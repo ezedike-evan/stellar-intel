@@ -1,5 +1,3 @@
-import { Zap } from 'lucide-react'
-
 export function Footer() {
   return (
     <footer className="border-t border-gray-200 dark:border-gray-800">
@@ -17,8 +15,7 @@ export function Footer() {
               className="underline underline-offset-2"
             >
               Stellar
-            </a>{' '}
-            · Submitted for SCF
+            </a>  
           </p>
         </div>
       </div>
