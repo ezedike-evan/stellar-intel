@@ -1,0 +1,26 @@
+@import "tailwindcss";
+
+body {
+  background: var(--background);
+  color: var(--foreground);
+  font-family: Arial, Helvetica, sans-serif;
+}
+
+
+:root {
+  --primary-text: #111827;
+  --secondary-text: #6b7280;
+  --background: #ffffff;
+  --bg-subtle: #f9fafb;
+  --border: #e5e7eb;
+  --accent: #2563eb;
+}
+
+.dark {
+  --primary-text: #f9fafb;
+  --secondary-text: #9ca3af;
+  --background: #030712;
+  --bg-subtle: #111827;
+  --border: #1f2937;
+  --accent: #60a5fa;
+}
