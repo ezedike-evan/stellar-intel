@@ -17,10 +17,9 @@ export function Navbar() {
   const pathname = usePathname()
   const { dark, toggle } = useTheme()
   return (
-    <header className="sticky top-0 z-40 border-b border-gray-200 bg-white/80 backdrop-blur-sm dark:border-gray-800 dark:bg-gray-950/80">
+    <header className="sticky top-0 z-40 border-b border-border bg-background backdrop-blur-sm">
       <div className="mx-auto flex max-w-7xl items-center justify-between px-4 py-3">
-        <Link href="/" className="flex items-center gap-2 font-bold text-gray-900 dark:text-white">
-          <Zap className="h-5 w-5 text-blue-600" />
+        <Link href="/" className="font-bold text-primary-text">
           Stellar Intel
         </Link>
         <nav className="hidden items-center gap-1 md:flex">
