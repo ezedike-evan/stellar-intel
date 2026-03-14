@@ -1,0 +1,103 @@
+name: Lighthouse CI
+
+on:
+  pull_request:
+    branches: [main]
+
+permissions:
+  contents: read
+  pull-requests: write
+
+jobs:
+  lighthouse:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+          cache: 'npm'
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Build Next.js app
+        run: npm run build
+        env:
+          NEXT_PUBLIC_STELLAR_NETWORK: mainnet
+          NEXT_PUBLIC_HORIZON_URL: https://horizon.stellar.org
+          NEXT_PUBLIC_STELLAR_EXPERT_URL: https://api.stellar.expert/explorer/public
+
+      - name: Install Lighthouse CI
+        run: npm install -g @lhci/cli@0.14.x
+
+      - name: Run Lighthouse CI
+        id: lhci
+        run: |
+          npm start &
+          SERVER_PID=$!
+          sleep 5
+
+          lhci collect \
+            --url=http://localhost:3000 \
+            --url=http://localhost:3000/yield \
+            --url=http://localhost:3000/swap \
+            --url=http://localhost:3000/onramp \
+            --url=http://localhost:3000/offramp \
+            --numberOfRuns=1 \
+            --settings.chromeFlags="--no-sandbox --headless" \
+            --output=jsonExpanded \
+            --outputPath=./lhci-results
+
+          kill $SERVER_PID || true
+        env:
+          LHCI_GITHUB_APP_TOKEN: ${{ secrets.LHCI_GITHUB_APP_TOKEN }}
+
+      - name: Parse and post Lighthouse scores
+        uses: actions/github-script@v7
+        with:
+          script: |
+            const fs = require('fs');
+            const path = require('path');
+
+            const resultsDir = './lhci-results';
+            const files = fs.readdirSync(resultsDir).filter(f => f.endsWith('.json') && !f.includes('manifest'));
+
+            if (!files.length) {
+              console.log('No Lighthouse result files found.');
+              return;
+            }
+
+            const formatScore = (score) => {
+              const pct = Math.round((score ?? 0) * 100);
+              const emoji = pct >= 90 ? '🟢' : pct >= 50 ? '🟡' : '🔴';
+              return `${emoji} ${pct}`;
+            };
+
+            let rows = '';
+            for (const file of files) {
+              const report = JSON.parse(fs.readFileSync(path.join(resultsDir, file), 'utf8'));
+              const cats = report.categories;
+              const url = new URL(report.finalUrl).pathname || '/';
+              rows += `| \`${url}\` | ${formatScore(cats.performance?.score)} | ${formatScore(cats.accessibility?.score)} | ${formatScore(cats['best-practices']?.score)} | ${formatScore(cats.seo?.score)} |\n`;
+            }
+
+            const body = [
+              '## Lighthouse CI Results',
+              '',
+              '| Page | Performance | Accessibility | Best Practices | SEO |',
+              '|------|-------------|---------------|----------------|-----|',
+              rows,
+              '',
+              '> Scores: 🟢 ≥ 90 &nbsp; 🟡 50–89 &nbsp; 🔴 < 50',
+            ].join('\n');
+
+            await github.rest.issues.createComment({
+              issue_number: context.issue.number,
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              body,
+            });

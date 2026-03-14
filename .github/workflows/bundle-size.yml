@@ -1,0 +1,163 @@
+name: Bundle Size Check
+
+on:
+  pull_request:
+    branches: [main]
+
+permissions:
+  contents: read
+  pull-requests: write
+
+jobs:
+  bundle-size:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout PR branch
+        uses: actions/checkout@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+          cache: 'npm'
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Build PR branch
+        run: npm run build
+        env:
+          NEXT_PUBLIC_STELLAR_NETWORK: mainnet
+          NEXT_PUBLIC_HORIZON_URL: https://horizon.stellar.org
+          NEXT_PUBLIC_STELLAR_EXPERT_URL: https://api.stellar.expert/explorer/public
+          ANALYZE: true
+
+      - name: Capture PR bundle stats
+        run: |
+          node -e "
+            const fs = require('fs');
+            const path = require('path');
+
+            const manifest = '.next/build-manifest.json';
+            if (!fs.existsSync(manifest)) { console.log('{}'); process.exit(0); }
+
+            const data = JSON.parse(fs.readFileSync(manifest, 'utf8'));
+            let total = 0;
+            const pages = {};
+
+            for (const [page, assets] of Object.entries(data.pages ?? {})) {
+              let size = 0;
+              for (const asset of assets) {
+                const p = path.join('.next', asset);
+                if (fs.existsSync(p)) size += fs.statSync(p).size;
+              }
+              pages[page] = size;
+              total += size;
+            }
+
+            fs.writeFileSync('pr-bundle.json', JSON.stringify({ total, pages }));
+            console.log('Total JS bundle (approx):', (total / 1024).toFixed(1), 'kB');
+          "
+
+      - name: Checkout base branch
+        uses: actions/checkout@v4
+        with:
+          ref: ${{ github.base_ref }}
+          path: base-branch
+
+      - name: Install base dependencies
+        run: npm ci
+        working-directory: base-branch
+
+      - name: Build base branch
+        run: npm run build
+        working-directory: base-branch
+        env:
+          NEXT_PUBLIC_STELLAR_NETWORK: mainnet
+          NEXT_PUBLIC_HORIZON_URL: https://horizon.stellar.org
+          NEXT_PUBLIC_STELLAR_EXPERT_URL: https://api.stellar.expert/explorer/public
+
+      - name: Capture base bundle stats
+        run: |
+          node -e "
+            const fs = require('fs');
+            const path = require('path');
+
+            const manifest = 'base-branch/.next/build-manifest.json';
+            if (!fs.existsSync(manifest)) { fs.writeFileSync('base-bundle.json', '{}'); process.exit(0); }
+
+            const data = JSON.parse(fs.readFileSync(manifest, 'utf8'));
+            let total = 0;
+            const pages = {};
+
+            for (const [page, assets] of Object.entries(data.pages ?? {})) {
+              let size = 0;
+              for (const asset of assets) {
+                const p = path.join('base-branch/.next', asset);
+                if (fs.existsSync(p)) size += fs.statSync(p).size;
+              }
+              pages[page] = size;
+              total += size;
+            }
+
+            fs.writeFileSync('base-bundle.json', JSON.stringify({ total, pages }));
+          "
+
+      - name: Comment bundle size diff
+        uses: actions/github-script@v7
+        with:
+          script: |
+            const fs = require('fs');
+
+            const pr   = JSON.parse(fs.existsSync('pr-bundle.json')   ? fs.readFileSync('pr-bundle.json',   'utf8') : '{}');
+            const base = JSON.parse(fs.existsSync('base-bundle.json') ? fs.readFileSync('base-bundle.json', 'utf8') : '{}');
+
+            const THRESHOLD_KB = 10;
+            const prTotal   = (pr.total   ?? 0) / 1024;
+            const baseTotal = (base.total ?? 0) / 1024;
+            const diffKB    = prTotal - baseTotal;
+            const diffPct   = baseTotal > 0 ? ((diffKB / baseTotal) * 100).toFixed(1) : 'N/A';
+
+            const sign    = diffKB > 0 ? '+' : '';
+            const status  = diffKB > THRESHOLD_KB
+              ? `🔴 Bundle increased by **${sign}${diffKB.toFixed(1)} kB** (${sign}${diffPct}%) — exceeds ${THRESHOLD_KB} kB threshold`
+              : diffKB < 0
+              ? `🟢 Bundle decreased by **${diffKB.toFixed(1)} kB** (${diffPct}%)`
+              : `🟢 Bundle size unchanged`;
+
+            const allPages = new Set([
+              ...Object.keys(pr.pages   ?? {}),
+              ...Object.keys(base.pages ?? {}),
+            ]);
+
+            let rows = '';
+            for (const page of [...allPages].sort()) {
+              const prSize   = ((pr.pages?.[page]   ?? 0) / 1024).toFixed(1);
+              const baseSize = ((base.pages?.[page] ?? 0) / 1024).toFixed(1);
+              const d = (parseFloat(prSize) - parseFloat(baseSize)).toFixed(1);
+              const indicator = parseFloat(d) > 0 ? '▲' : parseFloat(d) < 0 ? '▼' : '—';
+              rows += `| \`${page}\` | ${baseSize} kB | ${prSize} kB | ${indicator} ${d} kB |\n`;
+            }
+
+            const body = [
+              '## Bundle Size Report',
+              '',
+              status,
+              '',
+              '| Page | Base | PR | Diff |',
+              '|------|------|----|------|',
+              rows,
+              '',
+              `> Threshold: ${THRESHOLD_KB} kB increase triggers a warning.`,
+            ].join('\n');
+
+            await github.rest.issues.createComment({
+              issue_number: context.issue.number,
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              body,
+            });
+
+            if (diffKB > THRESHOLD_KB) {
+              core.warning(`Bundle size increased by ${diffKB.toFixed(1)} kB, exceeding the ${THRESHOLD_KB} kB threshold.`);
+            }

@@ -1,0 +1,86 @@
+name: Data Fetcher Health Check
+
+on:
+  schedule:
+    - cron: '0 * * * *'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  health-check:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+          cache: 'npm'
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Check Horizon API reachability
+        id: horizon
+        run: |
+          STATUS=$(curl -s -o /dev/null -w "%{http_code}" --max-time 10 \
+            "https://horizon.stellar.org/")
+          echo "status=$STATUS" >> "$GITHUB_OUTPUT"
+          if [ "$STATUS" != "200" ]; then
+            echo "::error::Horizon API returned HTTP $STATUS"
+            exit 1
+          fi
+          echo "Horizon API: OK (HTTP $STATUS)"
+
+      - name: Check Stellar Expert API reachability
+        id: stellar_expert
+        run: |
+          STATUS=$(curl -s -o /dev/null -w "%{http_code}" --max-time 10 \
+            "https://api.stellar.expert/explorer/public/asset")
+          echo "status=$STATUS" >> "$GITHUB_OUTPUT"
+          if [ "$STATUS" != "200" ]; then
+            echo "::warning::Stellar Expert API returned HTTP $STATUS"
+          else
+            echo "Stellar Expert API: OK (HTTP $STATUS)"
+          fi
+
+      - name: Validate USDC order book data shape
+        run: |
+          RESPONSE=$(curl -s --max-time 15 \
+            "https://horizon.stellar.org/order_book?selling_asset_type=native&buying_asset_type=credit_alphanum4&buying_asset_code=USDC&buying_asset_issuer=GA5ZSEJYB37JRC5AVCIA5MOP4RHTM335X2KGX3IHOJAPP5RE34K4KZVN&limit=1")
+          if echo "$RESPONSE" | grep -q '"bids"' && echo "$RESPONSE" | grep -q '"asks"'; then
+            echo "Order book data shape: OK"
+          else
+            echo "::error::Order book response missing expected fields"
+            echo "Response: $RESPONSE"
+            exit 1
+          fi
+
+      - name: Validate path-finding endpoint
+        run: |
+          RESPONSE=$(curl -s --max-time 15 \
+            "https://horizon.stellar.org/paths/strict-send?source_asset_type=native&source_amount=10&destination_assets=USDC%3AGA5ZSEJYB37JRC5AVCIA5MOP4RHTM335X2KGX3IHOJAPP5RE34K4KZVN")
+          if echo "$RESPONSE" | grep -q '"_embedded"'; then
+            echo "Path-finding endpoint: OK"
+          else
+            echo "::warning::Path-finding response shape unexpected"
+            echo "Response snippet: ${RESPONSE:0:200}"
+          fi
+
+      - name: Log health check summary
+        if: always()
+        run: |
+          echo "=== Data Health Check Summary ==="
+          echo "Run time   : $(date -u '+%Y-%m-%dT%H:%M:%SZ')"
+          echo "Horizon    : ${{ steps.horizon.outputs.status }}"
+          echo "Expert API : ${{ steps.stellar_expert.outputs.status }}"
+          echo "================================="
+
+      - name: Notify on failure
+        if: failure()
+        run: |
+          echo "::error::One or more data fetcher health checks failed. Review the steps above."

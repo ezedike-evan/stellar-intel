@@ -1,0 +1,108 @@
+name: Stellar API Availability Check
+
+on:
+  schedule:
+    - cron: '30 * * * *'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  api-check:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Ping Horizon (mainnet)
+        id: horizon_mainnet
+        run: |
+          STATUS=$(curl -s -o /tmp/horizon.json -w "%{http_code}" --max-time 15 \
+            "https://horizon.stellar.org/")
+          echo "status=$STATUS" >> "$GITHUB_OUTPUT"
+          if [ "$STATUS" = "200" ]; then
+            CORE_VERSION=$(python3 -c "import json,sys; d=json.load(open('/tmp/horizon.json')); print(d.get('core_version','unknown'))" 2>/dev/null || echo "unknown")
+            echo "Horizon mainnet: OK (HTTP $STATUS, core $CORE_VERSION)"
+          else
+            echo "::error::Horizon mainnet returned HTTP $STATUS"
+          fi
+
+      - name: Ping Horizon (testnet)
+        id: horizon_testnet
+        run: |
+          STATUS=$(curl -s -o /dev/null -w "%{http_code}" --max-time 15 \
+            "https://horizon-testnet.stellar.org/")
+          echo "status=$STATUS" >> "$GITHUB_OUTPUT"
+          if [ "$STATUS" = "200" ]; then
+            echo "Horizon testnet: OK (HTTP $STATUS)"
+          else
+            echo "::warning::Horizon testnet returned HTTP $STATUS"
+          fi
+
+      - name: Ping Stellar Expert API
+        id: stellar_expert
+        run: |
+          STATUS=$(curl -s -o /dev/null -w "%{http_code}" --max-time 15 \
+            "https://api.stellar.expert/explorer/public/asset?limit=1")
+          echo "status=$STATUS" >> "$GITHUB_OUTPUT"
+          if [ "$STATUS" = "200" ]; then
+            echo "Stellar Expert API: OK (HTTP $STATUS)"
+          else
+            echo "::warning::Stellar Expert API returned HTTP $STATUS"
+          fi
+
+      - name: Ping Stellar Federation / Lobstr
+        id: federation
+        run: |
+          STATUS=$(curl -s -o /dev/null -w "%{http_code}" --max-time 15 \
+            "https://lobstr.co/.well-known/stellar.toml")
+          echo "status=$STATUS" >> "$GITHUB_OUTPUT"
+          if [ "$STATUS" = "200" ]; then
+            echo "Federation (Lobstr TOML): OK (HTTP $STATUS)"
+          else
+            echo "::warning::Federation endpoint returned HTTP $STATUS"
+          fi
+
+      - name: Ping Soroswap API
+        id: soroswap
+        run: |
+          STATUS=$(curl -s -o /dev/null -w "%{http_code}" --max-time 15 \
+            "https://api.soroswap.finance/pairs")
+          echo "status=$STATUS" >> "$GITHUB_OUTPUT"
+          if [ "$STATUS" = "200" ] || [ "$STATUS" = "404" ]; then
+            echo "Soroswap API: reachable (HTTP $STATUS)"
+          else
+            echo "::warning::Soroswap API returned HTTP $STATUS"
+          fi
+
+      - name: Ping Aquarius API
+        id: aquarius
+        run: |
+          STATUS=$(curl -s -o /dev/null -w "%{http_code}" --max-time 15 \
+            "https://amm-api.aqua.network/api/v1/pools/?limit=1")
+          echo "status=$STATUS" >> "$GITHUB_OUTPUT"
+          if [ "$STATUS" = "200" ]; then
+            echo "Aquarius API: OK (HTTP $STATUS)"
+          else
+            echo "::warning::Aquarius API returned HTTP $STATUS"
+          fi
+
+      - name: Print availability summary
+        if: always()
+        run: |
+          echo "============================================"
+          echo "  Stellar API Availability Summary"
+          echo "  $(date -u '+%Y-%m-%dT%H:%M:%SZ')"
+          echo "============================================"
+          echo "  Horizon mainnet  : ${{ steps.horizon_mainnet.outputs.status }}"
+          echo "  Horizon testnet  : ${{ steps.horizon_testnet.outputs.status }}"
+          echo "  Stellar Expert   : ${{ steps.stellar_expert.outputs.status }}"
+          echo "  Federation/Lobstr: ${{ steps.federation.outputs.status }}"
+          echo "  Soroswap         : ${{ steps.soroswap.outputs.status }}"
+          echo "  Aquarius         : ${{ steps.aquarius.outputs.status }}"
+          echo "============================================"
+
+      - name: Fail if critical APIs are down
+        if: >
+          steps.horizon_mainnet.outputs.status != '200'
+        run: |
+          echo "::error::Critical API unreachable — Horizon mainnet returned HTTP ${{ steps.horizon_mainnet.outputs.status }}"
+          exit 1
