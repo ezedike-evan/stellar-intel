@@ -9,3 +9,15 @@ from the same interface.
 
 Built for users sending money home across Africa, Latin America, and Southeast
 Asia via Stellar anchors.
+
+---
+
+## Tech Stack
+
+| Layer | Technology |
+|---|---|
+| Framework | Next.js 16, React 19, TypeScript |
+| Styling | Tailwind CSS v4 |
+| Data fetching | SWR |
+| Blockchain | `@stellar/stellar-sdk` v14 |
+| Deployment | Vercel |
