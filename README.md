@@ -21,3 +21,37 @@ Asia via Stellar anchors.
 | Data fetching | SWR |
 | Blockchain | `@stellar/stellar-sdk` v14 |
 | Deployment | Vercel |
+
+---
+
+## Getting Started
+
+**Prerequisites:** Node.js 20+, npm
+
+```bash
+# Clone the repository
+git clone https://github.com/your-org/stellar-intel.git
+cd stellar-intel
+
+# Install dependencies
+npm install
+
+# Copy the example environment file and fill in your values
+cp .env.example .env.local
+
+# Start the development server
+npm run dev
+```
+
+The app will be available at `http://localhost:3000`.
+
+```bash
+# Type-check the codebase
+npm run typecheck
+
+# Lint
+npm run lint
+
+# Production build
+npm run build
+```
