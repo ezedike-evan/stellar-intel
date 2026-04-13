@@ -1,8 +1,8 @@
-'use client'
+'use client';
 
 interface CurrencySelectorProps {
-  currency: string
-  currencySymbol: string
+  currency: string;
+  currencySymbol: string;
 }
 
 export function CurrencyDisplay({ currency, currencySymbol }: CurrencySelectorProps) {
@@ -15,5 +15,5 @@ export function CurrencyDisplay({ currency, currencySymbol }: CurrencySelectorPr
         {currencySymbol} {currency}
       </div>
     </div>
-  )
+  );
 }

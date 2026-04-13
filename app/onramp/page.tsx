@@ -1,13 +1,13 @@
-'use client'
-import { useState } from 'react'
-import { RefreshCw } from 'lucide-react'
-import { CountrySelector } from '@/components/offramp/CountrySelector'
-import { RateTable, type RateTableColumn, type RateTableRow } from '@/components/ui/RateTable'
-import { Button } from '@/components/ui/Button'
-import { useOnrampRates } from '@/hooks/useAnchorRates'
-import { SUPPORTED_COUNTRIES } from '@/constants'
-import { formatAmount, formatPercent } from '@/lib/stellar'
-import type { Country } from '@/types'
+'use client';
+import { useState } from 'react';
+import { RefreshCw } from 'lucide-react';
+import { CountrySelector } from '@/components/offramp/CountrySelector';
+import { RateTable, type RateTableColumn, type RateTableRow } from '@/components/ui/RateTable';
+import { Button } from '@/components/ui/Button';
+import { useOnrampRates } from '@/hooks/useAnchorRates';
+import { SUPPORTED_COUNTRIES } from '@/constants';
+import { formatAmount, formatPercent } from '@/lib/stellar';
+import type { Country } from '@/types';
 
 const COLUMNS: RateTableColumn[] = [
   { key: 'provider', label: 'Provider' },
@@ -15,14 +15,18 @@ const COLUMNS: RateTableColumn[] = [
   { key: 'fee', label: 'Fee' },
   { key: 'receive', label: 'USDC Received' },
   { key: 'time', label: 'Est. time' },
-]
+];
 
 export default function OnrampPage() {
-  const [country, setCountry] = useState<Country>(SUPPORTED_COUNTRIES[0])
-  const [localAmount, setLocalAmount] = useState(10000)
-  const [selectedId, setSelectedId] = useState<string>()
+  const [country, setCountry] = useState<Country>(SUPPORTED_COUNTRIES[0]);
+  const [localAmount, setLocalAmount] = useState(10000);
+  const [selectedId, setSelectedId] = useState<string>();
 
-  const { data: rates, isLoading, mutate } = useOnrampRates(country.code, country.currency, localAmount)
+  const {
+    data: rates,
+    isLoading,
+    mutate,
+  } = useOnrampRates(country.code, country.currency, localAmount);
 
   const rows: RateTableRow[] = (rates ?? []).map((r) => ({
     id: r.anchorId,
@@ -30,16 +34,25 @@ export default function OnrampPage() {
     isMock: r.isMock,
     cells: {
       provider: r.anchorName,
-      methods: r.depositMethods.map((m) =>
-        m === 'bank_transfer' ? 'Bank' : m === 'mobile_money' ? 'Mobile Money' : m === 'cash' ? 'Cash' : 'Card'
-      ).join(', '),
+      methods: r.depositMethods
+        .map((m) =>
+          m === 'bank_transfer'
+            ? 'Bank'
+            : m === 'mobile_money'
+              ? 'Mobile Money'
+              : m === 'cash'
+                ? 'Cash'
+                : 'Card'
+        )
+        .join(', '),
       fee: `${formatAmount(r.fee)} + ${formatPercent(r.feePercent)}`,
-      receive: r.totalReceived != null
-        ? `${new Intl.NumberFormat('en-US', { maximumFractionDigits: 4 }).format(r.totalReceived)} USDC`
-        : '—',
+      receive:
+        r.totalReceived != null
+          ? `${new Intl.NumberFormat('en-US', { maximumFractionDigits: 4 }).format(r.totalReceived)} USDC`
+          : '—',
       time: r.estimatedTime,
     },
-  }))
+  }));
 
   return (
     <div className="space-y-6">
@@ -82,5 +95,5 @@ export default function OnrampPage() {
         caption="// MOCK data — connect to real SEP-24 endpoints for production."
       />
     </div>
-  )
+  );
 }

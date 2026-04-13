@@ -1,9 +1,9 @@
-import { clsx } from 'clsx'
-import type { ButtonHTMLAttributes } from 'react'
+import { clsx } from 'clsx';
+import type { ButtonHTMLAttributes } from 'react';
 
 interface ButtonProps extends ButtonHTMLAttributes<HTMLButtonElement> {
-  variant?: 'primary' | 'secondary' | 'ghost' | 'danger'
-  size?: 'sm' | 'md' | 'lg'
+  variant?: 'primary' | 'secondary' | 'ghost' | 'danger';
+  size?: 'sm' | 'md' | 'lg';
 }
 
 export function Button({ variant = 'primary', size = 'md', className, ...props }: ButtonProps) {
@@ -24,9 +24,9 @@ export function Button({ variant = 'primary', size = 'md', className, ...props }
           'h-10 px-4 text-sm': size === 'md',
           'h-12 px-6 text-base': size === 'lg',
         },
-        className,
+        className
       )}
       {...props}
     />
-  )
+  );
 }

@@ -1,7 +1,7 @@
-'use client'
-import type { SwapRoute } from '@/types'
-import { formatPercent } from '@/lib/stellar'
-import { ArrowRight } from 'lucide-react'
+'use client';
+import type { SwapRoute } from '@/types';
+import { formatPercent } from '@/lib/stellar';
+import { ArrowRight } from 'lucide-react';
 
 export function SwapRoutePath({ route }: { route: SwapRoute }) {
   return (
@@ -13,7 +13,7 @@ export function SwapRoutePath({ route }: { route: SwapRoute }) {
         </span>
       ))}
     </div>
-  )
+  );
 }
 
 export function SwapRouteCard({ route }: { route: SwapRoute }) {
@@ -25,5 +25,5 @@ export function SwapRouteCard({ route }: { route: SwapRoute }) {
       </div>
       <SwapRoutePath route={route} />
     </div>
-  )
+  );
 }

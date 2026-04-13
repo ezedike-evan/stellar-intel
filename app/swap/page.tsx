@@ -1,14 +1,14 @@
-'use client'
-import { useState } from 'react'
-import { RefreshCw, ArrowLeftRight } from 'lucide-react'
-import { AssetSelector } from '@/components/swap/AssetSelector'
-import { SwapRoutePath } from '@/components/swap/SwapRouteCard'
-import { RateTable, type RateTableColumn, type RateTableRow } from '@/components/ui/RateTable'
-import { Button } from '@/components/ui/Button'
-import { useSwapRoutes } from '@/hooks/useSwapRoutes'
-import { USDC_ASSET, XLM_ASSET } from '@/constants'
-import { formatPercent } from '@/lib/stellar'
-import type { StellarAsset } from '@/types'
+'use client';
+import { useState } from 'react';
+import { RefreshCw, ArrowLeftRight } from 'lucide-react';
+import { AssetSelector } from '@/components/swap/AssetSelector';
+import { SwapRoutePath } from '@/components/swap/SwapRouteCard';
+import { RateTable, type RateTableColumn, type RateTableRow } from '@/components/ui/RateTable';
+import { Button } from '@/components/ui/Button';
+import { useSwapRoutes } from '@/hooks/useSwapRoutes';
+import { USDC_ASSET, XLM_ASSET } from '@/constants';
+import { formatPercent } from '@/lib/stellar';
+import type { StellarAsset } from '@/types';
 
 const COLUMNS: RateTableColumn[] = [
   { key: 'source', label: 'Route / DEX' },
@@ -17,15 +17,15 @@ const COLUMNS: RateTableColumn[] = [
   { key: 'impact', label: 'Price Impact' },
   { key: 'fee', label: 'Fee' },
   { key: 'path', label: 'Path' },
-]
+];
 
 export default function SwapPage() {
-  const [fromAsset, setFromAsset] = useState<StellarAsset>(USDC_ASSET)
-  const [toAsset, setToAsset] = useState<StellarAsset>(XLM_ASSET)
-  const [fromAmount, setFromAmount] = useState(100)
-  const [selectedId, setSelectedId] = useState<string>()
+  const [fromAsset, setFromAsset] = useState<StellarAsset>(USDC_ASSET);
+  const [toAsset, setToAsset] = useState<StellarAsset>(XLM_ASSET);
+  const [fromAmount, setFromAmount] = useState(100);
+  const [selectedId, setSelectedId] = useState<string>();
 
-  const { data: routes, isLoading, mutate } = useSwapRoutes(fromAsset, toAsset, fromAmount)
+  const { data: routes, isLoading, mutate } = useSwapRoutes(fromAsset, toAsset, fromAmount);
 
   const rows: RateTableRow[] = (routes ?? []).map((r) => ({
     id: r.routeId,
@@ -35,11 +35,17 @@ export default function SwapPage() {
       source: r.source,
       receive: `${new Intl.NumberFormat('en-US', { maximumFractionDigits: 6 }).format(r.toAmount)} ${r.toAsset.code}`,
       price: `${new Intl.NumberFormat('en-US', { maximumFractionDigits: 6 }).format(r.price)} ${r.toAsset.code}/${r.fromAsset.code}`,
-      impact: <span className={r.priceImpact > 0.01 ? 'text-red-500' : 'text-gray-600 dark:text-gray-400'}>{formatPercent(r.priceImpact)}</span>,
+      impact: (
+        <span
+          className={r.priceImpact > 0.01 ? 'text-red-500' : 'text-gray-600 dark:text-gray-400'}
+        >
+          {formatPercent(r.priceImpact)}
+        </span>
+      ),
       fee: `${new Intl.NumberFormat('en-US', { maximumFractionDigits: 8 }).format(r.fee)} ${r.fromAsset.code}`,
       path: <SwapRoutePath route={r} />,
     },
-  }))
+  }));
 
   return (
     <div className="space-y-6">
@@ -69,9 +75,9 @@ export default function SwapPage() {
                 variant="ghost"
                 size="md"
                 onClick={() => {
-                  const tmp = fromAsset
-                  setFromAsset(toAsset)
-                  setToAsset(tmp)
+                  const tmp = fromAsset;
+                  setFromAsset(toAsset);
+                  setToAsset(tmp);
                 }}
                 title="Swap assets"
               >
@@ -99,5 +105,5 @@ export default function SwapPage() {
         caption="SDEX routes are live via Horizon. // MOCK data for Soroswap, Phoenix, Aquarius."
       />
     </div>
-  )
+  );
 }

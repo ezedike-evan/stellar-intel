@@ -1,18 +1,18 @@
-'use client'
-import Link from 'next/link'
-import { usePathname } from 'next/navigation'
-import { ArrowDownLeft, ArrowUpRight, Sprout, ArrowLeftRight } from 'lucide-react'
-import { clsx } from 'clsx'
+'use client';
+import Link from 'next/link';
+import { usePathname } from 'next/navigation';
+import { ArrowDownLeft, ArrowUpRight, Sprout, ArrowLeftRight } from 'lucide-react';
+import { clsx } from 'clsx';
 
 const TAB_LINKS = [
-  { href: '/offramp',  label: 'Off-ramp', icon: ArrowDownLeft },
-  { href: '/onramp',   label: 'On-ramp',  icon: ArrowUpRight },
-  { href: '/yield',    label: 'Yield',    icon: Sprout },
-  { href: '/swap',     label: 'Swap',     icon: ArrowLeftRight },
-]
+  { href: '/offramp', label: 'Off-ramp', icon: ArrowDownLeft },
+  { href: '/onramp', label: 'On-ramp', icon: ArrowUpRight },
+  { href: '/yield', label: 'Yield', icon: Sprout },
+  { href: '/swap', label: 'Swap', icon: ArrowLeftRight },
+];
 
 export function BottomNav() {
-  const pathname = usePathname()
+  const pathname = usePathname();
 
   return (
     <div className="fixed bottom-0 left-0 right-0 z-40 flex justify-center pb-5 md:hidden">
@@ -23,16 +23,14 @@ export function BottomNav() {
         }}
       >
         {TAB_LINKS.map(({ href, label, icon: Icon }) => {
-          const active = pathname === href
+          const active = pathname === href;
           return (
             <Link
               key={href}
               href={href}
               className={clsx(
                 'relative flex flex-col items-center gap-1 rounded-xl px-5 py-2.5 text-[10px] font-semibold tracking-wide uppercase transition-all duration-200 active:scale-90',
-                active
-                  ? 'text-accent'
-                  : 'text-secondary-text hover:text-primary-text'
+                active ? 'text-accent' : 'text-secondary-text hover:text-primary-text'
               )}
             >
               {/* active background pill */}
@@ -48,10 +46,14 @@ export function BottomNav() {
               {/* icon with glow on active */}
               <span
                 className="relative z-10 transition-transform duration-200"
-                style={active ? {
-                  filter: 'drop-shadow(0 0 6px var(--accent))',
-                  transform: 'translateY(-1px)',
-                } : {}}
+                style={
+                  active
+                    ? {
+                        filter: 'drop-shadow(0 0 6px var(--accent))',
+                        transform: 'translateY(-1px)',
+                      }
+                    : {}
+                }
               >
                 <Icon className={clsx('h-[18px] w-[18px]', active && 'stroke-[2.5]')} />
               </span>
@@ -67,9 +69,9 @@ export function BottomNav() {
                 />
               )}
             </Link>
-          )
+          );
         })}
       </nav>
     </div>
-  )
+  );
 }

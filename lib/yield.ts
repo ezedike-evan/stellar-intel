@@ -1,4 +1,4 @@
-import type { YieldRate, YieldAsset } from '@/types'
+import type { YieldRate, YieldAsset } from '@/types';
 
 // MOCK — Blend protocol: replace with https://blend-mainnet.stellar.org API
 const BLEND_RATES: YieldRate[] = [
@@ -28,7 +28,7 @@ const BLEND_RATES: YieldRate[] = [
     lastUpdated: new Date(),
     isMock: true,
   },
-]
+];
 
 // MOCK — DeFindex: replace with DeFindex API when available
 const DEFINDEX_RATES: YieldRate[] = [
@@ -41,11 +41,12 @@ const DEFINDEX_RATES: YieldRate[] = [
     minDeposit: 10,
     lockupDays: 0,
     riskLevel: 'medium',
-    description: 'Automated yield vault aggregator built on Stellar. Optimises across multiple strategies.',
+    description:
+      'Automated yield vault aggregator built on Stellar. Optimises across multiple strategies.',
     lastUpdated: new Date(),
     isMock: true,
   },
-]
+];
 
 // MOCK — Franklin Templeton BENJI
 const BENJI_RATES: YieldRate[] = [
@@ -58,11 +59,12 @@ const BENJI_RATES: YieldRate[] = [
     minDeposit: 1,
     lockupDays: 1,
     riskLevel: 'low',
-    description: 'Tokenised US government money market fund by Franklin Templeton. Regulated, low-risk.',
+    description:
+      'Tokenised US government money market fund by Franklin Templeton. Regulated, low-risk.',
     lastUpdated: new Date(),
     isMock: true,
   },
-]
+];
 
 // MOCK — Ondo USDY
 const USDY_RATES: YieldRate[] = [
@@ -79,14 +81,14 @@ const USDY_RATES: YieldRate[] = [
     lastUpdated: new Date(),
     isMock: true,
   },
-]
+];
 
 export async function fetchYieldRates(asset?: YieldAsset): Promise<YieldRate[]> {
-  const all = [...BLEND_RATES, ...DEFINDEX_RATES, ...BENJI_RATES, ...USDY_RATES]
-  const filtered = asset ? all.filter((r) => r.asset === asset) : all
+  const all = [...BLEND_RATES, ...DEFINDEX_RATES, ...BENJI_RATES, ...USDY_RATES];
+  const filtered = asset ? all.filter((r) => r.asset === asset) : all;
 
-  const sorted = [...filtered].sort((a, b) => b.apy - a.apy)
-  if (sorted.length > 0) sorted[0].isBest = true
+  const sorted = [...filtered].sort((a, b) => b.apy - a.apy);
+  if (sorted.length > 0) sorted[0].isBest = true;
 
-  return sorted
+  return sorted;
 }

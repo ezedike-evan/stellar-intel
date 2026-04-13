@@ -1,32 +1,32 @@
-'use client'
-import { clsx } from 'clsx'
-import { Badge } from './Badge'
-import { Button } from './Button'
-import type { RiskLevel } from '@/types'
+'use client';
+import { clsx } from 'clsx';
+import { Badge } from './Badge';
+import { Button } from './Button';
+import type { RiskLevel } from '@/types';
 
 export interface RateTableColumn {
-  key: string
-  label: string
-  className?: string
+  key: string;
+  label: string;
+  className?: string;
 }
 
 export interface RateTableRow {
-  id: string
-  cells: Record<string, React.ReactNode>
-  isBest?: boolean
-  isWorst?: boolean
-  isMock?: boolean
-  riskLevel?: RiskLevel
+  id: string;
+  cells: Record<string, React.ReactNode>;
+  isBest?: boolean;
+  isWorst?: boolean;
+  isMock?: boolean;
+  riskLevel?: RiskLevel;
 }
 
 interface RateTableProps {
-  columns: RateTableColumn[]
-  rows: RateTableRow[]
-  selectedId?: string
-  onSelect: (id: string) => void
-  onExecute?: (id: string) => void
-  isLoading?: boolean
-  caption?: string
+  columns: RateTableColumn[];
+  rows: RateTableRow[];
+  selectedId?: string;
+  onSelect: (id: string) => void;
+  onExecute?: (id: string) => void;
+  isLoading?: boolean;
+  caption?: string;
 }
 
 function SkeletonRow({ cols }: { cols: number }) {
@@ -34,11 +34,11 @@ function SkeletonRow({ cols }: { cols: number }) {
     <tr>
       {Array.from({ length: cols }).map((_, i) => (
         <td key={i} className="px-4 py-3">
-          <div className="h-4 animate-pulse rounded bg-gray-200 dark:bg-gray-700"/>
+          <div className="h-4 animate-pulse rounded bg-gray-200 dark:bg-gray-700" />
         </td>
       ))}
     </tr>
-  )
+  );
 }
 
 export function RateTable({
@@ -65,7 +65,7 @@ export function RateTable({
                 key={col.key}
                 className={clsx(
                   'px-4 py-3 text-left font-medium text-gray-600 dark:text-gray-400',
-                  col.className,
+                  col.className
                 )}
               >
                 {col.label}
@@ -92,7 +92,7 @@ export function RateTable({
             </tr>
           ) : (
             rows.map((row) => {
-              const isSelected = row.id === selectedId
+              const isSelected = row.id === selectedId;
               return (
                 <tr
                   key={row.id}
@@ -100,7 +100,7 @@ export function RateTable({
                     'border-b border-gray-100 transition-colors last:border-0 dark:border-gray-800 text-primary-text',
                     isSelected
                       ? 'bg-blue-50 dark:bg-blue-950/30'
-                      : 'hover:bg-gray-50 dark:hover:bg-gray-800/30',
+                      : 'hover:bg-gray-50 dark:hover:bg-gray-800/30'
                   )}
                 >
                   {columns.map((col) => (
@@ -108,9 +108,11 @@ export function RateTable({
                       key={col.key}
                       className={clsx(
                         'px-4 py-3',
-                        col.key === 'rate' && row.isBest && 'font-semibold text-green-600 dark:text-green-400',
+                        col.key === 'rate' &&
+                          row.isBest &&
+                          'font-semibold text-green-600 dark:text-green-400',
                         col.key === 'rate' && row.isWorst && 'text-red-500 dark:text-red-400',
-                        col.className,
+                        col.className
                       )}
                     >
                       <div className="flex items-center gap-2">
@@ -118,9 +120,7 @@ export function RateTable({
                         {col.key === 'provider' && row.isBest && (
                           <Badge variant="success">Best</Badge>
                         )}
-                        {col.key === 'provider' && row.isMock && (
-                          <Badge variant="mock">Mock</Badge>
-                        )}
+                        {col.key === 'provider' && row.isMock && <Badge variant="mock">Mock</Badge>}
                       </div>
                     </td>
                   ))}
@@ -136,11 +136,11 @@ export function RateTable({
                     )}
                   </td>
                 </tr>
-              )
+              );
             })
           )}
         </tbody>
       </table>
     </div>
-  )
+  );
 }

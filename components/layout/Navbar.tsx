@@ -1,21 +1,21 @@
-'use client'
-import Link from 'next/link'
-import { usePathname } from 'next/navigation'
-import { clsx } from 'clsx'
-import { Sun, Moon } from 'lucide-react'
-import { Button } from '@/components/ui/Button'
-import { useTheme } from '@/hooks/useTheme'
+'use client';
+import Link from 'next/link';
+import { usePathname } from 'next/navigation';
+import { clsx } from 'clsx';
+import { Sun, Moon } from 'lucide-react';
+import { Button } from '@/components/ui/Button';
+import { useTheme } from '@/hooks/useTheme';
 
 const NAV_LINKS = [
   { href: '/offramp', label: 'Off-ramp' },
   { href: '/onramp', label: 'On-ramp' },
   { href: '/yield', label: 'Yield' },
   { href: '/swap', label: 'Swap' },
-]
+];
 
 export function Navbar() {
-  const pathname = usePathname()
-  const { dark, toggle } = useTheme()
+  const pathname = usePathname();
+  const { dark, toggle } = useTheme();
   return (
     <header className="sticky top-0 z-40 border-b border-border bg-background backdrop-blur-sm">
       <div className="mx-auto flex max-w-7xl items-center justify-between px-4 py-3">
@@ -31,7 +31,7 @@ export function Navbar() {
                 'rounded-lg px-3 py-2 text-sm font-medium transition-colors',
                 pathname === href
                   ? 'bg-primary-text/10 text-accent'
-                  : 'text-gray-600 hover:bg-gray-100 dark:text-gray-400 dark:hover:bg-gray-800',
+                  : 'text-gray-600 hover:bg-gray-100 dark:text-gray-400 dark:hover:bg-gray-800'
               )}
             >
               {label}
@@ -43,5 +43,5 @@ export function Navbar() {
         </Button>
       </div>
     </header>
-  )
+  );
 }

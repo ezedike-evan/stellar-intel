@@ -15,10 +15,10 @@ export function Footer() {
               className="underline underline-offset-2"
             >
               Stellar
-            </a>  
+            </a>
           </p>
         </div>
       </div>
     </footer>
-  )
+  );
 }

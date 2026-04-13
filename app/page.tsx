@@ -1,10 +1,18 @@
-import Link from 'next/link'
-import { ArrowDownRight, ArrowUpRight, TrendingUp, ArrowLeftRight, Zap, Globe, BarChart3 } from 'lucide-react'
-import { Card } from '@/components/ui/Card'
-import { fetchAnchorRates } from '@/lib/anchors'
-import { fetchYieldRates } from '@/lib/yield'
-import { KNOWN_ANCHORS } from '@/constants'
-import { formatPercent } from '@/lib/stellar'
+import Link from 'next/link';
+import {
+  ArrowDownRight,
+  ArrowUpRight,
+  TrendingUp,
+  ArrowLeftRight,
+  Zap,
+  Globe,
+  BarChart3,
+} from 'lucide-react';
+import { Card } from '@/components/ui/Card';
+import { fetchAnchorRates } from '@/lib/anchors';
+import { fetchYieldRates } from '@/lib/yield';
+import { KNOWN_ANCHORS } from '@/constants';
+import { formatPercent } from '@/lib/stellar';
 
 const MODULES = [
   {
@@ -26,7 +34,8 @@ const MODULES = [
   {
     href: '/yield',
     label: 'Yield',
-    description: 'Compare APY across Blend, DeFindex, BENJI, USDY and other Stellar yield protocols.',
+    description:
+      'Compare APY across Blend, DeFindex, BENJI, USDY and other Stellar yield protocols.',
     icon: TrendingUp,
     color: 'text-purple-600',
     bg: 'bg-purple-50 dark:bg-purple-950/30',
@@ -39,23 +48,23 @@ const MODULES = [
     color: 'text-orange-600',
     bg: 'bg-orange-50 dark:bg-orange-950/30',
   },
-]
+];
 
 async function getStats() {
   try {
     const [ngRates, allYield] = await Promise.all([
       fetchAnchorRates('NG', 'NGN', 100),
       fetchYieldRates(),
-    ])
-    const best = ngRates.find((r) => r.isBest)
-    const bestYield = allYield.find((r) => r.isBest)
+    ]);
+    const best = ngRates.find((r) => r.isBest);
+    const bestYield = allYield.find((r) => r.isBest);
     return {
       totalAnchors: KNOWN_ANCHORS.length,
       bestUsdcOfframpRate: best?.exchangeRate ?? null,
       bestUsdcOfframpAnchor: best?.anchorName ?? null,
       highestYieldApy: bestYield?.apy ?? null,
       highestYieldProtocol: bestYield?.protocolName ?? null,
-    }
+    };
   } catch {
     return {
       totalAnchors: KNOWN_ANCHORS.length,
@@ -63,12 +72,12 @@ async function getStats() {
       bestUsdcOfframpAnchor: null,
       highestYieldApy: null,
       highestYieldProtocol: null,
-    }
+    };
   }
 }
 
 export default async function HomePage() {
-  const stats = await getStats()
+  const stats = await getStats();
 
   return (
     <div className="space-y-16">
@@ -159,9 +168,21 @@ export default async function HomePage() {
         <h2 className="mb-4 text-lg font-semibold text-gray-900 dark:text-white">How it works</h2>
         <div className="grid grid-cols-1 gap-6 md:grid-cols-3">
           {[
-            { step: '01', title: 'Pick your action', body: 'Off-ramp, on-ramp, earn yield, or swap — choose what you need.' },
-            { step: '02', title: 'Compare live rates', body: 'We fetch rates from all Stellar anchors and protocols in real time, every 30 seconds.' },
-            { step: '03', title: 'Execute in one click', body: 'Select the best option and execute directly on Stellar — no leaving the app.' },
+            {
+              step: '01',
+              title: 'Pick your action',
+              body: 'Off-ramp, on-ramp, earn yield, or swap — choose what you need.',
+            },
+            {
+              step: '02',
+              title: 'Compare live rates',
+              body: 'We fetch rates from all Stellar anchors and protocols in real time, every 30 seconds.',
+            },
+            {
+              step: '03',
+              title: 'Execute in one click',
+              body: 'Select the best option and execute directly on Stellar — no leaving the app.',
+            },
           ].map(({ step, title, body }) => (
             <div key={step} className="flex gap-4">
               <div className="flex h-8 w-8 shrink-0 items-center justify-center rounded-full bg-blue-600 text-xs font-bold text-white">
@@ -176,5 +197,5 @@ export default async function HomePage() {
         </div>
       </section>
     </div>
-  )
+  );
 }

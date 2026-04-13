@@ -1,6 +1,6 @@
-'use client'
-import type { AnchorRate } from '@/types'
-import { formatAmount, formatPercent } from '@/lib/stellar'
+'use client';
+import type { AnchorRate } from '@/types';
+import { formatAmount, formatPercent } from '@/lib/stellar';
 
 export function OnrampRateCard({ rate }: { rate: AnchorRate }) {
   return (
@@ -10,5 +10,5 @@ export function OnrampRateCard({ rate }: { rate: AnchorRate }) {
         Fee: {formatAmount(rate.fee, 'USD')} + {formatPercent(rate.feePercent)}
       </div>
     </div>
-  )
+  );
 }

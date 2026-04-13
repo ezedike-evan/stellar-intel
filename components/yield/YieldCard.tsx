@@ -1,7 +1,7 @@
-'use client'
-import type { YieldRate } from '@/types'
-import { formatPercent, formatTVL } from '@/lib/stellar'
-import { Badge } from '@/components/ui/Badge'
+'use client';
+import type { YieldRate } from '@/types';
+import { formatPercent, formatTVL } from '@/lib/stellar';
+import { Badge } from '@/components/ui/Badge';
 
 export function YieldCard({ rate }: { rate: YieldRate }) {
   return (
@@ -12,5 +12,5 @@ export function YieldCard({ rate }: { rate: YieldRate }) {
       </div>
       <Badge risk={rate.riskLevel}>{rate.riskLevel} risk</Badge>
     </div>
-  )
+  );
 }

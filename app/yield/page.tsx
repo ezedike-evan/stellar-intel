@@ -1,12 +1,12 @@
-'use client'
-import { useState } from 'react'
-import { RefreshCw } from 'lucide-react'
-import { RateTable, type RateTableColumn, type RateTableRow } from '@/components/ui/RateTable'
-import { Button } from '@/components/ui/Button'
-import { Badge } from '@/components/ui/Badge'
-import { useYieldRates } from '@/hooks/useYieldRates'
-import { formatPercent, formatTVL, formatAmount } from '@/lib/stellar'
-import type { YieldAsset } from '@/types'
+'use client';
+import { useState } from 'react';
+import { RefreshCw } from 'lucide-react';
+import { RateTable, type RateTableColumn, type RateTableRow } from '@/components/ui/RateTable';
+import { Button } from '@/components/ui/Button';
+import { Badge } from '@/components/ui/Badge';
+import { useYieldRates } from '@/hooks/useYieldRates';
+import { formatPercent, formatTVL, formatAmount } from '@/lib/stellar';
+import type { YieldAsset } from '@/types';
 
 const ASSETS: Array<{ value: YieldAsset | 'all'; label: string }> = [
   { value: 'all', label: 'All Assets' },
@@ -14,7 +14,7 @@ const ASSETS: Array<{ value: YieldAsset | 'all'; label: string }> = [
   { value: 'XLM', label: 'XLM' },
   { value: 'USDY', label: 'USDY' },
   { value: 'EURC', label: 'EURC' },
-]
+];
 
 const COLUMNS: RateTableColumn[] = [
   { key: 'provider', label: 'Protocol' },
@@ -24,13 +24,13 @@ const COLUMNS: RateTableColumn[] = [
   { key: 'min', label: 'Min Deposit' },
   { key: 'lockup', label: 'Lock-up' },
   { key: 'risk', label: 'Risk' },
-]
+];
 
 export default function YieldPage() {
-  const [asset, setAsset] = useState<YieldAsset | 'all'>('all')
-  const [selectedId, setSelectedId] = useState<string>()
+  const [asset, setAsset] = useState<YieldAsset | 'all'>('all');
+  const [selectedId, setSelectedId] = useState<string>();
 
-  const { data: rates, isLoading, mutate } = useYieldRates(asset === 'all' ? undefined : asset)
+  const { data: rates, isLoading, mutate } = useYieldRates(asset === 'all' ? undefined : asset);
 
   const rows: RateTableRow[] = (rates ?? []).map((r) => ({
     id: r.protocolId,
@@ -46,7 +46,7 @@ export default function YieldPage() {
       lockup: r.lockupDays === 0 ? 'None' : `${r.lockupDays} days`,
       risk: <Badge risk={r.riskLevel}>{r.riskLevel}</Badge>,
     },
-  }))
+  }));
 
   return (
     <div className="space-y-6">
@@ -85,5 +85,5 @@ export default function YieldPage() {
         caption="// MOCK data for Blend, DeFindex, BENJI, USDY — replace with live protocol APIs."
       />
     </div>
-  )
+  );
 }

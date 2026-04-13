@@ -1,14 +1,14 @@
-import type { SwapRoute, StellarAsset } from '@/types'
-import { getStrictSendPaths } from './horizon'
+import type { SwapRoute, StellarAsset } from '@/types';
+import { getStrictSendPaths } from './horizon';
 
 // MOCK — Soroswap, Phoenix, Aquarius: replace when public APIs are stable
 function generateMockDexRoutes(
   fromAsset: StellarAsset,
   toAsset: StellarAsset,
   fromAmount: number,
-  sdexPrice: number,
+  sdexPrice: number
 ): SwapRoute[] {
-  const variance = (pct: number) => sdexPrice * (1 + pct)
+  const variance = (pct: number) => sdexPrice * (1 + pct);
   return [
     {
       routeId: 'soroswap-1',
@@ -55,20 +55,20 @@ function generateMockDexRoutes(
       lastUpdated: new Date(),
       isMock: true,
     },
-  ]
+  ];
 }
 
 export async function fetchSwapRoutes(
   fromAsset: StellarAsset,
   toAsset: StellarAsset,
-  fromAmount: number,
+  fromAmount: number
 ): Promise<SwapRoute[]> {
-  let sdexRoutes: SwapRoute[] = []
-  let basePrice = 1
+  let sdexRoutes: SwapRoute[] = [];
+  let basePrice = 1;
 
   try {
-    sdexRoutes = await getStrictSendPaths(fromAsset, fromAmount, [toAsset])
-    if (sdexRoutes.length > 0) basePrice = sdexRoutes[0].price
+    sdexRoutes = await getStrictSendPaths(fromAsset, fromAmount, [toAsset]);
+    if (sdexRoutes.length > 0) basePrice = sdexRoutes[0].price;
   } catch {
     // Horizon unavailable — use mock SDEX route
     sdexRoutes = [
@@ -87,13 +87,13 @@ export async function fetchSwapRoutes(
         lastUpdated: new Date(),
         isMock: true,
       },
-    ]
-    basePrice = 1.0
+    ];
+    basePrice = 1.0;
   }
 
-  const mockDexRoutes = generateMockDexRoutes(fromAsset, toAsset, fromAmount, basePrice)
-  const all = [...sdexRoutes, ...mockDexRoutes].sort((a, b) => b.toAmount - a.toAmount)
+  const mockDexRoutes = generateMockDexRoutes(fromAsset, toAsset, fromAmount, basePrice);
+  const all = [...sdexRoutes, ...mockDexRoutes].sort((a, b) => b.toAmount - a.toAmount);
 
-  if (all.length > 0) all[0].isBest = true
-  return all
+  if (all.length > 0) all[0].isBest = true;
+  return all;
 }
