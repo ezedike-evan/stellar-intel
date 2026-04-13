@@ -55,3 +55,23 @@ npm run lint
 # Production build
 npm run build
 ```
+
+---
+
+## Environment Variables
+
+Copy `.env.example` to `.env.local` and set the following variables:
+
+| Variable | Required | Default | Description |
+|---|---|---|---|
+| `NEXT_PUBLIC_STELLAR_NETWORK` | No | `mainnet` | Stellar network to connect to (`mainnet` or `testnet`) |
+| `NEXT_PUBLIC_HORIZON_URL` | No | `https://horizon.stellar.org` | Horizon server URL |
+| `NEXT_PUBLIC_STELLAR_EXPERT_URL` | No | `https://api.stellar.expert/explorer/public` | Stellar Expert API base URL used for transaction links |
+
+All three variables have safe production defaults and are optional for local development.
+To point at the Stellar testnet, set:
+
+```bash
+NEXT_PUBLIC_STELLAR_NETWORK=testnet
+NEXT_PUBLIC_HORIZON_URL=https://horizon-testnet.stellar.org
+```
