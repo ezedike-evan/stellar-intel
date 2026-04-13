@@ -1,4 +1,4 @@
-import type { Country, StellarAsset, AnchorInfo } from '@/types';
+import type { Country, StellarAsset, Anchor } from '@/types';
 
 export const STELLAR_NETWORK = process.env.NEXT_PUBLIC_STELLAR_NETWORK ?? 'mainnet';
 export const HORIZON_URL = process.env.NEXT_PUBLIC_HORIZON_URL ?? 'https://horizon.stellar.org';
@@ -41,46 +41,46 @@ export const SUPPORTED_COUNTRIES: Country[] = [
   { code: 'DE', name: 'Germany', currency: 'EUR', currencySymbol: '€', flag: '🇩🇪' },
 ];
 
-export const KNOWN_ANCHORS: AnchorInfo[] = [
+export const KNOWN_ANCHORS: Anchor[] = [
   {
     id: 'bitso',
     name: 'Bitso',
-    domain: 'bitso.com',
-    supportedCountries: ['MX', 'BR'],
-    supportedCurrencies: ['MXN', 'BRL'],
-    depositMethods: ['bank_transfer'],
+    homeDomain: 'bitso.com',
+    corridors: ['usdc-mxn', 'usdc-brl'],
+    assetCode: 'USDC',
+    assetIssuer: 'GA5ZSEJYB37JRC5AVCIA5MOP4RHTM335X2KGX3IHOJAPP5RE34K4KZVN',
   },
   {
     id: 'flutterwave',
     name: 'Flutterwave',
-    domain: 'flutterwave.com',
-    supportedCountries: ['NG', 'KE', 'GH'],
-    supportedCurrencies: ['NGN', 'KES', 'GHS'],
-    depositMethods: ['bank_transfer', 'mobile_money'],
+    homeDomain: 'flutterwave.com',
+    corridors: ['usdc-ngn', 'usdc-kes', 'usdc-ghs'],
+    assetCode: 'USDC',
+    assetIssuer: 'GA5ZSEJYB37JRC5AVCIA5MOP4RHTM335X2KGX3IHOJAPP5RE34K4KZVN',
   },
   {
     id: 'mychoice',
     name: 'MyChoice',
-    domain: 'mychoicefinance.com',
-    supportedCountries: ['PH'],
-    supportedCurrencies: ['PHP'],
-    depositMethods: ['bank_transfer', 'mobile_money', 'cash'],
+    homeDomain: 'mychoicefinance.com',
+    corridors: ['usdc-php'],
+    assetCode: 'USDC',
+    assetIssuer: 'GA5ZSEJYB37JRC5AVCIA5MOP4RHTM335X2KGX3IHOJAPP5RE34K4KZVN',
   },
   {
     id: 'tempo',
     name: 'Tempo',
-    domain: 'tempo.eu.com',
-    supportedCountries: ['DE'],
-    supportedCurrencies: ['EUR'],
-    depositMethods: ['bank_transfer'],
+    homeDomain: 'tempo.eu.com',
+    corridors: ['usdc-eur'],
+    assetCode: 'USDC',
+    assetIssuer: 'GA5ZSEJYB37JRC5AVCIA5MOP4RHTM335X2KGX3IHOJAPP5RE34K4KZVN',
   },
   {
     id: 'cowrie',
     name: 'Cowrie Exchange',
-    domain: 'cowrie.exchange',
-    supportedCountries: ['NG'],
-    supportedCurrencies: ['NGN'],
-    depositMethods: ['bank_transfer'],
+    homeDomain: 'cowrie.exchange',
+    corridors: ['usdc-ngn'],
+    assetCode: 'USDC',
+    assetIssuer: 'GA5ZSEJYB37JRC5AVCIA5MOP4RHTM335X2KGX3IHOJAPP5RE34K4KZVN',
   },
 ];
 

@@ -1,2 +1,4 @@
 // Anchor discovery and rate fetching
-export {};
+import type { Anchor, Corridor } from '@/types'
+
+export type { Anchor, Corridor }

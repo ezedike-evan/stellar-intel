@@ -1,77 +1,182 @@
-// ─── Anchor / Off-ramp / On-ramp ────────────────────────────────────────────
+// ─── Anchors ─────────────────────────────────────────────────────────────────
 
-export type DepositMethod = 'bank_transfer' | 'mobile_money' | 'cash' | 'card';
-
-export interface AnchorInfo {
-  id: string;
-  name: string;
-  domain: string;
-  logoUrl?: string;
-  supportedCountries: string[];
-  supportedCurrencies: string[];
-  depositMethods: DepositMethod[];
+/** A Stellar anchor that supports SEP-24 withdrawals and/or deposits. */
+export interface Anchor {
+  id: string
+  name: string
+  homeDomain: string
+  corridors: string[] // corridor IDs this anchor serves
+  assetCode: string
+  assetIssuer: string
 }
 
+/** A payment corridor from one asset to a fiat currency in a given country. */
+export interface Corridor {
+  id: string // e.g. 'usdc-ngn'
+  from: string // asset code, e.g. 'USDC'
+  to: string // fiat currency code, e.g. 'NGN'
+  countryCode: string // ISO 3166-1 alpha-2
+  countryName: string
+}
+
+// ─── Rate comparison ──────────────────────────────────────────────────────────
+
+/** The fee structure an anchor charges for a given corridor and amount. */
 export interface AnchorRate {
-  anchorId: string;
-  anchorName: string;
-  logoUrl?: string;
-  // Off-ramp: USDC → fiat
-  exchangeRate: number; // units of local currency per 1 USDC
-  fee: number; // flat fee in USDC
-  feePercent: number; // percentage fee (0.01 = 1%)
-  minAmount: number; // minimum in USDC
-  maxAmount: number; // maximum in USDC
-  estimatedTime: string; // e.g. "1–2 hours"
-  depositMethods: DepositMethod[];
-  country: string;
-  currency: string; // ISO 4217
-  totalReceived?: number; // computed: (amount - fee) * exchangeRate
-  isBest?: boolean;
-  isWorst?: boolean;
-  lastUpdated: Date;
-  isMock?: boolean;
+  anchorId: string
+  anchorName: string
+  corridorId: string
+  fee: number // flat fee in USDC
+  feeType: 'flat' | 'percent' | 'combined'
+  exchangeRate: number // local currency units per 1 USDC
+  totalReceived: number // computed: (amount - fee) * exchangeRate
+  updatedAt: Date
 }
 
-// ─── Swap routing (SDEX path results) ────────────────────────────────────────
-
-export type SwapSource = 'SDEX' | 'Soroswap' | 'Phoenix' | 'Aquarius';
-
-export interface SwapRoute {
-  routeId: string;
-  source: SwapSource;
-  fromAsset: StellarAsset;
-  toAsset: StellarAsset;
-  fromAmount: number;
-  toAmount: number;
-  price: number;
-  priceImpact: number;
-  fee: number;
-  path: StellarAsset[];
-  estimatedTime: string;
-  isBest?: boolean;
-  lastUpdated: Date;
+/** The result of comparing all anchor rates for a single corridor. */
+export interface RateComparison {
+  corridorId: string
+  rates: AnchorRate[]
+  bestRateId: string // anchorId of the anchor with the highest totalReceived
 }
 
-// ─── Stellar assets ───────────────────────────────────────────────────────────
+// ─── Wallet ───────────────────────────────────────────────────────────────────
+
+/** The current state of the Freighter browser extension. */
+export interface FreighterState {
+  isInstalled: boolean
+  isConnected: boolean
+  publicKey: string | null
+  network: string | null
+  error: string | null
+}
+
+// ─── SEP-1 ────────────────────────────────────────────────────────────────────
+
+/** Relevant fields from a stellar.toml file resolved via SEP-1. */
+export interface Sep1TomlData {
+  TRANSFER_SERVER_SEP0024: string
+  WEB_AUTH_ENDPOINT: string
+  SIGNING_KEY?: string
+  CURRENCIES?: Array<{ code: string; issuer?: string }>
+}
+
+// ─── SEP-10 ───────────────────────────────────────────────────────────────────
+
+/** A JWT issued by an anchor after successful SEP-10 authentication. */
+export interface Sep10Auth {
+  jwt: string
+  anchorDomain: string
+  publicKey: string
+  expiresAt: Date
+}
+
+// ─── SEP-24 ───────────────────────────────────────────────────────────────────
+
+/** Parameters for the SEP-24 GET /fee endpoint. */
+export interface Sep24FeeParams {
+  anchorDomain: string
+  operation: 'deposit' | 'withdraw'
+  assetCode: string
+  assetIssuer: string
+  amount: string
+  type: 'bank_account' | 'cash' | 'mobile_money'
+}
+
+/** Body sent to POST /transactions/withdraw/interactive. */
+export interface Sep24WithdrawRequest {
+  assetCode: string
+  assetIssuer: string
+  amount: string
+  account: string // user's Stellar public key
+  jwt: string
+}
+
+/** Response from POST /transactions/withdraw/interactive. */
+export interface Sep24WithdrawResponse {
+  type: 'interactive_customer_info_needed'
+  url: string
+  id: string
+}
+
+/** All possible status values for a SEP-24 transaction. */
+export type WithdrawStatusValue =
+  | 'incomplete'
+  | 'pending_user_transfer_start'
+  | 'pending_user_transfer_complete'
+  | 'pending_external'
+  | 'pending_anchor'
+  | 'pending_stellar'
+  | 'pending_trust'
+  | 'pending_user'
+  | 'completed'
+  | 'refunded'
+  | 'error'
+  | 'no_market'
+  | 'too_small'
+  | 'too_large'
+
+/** The live status of a SEP-24 withdrawal transaction. */
+export interface WithdrawStatus {
+  id: string
+  status: WithdrawStatusValue
+  amountIn?: string
+  amountOut?: string
+  amountFee?: string
+  updatedAt: Date
+  stellarTransactionId?: string
+}
+
+// ─── API ──────────────────────────────────────────────────────────────────────
+
+/** Shape returned by GET /api/rates. */
+export interface ApiRatesResponse {
+  rates: RateComparison
+  fetchedAt: string
+}
+
+/** Shape returned by API routes on error. */
+export interface ApiError {
+  code: string
+  message: string
+  anchorId?: string
+}
+
+// ─── UI helpers ───────────────────────────────────────────────────────────────
+
+/** A country supported by the off-ramp module. */
+export interface Country {
+  code: string // ISO 3166-1 alpha-2
+  name: string
+  currency: string // ISO 4217
+  currencySymbol: string
+  flag: string
+}
+
+export type OfframpSortKey = 'rate' | 'fee' | 'time' | 'total'
+export type SortDirection = 'asc' | 'desc'
+export type RiskLevel = 'low' | 'medium' | 'high'
+
+// ─── Stellar assets (used by Horizon swap routing) ────────────────────────────
 
 export interface StellarAsset {
-  code: string;
-  issuer?: string; // undefined for XLM (native)
-  name: string;
-  logoUrl?: string;
+  code: string
+  issuer?: string
+  name: string
+  logoUrl?: string
 }
 
-// ─── Shared UI ───────────────────────────────────────────────────────────────
-
-export type RiskLevel = 'low' | 'medium' | 'high';
-export type SortDirection = 'asc' | 'desc';
-export type OfframpSortKey = 'rate' | 'fee' | 'time' | 'total';
-
-export interface Country {
-  code: string; // ISO 3166-1 alpha-2
-  name: string;
-  currency: string; // ISO 4217
-  currencySymbol: string;
-  flag: string;
+export interface SwapRoute {
+  routeId: string
+  source: 'SDEX' | 'Soroswap' | 'Phoenix' | 'Aquarius'
+  fromAsset: StellarAsset
+  toAsset: StellarAsset
+  fromAmount: number
+  toAmount: number
+  price: number
+  priceImpact: number
+  fee: number
+  path: StellarAsset[]
+  estimatedTime: string
+  lastUpdated: Date
 }
