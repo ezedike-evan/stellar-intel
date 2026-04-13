@@ -75,3 +75,18 @@ To point at the Stellar testnet, set:
 NEXT_PUBLIC_STELLAR_NETWORK=testnet
 NEXT_PUBLIC_HORIZON_URL=https://horizon-testnet.stellar.org
 ```
+
+---
+
+## Contributing
+
+Contributions are welcome. Please read [CONTRIBUTING.md](CONTRIBUTING.md) before
+opening a pull request.
+
+All contributors are expected to follow the [Code of Conduct](CODE_OF_CONDUCT.md).
+
+---
+
+## License
+
+[MIT](LICENSE)
