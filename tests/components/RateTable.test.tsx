@@ -8,17 +8,16 @@ const makeRate = (anchorId: string, totalReceived: number): AnchorRate => ({
   anchorName: anchorId === 'cowrie' ? 'Cowrie' : 'Flutterwave',
   corridorId: 'usdc-ngn',
   fee: 2,
-  feePercent: 0,
+  feeType: 'flat',
   exchangeRate: 1580,
   totalReceived,
+  updatedAt: new Date(),
 })
 
 const mockRates: RateComparison = {
   corridorId: 'usdc-ngn',
-  amount: 100,
   bestRateId: 'cowrie',
   rates: [makeRate('cowrie', 154840), makeRate('flutterwave', 153260)],
-  fetchedAt: new Date(),
 }
 
 describe('RateTable', () => {
