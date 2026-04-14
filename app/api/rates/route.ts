@@ -1,7 +1,8 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { fetchAllAnchorFees, computeRateComparison } from '@/lib/stellar/sep24'
+import { fetchEstimatedRates } from '@/lib/stellar/estimatedRates'
 import { isValidCorridorId } from '@/lib/stellar/anchors'
-import type { ApiRatesResponse, ApiError } from '@/types'
+import type { AnchorRate, ApiRatesResponse, ApiError } from '@/types'
 
 export async function GET(request: NextRequest) {
   const { searchParams } = request.nextUrl
@@ -30,18 +31,36 @@ export async function GET(request: NextRequest) {
     )
   }
 
+  // Try live anchor fee APIs first
   const results = await fetchAllAnchorFees(amountParam, corridor)
   const rates = computeRateComparison(results, corridor)
 
-  if (rates.rates.length === 0) {
-    return NextResponse.json<ApiError>(
-      { code: 'ALL_ANCHORS_FAILED', message: 'All anchor fee requests failed for this corridor' },
-      { status: 500 }
-    )
+  // If all anchor APIs failed, fall back to market-rate estimates
+  let liveRates: AnchorRate[] = rates.rates
+  if (liveRates.length === 0) {
+    try {
+      liveRates = await fetchEstimatedRates(corridor, amountParam)
+    } catch {
+      return NextResponse.json<ApiError>(
+        {
+          code: 'ALL_ANCHORS_FAILED',
+          message: 'Unable to fetch rates. Please try again shortly.',
+        },
+        { status: 500 }
+      )
+    }
   }
 
+  const bestRateId = liveRates.reduce((best, r) =>
+    r.totalReceived > (liveRates.find((x) => x.anchorId === best)?.totalReceived ?? 0) ? r.anchorId : best,
+    liveRates[0].anchorId
+  )
+
   return NextResponse.json<ApiRatesResponse>(
-    { rates, fetchedAt: new Date().toISOString() },
+    {
+      rates: { corridorId: corridor, rates: liveRates, bestRateId },
+      fetchedAt: new Date().toISOString(),
+    },
     { headers: { 'Cache-Control': 'no-store' } }
   )
 }

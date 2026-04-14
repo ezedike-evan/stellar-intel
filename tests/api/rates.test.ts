@@ -2,6 +2,7 @@ import { describe, it, expect, vi, beforeEach } from 'vitest'
 import { NextRequest } from 'next/server'
 import { GET } from '@/app/api/rates/route'
 import * as sep24 from '@/lib/stellar/sep24'
+import * as estimatedRates from '@/lib/stellar/estimatedRates'
 import type { AnchorRate } from '@/types'
 
 const makeRate = (anchorId: string, total: number): AnchorRate => ({
@@ -67,14 +68,30 @@ describe('GET /api/rates', () => {
     expect(body.code).toBe('INVALID_AMOUNT')
   })
 
-  it('returns 500 when all anchor fetches fail', async () => {
+  it('returns 500 when all anchor fetches fail and estimated rates also fail', async () => {
     vi.spyOn(sep24, 'fetchAllAnchorFees').mockResolvedValue([
       { status: 'rejected', reason: new Error('timeout') },
     ])
+    vi.spyOn(estimatedRates, 'fetchEstimatedRates').mockRejectedValue(
+      new Error('Exchange rate API unavailable')
+    )
     const res = await GET(makeRequest({ corridor: 'usdc-ngn', amount: '100' }))
     expect(res.status).toBe(500)
     const body = await res.json()
     expect(body.code).toBe('ALL_ANCHORS_FAILED')
+  })
+
+  it('falls back to estimated rates and returns 200 when anchor APIs fail', async () => {
+    vi.spyOn(sep24, 'fetchAllAnchorFees').mockResolvedValue([
+      { status: 'rejected', reason: new Error('timeout') },
+    ])
+    vi.spyOn(estimatedRates, 'fetchEstimatedRates').mockResolvedValue([
+      { ...makeRate('cowrie', 133000), source: 'estimated' },
+    ])
+    const res = await GET(makeRequest({ corridor: 'usdc-ngn', amount: '100' }))
+    expect(res.status).toBe(200)
+    const body = await res.json()
+    expect(body.rates.rates[0].source).toBe('estimated')
   })
 
   it('sets Cache-Control: no-store on successful responses', async () => {

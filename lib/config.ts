@@ -63,8 +63,11 @@ function validateEnv(): void {
   }
 }
 
-// Run validation immediately
-validateEnv();
+// Only validate on the server. In the browser, Next.js inlines NEXT_PUBLIC_*
+// values at compile time so process.env is empty — validation would always fail.
+if (typeof window === 'undefined') {
+  validateEnv();
+}
 
 /**
  * Typed configuration object.
