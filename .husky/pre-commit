@@ -1,0 +1,6 @@
+#!/usr/bin/env sh
+# Stellar Intel — pre-commit hook.
+# Runs lint-staged against staged files. Full typecheck is expensive and is
+# left to CI; pre-commit stays fast so contributors do not disable it.
+
+npx --no-install lint-staged

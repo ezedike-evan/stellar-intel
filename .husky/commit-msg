@@ -1,0 +1,6 @@
+#!/usr/bin/env sh
+# Stellar Intel — commit-msg hook.
+# Enforces Conventional Commits with Stellar Intel scopes via commitlint.
+# The config lives in commitlint.config.mjs.
+
+npx --no-install commitlint --edit "$1"
