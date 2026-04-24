@@ -1,0 +1,35 @@
+name: Label Sync
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - '.github/labels.yml'
+      - '.github/workflows/label-sync.yml'
+  workflow_dispatch:
+    inputs:
+      delete-extra:
+        description: Delete labels not defined in labels.yml
+        required: false
+        type: boolean
+        default: false
+
+permissions:
+  issues: write
+  contents: read
+
+jobs:
+  sync:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Sync labels from .github/labels.yml
+        uses: EndBug/label-sync@v2
+        with:
+          config-file: .github/labels.yml
+          # Manual-run parameter controls whether labels absent from labels.yml
+          # are removed from the repo. Keep false on automatic runs so ad-hoc
+          # labels created by integrations are preserved until reviewed.
+          delete-other-labels: ${{ github.event_name == 'workflow_dispatch' && inputs.delete-extra == true }}

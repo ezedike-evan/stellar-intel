@@ -1,0 +1,193 @@
+# Stellar Intel — canonical label taxonomy.
+# Single source of truth; synced to GitHub by .github/workflows/label-sync.yml.
+# Edit this file, merge to main, and the workflow will reconcile the repo labels.
+#
+# Naming rules:
+#   - lower-case, hyphenated, namespaced with "/"
+#   - one concern per namespace: epic/, module/, wave/, difficulty/
+#   - state labels stay flat ("blocked", "help-wanted", "design-review")
+
+# ─── Type ─────────────────────────────────────────────────────────────────────
+- name: bug
+  color: 'd73a4a'
+  description: Something is broken. A user-visible defect or a broken invariant.
+- name: feature
+  color: '0e8a16'
+  description: New capability. Expands what the product can do.
+- name: enhancement
+  color: 'a2eeef'
+  description: Improvement to an existing capability (not a bug fix, not new scope).
+- name: docs
+  color: '0075ca'
+  description: Documentation change — README, /docs, inline, or templates.
+- name: refactor
+  color: 'c2e0c6'
+  description: Code structure change with no behaviour change.
+- name: test
+  color: 'bfd4f2'
+  description: Adds or changes tests. No production behaviour change.
+- name: chore
+  color: 'ededed'
+  description: Build, tooling, deps, repo meta. Not a user-visible change.
+- name: question
+  color: 'd876e3'
+  description: Triage question — needs a decision or clarification.
+
+# ─── State ────────────────────────────────────────────────────────────────────
+- name: blocked
+  color: 'b60205'
+  description: Cannot progress — waiting on another issue, anchor, or external party.
+- name: help-wanted
+  color: '008672'
+  description: Actively looking for a contributor to own this.
+- name: good-first-issue
+  color: '7057ff'
+  description: Scoped, unblocked, reviewer-ready. Safe for a first-time contributor.
+- name: design-review
+  color: 'fbca04'
+  description: Needs UX / product review before implementation starts.
+- name: needs-triage
+  color: 'e99695'
+  description: New issue that a maintainer has not yet categorised.
+- name: duplicate
+  color: 'cfd3d7'
+  description: Already tracked by another issue. Link and close.
+- name: wontfix
+  color: 'ffffff'
+  description: Out of scope or intentionally not addressed. Document why and close.
+- name: stale
+  color: 'bfbfbf'
+  description: Auto-applied after 30 days of inactivity by the stale action.
+- name: pinned
+  color: '006b75'
+  description: Exempt from the stale action. Load-bearing tracking issues.
+- name: security
+  color: '7a0000'
+  description: Security concern. Exempt from stale. Escalate to SECURITY.md flow.
+
+# ─── Difficulty ───────────────────────────────────────────────────────────────
+- name: difficulty/good-first-issue
+  color: '7057ff'
+  description: '< 2 hours, self-contained, clear acceptance criteria.'
+- name: difficulty/intermediate
+  color: 'c5def5'
+  description: '~1 day of work. Touches one module. No cross-cutting concerns.'
+- name: difficulty/hard
+  color: '1d76db'
+  description: Multi-day. Cross-module or requires design work first.
+
+# ─── Wave (ties to docs/ROADMAP.md) ───────────────────────────────────────────
+- name: wave/1.0
+  color: 'fef2c0'
+  description: v1.0 Core Executable — issues #001–#070.
+- name: wave/1.1
+  color: 'fef2c0'
+  description: v1.1 Hardening + SEP-38 — issues #071–#110.
+- name: wave/1.2
+  color: 'fef2c0'
+  description: v1.2 Router + Seeds — issues #111–#140.
+- name: wave/1.3
+  color: 'fef2c0'
+  description: v1.3 Polish + Release Gate — issues #141–#150.
+- name: wave/2.0
+  color: 'ffeb99'
+  description: v2.0 Reputation as Product Surface — issues #151–#180.
+- name: wave/2.1
+  color: 'ffeb99'
+  description: v2.1 Soroban Oracle Live — issues #181–#205.
+- name: wave/2.2
+  color: 'ffeb99'
+  description: v2.2 Multi-Anchor Split Routing — issues #206–#230.
+- name: wave/2.3
+  color: 'ffeb99'
+  description: v2.3 Public Reputation API + Bootstrap — issues #231–#250.
+
+# ─── Epic (high-level theme) ──────────────────────────────────────────────────
+- name: epic/execution-layer
+  color: '5319e7'
+  description: Intent router, solver, execution semantics.
+- name: epic/reputation
+  color: '5319e7'
+  description: Anchor scoring, probe bot, Soroban oracle.
+- name: epic/agents
+  color: '5319e7'
+  description: MCP server, SDK, agent-facing APIs.
+- name: epic/anchor-integration
+  color: '5319e7'
+  description: Listing, onboarding, and supporting new Stellar anchors.
+- name: epic/ui
+  color: '5319e7'
+  description: Product surface — widget, dashboard, rate table.
+- name: epic/docs-community
+  color: '5319e7'
+  description: Documentation, governance, contributor experience.
+
+# ─── Module (maps to a directory) ─────────────────────────────────────────────
+- name: module/offramp
+  color: 'c5def5'
+  description: app/offramp/* and lib/offramp/*.
+- name: module/intent
+  color: 'c5def5'
+  description: lib/intent/* — canonical schema, signing, hashing, replay.
+- name: module/router
+  color: 'c5def5'
+  description: lib/router/* — solver, path selection, split routing.
+- name: module/reputation
+  color: 'c5def5'
+  description: lib/reputation/* — scoring, aggregation, dispute handling.
+- name: module/oracle
+  color: 'c5def5'
+  description: contracts/oracle and lib/oracle/* — Soroban oracle.
+- name: module/mcp
+  color: 'c5def5'
+  description: packages/mcp/* — MCP server + tool definitions.
+- name: module/api
+  color: 'c5def5'
+  description: app/api/* — HTTP surface.
+- name: module/ui
+  color: 'c5def5'
+  description: components/* + app/(ui)/* — React components and pages.
+- name: module/sep1
+  color: 'c5def5'
+  description: lib/sep1/* — stellar.toml resolution.
+- name: module/sep10
+  color: 'c5def5'
+  description: lib/sep10/* — anchor authentication.
+- name: module/sep24
+  color: 'c5def5'
+  description: lib/sep24/* — interactive deposit/withdraw.
+- name: module/sep38
+  color: 'c5def5'
+  description: lib/sep38/* — quote API.
+- name: module/freighter
+  color: 'c5def5'
+  description: lib/freighter/* — wallet adapter surface.
+- name: module/ops
+  color: 'c5def5'
+  description: Infrastructure, CI, deploys, monitoring.
+
+# ─── Release / dependency meta ───────────────────────────────────────────────
+- name: release
+  color: '0e8a16'
+  description: Release-related PRs. Ignored by commit-title linter.
+- name: dependencies
+  color: '0366d6'
+  description: Dependency updates. Auto-applied by Dependabot.
+- name: size
+  color: 'ededed'
+  description: Parent for size/xs..size/xl applied by the bundle-size workflow.
+- name: size/xs
+  color: 'e6f4ea'
+  description: Change set is ~50 lines or less.
+- name: size/s
+  color: 'c6e8c6'
+  description: Change set is ~50–200 lines.
+- name: size/m
+  color: 'fef2c0'
+  description: Change set is ~200–500 lines.
+- name: size/l
+  color: 'fbca04'
+  description: Change set is ~500–1000 lines.
+- name: size/xl
+  color: 'd93f0b'
+  description: Change set exceeds 1000 lines. Consider splitting.
