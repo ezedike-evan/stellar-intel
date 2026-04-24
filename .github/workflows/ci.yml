@@ -2,12 +2,65 @@ name: CI
 
 on:
   push:
-    branches: ['**']
+    branches: [main]
   pull_request:
     branches: ['**']
 
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: true
+
+permissions:
+  contents: read
+
+env:
+  NEXT_PUBLIC_STELLAR_NETWORK: mainnet
+  NEXT_PUBLIC_HORIZON_URL: https://horizon.stellar.org
+  NEXT_PUBLIC_STELLAR_EXPERT_URL: https://api.stellar.expert/explorer/public
+
 jobs:
-  ci:
+  # Fast jobs — fan out per Node version.
+  check:
+    name: check (node ${{ matrix.node }})
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        node: ['20', '22']
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: ${{ matrix.node }}
+          cache: 'npm'
+
+      - run: npm ci
+
+      - name: Prettier formatting
+        run: npm run format:check
+
+      - name: ESLint (zero warnings)
+        run: npm run lint
+
+      - name: TypeScript
+        run: npm run typecheck
+
+      - name: Unit tests (vitest)
+        run: npm run test -- --reporter=default --coverage
+
+      - name: Upload coverage to Codecov
+        if: matrix.node == '20'
+        uses: codecov/codecov-action@v5
+        with:
+          token: ${{ secrets.CODECOV_TOKEN }}
+          fail_ci_if_error: false
+          flags: unit
+          name: unit-node20
+
+  build:
+    name: build (node 20)
+    needs: check
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
@@ -16,6 +69,10 @@ jobs:
           node-version: '20'
           cache: 'npm'
       - run: npm ci
-      - run: npm run lint
-      - run: npm run typecheck
       - run: npm run build
+      - name: Upload .next artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: next-build
+          path: .next
+          retention-days: 3

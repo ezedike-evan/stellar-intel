@@ -1,0 +1,110 @@
+name: Preview Deploy
+
+on:
+  pull_request:
+    branches: [main]
+
+permissions:
+  contents: read
+  pull-requests: write
+  deployments: write
+
+concurrency:
+  group: preview-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  deploy:
+    name: Vercel preview
+    runs-on: ubuntu-latest
+    outputs:
+      preview-url: ${{ steps.vercel.outputs.preview-url }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+          cache: 'npm'
+      - run: npm ci
+
+      - name: Install Vercel CLI
+        run: npm install --global vercel@latest
+
+      - name: Pull Vercel environment
+        run: vercel pull --yes --environment=preview --token=${{ secrets.VERCEL_TOKEN }}
+
+      - name: Build with Vercel
+        run: vercel build --token=${{ secrets.VERCEL_TOKEN }}
+
+      - name: Deploy preview
+        id: vercel
+        run: |
+          URL=$(vercel deploy --prebuilt --token=${{ secrets.VERCEL_TOKEN }})
+          echo "preview-url=$URL" >> "$GITHUB_OUTPUT"
+          echo "Preview URL: $URL"
+
+      - name: Comment preview URL on PR
+        uses: actions/github-script@v7
+        with:
+          script: |
+            const url = `${{ steps.vercel.outputs.preview-url }}`;
+            const marker = '<!-- vercel-preview -->';
+            const body = [
+              marker,
+              '## Preview deployment',
+              '',
+              `:rocket: **Preview URL**: ${url}`,
+              '',
+              `Commit: \`${context.sha.slice(0, 7)}\``,
+            ].join('\n');
+
+            const { data: comments } = await github.rest.issues.listComments({
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              issue_number: context.issue.number,
+            });
+            const prior = comments.find((c) => c.body?.includes(marker));
+            if (prior) {
+              await github.rest.issues.updateComment({
+                owner: context.repo.owner,
+                repo: context.repo.repo,
+                comment_id: prior.id,
+                body,
+              });
+            } else {
+              await github.rest.issues.createComment({
+                owner: context.repo.owner,
+                repo: context.repo.repo,
+                issue_number: context.issue.number,
+                body,
+              });
+            }
+
+  smoke:
+    name: Playwright smoke
+    runs-on: ubuntu-latest
+    needs: deploy
+    if: needs.deploy.outputs.preview-url != ''
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+          cache: 'npm'
+      - run: npm ci
+
+      - name: Install Playwright browsers
+        run: npx playwright install --with-deps chromium
+
+      - name: Smoke-test preview URL
+        env:
+          PREVIEW_URL: ${{ needs.deploy.outputs.preview-url }}
+        run: |
+          if [ -f "tests/e2e/smoke.spec.ts" ]; then
+            npx playwright test tests/e2e/smoke.spec.ts --reporter=line
+          else
+            echo "No smoke spec yet — issuing a baseline HTTP probe instead."
+            STATUS=$(curl -sS -o /dev/null -w "%{http_code}" --max-time 30 "$PREVIEW_URL/")
+            echo "Homepage HTTP: $STATUS"
+            test "$STATUS" = "200"
+          fi
