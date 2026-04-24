@@ -1,5 +1,5 @@
 import { StellarToml } from '@stellar/stellar-sdk'
-import type { Sep1TomlData } from '@/types'
+import type { ResolvedAnchor, Sep1TomlData } from '@/types'
 import { ANCHORS } from './anchors'
 
 // ─── In-memory cache ──────────────────────────────────────────────────────────
@@ -35,31 +35,24 @@ export async function resolveToml(domain: string): Promise<Sep1TomlData> {
     )
   }
 
-  const transferServer = raw['TRANSFER_SERVER_SEP0024']
-  if (!transferServer || typeof transferServer !== 'string') {
-    cache.delete(domain)
-    throw new Error(
-      `Missing TRANSFER_SERVER_SEP0024 in stellar.toml for "${domain}". ` +
-        `This anchor does not support SEP-24.`
-    )
-  }
-
-  const webAuthEndpoint = raw['WEB_AUTH_ENDPOINT']
-  if (!webAuthEndpoint || typeof webAuthEndpoint !== 'string') {
-    cache.delete(domain)
-    throw new Error(
-      `Missing WEB_AUTH_ENDPOINT in stellar.toml for "${domain}". ` +
-        `This anchor does not support SEP-10 authentication.`
-    )
-  }
+  const transferServer = typeof raw['TRANSFER_SERVER_SEP0024'] === 'string' ? raw['TRANSFER_SERVER_SEP0024'] : undefined
+  const webAuthEndpoint = typeof raw['WEB_AUTH_ENDPOINT'] === 'string' ? raw['WEB_AUTH_ENDPOINT'] : undefined
+  const signingKey = typeof raw['SIGNING_KEY'] === 'string' ? raw['SIGNING_KEY'] : undefined
+  const quoteServer = typeof raw['QUOTE_SERVER'] === 'string' ? raw['QUOTE_SERVER'] : undefined
 
   const data: Sep1TomlData = {
     TRANSFER_SERVER_SEP0024: transferServer,
     WEB_AUTH_ENDPOINT: webAuthEndpoint,
-    SIGNING_KEY: typeof raw['SIGNING_KEY'] === 'string' ? raw['SIGNING_KEY'] : undefined,
+    SIGNING_KEY: signingKey,
     CURRENCIES: Array.isArray(raw['CURRENCIES'])
       ? (raw['CURRENCIES'] as Array<{ code: string; issuer?: string }>)
       : undefined,
+    capabilities: {
+      sep10: Boolean(webAuthEndpoint),
+      sep24: Boolean(transferServer),
+      sep38: Boolean(quoteServer),
+      sep12: Boolean(signingKey),
+    },
   }
 
   cache.set(domain, { data, expiresAt: Date.now() + TTL_MS })
@@ -73,6 +66,9 @@ export async function resolveToml(domain: string): Promise<Sep1TomlData> {
  */
 export async function getTransferServer(domain: string): Promise<string> {
   const toml = await resolveToml(domain)
+  if (!toml.TRANSFER_SERVER_SEP0024) {
+    throw new Error(`Anchor "${domain}" does not support SEP-24.`)
+  }
   return toml.TRANSFER_SERVER_SEP0024
 }
 
@@ -81,6 +77,9 @@ export async function getTransferServer(domain: string): Promise<string> {
  */
 export async function getWebAuthEndpoint(domain: string): Promise<string> {
   const toml = await resolveToml(domain)
+  if (!toml.WEB_AUTH_ENDPOINT) {
+    throw new Error(`Anchor "${domain}" does not support SEP-10 authentication.`)
+  }
   return toml.WEB_AUTH_ENDPOINT
 }
 
@@ -90,12 +89,12 @@ export async function getWebAuthEndpoint(domain: string): Promise<string> {
  * Resolves stellar.toml for all known anchors in parallel.
  * Anchors that fail resolution are logged but do not cause the function to throw.
  */
-export async function resolveAllAnchors(): Promise<Record<string, Sep1TomlData>> {
+export async function resolveAllAnchors(): Promise<Record<string, ResolvedAnchor>> {
   const results = await Promise.allSettled(
     ANCHORS.map((anchor) => resolveToml(anchor.homeDomain).then((data) => ({ anchor, data })))
   )
 
-  const resolved: Record<string, Sep1TomlData> = {}
+  const resolved: Record<string, ResolvedAnchor> = {}
 
   for (const result of results) {
     if (result.status === 'fulfilled') {

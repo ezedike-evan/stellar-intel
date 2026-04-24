@@ -55,13 +55,25 @@ export interface FreighterState {
 
 // ─── SEP-1 ────────────────────────────────────────────────────────────────────
 
+/** Per-anchor protocol capability flags derived from the resolved TOML. */
+export interface AnchorCapabilities {
+  sep10: boolean
+  sep24: boolean
+  sep38: boolean
+  sep12: boolean
+}
+
 /** Relevant fields from a stellar.toml file resolved via SEP-1. */
 export interface Sep1TomlData {
-  TRANSFER_SERVER_SEP0024: string
-  WEB_AUTH_ENDPOINT: string
-  SIGNING_KEY?: string
-  CURRENCIES?: Array<{ code: string; issuer?: string }>
+  TRANSFER_SERVER_SEP0024: string | undefined
+  WEB_AUTH_ENDPOINT: string | undefined
+  SIGNING_KEY: string | undefined
+  CURRENCIES: Array<{ code: string; issuer?: string }> | undefined
+  capabilities: AnchorCapabilities
 }
+
+/** A resolved anchor with protocol capabilities attached. */
+export type ResolvedAnchor = Sep1TomlData
 
 // ─── SEP-10 ───────────────────────────────────────────────────────────────────
 
