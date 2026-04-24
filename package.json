@@ -10,6 +10,7 @@
     "lint:fix": "eslint --fix",
     "typecheck": "tsc --noEmit",
     "type-check": "tsc --noEmit",
+    "validate:anchors": "jiti scripts/validate-anchors.ts",
     "format": "prettier --write \"**/*.{ts,tsx,mjs,json,css,md}\"",
     "format:check": "prettier --check \"**/*.{ts,tsx,mjs,json,css,md}\"",
     "test": "vitest run",
