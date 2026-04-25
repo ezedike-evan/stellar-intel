@@ -29,24 +29,28 @@ describe('resolveToml', () => {
     expect(result.WEB_AUTH_ENDPOINT).toBe('https://cowrie.exchange/auth')
   })
 
-  it('throws when TRANSFER_SERVER_SEP0024 is absent', async () => {
+  it('returns sep24 false when TRANSFER_SERVER_SEP0024 is absent', async () => {
     vi.spyOn(StellarToml.Resolver, 'resolve').mockResolvedValue({
       WEB_AUTH_ENDPOINT: 'https://cowrie.exchange/auth',
     } as never)
 
-    await expect(resolveToml('cowrie.exchange')).rejects.toThrow(
-      /Missing TRANSFER_SERVER_SEP0024.*"cowrie\.exchange"/
-    )
+    const result = await resolveToml('cowrie.exchange')
+
+    expect(result.capabilities.sep24).toBe(false)
+    expect(result.capabilities.sep10).toBe(true)
+    expect(result.TRANSFER_SERVER_SEP0024).toBeUndefined()
   })
 
-  it('throws when WEB_AUTH_ENDPOINT is absent', async () => {
+  it('returns sep10 false when WEB_AUTH_ENDPOINT is absent', async () => {
     vi.spyOn(StellarToml.Resolver, 'resolve').mockResolvedValue({
       TRANSFER_SERVER_SEP0024: 'https://cowrie.exchange/sep24',
     } as never)
 
-    await expect(resolveToml('cowrie.exchange')).rejects.toThrow(
-      /Missing WEB_AUTH_ENDPOINT.*"cowrie\.exchange"/
-    )
+    const result = await resolveToml('cowrie.exchange')
+
+    expect(result.capabilities.sep10).toBe(false)
+    expect(result.capabilities.sep24).toBe(true)
+    expect(result.WEB_AUTH_ENDPOINT).toBeUndefined()
   })
 
   it('throws a descriptive error when the network call fails', async () => {
