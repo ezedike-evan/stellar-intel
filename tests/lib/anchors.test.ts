@@ -10,13 +10,12 @@ import {
 } from '@/lib/stellar/anchors'
 
 describe('ANCHORS', () => {
-  it('contains MoneyGram, Cowrie, Flutterwave, and Anclap', () => {
+  it('contains MoneyGram, Cowrie, and Anclap', () => {
     const ids = ANCHORS.map((a) => a.id)
     expect(ids).toContain('moneygram')
     expect(ids).toContain('cowrie')
-    expect(ids).toContain('flutterwave')
     expect(ids).toContain('anclap')
-    expect(ids).toHaveLength(4)
+    expect(ids).toHaveLength(3)
   })
 
   it('MoneyGram covers all five primary corridors', () => {
@@ -31,11 +30,6 @@ describe('ANCHORS', () => {
   it('Cowrie is only in usdc-ngn', () => {
     const cowrie = ANCHORS.find((a) => a.id === 'cowrie')!
     expect(cowrie.corridors).toEqual(['usdc-ngn'])
-  })
-
-  it('Flutterwave covers usdc-ngn, usdc-kes, and usdc-ghs', () => {
-    const flutterwave = ANCHORS.find((a) => a.id === 'flutterwave')!
-    expect(flutterwave.corridors).toEqual(['usdc-ngn', 'usdc-kes', 'usdc-ghs'])
   })
 
   it('Anclap covers usdc-ars and usdc-pen', () => {
@@ -75,10 +69,6 @@ describe('ANCHOR_HOME_DOMAINS', () => {
     expect(ANCHOR_HOME_DOMAINS['cowrie']).toBe('cowrie.exchange')
   })
 
-  it('maps flutterwave to flutterwave.com', () => {
-    expect(ANCHOR_HOME_DOMAINS['flutterwave']).toBe('flutterwave.com')
-  })
-
   it('maps anclap to anclap.com', () => {
     expect(ANCHOR_HOME_DOMAINS['anclap']).toBe('anclap.com')
   })
@@ -103,19 +93,18 @@ describe('getAnchorById', () => {
 })
 
 describe('getAnchorsByCorridorId', () => {
-  it('returns MoneyGram, Cowrie, and Flutterwave for usdc-ngn', () => {
+  it('returns MoneyGram and Cowrie for usdc-ngn', () => {
     const anchors = getAnchorsByCorridorId('usdc-ngn')
     const ids = anchors.map((a) => a.id)
     expect(ids).toContain('moneygram')
     expect(ids).toContain('cowrie')
-    expect(ids).toContain('flutterwave')
-    expect(ids).toHaveLength(3)
+    expect(ids).toHaveLength(2)
   })
 
-  it('returns MoneyGram and Flutterwave for usdc-kes', () => {
+  it('returns only MoneyGram for usdc-kes', () => {
     const anchors = getAnchorsByCorridorId('usdc-kes')
-    const ids = anchors.map((a) => a.id)
-    expect(ids).toEqual(['moneygram', 'flutterwave'])
+    expect(anchors).toHaveLength(1)
+    expect(anchors[0]?.id).toBe('moneygram')
   })
 
   it('returns only MoneyGram for usdc-mxn', () => {

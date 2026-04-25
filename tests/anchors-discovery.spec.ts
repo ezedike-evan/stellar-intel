@@ -28,18 +28,13 @@ describe('discoverAnchorsForCorridor', () => {
     const result = await discoverAnchorsForCorridor('usdc-ngn')
     const ids = result.map((anchor) => anchor.id)
 
-    expect(ids).toEqual(['cowrie', 'flutterwave'])
+    expect(ids).toEqual(['cowrie'])
     expect(result).toEqual(
       expect.arrayContaining([
         expect.objectContaining({
           id: 'cowrie',
           transferServerSep24: 'https://cowrie.exchange/sep24',
           webAuthEndpoint: 'https://cowrie.exchange/auth',
-        }),
-        expect.objectContaining({
-          id: 'flutterwave',
-          transferServerSep24: 'https://flutterwave.com/sep24',
-          webAuthEndpoint: 'https://flutterwave.com/auth',
         }),
       ])
     )

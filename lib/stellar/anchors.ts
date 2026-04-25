@@ -39,18 +39,6 @@ const COWRIE: Anchor = {
 }
 
 /**
- * Flutterwave - Nigeria, Kenya, and Ghana corridors (USDC -> NGN / KES / GHS).
- */
-const FLUTTERWAVE: Anchor = {
-  id: 'flutterwave',
-  name: 'Flutterwave',
-  homeDomain: 'flutterwave.com',
-  corridors: ['usdc-ngn', 'usdc-kes', 'usdc-ghs'],
-  assetCode: 'USDC',
-  assetIssuer: USDC_ISSUER,
-}
-
-/**
  * Anclap — Argentina and Peru corridors (USDC → ARS / PEN).
  * Confirmed live SEP-24 anchor. 2% withdrawal fee.
  */
@@ -64,8 +52,8 @@ const ANCLAP: Anchor = {
 }
 
 /** All supported anchors. */
-export const KNOWN_ANCHORS: Anchor[] = [MONEYGRAM, COWRIE, FLUTTERWAVE, ANCLAP] as const
-export const ANCHORS = KNOWN_ANCHORS
+export const ANCHORS: Anchor[] = [MONEYGRAM, COWRIE, ANCLAP]
+export const KNOWN_ANCHORS = ANCHORS
 
 export interface DiscoveredAnchor extends Anchor {
   sep1: Sep1TomlData
@@ -77,7 +65,6 @@ export interface DiscoveredAnchor extends Anchor {
 export const ANCHOR_HOME_DOMAINS: Record<string, string> = {
   moneygram: 'stellar.moneygram.com',
   cowrie: 'cowrie.exchange',
-  flutterwave: 'flutterwave.com',
   anclap: 'anclap.com',
 } as const
 
@@ -179,18 +166,22 @@ export function getAnchorsByCorridorId(corridorId: string): Anchor[] {
  * Failed anchors are omitted so callers can continue with the live subset.
  */
 export async function discoverAnchorsForCorridor(corridorId: string): Promise<DiscoveredAnchor[]> {
-  const { resolveToml } = await import('./sep1')
-  const corridorAnchors = KNOWN_ANCHORS.filter((anchor) => anchor.corridors.includes(corridorId))
+  const { resolveToml, getTransferServer, getWebAuthEndpoint } = await import('./sep1')
+  const corridorAnchors = ANCHORS.filter((anchor) => anchor.corridors.includes(corridorId))
 
   const results = await Promise.allSettled(
     corridorAnchors.map(async (anchor): Promise<DiscoveredAnchor> => {
-      const sep1 = await resolveToml(anchor.homeDomain)
+      const [sep1, transferServerSep24, webAuthEndpoint] = await Promise.all([
+        resolveToml(anchor.homeDomain),
+        getTransferServer(anchor.homeDomain),
+        getWebAuthEndpoint(anchor.homeDomain),
+      ])
 
       return {
         ...anchor,
         sep1,
-        transferServerSep24: sep1.TRANSFER_SERVER_SEP0024,
-        webAuthEndpoint: sep1.WEB_AUTH_ENDPOINT,
+        transferServerSep24,
+        webAuthEndpoint,
       }
     })
   )
