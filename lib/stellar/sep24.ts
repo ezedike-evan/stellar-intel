@@ -1,7 +1,70 @@
 import { getTransferServer } from './sep1'
 import { getAnchorsByCorridorId, getCorridorById } from './anchors'
 import { computeTotalReceived } from '@/lib/utils'
-import type { Sep24FeeParams, AnchorRate, RateComparison, Sep24WithdrawRequest, Sep24WithdrawResponse } from '@/types'
+import type { Sep24FeeParams, AnchorRate, RateComparison, Sep24WithdrawRequest, Sep24WithdrawResponse, WithdrawStatus, WithdrawStatusValue } from '@/types'
+
+// ─── Transaction polling ──────────────────────────────────────────────────────
+
+export const TERMINAL_STATES: ReadonlySet<WithdrawStatusValue> = new Set([
+  'completed',
+  'error',
+  'refunded',
+])
+
+const KNOWN_STATUSES = new Set<WithdrawStatusValue>([
+  'incomplete',
+  'pending_user_transfer_start',
+  'pending_user_transfer_complete',
+  'pending_external',
+  'pending_anchor',
+  'pending_stellar',
+  'pending_trust',
+  'pending_user',
+  'completed',
+  'refunded',
+  'error',
+  'no_market',
+  'too_small',
+  'too_large',
+])
+
+function normalizeStatus(raw: unknown): WithdrawStatusValue {
+  if (typeof raw === 'string' && KNOWN_STATUSES.has(raw as WithdrawStatusValue)) {
+    return raw as WithdrawStatusValue
+  }
+  return 'pending_external'
+}
+
+/**
+ * Fetches the current status of a single SEP-24 transaction.
+ * Unknown anchor status strings are normalized to "pending_external" rather than throwing.
+ */
+export async function getSep24Transaction(
+  transferServer: string,
+  transactionId: string,
+  jwt: string
+): Promise<WithdrawStatus> {
+  const res = await fetch(`${transferServer}/transaction?id=${transactionId}`, {
+    headers: { Authorization: `Bearer ${jwt}` },
+  })
+
+  if (!res.ok) {
+    throw new Error(`Transaction fetch failed: HTTP ${res.status}`)
+  }
+
+  const data = (await res.json()) as { transaction?: Record<string, unknown> }
+  const tx = data.transaction ?? {}
+
+  return {
+    id: String(tx['id'] ?? transactionId),
+    status: normalizeStatus(tx['status']),
+    updatedAt: new Date(),
+    ...(tx['amount_in'] !== undefined && { amountIn: tx['amount_in'] as string }),
+    ...(tx['amount_out'] !== undefined && { amountOut: tx['amount_out'] as string }),
+    ...(tx['amount_fee'] !== undefined && { amountFee: tx['amount_fee'] as string }),
+    ...(tx['stellar_transaction_id'] !== undefined && { stellarTransactionId: tx['stellar_transaction_id'] as string }),
+  }
+}
 
 // ─── Fee fetching ─────────────────────────────────────────────────────────────
 
