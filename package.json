@@ -2,6 +2,9 @@
   "name": "stellar-intel",
   "version": "0.1.0",
   "private": true,
+  "engines": {
+    "node": ">=20.19.0"
+  },
   "scripts": {
     "dev": "next dev",
     "build": "next build",
@@ -16,7 +19,7 @@
     "test:watch": "vitest --watch",
     "test:coverage": "vitest --coverage",
     "test:release": "npm run typecheck && npm run lint && npm run format:check && npm run test && npm run build",
-    "prepare": "husky || true"
+    "prepare": "husky install || true"
   },
   "lint-staged": {
     "*.{ts,tsx,mjs}": [
