@@ -1,5 +1,5 @@
-'use client'
-import { CORRIDORS } from '@/lib/stellar/anchors'
+'use client';
+import { CORRIDORS } from '@/lib/stellar/anchors';
 
 const COUNTRY_FLAGS: Record<string, string> = {
   NG: '🇳🇬',
@@ -9,11 +9,11 @@ const COUNTRY_FLAGS: Record<string, string> = {
   BR: '🇧🇷',
   AR: '🇦🇷',
   PE: '🇵🇪',
-}
+};
 
 interface CorridorSelectorProps {
-  value: string
-  onChange: (corridorId: string) => void
+  value: string;
+  onChange: (corridorId: string) => void;
 }
 
 /**
@@ -38,5 +38,5 @@ export function CorridorSelector({ value, onChange }: CorridorSelectorProps) {
         ))}
       </select>
     </div>
-  )
+  );
 }

@@ -1,42 +1,42 @@
-'use client'
-import { useState, useCallback } from 'react'
-import { WalletButton } from '@/components/ui/WalletButton'
-import { AmountInput } from '@/components/ui/AmountInput'
-import { CorridorSelector } from '@/components/ui/CorridorSelector'
-import { RateTable } from '@/components/offramp/RateTable'
-import { ExecuteDrawer } from '@/components/offramp/ExecuteDrawer'
-import { StatusTracker } from '@/components/offramp/StatusTracker'
-import { useAnchorRates } from '@/hooks/useAnchorRates'
-import { useFreighter } from '@/hooks/useFreighter'
-import { useWithdrawStatus } from '@/hooks/useWithdrawStatus'
-import type { AnchorRate } from '@/types'
+'use client';
+import { useState, useCallback } from 'react';
+import { WalletButton } from '@/components/ui/WalletButton';
+import { AmountInput } from '@/components/ui/AmountInput';
+import { CorridorSelector } from '@/components/ui/CorridorSelector';
+import { RateTable } from '@/components/offramp/RateTable';
+import { ExecuteDrawer } from '@/components/offramp/ExecuteDrawer';
+import { StatusTracker } from '@/components/offramp/StatusTracker';
+import { useAnchorRates } from '@/hooks/useAnchorRates';
+import { useFreighter } from '@/hooks/useFreighter';
+import { useWithdrawStatus } from '@/hooks/useWithdrawStatus';
+import type { AnchorRate } from '@/types';
 
 export default function OfframpPage() {
-  const [corridorId, setCorridorId] = useState('usdc-ngn')
-  const [amount, setAmount] = useState('100')
-  const [selectedRate, setSelectedRate] = useState<AnchorRate | null>(null)
+  const [corridorId, setCorridorId] = useState('usdc-ngn');
+  const [amount, setAmount] = useState('100');
+  const [selectedRate, setSelectedRate] = useState<AnchorRate | null>(null);
 
   // Post-execute status tracking
-  const [trackingTransactionId, setTrackingTransactionId] = useState<string | null>(null)
-  const [trackingTransferServer, setTrackingTransferServer] = useState<string | null>(null)
-  const [trackingJwt, setTrackingJwt] = useState<string | null>(null)
+  const [trackingTransactionId, setTrackingTransactionId] = useState<string | null>(null);
+  const [trackingTransferServer, setTrackingTransferServer] = useState<string | null>(null);
+  const [trackingJwt, setTrackingJwt] = useState<string | null>(null);
 
-  const { isConnected, publicKey } = useFreighter()
-  const { rates, isLoading, error, mutate } = useAnchorRates(corridorId, amount)
+  const { isConnected, publicKey } = useFreighter();
+  const { rates, isLoading, error, mutate } = useAnchorRates(corridorId, amount);
 
   const withdrawStatus = useWithdrawStatus(
     trackingTransferServer,
     trackingTransactionId,
     trackingJwt
-  )
+  );
 
   const handleSelectAnchor = useCallback((rate: AnchorRate) => {
-    setSelectedRate(rate)
-  }, [])
+    setSelectedRate(rate);
+  }, []);
 
   const handleDrawerClose = useCallback(() => {
-    setSelectedRate(null)
-  }, [])
+    setSelectedRate(null);
+  }, []);
 
   return (
     <div className="mx-auto max-w-4xl space-y-6 px-4 py-8">
@@ -74,8 +74,18 @@ export default function OfframpPage() {
             onClick={() => mutate()}
             className="flex items-center gap-1 rounded-lg px-2 py-1 text-xs text-gray-500 hover:bg-gray-100 hover:text-gray-700 dark:hover:bg-gray-800 dark:hover:text-gray-300"
           >
-            <svg className="h-3.5 w-3.5" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={2}>
-              <path strokeLinecap="round" strokeLinejoin="round" d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15" />
+            <svg
+              className="h-3.5 w-3.5"
+              viewBox="0 0 24 24"
+              fill="none"
+              stroke="currentColor"
+              strokeWidth={2}
+            >
+              <path
+                strokeLinecap="round"
+                strokeLinejoin="round"
+                d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15"
+              />
             </svg>
             Refresh
           </button>
@@ -109,5 +119,5 @@ export default function OfframpPage() {
         onClose={handleDrawerClose}
       />
     </div>
-  )
+  );
 }

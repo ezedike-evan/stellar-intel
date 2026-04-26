@@ -1,9 +1,9 @@
-'use client'
+'use client';
 
 interface AmountInputProps {
-  value: string
-  onChange: (value: string) => void
-  disabled?: boolean
+  value: string;
+  onChange: (value: string) => void;
+  disabled?: boolean;
 }
 
 /**
@@ -12,21 +12,21 @@ interface AmountInputProps {
  */
 export function AmountInput({ value, onChange, disabled }: AmountInputProps) {
   function handleChange(e: React.ChangeEvent<HTMLInputElement>) {
-    const raw = e.target.value
+    const raw = e.target.value;
 
     // Allow empty string for clearing the field
     if (raw === '') {
-      onChange('')
-      return
+      onChange('');
+      return;
     }
 
-    const num = Number(raw)
-    if (num < 0) return
+    const num = Number(raw);
+    if (num < 0) return;
 
     // Enforce max 2 decimal places
-    if (/\.\d{3,}$/.test(raw)) return
+    if (/\.\d{3,}$/.test(raw)) return;
 
-    onChange(raw)
+    onChange(raw);
   }
 
   return (
@@ -52,5 +52,5 @@ export function AmountInput({ value, onChange, disabled }: AmountInputProps) {
         Enter the amount of USDC to off-ramp
       </p>
     </div>
-  )
+  );
 }

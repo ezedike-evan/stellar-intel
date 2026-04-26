@@ -1,14 +1,14 @@
-'use client'
-import type { WithdrawStatusValue } from '@/types'
+'use client';
+import type { WithdrawStatusValue } from '@/types';
 
 interface StatusTrackerProps {
-  transactionId: string
-  status: WithdrawStatusValue | undefined
-  amountIn: string | undefined
-  amountOut: string | undefined
-  stellarTransactionId: string | undefined
-  isLoading: boolean
-  error: string | undefined
+  transactionId: string;
+  status: WithdrawStatusValue | undefined;
+  amountIn: string | undefined;
+  amountOut: string | undefined;
+  stellarTransactionId: string | undefined;
+  isLoading: boolean;
+  error: string | undefined;
 }
 
 const STATUS_LABELS: Record<WithdrawStatusValue, string> = {
@@ -26,25 +26,32 @@ const STATUS_LABELS: Record<WithdrawStatusValue, string> = {
   no_market: 'No market available',
   too_small: 'Amount too small',
   too_large: 'Amount too large',
-}
+};
 
-const TERMINAL: WithdrawStatusValue[] = ['completed', 'refunded', 'error', 'no_market', 'too_small', 'too_large']
+const TERMINAL: WithdrawStatusValue[] = [
+  'completed',
+  'refunded',
+  'error',
+  'no_market',
+  'too_small',
+  'too_large',
+];
 
 function statusColor(status: WithdrawStatusValue | undefined): string {
-  if (!status) return 'text-gray-500'
-  if (status === 'completed') return 'text-green-600 dark:text-green-400'
+  if (!status) return 'text-gray-500';
+  if (status === 'completed') return 'text-green-600 dark:text-green-400';
   if (['error', 'no_market', 'too_small', 'too_large'].includes(status))
-    return 'text-red-600 dark:text-red-400'
-  if (status === 'refunded') return 'text-yellow-600 dark:text-yellow-400'
-  return 'text-blue-600 dark:text-blue-400'
+    return 'text-red-600 dark:text-red-400';
+  if (status === 'refunded') return 'text-yellow-600 dark:text-yellow-400';
+  return 'text-blue-600 dark:text-blue-400';
 }
 
 function statusDot(status: WithdrawStatusValue | undefined): string {
-  if (!status) return 'bg-gray-300'
-  if (status === 'completed') return 'bg-green-500'
-  if (['error', 'no_market', 'too_small', 'too_large'].includes(status)) return 'bg-red-500'
-  if (status === 'refunded') return 'bg-yellow-500'
-  return 'bg-blue-500 animate-pulse'
+  if (!status) return 'bg-gray-300';
+  if (status === 'completed') return 'bg-green-500';
+  if (['error', 'no_market', 'too_small', 'too_large'].includes(status)) return 'bg-red-500';
+  if (status === 'refunded') return 'bg-yellow-500';
+  return 'bg-blue-500 animate-pulse';
 }
 
 export function StatusTracker({
@@ -56,13 +63,15 @@ export function StatusTracker({
   isLoading,
   error,
 }: StatusTrackerProps) {
-  const isTerminal = status ? TERMINAL.includes(status) : false
+  const isTerminal = status ? TERMINAL.includes(status) : false;
 
   return (
     <div className="rounded-xl border border-gray-200 p-5 dark:border-gray-700">
       <div className="mb-4 flex items-start justify-between">
         <div>
-          <h3 className="text-sm font-semibold text-gray-900 dark:text-white">Transaction Status</h3>
+          <h3 className="text-sm font-semibold text-gray-900 dark:text-white">
+            Transaction Status
+          </h3>
           <p className="mt-0.5 font-mono text-xs text-gray-400">{transactionId}</p>
         </div>
         {!isTerminal && (
@@ -116,5 +125,5 @@ export function StatusTracker({
         </p>
       )}
     </div>
-  )
+  );
 }

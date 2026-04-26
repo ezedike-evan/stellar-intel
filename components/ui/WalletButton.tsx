@@ -1,7 +1,7 @@
-'use client'
-import { useFreighter } from '@/hooks/useFreighter'
-import { truncatePublicKey } from '@/lib/utils'
-import { Button } from './Button'
+'use client';
+import { useFreighter } from '@/hooks/useFreighter';
+import { truncatePublicKey } from '@/lib/utils';
+import { Button } from './Button';
 
 /**
  * Renders the correct wallet state:
@@ -12,7 +12,7 @@ import { Button } from './Button'
  * - Error → error message below the button
  */
 export function WalletButton() {
-  const { isInstalled, isConnected, publicKey, connect, error } = useFreighter()
+  const { isInstalled, isConnected, publicKey, connect, error } = useFreighter();
 
   if (!isInstalled) {
     return (
@@ -24,7 +24,7 @@ export function WalletButton() {
       >
         Install Freighter
       </a>
-    )
+    );
   }
 
   if (!isConnected) {
@@ -39,7 +39,7 @@ export function WalletButton() {
           </p>
         )}
       </div>
-    )
+    );
   }
 
   return (
@@ -58,5 +58,5 @@ export function WalletButton() {
         </p>
       )}
     </div>
-  )
+  );
 }
