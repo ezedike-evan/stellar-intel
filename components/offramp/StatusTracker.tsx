@@ -9,6 +9,8 @@ interface StatusTrackerProps {
   stellarTransactionId: string | undefined;
   isLoading: boolean;
   error: string | undefined;
+  onRetryAnchor?: () => void;
+  onAdjust?: () => void;
 }
 
 const STATUS_LABELS: Record<WithdrawStatusValue, string> = {
@@ -62,6 +64,8 @@ export function StatusTracker({
   stellarTransactionId,
   isLoading,
   error,
+  onRetryAnchor,
+  onAdjust,
 }: StatusTrackerProps) {
   const isTerminal = status ? TERMINAL.includes(status) : false;
 
@@ -123,6 +127,36 @@ export function StatusTracker({
             {stellarTransactionId.slice(0, 16)}…
           </span>
         </p>
+      )}
+
+      {/* Error CTA */}
+      {status === 'error' && onRetryAnchor && (
+        <div className="mt-4 rounded-lg bg-red-50 p-3 dark:bg-red-950/30">
+          <p className="mb-2 text-xs text-red-600 dark:text-red-400">
+            This transaction could not be completed.
+          </p>
+          <button
+            onClick={onRetryAnchor}
+            className="text-xs font-medium text-red-700 underline underline-offset-2 dark:text-red-300"
+          >
+            Try another anchor →
+          </button>
+        </div>
+      )}
+
+      {/* No-market CTA */}
+      {status === 'no_market' && onAdjust && (
+        <div className="mt-4 rounded-lg bg-amber-50 p-3 dark:bg-amber-950/30">
+          <p className="mb-2 text-xs text-amber-700 dark:text-amber-400">
+            No market available for this corridor. Try a smaller amount or a different destination.
+          </p>
+          <button
+            onClick={onAdjust}
+            className="text-xs font-medium text-amber-700 underline underline-offset-2 dark:text-amber-300"
+          >
+            Adjust amount or corridor →
+          </button>
+        </div>
       )}
     </div>
   );

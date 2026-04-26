@@ -7,7 +7,91 @@ import type {
   RateComparison,
   Sep24WithdrawRequest,
   Sep24WithdrawResponse,
+  WithdrawStatus,
+  WithdrawStatusValue,
 } from '@/types';
+
+// ─── Transaction polling (PR #74) ─────────────────────────────────────────────
+
+export const TERMINAL_STATES: ReadonlySet<WithdrawStatusValue> = new Set([
+  'completed',
+  'error',
+  'refunded',
+]);
+
+const KNOWN_STATUSES = new Set<WithdrawStatusValue>([
+  'incomplete',
+  'pending_user_transfer_start',
+  'pending_user_transfer_complete',
+  'pending_external',
+  'pending_anchor',
+  'pending_stellar',
+  'pending_trust',
+  'pending_user',
+  'completed',
+  'refunded',
+  'error',
+  'no_market',
+  'too_small',
+  'too_large',
+]);
+
+function normalizeStatus(raw: unknown): WithdrawStatusValue {
+  if (typeof raw === 'string' && KNOWN_STATUSES.has(raw as WithdrawStatusValue)) {
+    return raw as WithdrawStatusValue;
+  }
+  return 'pending_external';
+}
+
+export async function getSep24Transaction(
+  transferServer: string,
+  transactionId: string,
+  jwt: string
+): Promise<WithdrawStatus> {
+  const res = await fetch(`${transferServer}/transaction?id=${transactionId}`, {
+    headers: { Authorization: `Bearer ${jwt}` },
+  });
+
+  if (!res.ok) {
+    throw new Error(`Transaction fetch failed: HTTP ${res.status}`);
+  }
+
+  const data = (await res.json()) as { transaction?: Record<string, unknown> };
+  const tx = data.transaction ?? {};
+
+  return {
+    id: String(tx['id'] ?? transactionId),
+    status: normalizeStatus(tx['status']),
+    updatedAt: new Date(),
+    ...(tx['amount_in'] !== undefined && { amountIn: tx['amount_in'] as string }),
+    ...(tx['amount_out'] !== undefined && { amountOut: tx['amount_out'] as string }),
+    ...(tx['amount_fee'] !== undefined && { amountFee: tx['amount_fee'] as string }),
+    ...(tx['stellar_transaction_id'] !== undefined && {
+      stellarTransactionId: tx['stellar_transaction_id'] as string,
+    }),
+  };
+}
+
+// ─── Typed errors ─────────────────────────────────────────────────────────────
+
+export class AnchorRateError extends Error {
+  readonly anchorId: string;
+
+  constructor(anchorId: string, message: string) {
+    super(message);
+    this.name = 'AnchorRateError';
+    this.anchorId = anchorId;
+  }
+}
+
+// ─── Helpers ──────────────────────────────────────────────────────────────────
+
+// Strips thousands-separator commas before parsing so "1,580.50" → 1580.50.
+function parseRate(raw: unknown): number {
+  if (raw === undefined || raw === null) return 0;
+  const num = Number(String(raw).replace(/,/g, ''));
+  return Number.isFinite(num) ? num : 0;
+}
 
 // ─── Fee fetching ─────────────────────────────────────────────────────────────
 
@@ -17,7 +101,7 @@ import type {
  */
 export async function fetchAnchorFee(
   params: Sep24FeeParams
-): Promise<{ fee: string; anchorDomain: string }> {
+): Promise<{ fee: string; anchorDomain: string; exchangeRate: number }> {
   const transferServer = await getTransferServer(params.anchorDomain);
 
   const url = new URL(`${transferServer}/fee`);
@@ -55,7 +139,12 @@ export async function fetchAnchorFee(
     );
   }
 
-  return { fee: String(fee), anchorDomain: params.anchorDomain };
+  // Anchors include the exchange rate under various field names; strip
+  // thousands-separator commas before parsing ("1,580.50" → 1580.50).
+  const rateRaw = data['price'] ?? data['exchange_rate'] ?? data['rate'];
+  const exchangeRate = parseRate(rateRaw);
+
+  return { fee: String(fee), anchorDomain: params.anchorDomain, exchangeRate };
 }
 
 /**
@@ -71,7 +160,7 @@ export async function fetchAllAnchorFees(
 
   return Promise.allSettled(
     anchors.map(async (anchor): Promise<AnchorRate> => {
-      const { fee } = await fetchAnchorFee({
+      const { fee, exchangeRate } = await fetchAnchorFee({
         anchorDomain: anchor.homeDomain,
         operation: 'withdraw',
         assetCode: anchor.assetCode,
@@ -83,14 +172,22 @@ export async function fetchAllAnchorFees(
       const feeNum = Number(fee);
       const amountNum = Number(amount);
 
+      if (exchangeRate <= 0) {
+        throw new AnchorRateError(
+          anchor.id,
+          `${anchor.name} returned a zero or missing exchange rate for ${corridor.to} — rate cannot be derived`
+        );
+      }
+
       return {
         anchorId: anchor.id,
         anchorName: anchor.name,
         corridorId,
         fee: feeNum,
         feeType: 'flat',
-        exchangeRate: 0, // populated by computeRateComparison once exchange rates are available
-        totalReceived: computeTotalReceived(amountNum, feeNum, 0, 1),
+        exchangeRate,
+        totalReceived: computeTotalReceived(amountNum, feeNum, 0, exchangeRate),
+        source: 'live' as const,
         updatedAt: new Date(),
       };
     })
@@ -113,7 +210,7 @@ export function computeRateComparison(
     return { corridorId, rates: [], bestRateId: '' };
   }
 
-  const best = rates.reduce((a, b) => (b.totalReceived > a.totalReceived ? b : a));
+  const best = rates.reduce((a, b) => ((b.totalReceived ?? 0) > (a.totalReceived ?? 0) ? b : a));
 
   return { corridorId, rates, bestRateId: best.anchorId };
 }

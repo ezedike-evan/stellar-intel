@@ -126,7 +126,7 @@ describe('signChallenge', () => {
       signerAddress: PUBLIC_KEY,
     });
 
-    const result = await signChallenge(CHALLENGE_XDR, Networks.PUBLIC);
+    const result = await signChallenge(CHALLENGE_XDR, Networks.PUBLIC, PUBLIC_KEY);
     expect(result).toBe(SIGNED_XDR);
   });
 
@@ -138,7 +138,7 @@ describe('signChallenge', () => {
       error: { message: 'User declined', code: -1 },
     });
 
-    await expect(signChallenge(CHALLENGE_XDR, Networks.PUBLIC)).rejects.toThrow(
+    await expect(signChallenge(CHALLENGE_XDR, Networks.PUBLIC, PUBLIC_KEY)).rejects.toThrow(
       'User rejected signing'
     );
   });

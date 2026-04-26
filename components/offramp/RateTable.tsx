@@ -80,6 +80,7 @@ export function RateTable({ rates, isLoading, error, onSelectAnchor }: RateTable
             rates?.rates.map((rate) => {
               const isBest = rate.anchorId === rates.bestRateId;
               const currency = rate.corridorId.split('-')[1]?.toUpperCase() ?? '';
+              const isUnavailable = rate.source === 'unavailable';
 
               return (
                 <tr
@@ -95,31 +96,36 @@ export function RateTable({ rates, isLoading, error, onSelectAnchor }: RateTable
                       <span className="font-medium text-gray-900 dark:text-white">
                         {rate.anchorName}
                       </span>
-                      {isBest && (
+                      {isBest && !isUnavailable && (
                         <span className="rounded-full bg-blue-100 px-2 py-0.5 text-xs font-medium text-blue-700 dark:bg-blue-900/40 dark:text-blue-300">
                           Best Rate
                         </span>
                       )}
-                      {rate.source === 'estimated' && (
-                        <span className="rounded-full bg-amber-100 px-2 py-0.5 text-xs font-medium text-amber-700 dark:bg-amber-900/30 dark:text-amber-400">
-                          Estimated
+                      {isUnavailable && (
+                        <span className="rounded-full bg-gray-100 px-2 py-0.5 text-xs font-medium text-gray-500 dark:bg-gray-800 dark:text-gray-400">
+                          Unavailable
                         </span>
                       )}
                     </div>
                   </td>
                   <td className="px-4 py-3 text-right text-gray-700 dark:text-gray-300">
-                    {formatCurrency(rate.fee, 'USD')}
+                    {rate.fee !== null ? formatCurrency(rate.fee, 'USD') : '—'}
                   </td>
                   <td className="px-4 py-3 text-right text-gray-700 dark:text-gray-300">
-                    {rate.exchangeRate > 0 ? formatRate(rate.exchangeRate, 'USDC', currency) : '—'}
+                    {rate.exchangeRate !== null && rate.exchangeRate > 0
+                      ? formatRate(rate.exchangeRate, 'USDC', currency)
+                      : '—'}
                   </td>
                   <td className="px-4 py-3 text-right font-medium text-gray-900 dark:text-white">
-                    {formatCurrency(rate.totalReceived, currency)}
+                    {rate.totalReceived !== null
+                      ? formatCurrency(rate.totalReceived, currency)
+                      : '—'}
                   </td>
                   <td className="px-4 py-3 text-right">
                     <button
                       onClick={() => onSelectAnchor(rate)}
-                      className="rounded-lg bg-blue-600 px-3 py-1.5 text-xs font-medium text-white transition-colors hover:bg-blue-700 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:ring-offset-1"
+                      disabled={isUnavailable}
+                      className="rounded-lg bg-blue-600 px-3 py-1.5 text-xs font-medium text-white transition-colors hover:bg-blue-700 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:ring-offset-1 disabled:cursor-not-allowed disabled:opacity-40"
                     >
                       Off-ramp
                     </button>

@@ -26,13 +26,17 @@ export interface AnchorRate {
   anchorId: string;
   anchorName: string;
   corridorId: string;
-  fee: number; // flat fee in USDC
+  fee: number | null; // flat fee in USDC; null when anchor is unreachable
   feeType: 'flat' | 'percent' | 'combined';
-  exchangeRate: number; // local currency units per 1 USDC
-  totalReceived: number; // computed: (amount - fee) * exchangeRate
+  exchangeRate: number | null; // local currency units per 1 USDC; null when anchor is unreachable
+  totalReceived: number | null; // computed: (amount - fee) * exchangeRate; null when anchor is unreachable
   updatedAt: Date;
-  /** 'live' = fetched directly from the anchor API; 'estimated' = derived from market rates */
-  source?: 'live' | 'estimated';
+  /**
+   * 'live'        = fetched directly from the anchor API
+   * 'unavailable' = all live sources failed; never fall back to synthetic numbers
+   * @deprecated 'estimated' is banned — use 'unavailable' instead
+   */
+  source?: 'live' | 'unavailable';
 }
 
 /** The result of comparing all anchor rates for a single corridor. */
@@ -73,7 +77,9 @@ export interface Sep1TomlData {
 }
 
 /** A resolved anchor with protocol capabilities attached. */
-export type ResolvedAnchor = Sep1TomlData;
+export interface ResolvedAnchor extends Anchor {
+  capabilities: AnchorCapabilities;
+}
 
 // ─── SEP-10 ───────────────────────────────────────────────────────────────────
 
@@ -139,6 +145,15 @@ export interface WithdrawStatus {
   amountFee?: string | undefined;
   updatedAt: Date;
   stellarTransactionId?: string | undefined;
+}
+
+// ─── Post-execute handoff ─────────────────────────────────────────────────────
+
+/** Data passed from ExecuteDrawer to the page after a successful withdrawal initiation. */
+export interface WithdrawHandoffPayload {
+  transactionId: string;
+  transferServer: string;
+  jwt: string;
 }
 
 // ─── API ──────────────────────────────────────────────────────────────────────

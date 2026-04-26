@@ -2,13 +2,31 @@
 import { CORRIDORS } from '@/lib/stellar/anchors';
 
 const COUNTRY_FLAGS: Record<string, string> = {
+  // Africa
   NG: '🇳🇬',
   KE: '🇰🇪',
   GH: '🇬🇭',
+  UG: '🇺🇬',
+  TZ: '🇹🇿',
+  SN: '🇸🇳',
+  ZA: '🇿🇦',
+  // Latin America
   MX: '🇲🇽',
   BR: '🇧🇷',
   AR: '🇦🇷',
   PE: '🇵🇪',
+  CO: '🇨🇴',
+  CL: '🇨🇱',
+  // Southeast Asia
+  PH: '🇵🇭',
+  ID: '🇮🇩',
+  VN: '🇻🇳',
+  TH: '🇹🇭',
+  // South Asia
+  IN: '🇮🇳',
+  PK: '🇵🇰',
+  // Europe
+  DE: '🇩🇪',
 };
 
 interface CorridorSelectorProps {

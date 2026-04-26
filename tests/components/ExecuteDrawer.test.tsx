@@ -98,39 +98,93 @@ beforeEach(() => {
 
 describe('ExecuteDrawer', () => {
   it('renders the dialog shell but no anchor name when rate is null', () => {
-    render(<ExecuteDrawer rate={null} amount="100" publicKey={PUBLIC_KEY} onClose={vi.fn()} />);
+    render(
+      <ExecuteDrawer
+        rate={null}
+        amount="100"
+        publicKey={PUBLIC_KEY}
+        onClose={vi.fn()}
+        onExecuteStarted={vi.fn()}
+      />
+    );
     expect(screen.queryByRole('dialog')).toBeInTheDocument();
-    // No anchor-specific content should appear
     expect(screen.queryByText('Cowrie')).not.toBeInTheDocument();
     expect(screen.queryByText('100 USDC')).not.toBeInTheDocument();
   });
 
   it('shows the anchor name and transaction summary when a rate is provided', () => {
-    render(<ExecuteDrawer rate={RATE} amount="100" publicKey={PUBLIC_KEY} onClose={vi.fn()} />);
+    render(
+      <ExecuteDrawer
+        rate={RATE}
+        amount="100"
+        publicKey={PUBLIC_KEY}
+        onClose={vi.fn()}
+        onExecuteStarted={vi.fn()}
+      />
+    );
     expect(screen.getByText(/Cowrie/)).toBeInTheDocument();
     expect(screen.getByText('100 USDC')).toBeInTheDocument();
     expect(screen.getByText('Start Off-ramp')).toBeInTheDocument();
   });
 
-  it('runs through the full happy path and shows the tx hash', async () => {
-    render(<ExecuteDrawer rate={RATE} amount="100" publicKey={PUBLIC_KEY} onClose={vi.fn()} />);
+  it('runs through the full happy path and calls onExecuteStarted with transactionId, transferServer, and jwt', async () => {
+    const onExecuteStarted = vi.fn();
+    const onClose = vi.fn();
+    render(
+      <ExecuteDrawer
+        rate={RATE}
+        amount="100"
+        publicKey={PUBLIC_KEY}
+        onClose={onClose}
+        onExecuteStarted={onExecuteStarted}
+      />
+    );
 
     fireEvent.click(screen.getByText('Start Off-ramp'));
 
-    await waitFor(() => expect(screen.getByText('Transaction submitted')).toBeInTheDocument());
+    await waitFor(() => expect(onExecuteStarted).toHaveBeenCalled());
 
     expect(mockAuthenticate).toHaveBeenCalledWith('cowrie.exchange', PUBLIC_KEY);
     expect(mockInitiateWithdraw).toHaveBeenCalled();
     expect(mockOpenWithdrawPopup).toHaveBeenCalledWith('https://anchor.example/kyc');
     expect(mockBuildWithdrawPayment).toHaveBeenCalled();
     expect(mockSignAndSubmitPayment).toHaveBeenCalled();
-    expect(screen.getByText('abc123txhash')).toBeInTheDocument();
+    expect(onExecuteStarted).toHaveBeenCalledWith(
+      'txn-abc-123',
+      'https://transfer.cowrie.exchange',
+      AUTH.jwt
+    );
+  });
+
+  it('auto-closes the drawer after a successful execute', async () => {
+    const onClose = vi.fn();
+    render(
+      <ExecuteDrawer
+        rate={RATE}
+        amount="100"
+        publicKey={PUBLIC_KEY}
+        onClose={onClose}
+        onExecuteStarted={vi.fn()}
+      />
+    );
+
+    fireEvent.click(screen.getByText('Start Off-ramp'));
+
+    await waitFor(() => expect(onClose).toHaveBeenCalled());
   });
 
   it('shows the error message and a Try Again button when authentication fails', async () => {
     mockAuthenticate.mockRejectedValue(new Error('SEP-10 challenge failed'));
 
-    render(<ExecuteDrawer rate={RATE} amount="100" publicKey={PUBLIC_KEY} onClose={vi.fn()} />);
+    render(
+      <ExecuteDrawer
+        rate={RATE}
+        amount="100"
+        publicKey={PUBLIC_KEY}
+        onClose={vi.fn()}
+        onExecuteStarted={vi.fn()}
+      />
+    );
 
     fireEvent.click(screen.getByText('Start Off-ramp'));
 
@@ -138,10 +192,38 @@ describe('ExecuteDrawer', () => {
     expect(screen.getByRole('button', { name: 'Try Again' })).toBeInTheDocument();
   });
 
+  it('does not call onExecuteStarted when an error occurs', async () => {
+    mockAuthenticate.mockRejectedValue(new Error('SEP-10 challenge failed'));
+    const onExecuteStarted = vi.fn();
+
+    render(
+      <ExecuteDrawer
+        rate={RATE}
+        amount="100"
+        publicKey={PUBLIC_KEY}
+        onClose={vi.fn()}
+        onExecuteStarted={onExecuteStarted}
+      />
+    );
+
+    fireEvent.click(screen.getByText('Start Off-ramp'));
+
+    await waitFor(() => expect(screen.getByText('SEP-10 challenge failed')).toBeInTheDocument());
+    expect(onExecuteStarted).not.toHaveBeenCalled();
+  });
+
   it('shows the error when the user cancels the KYC popup', async () => {
     mockOpenWithdrawPopup.mockRejectedValue(new Error('User cancelled the transaction'));
 
-    render(<ExecuteDrawer rate={RATE} amount="100" publicKey={PUBLIC_KEY} onClose={vi.fn()} />);
+    render(
+      <ExecuteDrawer
+        rate={RATE}
+        amount="100"
+        publicKey={PUBLIC_KEY}
+        onClose={vi.fn()}
+        onExecuteStarted={vi.fn()}
+      />
+    );
 
     fireEvent.click(screen.getByText('Start Off-ramp'));
 
@@ -152,7 +234,15 @@ describe('ExecuteDrawer', () => {
 
   it('calls onClose when the X button is clicked in idle state', () => {
     const onClose = vi.fn();
-    render(<ExecuteDrawer rate={RATE} amount="100" publicKey={PUBLIC_KEY} onClose={onClose} />);
+    render(
+      <ExecuteDrawer
+        rate={RATE}
+        amount="100"
+        publicKey={PUBLIC_KEY}
+        onClose={onClose}
+        onExecuteStarted={vi.fn()}
+      />
+    );
     fireEvent.click(screen.getByRole('button', { name: 'Close' }));
     expect(onClose).toHaveBeenCalledOnce();
   });

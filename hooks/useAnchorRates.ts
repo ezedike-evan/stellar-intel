@@ -1,5 +1,5 @@
 import useSWR from 'swr';
-import type { ApiRatesResponse, RateComparison } from '@/types';
+import type { ApiRatesResponse, RateComparison, ResolvedAnchor } from '@/types';
 
 async function fetcher([, corridorId, amount]: [string, string, string]): Promise<RateComparison> {
   const url = new URL('/api/rates', window.location.origin);
@@ -21,15 +21,22 @@ export interface UseAnchorRatesResult {
   isLoading: boolean;
   error: string | undefined;
   mutate: () => void;
+  source?: 'live' | 'unavailable';
 }
 
 /**
  * Fetches live anchor rates for the given corridor and amount.
  * Refreshes every 30 seconds and revalidates when the tab regains focus.
  */
-export function useAnchorRates(corridorId: string, amount: string): UseAnchorRatesResult {
+export function useAnchorRates(
+  corridorId: string,
+  amount: string,
+  anchor?: ResolvedAnchor
+): UseAnchorRatesResult {
+  const capable = anchor === undefined || anchor.capabilities.sep24 || anchor.capabilities.sep38;
+
   const { data, error, isLoading, mutate } = useSWR<RateComparison, Error>(
-    ['/api/rates', corridorId, amount],
+    capable ? ['/api/rates', corridorId, amount] : null,
     fetcher,
     {
       refreshInterval: 30_000,
@@ -37,6 +44,16 @@ export function useAnchorRates(corridorId: string, amount: string): UseAnchorRat
       dedupingInterval: 5_000,
     }
   );
+
+  if (!capable) {
+    return {
+      rates: undefined,
+      isLoading: false,
+      error: undefined,
+      mutate: () => {},
+      source: 'unavailable',
+    };
+  }
 
   return {
     rates: data,
