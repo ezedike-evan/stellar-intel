@@ -48,10 +48,10 @@ const client = new StellarIntel({
 
 const quotes = await client.offramp.quote({
   user: 'GD3Z…',
-  sourceAsset:  { code: 'USDC', issuer: 'GA5Z…' },
+  sourceAsset: { code: 'USDC', issuer: 'GA5Z…' },
   sourceAmount: '100.00',
-  targetAsset:  { code: 'NGN' },
-  country:      'NG',
+  targetAsset: { code: 'NGN' },
+  country: 'NG',
 });
 
 console.log(quotes.routes[0].netLanded); // "141230.00"
@@ -61,23 +61,23 @@ console.log(quotes.routes[0].netLanded); // "141230.00"
 
 ## Modules
 
-| Module | What it does |
-|--------|--------------|
-| `StellarIntel` | Top-level client. Bundles the three modules below. |
-| `offramp` | Off-ramp intents — quote, sign, submit, poll. |
-| `onramp` _(v2)_ | On-ramp intents. Same shape as `offramp`. |
-| `swap` _(v2)_ | Cross-asset swaps. Routes through Stellar DEX + Soroswap/Aquarius. |
-| `reputation` | Read access to anchor TrustScores. Back-ends: oracle first, API fallback. |
-| `canonical` | Pure helpers: `canonicalize(intent)`, `hashIntent(intent)`. |
-| `signer` | Adapters: `FreighterSigner`, `Sep10Signer`, `HwWalletSigner`. Implement `Signer` to roll your own. |
-| `oracle` | `OracleClient` — direct Soroban reads (`getScore`, `getScoresBatch`). |
-| `types` | Every shape. Re-export of the public type surface. |
+| Module          | What it does                                                                                       |
+| --------------- | -------------------------------------------------------------------------------------------------- |
+| `StellarIntel`  | Top-level client. Bundles the three modules below.                                                 |
+| `offramp`       | Off-ramp intents — quote, sign, submit, poll.                                                      |
+| `onramp` _(v2)_ | On-ramp intents. Same shape as `offramp`.                                                          |
+| `swap` _(v2)_   | Cross-asset swaps. Routes through Stellar DEX + Soroswap/Aquarius.                                 |
+| `reputation`    | Read access to anchor TrustScores. Back-ends: oracle first, API fallback.                          |
+| `canonical`     | Pure helpers: `canonicalize(intent)`, `hashIntent(intent)`.                                        |
+| `signer`        | Adapters: `FreighterSigner`, `Sep10Signer`, `HwWalletSigner`. Implement `Signer` to roll your own. |
+| `oracle`        | `OracleClient` — direct Soroban reads (`getScore`, `getScoresBatch`).                              |
+| `types`         | Every shape. Re-export of the public type surface.                                                 |
 
 Imports are designed to be ergonomic:
 
 ```ts
 import { StellarIntel } from '@stellarintel/sdk';
-import { hashIntent }   from '@stellarintel/sdk/canonical';
+import { hashIntent } from '@stellarintel/sdk/canonical';
 import { OracleClient } from '@stellarintel/sdk/oracle';
 import type { OfframpIntent } from '@stellarintel/sdk/types';
 ```
@@ -96,16 +96,16 @@ const signer = new FreighterSigner();
 
 const quote = await client.offramp.quote({
   user: await signer.publicKey(),
-  sourceAsset:  { code: 'USDC', issuer: 'GA5Z…' },
+  sourceAsset: { code: 'USDC', issuer: 'GA5Z…' },
   sourceAmount: '100.00',
-  targetAsset:  { code: 'NGN' },
-  country:      'NG',
+  targetAsset: { code: 'NGN' },
+  country: 'NG',
 });
 
 const bestRoute = quote.routes[0];
 
 const signed = await client.offramp.sign({
-  intent:  quote.intent,   // server returns the canonicalised intent
+  intent: quote.intent, // server returns the canonicalised intent
   routeId: bestRoute.id,
   signer,
 });
@@ -124,11 +124,11 @@ import { useOfframpQuote } from '@stellarintel/sdk/react';
 
 export function RateTable() {
   const { data, error, isLoading } = useOfframpQuote({
-    sourceAsset:  { code: 'USDC', issuer: 'GA5Z…' },
+    sourceAsset: { code: 'USDC', issuer: 'GA5Z…' },
     sourceAmount: '100.00',
-    targetAsset:  { code: 'NGN' },
-    country:      'NG',
-    refreshMs:    30_000,
+    targetAsset: { code: 'NGN' },
+    country: 'NG',
+    refreshMs: 30_000,
   });
 
   if (error) return <ErrorState error={error} />;
@@ -137,7 +137,7 @@ export function RateTable() {
   return (
     <table>
       <tbody>
-        {data.routes.map(r => (
+        {data.routes.map((r) => (
           <tr key={r.id}>
             <td>{r.anchorId}</td>
             <td>{r.netLanded}</td>
@@ -161,14 +161,14 @@ import { OracleClient } from '@stellarintel/sdk/oracle';
 
 const oracle = new OracleClient({
   contractId: 'CA…',
-  network:    'mainnet',
+  network: 'mainnet',
 });
 
 const top = await oracle.getScoresBatch(['cowrie', 'bitso', 'click']);
 top
   .filter((a): a is NonNullable<typeof a> => a !== null)
   .sort((a, b) => b.trustScore - a.trustScore)
-  .forEach(a => console.log(a.anchorId, a.trustScore, a.confidence));
+  .forEach((a) => console.log(a.anchorId, a.trustScore, a.confidence));
 ```
 
 ### Corridor-gated routing
@@ -176,7 +176,7 @@ top
 ```ts
 async function bestReputableRoute(corridor) {
   const quotes = await client.offramp.quote(corridor);
-  return quotes.routes.find(r => r.trustScore >= 75 && r.confidence !== 'low');
+  return quotes.routes.find((r) => r.trustScore >= 75 && r.confidence !== 'low');
 }
 ```
 
@@ -190,15 +190,15 @@ reputation gate on top keeps callers terse.
 
 Every SDK method throws one of:
 
-| Class | Retryable? | Notes |
-|-------|-----------|-------|
-| `ValidationError` | no | Your input failed schema. `.details` has the pointer. |
-| `SignatureError` | no | Signer rejected or returned a malformed signature. |
-| `RouteStaleError` | yes | Quote expired — re-quote. |
-| `RateDriftError` | yes | Anchor moved below your `minNetLanded`. |
-| `AnchorUnavailableError` | yes | SEP-24 handshake failed. Pick another route. |
-| `RateLimitError` | yes | Back off per `retryAfter`. |
-| `ServerError` | yes | Generic 5xx. |
+| Class                    | Retryable? | Notes                                                 |
+| ------------------------ | ---------- | ----------------------------------------------------- |
+| `ValidationError`        | no         | Your input failed schema. `.details` has the pointer. |
+| `SignatureError`         | no         | Signer rejected or returned a malformed signature.    |
+| `RouteStaleError`        | yes        | Quote expired — re-quote.                             |
+| `RateDriftError`         | yes        | Anchor moved below your `minNetLanded`.               |
+| `AnchorUnavailableError` | yes        | SEP-24 handshake failed. Pick another route.          |
+| `RateLimitError`         | yes        | Back off per `retryAfter`.                            |
+| `ServerError`            | yes        | Generic 5xx.                                          |
 
 Retryable errors carry a `.retryable === true` flag so wrappers can
 retry generically without a `switch`. The SDK does **not** retry on your

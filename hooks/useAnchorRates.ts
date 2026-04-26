@@ -1,26 +1,26 @@
-import useSWR from 'swr'
-import type { ApiRatesResponse, RateComparison } from '@/types'
+import useSWR from 'swr';
+import type { ApiRatesResponse, RateComparison } from '@/types';
 
 async function fetcher([, corridorId, amount]: [string, string, string]): Promise<RateComparison> {
-  const url = new URL('/api/rates', window.location.origin)
-  url.searchParams.set('corridor', corridorId)
-  url.searchParams.set('amount', amount)
+  const url = new URL('/api/rates', window.location.origin);
+  url.searchParams.set('corridor', corridorId);
+  url.searchParams.set('amount', amount);
 
-  const res = await fetch(url.toString())
+  const res = await fetch(url.toString());
   if (!res.ok) {
-    const err = await res.json().catch(() => ({}))
-    throw new Error((err as { message?: string }).message ?? `HTTP ${res.status}`)
+    const err = await res.json().catch(() => ({}));
+    throw new Error((err as { message?: string }).message ?? `HTTP ${res.status}`);
   }
 
-  const data: ApiRatesResponse = await res.json()
-  return data.rates
+  const data: ApiRatesResponse = await res.json();
+  return data.rates;
 }
 
 export interface UseAnchorRatesResult {
-  rates: RateComparison | undefined
-  isLoading: boolean
-  error: string | undefined
-  mutate: () => void
+  rates: RateComparison | undefined;
+  isLoading: boolean;
+  error: string | undefined;
+  mutate: () => void;
 }
 
 /**
@@ -36,12 +36,12 @@ export function useAnchorRates(corridorId: string, amount: string): UseAnchorRat
       revalidateOnFocus: true,
       dedupingInterval: 5_000,
     }
-  )
+  );
 
   return {
     rates: data,
     isLoading,
     error: error?.message,
     mutate,
-  }
+  };
 }

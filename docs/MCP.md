@@ -72,10 +72,10 @@ Config lives at `~/.config/stellarintel/mcp.json`:
 
 ```json
 {
-  "apiBase":    "https://stellar-intel.vercel.app/api/v1",
-  "network":    "mainnet",
-  "signer":     { "kind": "freighter" },
-  "oracleId":   "CA…"
+  "apiBase": "https://stellar-intel.vercel.app/api/v1",
+  "network": "mainnet",
+  "signer": { "kind": "freighter" },
+  "oracleId": "CA…"
 }
 ```
 
@@ -202,7 +202,7 @@ enforcement of that principle.
    whenever the agent runtime signals it is acting without direct user
    input.
 2. **Deadline ceiling.** The server rejects any intent with `deadline >
-   now + 10min`. An agent cannot pre-sign intents to burn later.
+now + 10min`. An agent cannot pre-sign intents to burn later.
 3. **Nonce-per-session.** The server allocates nonces and returns them
    in the quote response; agents should not compose nonces themselves.
    (This is a belt-and-braces to prevent replay across sessions.)
@@ -217,8 +217,8 @@ enforcement of that principle.
    the agent must surface it.
 
 An AI-agent threat model extends the core one in
-[`docs/THREAT_MODEL.md`](THREAT_MODEL.md) with an explicit *agent-acting-
-without-user-context* scenario and its mitigations.
+[`docs/THREAT_MODEL.md`](THREAT_MODEL.md) with an explicit _agent-acting-
+without-user-context_ scenario and its mitigations.
 
 ---
 
@@ -230,7 +230,7 @@ without-user-context* scenario and its mitigations.
   bearer token emitted by the user's signing bridge.
 - **Rate limits**: 60 rpm per client id for read tools, 10 rpm for
   sign/submit. Agents that misbehave get throttled, not banned — the
-  default posture is *permissive-but-accounted*.
+  default posture is _permissive-but-accounted_.
 
 The reference server lives at
 [`packages/mcp/`](../packages/mcp/) (ships wave 2.3). Until then, the

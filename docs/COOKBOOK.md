@@ -34,28 +34,28 @@ const signer = new FreighterSigner();
 
 const quote = await client.offramp.quote({
   user: await signer.publicKey(),
-  sourceAsset:  { code: 'USDC', issuer: 'GA5Z…' },
+  sourceAsset: { code: 'USDC', issuer: 'GA5Z…' },
   sourceAmount: '100.00',
-  targetAsset:  { code: 'NGN' },
-  country:      'NG',
+  targetAsset: { code: 'NGN' },
+  country: 'NG',
   beneficiary: {
     kind: 'bank-account',
     country: 'NG',
     bankCode: '058',
     accountNumber: '0123456789',
-    accountName:   'Adaora Nnamdi',
+    accountName: 'Adaora Nnamdi',
   },
   minNetLanded: '140500.00',
 });
 
-const best  = quote.routes[0];
-const sign  = await client.offramp.sign({ intent: quote.intent, routeId: best.id, signer });
-const sub   = await client.offramp.submit(sign);
+const best = quote.routes[0];
+const sign = await client.offramp.sign({ intent: quote.intent, routeId: best.id, signer });
+const sub = await client.offramp.submit(sign);
 
-window.location.href = sub.interactiveUrl;           // KYC + anchor finalisation
+window.location.href = sub.interactiveUrl; // KYC + anchor finalisation
 
 const final = await client.offramp.poll(sub.intentHash, { timeoutMs: 10 * 60_000 });
-console.log(final.state, final.txHash);              // 'fulfilled', 'a91b…'
+console.log(final.state, final.txHash); // 'fulfilled', 'a91b…'
 ```
 
 Running this against the staging deployment and the testnet anchor set:
@@ -100,8 +100,8 @@ Direct Soroban read, zero fees.
 import { OracleClient } from '@stellarintel/sdk/oracle';
 
 const oracle = new OracleClient({
-  contractId: 'CA…',          // see docs/DEPLOYMENTS.md
-  network:    'mainnet',
+  contractId: 'CA…', // see docs/DEPLOYMENTS.md
+  network: 'mainnet',
 });
 
 const cowrie = await oracle.getScore('cowrie');
@@ -121,21 +121,26 @@ Batch read + net landed delta.
 ```ts
 const [rep, quote] = await Promise.all([
   oracle.getScoresBatch(['cowrie', 'bitso', 'click']),
-  client.offramp.quote({ sourceAsset, sourceAmount: '100.00',
-                         targetAsset: { code: 'NGN' }, country: 'NG' }),
+  client.offramp.quote({
+    sourceAsset,
+    sourceAmount: '100.00',
+    targetAsset: { code: 'NGN' },
+    country: 'NG',
+  }),
 ]);
 
-const byAnchor = Object.fromEntries(
-  rep.filter(Boolean).map(r => [r.anchorId, r])
-);
+const byAnchor = Object.fromEntries(rep.filter(Boolean).map((r) => [r.anchorId, r]));
 
 for (const route of quote.routes) {
   const r = byAnchor[route.anchorId];
   console.log(
     route.anchorId.padEnd(8),
-    'net:', route.netLanded.padStart(12),
-    'trust:', r?.trustScore ?? '—',
-    'conf:', r?.confidence ?? '—'
+    'net:',
+    route.netLanded.padStart(12),
+    'trust:',
+    r?.trustScore ?? '—',
+    'conf:',
+    r?.confidence ?? '—'
   );
 }
 ```
@@ -206,10 +211,10 @@ receives USDC.
 ```ts
 const quote = await client.onramp.quote({
   user: await signer.publicKey(),
-  sourceAsset:  { code: 'NGN' },
+  sourceAsset: { code: 'NGN' },
   sourceAmount: '141000.00',
-  targetAsset:  { code: 'USDC', issuer: 'GA5Z…' },
-  country:      'NG',
+  targetAsset: { code: 'USDC', issuer: 'GA5Z…' },
+  country: 'NG',
 });
 // …same sign/submit/poll sequence as recipe 1…
 ```
@@ -224,10 +229,10 @@ best single-anchor quote, and returns a ranked list of split plans.
 ```ts
 const quote = await client.offramp.quote({
   sourceAsset,
-  sourceAmount: '10000.00',  // large enough to exhaust top anchor's liquidity
-  targetAsset:  { code: 'NGN' },
-  country:      'NG',
-  splitting:    'auto',      // default: 'single' until v2
+  sourceAmount: '10000.00', // large enough to exhaust top anchor's liquidity
+  targetAsset: { code: 'NGN' },
+  country: 'NG',
+  splitting: 'auto', // default: 'single' until v2
 });
 
 // quote.routes[0].legs === [{ anchorId: 'cowrie', amount: '6000' },
@@ -250,7 +255,7 @@ import { useTxAnchor, useAnchorScore } from '@stellarintel/sdk/react';
 
 export function ScorecardBadge({ txHash }: { txHash: string }) {
   const { anchorId } = useTxAnchor(txHash);
-  const { score }    = useAnchorScore(anchorId);
+  const { score } = useAnchorScore(anchorId);
   if (!score) return null;
   return (
     <span className="badge" data-confidence={score.confidence}>
@@ -276,7 +281,7 @@ const client = new StellarIntel({ network: 'mainnet' });
 
 for (const payout of readPayoutCSV(process.argv[2])) {
   const quote = await client.offramp.quote(payout);
-  const best  = quote.routes.find(r => r.trustScore >= FLOOR);
+  const best = quote.routes.find((r) => r.trustScore >= FLOOR);
   if (!best) {
     console.error(`SKIP ${payout.beneficiary.accountNumber}: no route ≥ ${FLOOR}`);
     continue;

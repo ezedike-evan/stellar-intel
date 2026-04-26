@@ -176,8 +176,8 @@ this policy, we will not pursue legal action.
 
 Researchers who have reported valid vulnerabilities:
 
-| Date | Researcher | Severity | Summary |
-|------|-----------|----------|---------|
+| Date                     | Researcher | Severity | Summary |
+| ------------------------ | ---------- | -------- | ------- |
 | _(empty — be the first)_ |
 
 If you would like to help without finding a vulnerability, see the

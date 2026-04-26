@@ -45,13 +45,13 @@ public page at `/benchmarks` (v2).
 Time from `POST /intents/quote` returning quotes to the user receiving
 the best route. Measured against live anchor SEP-38 endpoints.
 
-| Corridor | Anchors polled | p50 | p95 | p99 |
-|----------|---------------:|----:|----:|----:|
-| USDC → NGN | 4 | 420 ms | 980 ms | 1 410 ms |
-| USDC → MXN | 3 | 360 ms | 810 ms | 1 250 ms |
-| USDC → BRL | 3 | 510 ms | 1 240 ms | 1 980 ms |
-| USDC → PHP | 2 | 480 ms | 1 100 ms | 1 620 ms |
-| USDC → KES | 2 | 690 ms | 1 400 ms | 2 200 ms |
+| Corridor   | Anchors polled |    p50 |      p95 |      p99 |
+| ---------- | -------------: | -----: | -------: | -------: |
+| USDC → NGN |              4 | 420 ms |   980 ms | 1 410 ms |
+| USDC → MXN |              3 | 360 ms |   810 ms | 1 250 ms |
+| USDC → BRL |              3 | 510 ms | 1 240 ms | 1 980 ms |
+| USDC → PHP |              2 | 480 ms | 1 100 ms | 1 620 ms |
+| USDC → KES |              2 | 690 ms | 1 400 ms | 2 200 ms |
 
 Fan-out is parallel. The router's contribution to the p95 is < 40 ms —
 most of the number above is anchor-side.
@@ -63,13 +63,13 @@ most of the number above is anchor-side.
 The user-observed path. Starts when the rate table finishes rendering,
 ends when Freighter returns a signature.
 
-| Step | p50 | p95 |
-|------|----:|----:|
-| User reviews routes | 8.2 s | 22 s |
-| Clicks "Send" | — | — |
-| Freighter popup open | 310 ms | 620 ms |
-| User signs | 2.1 s | 6 s |
-| SDK posts signed envelope | 180 ms | 340 ms |
+| Step                            |    p50 |    p95 |
+| ------------------------------- | -----: | -----: |
+| User reviews routes             |  8.2 s |   22 s |
+| Clicks "Send"                   |      — |      — |
+| Freighter popup open            | 310 ms | 620 ms |
+| User signs                      |  2.1 s |    6 s |
+| SDK posts signed envelope       | 180 ms | 340 ms |
 | Anchor interactive URL returned | 260 ms | 540 ms |
 
 Total p50: **~11 s**. Total p95: **~30 s**. The dominant component is the
@@ -82,11 +82,11 @@ user reading; the route-to-sign mechanical path is sub-second.
 30-day rolling `fulfilled / (fulfilled + failed + expired)` on
 real-user intents + probe traffic. Probe-only anchors flagged.
 
-| Anchor | Corridors | Volume (30d) | Fulfilled | Fill rate | TrustScore |
-|--------|-----------|-------------:|----------:|----------:|-----------:|
-| cowrie | USDC_NGN, USDC_KES | 2 840 | 2 710 | **95.4 %** | 84 |
-| bitso | USDC_MXN, USDC_BRL, USDC_ARS | 1 920 | 1 780 | **92.7 %** | 81 |
-| click* | USDC_PHP | 360 | 318 | **88.3 %** | 72 |
+| Anchor  | Corridors                    | Volume (30d) | Fulfilled |  Fill rate | TrustScore |
+| ------- | ---------------------------- | -----------: | --------: | ---------: | ---------: |
+| cowrie  | USDC_NGN, USDC_KES           |        2 840 |     2 710 | **95.4 %** |         84 |
+| bitso   | USDC_MXN, USDC_BRL, USDC_ARS |        1 920 |     1 780 | **92.7 %** |         81 |
+| click\* | USDC_PHP                     |          360 |       318 | **88.3 %** |         72 |
 
 \* Probe-heavy; real-user volume is still low. Confidence: `medium`.
 
@@ -100,13 +100,13 @@ When does splitting an intent across two anchors beat the best single
 quote? Simulated over the corridor's anchor quote history; v2 will
 execute for real.
 
-| Notional (USDC) | Corridor | Single best | 2-way split | Savings |
-|----------------:|----------|------------:|------------:|--------:|
-| 100 | USDC → NGN | 141 230 | 141 235 | negligible |
-| 1 000 | USDC → NGN | 1 410 200 | 1 410 900 | **+0.05 %** |
-| 10 000 | USDC → NGN | 14 062 000 | 14 091 400 | **+0.21 %** |
-| 50 000 | USDC → NGN | 70 110 000 | 70 620 000 | **+0.73 %** |
-| 100 000 | USDC → NGN | 139 600 000 | 141 040 000 | **+1.03 %** |
+| Notional (USDC) | Corridor   | Single best | 2-way split |     Savings |
+| --------------: | ---------- | ----------: | ----------: | ----------: |
+|             100 | USDC → NGN |     141 230 |     141 235 |  negligible |
+|           1 000 | USDC → NGN |   1 410 200 |   1 410 900 | **+0.05 %** |
+|          10 000 | USDC → NGN |  14 062 000 |  14 091 400 | **+0.21 %** |
+|          50 000 | USDC → NGN |  70 110 000 |  70 620 000 | **+0.73 %** |
+|         100 000 | USDC → NGN | 139 600 000 | 141 040 000 | **+1.03 %** |
 
 The headline: **splitting matters above ~$5 000.** For retail sub-$1k
 flows the single-anchor routing is already optimal. The router's
@@ -121,10 +121,10 @@ for amounts where splitting is a rounding error.
 Direct Soroban reads via `simulateTransaction`. No tx submission, no
 fees.
 
-| Operation | p50 | p95 |
-|-----------|----:|----:|
-| `get_score(anchor_id)` | 180 ms | 420 ms |
-| `get_scores_batch(10 anchors)` | 240 ms | 510 ms |
+| Operation                       |    p50 |    p95 |
+| ------------------------------- | -----: | -----: |
+| `get_score(anchor_id)`          | 180 ms | 420 ms |
+| `get_scores_batch(10 anchors)`  | 240 ms | 510 ms |
 | `list_anchors()` (≤ 20 anchors) | 160 ms | 360 ms |
 
 Run against mainnet-forked sandbox: the SDK client caches per instance

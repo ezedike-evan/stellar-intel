@@ -28,14 +28,14 @@ Status: **wave 2.1** — specification frozen; implementation in progress.
 
 ## Design goals
 
-| Goal | Mechanism |
-|------|-----------|
-| **Public** | Every observation and every aggregate is readable by any caller, no auth. |
-| **Permissionless to read** | Zero-fee `view` style calls via `simulateTransaction`. No allowlist. |
-| **Write-restricted** | Only whitelisted publishers can append. Rotatable. |
-| **Append-only** | Corrections are new observations with `supersedes`, never deletes. |
-| **Cheap to read often** | Aggregates (rolling 30-day TrustScore) are pre-computed on write, keyed by `(anchor_id)`. |
-| **Tamper-evident** | Every aggregate record embeds a Merkle root over the observations that produced it. |
+| Goal                       | Mechanism                                                                                 |
+| -------------------------- | ----------------------------------------------------------------------------------------- |
+| **Public**                 | Every observation and every aggregate is readable by any caller, no auth.                 |
+| **Permissionless to read** | Zero-fee `view` style calls via `simulateTransaction`. No allowlist.                      |
+| **Write-restricted**       | Only whitelisted publishers can append. Rotatable.                                        |
+| **Append-only**            | Corrections are new observations with `supersedes`, never deletes.                        |
+| **Cheap to read often**    | Aggregates (rolling 30-day TrustScore) are pre-computed on write, keyed by `(anchor_id)`. |
+| **Tamper-evident**         | Every aggregate record embeds a Merkle root over the observations that produced it.       |
 
 ---
 
@@ -257,7 +257,7 @@ import { OracleClient } from '@stellarintel/sdk/oracle';
 
 const oracle = new OracleClient({
   contractId: 'CA…',
-  network:    'mainnet',
+  network: 'mainnet',
 });
 
 const cowrie = await oracle.getScore('cowrie');
@@ -268,7 +268,7 @@ const leaderboard = await oracle.getScoresBatch(['cowrie', 'bitso', 'click']);
 leaderboard
   .filter((agg): agg is NonNullable<typeof agg> => agg !== null)
   .sort((a, b) => b.trustScore - a.trustScore)
-  .forEach(a => console.log(a.anchorId, a.trustScore));
+  .forEach((a) => console.log(a.anchorId, a.trustScore));
 ```
 
 Reads use `simulateTransaction` under the hood — zero fee, no network
@@ -291,4 +291,4 @@ latency to Horizon's submit endpoint.
   can verify inclusion without scanning history.
 
 Threat model for the oracle specifically lives in
-[`docs/THREAT_MODEL.md`](THREAT_MODEL.md) under *Oracle tampering*.
+[`docs/THREAT_MODEL.md`](THREAT_MODEL.md) under _Oracle tampering_.

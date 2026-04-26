@@ -37,13 +37,13 @@ opens. A wave does not open early. A wave does not ship partial.
 
 ## At a glance
 
-| Version | Theme | Scope | Target gate | Status |
-| --- | --- | --- | --- | --- |
-| **v1 Executable** | A correct, demonstrable off-ramp | `#001–#150` · 150 tickets · 4 waves | `npm run test:release` green; feature flags default-on | 🟢 Wave 1.0 substantially shipped |
-| **v2 Observable** | Reputation as product surface, Soroban on mainnet | `#151–#250` · 100 tickets · 4 waves | Soroban contract deployed, ≥3 publishers, ≥1000 outcomes | ⚪ Not started |
-| **v3 Guaranteed** | Intent-level SLAs, slippage bounds, recurring intents | Planned · scope decomposed post-v2 | Slippage-bound compliance ≥ 99.5% over 10k intents | ⚪ Not started |
-| **v4 Universal** | SDK + MCP GA + embeddable widget | Planned · scope decomposed post-v3 | `@stellarintel/sdk` + `@stellarintel/mcp` on npm; 3 reference integrations | ⚪ Not started |
-| **v5 Institutional** | Compliance-grade primitives, audit-ready | Planned · scope decomposed post-v4 | Third-party audit report published; SBOM on every release | ⚪ Not started |
+| Version              | Theme                                                 | Scope                               | Target gate                                                                | Status                            |
+| -------------------- | ----------------------------------------------------- | ----------------------------------- | -------------------------------------------------------------------------- | --------------------------------- |
+| **v1 Executable**    | A correct, demonstrable off-ramp                      | `#001–#150` · 150 tickets · 4 waves | `npm run test:release` green; feature flags default-on                     | 🟢 Wave 1.0 substantially shipped |
+| **v2 Observable**    | Reputation as product surface, Soroban on mainnet     | `#151–#250` · 100 tickets · 4 waves | Soroban contract deployed, ≥3 publishers, ≥1000 outcomes                   | ⚪ Not started                    |
+| **v3 Guaranteed**    | Intent-level SLAs, slippage bounds, recurring intents | Planned · scope decomposed post-v2  | Slippage-bound compliance ≥ 99.5% over 10k intents                         | ⚪ Not started                    |
+| **v4 Universal**     | SDK + MCP GA + embeddable widget                      | Planned · scope decomposed post-v3  | `@stellarintel/sdk` + `@stellarintel/mcp` on npm; 3 reference integrations | ⚪ Not started                    |
+| **v5 Institutional** | Compliance-grade primitives, audit-ready              | Planned · scope decomposed post-v4  | Third-party audit report published; SBOM on every release                  | ⚪ Not started                    |
 
 ---
 
@@ -412,8 +412,8 @@ compounds.
 
 ## v3 Guaranteed
 
-**Thesis.** Up to this point, an intent is a *preference*. In v3 it
-becomes a *guarantee*: deadline enforcement, slippage-bound compliance,
+**Thesis.** Up to this point, an intent is a _preference_. In v3 it
+becomes a _guarantee_: deadline enforcement, slippage-bound compliance,
 recurring intents that auto-execute under a standing signed authorization.
 
 Scope is decomposed post-v2; the shape is already committed.

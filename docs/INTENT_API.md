@@ -64,15 +64,15 @@ Every intent is a JSON object with a top-level `kind` discriminator.
 
 ### Common fields
 
-| Field | Type | Notes |
-|-------|------|-------|
-| `kind` | enum | `offramp` · `onramp` · `swap` (v2) · `yield` (v2) |
-| `version` | `"1.0"` | Schema version. Bumps are additive only within a major. |
-| `user` | string | User's Stellar account G-address. |
-| `nonce` | string | 128-bit hex. Caller-chosen, must be unique per user per 30 days. |
-| `deadline` | RFC-3339 | Hard expiry. Server rejects submission after this. Max 10 minutes from `createdAt`. |
-| `createdAt` | RFC-3339 | Client-side timestamp. Server tolerates ±2 minutes of skew. |
-| `minNetLanded` | string | Decimal string. Minimum acceptable net landed value, denominated in `targetAsset`. |
+| Field          | Type     | Notes                                                                               |
+| -------------- | -------- | ----------------------------------------------------------------------------------- |
+| `kind`         | enum     | `offramp` · `onramp` · `swap` (v2) · `yield` (v2)                                   |
+| `version`      | `"1.0"`  | Schema version. Bumps are additive only within a major.                             |
+| `user`         | string   | User's Stellar account G-address.                                                   |
+| `nonce`        | string   | 128-bit hex. Caller-chosen, must be unique per user per 30 days.                    |
+| `deadline`     | RFC-3339 | Hard expiry. Server rejects submission after this. Max 10 minutes from `createdAt`. |
+| `createdAt`    | RFC-3339 | Client-side timestamp. Server tolerates ±2 minutes of skew.                         |
+| `minNetLanded` | string   | Decimal string. Minimum acceptable net landed value, denominated in `targetAsset`.  |
 
 All numeric values are **decimal strings**, never JS numbers. Amounts are
 the raw unit (e.g. `"100.00"` NGN, not `"10000"` kobo).
@@ -86,19 +86,19 @@ the raw unit (e.g. `"100.00"` NGN, not `"10000"` kobo).
   "user": "GD3Z…",
   "nonce": "7b1c…9a4d",
   "createdAt": "2026-04-24T14:12:05Z",
-  "deadline":  "2026-04-24T14:22:05Z",
+  "deadline": "2026-04-24T14:22:05Z",
   "sourceAsset": {
     "code": "USDC",
     "issuer": "GA5ZSEJYB37JRC5AVCIA5MOP4RHTM335X2KGX3IHOJAPP5RE34K4KZVN"
   },
   "sourceAmount": "100.00",
-  "targetAsset":  { "code": "NGN" },
+  "targetAsset": { "code": "NGN" },
   "beneficiary": {
     "kind": "bank-account",
     "country": "NG",
     "bankCode": "058",
     "accountNumber": "0123456789",
-    "accountName":   "Adaora Nnamdi"
+    "accountName": "Adaora Nnamdi"
   },
   "minNetLanded": "140500.00"
 }
@@ -147,10 +147,12 @@ The signed envelope submitted to the server is:
 
 ```json
 {
-  "intent":   { /* the canonical intent */ },
-  "routeId":  "r_2ZQ9…",
-  "signature":"base64(ed25519(sig))",
-  "publicKey":"GD3Z…"
+  "intent": {
+    /* the canonical intent */
+  },
+  "routeId": "r_2ZQ9…",
+  "signature": "base64(ed25519(sig))",
+  "publicKey": "GD3Z…"
 }
 ```
 
@@ -190,21 +192,23 @@ receives the original server response, not a duplicate anchor call.
 
 Base URL (production): `https://stellar-intel.vercel.app/api/v1`.
 
-| Method | Path | Purpose |
-|--------|------|---------|
-| `POST` | `/intents/quote` | Submit a draft intent, receive a ranked list of anchor quotes. |
-| `POST` | `/intents/submit` | Submit a signed envelope. Returns the anchor interactive URL (SEP-24). |
-| `GET`  | `/intents/:intentHash` | Poll the state. |
-| `GET`  | `/public/scores` | Public anchor reputation snapshot (no auth). |
-| `GET`  | `/public/scores/:anchorId` | Per-anchor composite + component breakdown. |
-| `POST` | `/webhooks/anchor/:anchorId` | SEP-24 callback (anchor → us). Signed. |
+| Method | Path                         | Purpose                                                                |
+| ------ | ---------------------------- | ---------------------------------------------------------------------- |
+| `POST` | `/intents/quote`             | Submit a draft intent, receive a ranked list of anchor quotes.         |
+| `POST` | `/intents/submit`            | Submit a signed envelope. Returns the anchor interactive URL (SEP-24). |
+| `GET`  | `/intents/:intentHash`       | Poll the state.                                                        |
+| `GET`  | `/public/scores`             | Public anchor reputation snapshot (no auth).                           |
+| `GET`  | `/public/scores/:anchorId`   | Per-anchor composite + component breakdown.                            |
+| `POST` | `/webhooks/anchor/:anchorId` | SEP-24 callback (anchor → us). Signed.                                 |
 
 All `v1` responses are JSON with an `envelope` form:
 
 ```json
 {
-  "data":  { /* payload */ },
-  "meta":  { "requestId": "req_…", "tookMs": 132 },
+  "data": {
+    /* payload */
+  },
+  "meta": { "requestId": "req_…", "tookMs": 132 },
   "error": null
 }
 ```
@@ -239,15 +243,8 @@ watch -n 3 "curl -s https://stellar-intel.vercel.app/api/v1/intents/$INTENT_HASH
 ### TypeScript
 
 ```ts
-import {
-  canonicalize,
-  hashIntent,
-  type OfframpIntent,
-} from '@stellarintel/sdk';
-import {
-  getPublicKey,
-  signMessage,
-} from '@stellar/freighter-api';
+import { canonicalize, hashIntent, type OfframpIntent } from '@stellarintel/sdk';
+import { getPublicKey, signMessage } from '@stellar/freighter-api';
 
 const intent: OfframpIntent = {
   kind: 'offramp',
@@ -255,11 +252,13 @@ const intent: OfframpIntent = {
   user: await getPublicKey(),
   nonce: crypto.randomUUID().replace(/-/g, ''),
   createdAt: new Date().toISOString(),
-  deadline:  new Date(Date.now() + 5 * 60_000).toISOString(),
-  sourceAsset:  { code: 'USDC', issuer: 'GA5Z…' },
+  deadline: new Date(Date.now() + 5 * 60_000).toISOString(),
+  sourceAsset: { code: 'USDC', issuer: 'GA5Z…' },
   sourceAmount: '100.00',
-  targetAsset:  { code: 'NGN' },
-  beneficiary: { /* … */ },
+  targetAsset: { code: 'NGN' },
+  beneficiary: {
+    /* … */
+  },
   minNetLanded: '140500.00',
 };
 
@@ -267,22 +266,22 @@ const quoteRes = await fetch('/api/v1/intents/quote', {
   method: 'POST',
   headers: { 'content-type': 'application/json' },
   body: canonicalize(intent),
-}).then(r => r.json());
+}).then((r) => r.json());
 
-const route = quoteRes.data.routes[0];      // best by net landed value
-const hash  = hashIntent(intent);            // hex digest, SHA-256
-const sig   = await signMessage(hash, { domain: 'STELLAR_INTEL_INTENT_V1' });
+const route = quoteRes.data.routes[0]; // best by net landed value
+const hash = hashIntent(intent); // hex digest, SHA-256
+const sig = await signMessage(hash, { domain: 'STELLAR_INTEL_INTENT_V1' });
 
 const submit = await fetch('/api/v1/intents/submit', {
   method: 'POST',
   headers: { 'content-type': 'application/json' },
   body: JSON.stringify({
     intent,
-    routeId:   route.id,
+    routeId: route.id,
     signature: sig,
     publicKey: intent.user,
   }),
-}).then(r => r.json());
+}).then((r) => r.json());
 
 window.location.href = submit.data.interactiveUrl;
 ```
@@ -293,18 +292,18 @@ window.location.href = submit.data.interactiveUrl;
 
 Every error has a stable `code` string. Safe to switch on.
 
-| Code | HTTP | Meaning |
-|------|------|---------|
-| `intent.invalid_schema` | 400 | Failed JSON-schema validation. `error.details` has the JSON Pointer. |
-| `intent.expired_deadline` | 400 | `deadline` is in the past at submission time. |
-| `intent.signature_invalid` | 401 | Ed25519 signature failed verification. |
-| `intent.signer_mismatch` | 401 | `publicKey` does not match `intent.user`. |
-| `intent.nonce_reused` | 409 | `(user, nonce)` already seen; pick a new nonce. |
-| `intent.route_stale` | 409 | `routeId` quote has expired — re-quote and resubmit. |
-| `intent.rate_drift` | 409 | Anchor quote now below `minNetLanded`. |
-| `anchor.unavailable` | 502 | Chosen anchor failed SEP-24 handshake. Router should re-route. |
-| `anchor.rate_limited` | 429 | Anchor throttled us. Retry-After header set. |
-| `internal.router_down` | 503 | Router pipeline broken; caller should back off. |
+| Code                       | HTTP | Meaning                                                              |
+| -------------------------- | ---- | -------------------------------------------------------------------- |
+| `intent.invalid_schema`    | 400  | Failed JSON-schema validation. `error.details` has the JSON Pointer. |
+| `intent.expired_deadline`  | 400  | `deadline` is in the past at submission time.                        |
+| `intent.signature_invalid` | 401  | Ed25519 signature failed verification.                               |
+| `intent.signer_mismatch`   | 401  | `publicKey` does not match `intent.user`.                            |
+| `intent.nonce_reused`      | 409  | `(user, nonce)` already seen; pick a new nonce.                      |
+| `intent.route_stale`       | 409  | `routeId` quote has expired — re-quote and resubmit.                 |
+| `intent.rate_drift`        | 409  | Anchor quote now below `minNetLanded`.                               |
+| `anchor.unavailable`       | 502  | Chosen anchor failed SEP-24 handshake. Router should re-route.       |
+| `anchor.rate_limited`      | 429  | Anchor throttled us. Retry-After header set.                         |
+| `internal.router_down`     | 503  | Router pipeline broken; caller should back off.                      |
 
 A contributor-facing note: **never swallow an error code.** If a caller
 cannot recover, surface the `code` verbatim so support can search it.

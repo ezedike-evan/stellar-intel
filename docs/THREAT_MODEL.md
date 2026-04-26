@@ -31,15 +31,15 @@
 
 ## Threat actors
 
-| Actor | Capabilities | Motivation |
-|-------|-------------|------------|
-| **Anchor (honest but buggy)** | Operates SEP-24 / 38 endpoints. | Normal business. |
-| **Anchor (adversarial)** | As above, plus incentive to mis-quote or silently fail. | Preserve margin, avoid disclosure. |
-| **Network attacker** | Can MITM plaintext, but not TLS-validated endpoints. | Skim funds, grief users. |
-| **User-local malware** | Read browser memory, replace env vars, exfiltrate keys. | Steal funds. |
-| **Compromised publisher key** | Mint on-chain observations. | Inflate / deflate anchor scores. |
-| **Hostile agent** | Speaks MCP, has a signer. | Automate exfiltration, abuse rate limits. |
-| **Supply-chain attacker** | Publish malicious dependency. | Persistent foothold. |
+| Actor                         | Capabilities                                            | Motivation                                |
+| ----------------------------- | ------------------------------------------------------- | ----------------------------------------- |
+| **Anchor (honest but buggy)** | Operates SEP-24 / 38 endpoints.                         | Normal business.                          |
+| **Anchor (adversarial)**      | As above, plus incentive to mis-quote or silently fail. | Preserve margin, avoid disclosure.        |
+| **Network attacker**          | Can MITM plaintext, but not TLS-validated endpoints.    | Skim funds, grief users.                  |
+| **User-local malware**        | Read browser memory, replace env vars, exfiltrate keys. | Steal funds.                              |
+| **Compromised publisher key** | Mint on-chain observations.                             | Inflate / deflate anchor scores.          |
+| **Hostile agent**             | Speaks MCP, has a signer.                               | Automate exfiltration, abuse rate limits. |
+| **Supply-chain attacker**     | Publish malicious dependency.                           | Persistent foothold.                      |
 
 We assume actors above, **but not** a nation-state with TLS root CA
 compromise. If TLS is broken, everyone's threat model is broken.
@@ -75,6 +75,7 @@ Ranked by blast radius:
 intent and never reports terminal state.
 
 **Mitigation.**
+
 - `deadline` bounds the wait: after expiry the router writes a
   `failed:deadline` observation and the UI marks the intent failed.
 - `fill_rate` component in TrustScore captures the pattern; chronically
@@ -91,6 +92,7 @@ alert (>20% over 1h).
 than the anchor offered, getting the user to sign for less.
 
 **Mitigation.**
+
 - All anchor endpoints are TLS. Our HTTP client rejects non-HTTPS TOML
   entries.
 - SEP-38 response inclusion in the signed intent: the net landed value
@@ -109,6 +111,7 @@ pages the oncall.
 second execution.
 
 **Mitigation.**
+
 - `(user, nonce)` uniqueness enforced server-side with a 30-day TTL past
   the intent's `deadline`.
 - Nonce is CSPRNG, not derivable. Re-using a nonce is rejected.
@@ -125,6 +128,7 @@ IP, flagged for review if they exceed 1% of daily traffic.
 router capacity and muddy the reputation stream.
 
 **Mitigation.**
+
 - Per-IP and per-user rate limits on the router.
 - SEP-10 auth requirement for the sign/submit path: every submit costs
   one valid Stellar keypair and an authenticated session.
@@ -140,6 +144,7 @@ checks.
 deflate an anchor's score.
 
 **Mitigation.**
+
 - Soroban storage is tamper-evident; the only write path is via
   whitelisted publisher contracts (see [`ORACLE_SPEC.md`](ORACLE_SPEC.md)
   §publisher whitelist).
@@ -157,6 +162,7 @@ recomputed; any diff opens a tracking issue.
 observations.
 
 **Mitigation.**
+
 - HSM in prod reduces probability.
 - `rotate_publisher(old, new)` is atomic; rotation does not lose history.
 - Every observation carries `publisher: Address`; post-incident, the
@@ -174,6 +180,7 @@ against the other; or worse, a user signs a hash they do not believe
 they are signing.
 
 **Mitigation.**
+
 - A single implementation in the SDK, imported by every client (web UI,
   MCP server, agents). Canonicalisation logic is not re-implemented
   per-client.
@@ -191,6 +198,7 @@ detection because drift is a build-time concern.
 without user awareness.
 
 **Mitigation.**
+
 - Default `signer.kind == "readonly"` on fresh MCP installs.
 - `user_attestation_required` handshake between sign and submit for
   agent runtimes signalling unattended operation.
@@ -207,6 +215,7 @@ attestation ACK flags the session.
 transitive Rust crate.
 
 **Mitigation.**
+
 - Dependency review on PR (severity gate + licence deny list).
 - CodeQL SAST on every push.
 - Pinned lockfile; `npm ci` in CI.
@@ -222,6 +231,7 @@ are encouraged to flag unfamiliar additions in reviews.
 signing an intent with a malicious beneficiary.
 
 **Mitigation.**
+
 - Only the official domain (`stellar-intel.vercel.app` / eventual
   canonical domain) is listed in brand materials.
 - `X-Frame-Options: DENY` + `frame-ancestors 'none'` on our app.

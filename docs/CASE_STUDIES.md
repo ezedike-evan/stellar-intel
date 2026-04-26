@@ -31,16 +31,16 @@ code `058` (Kuda).
 
 **Timeline.**
 
-| t+ | Event |
-|---:|-------|
-| 0.0 s | User opens `stellar-intel.vercel.app`, selects USDC → NGN, enters 500. |
-| 0.6 s | Rate table populated with three ranked anchors. Cowrie leads (net landed ₦703 500). |
-| 38 s | User reviews TrustScore (84), confirms beneficiary, clicks Send. |
-| 41 s | Freighter popup; user signs. |
-| 43 s | Router relays the signed envelope to Cowrie; anchor returns interactive URL. |
-| 47 s | User redirected to Cowrie; completes SEP-24 KYC check (returning user, fast path). |
-| 3 m 20 s | Cowrie publishes `status: completed` + Stellar tx hash. |
-| 3 m 58 s | NGN credited to Kuda account. |
+|       t+ | Event                                                                               |
+| -------: | ----------------------------------------------------------------------------------- |
+|    0.0 s | User opens `stellar-intel.vercel.app`, selects USDC → NGN, enters 500.              |
+|    0.6 s | Rate table populated with three ranked anchors. Cowrie leads (net landed ₦703 500). |
+|     38 s | User reviews TrustScore (84), confirms beneficiary, clicks Send.                    |
+|     41 s | Freighter popup; user signs.                                                        |
+|     43 s | Router relays the signed envelope to Cowrie; anchor returns interactive URL.        |
+|     47 s | User redirected to Cowrie; completes SEP-24 KYC check (returning user, fast path).  |
+| 3 m 20 s | Cowrie publishes `status: completed` + Stellar tx hash.                             |
+| 3 m 58 s | NGN credited to Kuda account.                                                       |
 
 **Net landed.** ₦703 500 (quoted), ₦703 500 (received). Zero drift.
 

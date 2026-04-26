@@ -153,13 +153,13 @@ endpoint.
 
 When an anchor's score drops, the most common causes and their fixes:
 
-| Symptom | Likely cause | Fix |
-|---------|--------------|-----|
-| Low `fill_rate` | Timeout on SEP-24 handshake, or rejecting valid SEP-38 quotes. | Check `/transactions_info` for 4xx patterns during the window. Increase timeout on your quote-sign-callback path to ≥ 30s. |
-| Low `uptime` | Probe can't resolve TOML or `/price`. | Verify CDN cache isn't serving stale TOML; verify `/price` returns 200 within 5s. |
-| Low `price_efficiency` | Spread vs. best market quote > 3%. | Review your pricing pipeline. Our router compares to the best _other_ anchor, not to an off-exchange benchmark. |
-| Low `settle_latency_score` | p95 fiat settlement > 900s. | This is usually rails, not anchor software. Document the cause in your status page; we mark incident windows and exclude them. |
-| Rising `dispute_rate` | Users reporting "I signed and nothing happened". | Check your interactive-URL expiry. Our deadline is 10min; if your SEP-24 session expires sooner, intents die silently. |
+| Symptom                    | Likely cause                                                   | Fix                                                                                                                            |
+| -------------------------- | -------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------ |
+| Low `fill_rate`            | Timeout on SEP-24 handshake, or rejecting valid SEP-38 quotes. | Check `/transactions_info` for 4xx patterns during the window. Increase timeout on your quote-sign-callback path to ≥ 30s.     |
+| Low `uptime`               | Probe can't resolve TOML or `/price`.                          | Verify CDN cache isn't serving stale TOML; verify `/price` returns 200 within 5s.                                              |
+| Low `price_efficiency`     | Spread vs. best market quote > 3%.                             | Review your pricing pipeline. Our router compares to the best _other_ anchor, not to an off-exchange benchmark.                |
+| Low `settle_latency_score` | p95 fiat settlement > 900s.                                    | This is usually rails, not anchor software. Document the cause in your status page; we mark incident windows and exclude them. |
+| Rising `dispute_rate`      | Users reporting "I signed and nothing happened".               | Check your interactive-URL expiry. Our deadline is 10min; if your SEP-24 session expires sooner, intents die silently.         |
 
 You can always ask for a private "what would move your score" report.
 Open a Discussion and a maintainer will send back the per-component

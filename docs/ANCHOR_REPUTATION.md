@@ -77,14 +77,14 @@ TrustScore = 100 × (
 
 Where:
 
-| Component | Definition | Higher is |
-|-----------|------------|-----------|
-| `fill_rate` | `fulfilled / (fulfilled + failed + expired)` | better |
-| `uptime` | Fraction of 1-minute probe windows with a successful SEP-38 quote. | better |
-| `price_efficiency` | `1 − min(1, mean(spread vs. best-quote in window))`. | better |
-| `settle_latency_score` | `clamp(1 − (p95_settle_s / SLO_s), 0, 1)` where `SLO_s = 900` for fiat. | better |
-| `dispute_score` | `1 − (disputes / fulfilled)` over the window. | better |
-| `quote_stability` | `1 − stddev(mid) / mean(mid)` over one-hour quote samples. | better |
+| Component              | Definition                                                              | Higher is |
+| ---------------------- | ----------------------------------------------------------------------- | --------- |
+| `fill_rate`            | `fulfilled / (fulfilled + failed + expired)`                            | better    |
+| `uptime`               | Fraction of 1-minute probe windows with a successful SEP-38 quote.      | better    |
+| `price_efficiency`     | `1 − min(1, mean(spread vs. best-quote in window))`.                    | better    |
+| `settle_latency_score` | `clamp(1 − (p95_settle_s / SLO_s), 0, 1)` where `SLO_s = 900` for fiat. | better    |
+| `dispute_score`        | `1 − (disputes / fulfilled)` over the window.                           | better    |
+| `quote_stability`      | `1 − stddev(mid) / mean(mid)` over one-hour quote samples.              | better    |
 
 The weights are fixed in `lib/reputation/weights.ts`. Changes to the
 weights require a governance vote (§ Governance). A change of weights

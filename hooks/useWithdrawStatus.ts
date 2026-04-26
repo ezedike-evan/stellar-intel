@@ -1,19 +1,23 @@
-import useSWR from 'swr'
-import type { WithdrawStatus, WithdrawStatusValue } from '@/types'
+import useSWR from 'swr';
+import type { WithdrawStatus, WithdrawStatusValue } from '@/types';
 
-const TERMINAL_STATES: WithdrawStatusValue[] = ['completed', 'error', 'refunded']
+const TERMINAL_STATES: WithdrawStatusValue[] = ['completed', 'error', 'refunded'];
 
-async function fetcher([transferServer, transactionId, jwt]: [string, string, string]): Promise<WithdrawStatus> {
+async function fetcher([transferServer, transactionId, jwt]: [
+  string,
+  string,
+  string,
+]): Promise<WithdrawStatus> {
   const res = await fetch(`${transferServer}/transaction?id=${transactionId}`, {
     headers: { Authorization: `Bearer ${jwt}` },
-  })
+  });
 
   if (!res.ok) {
-    throw new Error(`Status poll failed: HTTP ${res.status}`)
+    throw new Error(`Status poll failed: HTTP ${res.status}`);
   }
 
-  const data = (await res.json()) as { transaction?: Record<string, unknown> }
-  const tx = data.transaction ?? {}
+  const data = (await res.json()) as { transaction?: Record<string, unknown> };
+  const tx = data.transaction ?? {};
 
   return {
     id: String(tx['id'] ?? transactionId),
@@ -23,18 +27,18 @@ async function fetcher([transferServer, transactionId, jwt]: [string, string, st
     amountFee: tx['amount_fee'] as string | undefined,
     updatedAt: new Date(),
     stellarTransactionId: tx['stellar_transaction_id'] as string | undefined,
-  }
+  };
 }
 
 export interface UseWithdrawStatusResult {
-  status: WithdrawStatusValue | undefined
-  amountIn: string | undefined
-  amountOut: string | undefined
-  amountFee: string | undefined
-  stellarTransactionId: string | undefined
-  updatedAt: Date | undefined
-  isLoading: boolean
-  error: string | undefined
+  status: WithdrawStatusValue | undefined;
+  amountIn: string | undefined;
+  amountOut: string | undefined;
+  amountFee: string | undefined;
+  stellarTransactionId: string | undefined;
+  updatedAt: Date | undefined;
+  isLoading: boolean;
+  error: string | undefined;
 }
 
 /**
@@ -50,15 +54,15 @@ export function useWithdrawStatus(
   const key =
     transferServer && transactionId && jwt
       ? ([transferServer, transactionId, jwt] as [string, string, string])
-      : null
+      : null;
 
   const { data, error, isLoading } = useSWR<WithdrawStatus, Error>(key, fetcher, {
     refreshInterval: (latestData) => {
-      if (!latestData) return 5_000
-      return TERMINAL_STATES.includes(latestData.status) ? 0 : 5_000
+      if (!latestData) return 5_000;
+      return TERMINAL_STATES.includes(latestData.status) ? 0 : 5_000;
     },
     revalidateOnFocus: false,
-  })
+  });
 
   return {
     status: data?.status,
@@ -69,5 +73,5 @@ export function useWithdrawStatus(
     updatedAt: data?.updatedAt,
     isLoading,
     error: error?.message,
-  }
+  };
 }
