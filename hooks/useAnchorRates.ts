@@ -1,5 +1,5 @@
 import useSWR from 'swr';
-import type { ApiRatesResponse, RateComparison, AnchorCapabilities } from '@/types';
+import type { ApiRatesResponse, RateComparison, ResolvedAnchor } from '@/types';
 
 async function fetcher([, corridorId, amount]: [string, string, string]): Promise<RateComparison> {
   const url = new URL('/api/rates', window.location.origin);
@@ -31,10 +31,10 @@ export interface UseAnchorRatesResult {
 export function useAnchorRates(
   corridorId: string,
   amount: string,
-  capabilities?: AnchorCapabilities
+  anchor?: ResolvedAnchor
 ): UseAnchorRatesResult {
   const capable =
-    capabilities === undefined || capabilities.sep24 || capabilities.sep38;
+    anchor === undefined || anchor.capabilities.sep24 || anchor.capabilities.sep38;
 
   const { data, error, isLoading, mutate } = useSWR<RateComparison, Error>(
     capable ? ['/api/rates', corridorId, amount] : null,

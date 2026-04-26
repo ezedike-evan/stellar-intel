@@ -1,4 +1,4 @@
-import type { Anchor, Corridor, Sep1TomlData, StellarAsset } from '@/types';
+import type { Anchor, Corridor, Sep1TomlData, StellarAsset, ResolvedAnchor } from '@/types';
 import { USDC_ISSUER } from '../config';
 // ─── USDC asset ───────────────────────────────────────────────────────────────
 
@@ -55,7 +55,7 @@ const ANCLAP: Anchor = {
 export const ANCHORS: Anchor[] = [MONEYGRAM, COWRIE, ANCLAP];
 export const KNOWN_ANCHORS = ANCHORS;
 
-export interface DiscoveredAnchor extends Anchor {
+export interface DiscoveredAnchor extends ResolvedAnchor {
   sep1: Sep1TomlData;
   transferServerSep24: string;
   webAuthEndpoint: string;
@@ -180,6 +180,7 @@ export async function discoverAnchorsForCorridor(corridorId: string): Promise<Di
       return {
         ...anchor,
         sep1,
+        capabilities: sep1.capabilities,
         transferServerSep24,
         webAuthEndpoint,
       };

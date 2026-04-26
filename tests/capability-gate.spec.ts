@@ -3,16 +3,24 @@ import { renderHook, waitFor } from '@testing-library/react';
 import { createElement } from 'react';
 import { SWRConfig } from 'swr';
 import { useAnchorRates } from '@/hooks/useAnchorRates';
-import type { AnchorCapabilities, RateComparison } from '@/types';
+import type { ResolvedAnchor, RateComparison } from '@/types';
 
 const wrapper = ({ children }: { children: React.ReactNode }) =>
   createElement(SWRConfig, { value: { provider: () => new Map() } }, children);
 
-const mockCapabilities = (sep24: boolean, sep38: boolean): AnchorCapabilities => ({
-  sep10: true,
-  sep24,
-  sep38,
-  sep12: true,
+const mockAnchor = (sep24: boolean, sep38: boolean): ResolvedAnchor => ({
+  id: 'test-anchor',
+  name: 'Test Anchor',
+  homeDomain: 'test.com',
+  corridors: ['usdc-ngn'],
+  assetCode: 'USDC',
+  assetIssuer: 'G...',
+  capabilities: {
+    sep10: true,
+    sep24,
+    sep38,
+    sep12: true,
+  },
 });
 
 beforeEach(() => {
@@ -22,9 +30,9 @@ beforeEach(() => {
 describe('capability gating in useAnchorRates', () => {
   it('short-circuits when neither sep24 nor sep38 is true', async () => {
     const fetchSpy = vi.stubGlobal('fetch', vi.fn());
-    const capabilities = mockCapabilities(false, false);
+    const anchor = mockAnchor(false, false);
 
-    const { result } = renderHook(() => useAnchorRates('usdc-ngn', '100', capabilities), { wrapper });
+    const { result } = renderHook(() => useAnchorRates('usdc-ngn', '100', anchor), { wrapper });
 
     expect(result.current.isLoading).toBe(false);
     expect(result.current.source).toBe('unavailable');
@@ -37,9 +45,9 @@ describe('capability gating in useAnchorRates', () => {
       'fetch',
       vi.fn(async () => ({ ok: true, json: async () => ({ rates: {} }) }))
     );
-    const capabilities = mockCapabilities(true, false);
+    const anchor = mockAnchor(true, false);
 
-    renderHook(() => useAnchorRates('usdc-ngn', '100', capabilities), { wrapper });
+    renderHook(() => useAnchorRates('usdc-ngn', '100', anchor), { wrapper });
     await waitFor(() => expect(fetchSpy).toHaveBeenCalledTimes(1));
   });
 
@@ -48,9 +56,9 @@ describe('capability gating in useAnchorRates', () => {
       'fetch',
       vi.fn(async () => ({ ok: true, json: async () => ({ rates: {} }) }))
     );
-    const capabilities = mockCapabilities(false, true);
+    const anchor = mockAnchor(false, true);
 
-    renderHook(() => useAnchorRates('usdc-ngn', '100', capabilities), { wrapper });
+    renderHook(() => useAnchorRates('usdc-ngn', '100', anchor), { wrapper });
     await waitFor(() => expect(fetchSpy).toHaveBeenCalledTimes(1));
   });
 
@@ -59,9 +67,9 @@ describe('capability gating in useAnchorRates', () => {
       'fetch',
       vi.fn(async () => ({ ok: true, json: async () => ({ rates: {} }) }))
     );
-    const capabilities = mockCapabilities(true, true);
+    const anchor = mockAnchor(true, true);
 
-    renderHook(() => useAnchorRates('usdc-ngn', '100', capabilities), { wrapper });
+    renderHook(() => useAnchorRates('usdc-ngn', '100', anchor), { wrapper });
     await waitFor(() => expect(fetchSpy).toHaveBeenCalledTimes(1));
   });
 });
