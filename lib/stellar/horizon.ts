@@ -217,6 +217,7 @@ export async function getStrictSendPaths(
   };
 
   const toAsset = toAssets[0];
+  if (!toAsset) return [];
   return data._embedded.records.map((r, i) => {
     const toAmt = parseFloat(r.destination_amount);
     const fromAmt = parseFloat(r.source_amount);

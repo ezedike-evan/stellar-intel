@@ -51,7 +51,7 @@ describe('buildWithdrawPayment', () => {
     });
 
     expect(tx.operations).toHaveLength(1);
-    expect(tx.operations[0].type).toBe('payment');
+    expect(tx.operations[0]!.type).toBe('payment');
   });
 
   it('applies the memo field to the built transaction', async () => {

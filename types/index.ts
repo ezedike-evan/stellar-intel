@@ -67,8 +67,8 @@ export interface AnchorCapabilities {
 export interface Sep1TomlData {
   TRANSFER_SERVER_SEP0024: string | undefined;
   WEB_AUTH_ENDPOINT: string | undefined;
-  SIGNING_KEY?: string;
-  CURRENCIES?: Array<{ code: string; issuer?: string }>;
+  SIGNING_KEY?: string | undefined;
+  CURRENCIES?: Array<{ code: string; issuer?: string | undefined }> | undefined;
   capabilities: AnchorCapabilities;
 }
 
@@ -134,11 +134,11 @@ export type WithdrawStatusValue =
 export interface WithdrawStatus {
   id: string;
   status: WithdrawStatusValue;
-  amountIn?: string;
-  amountOut?: string;
-  amountFee?: string;
+  amountIn?: string | undefined;
+  amountOut?: string | undefined;
+  amountFee?: string | undefined;
   updatedAt: Date;
-  stellarTransactionId?: string;
+  stellarTransactionId?: string | undefined;
 }
 
 // ─── API ──────────────────────────────────────────────────────────────────────
@@ -175,9 +175,9 @@ export type RiskLevel = 'low' | 'medium' | 'high';
 
 export interface StellarAsset {
   code: string;
-  issuer?: string;
+  issuer?: string | undefined;
   name: string;
-  logoUrl?: string;
+  logoUrl?: string | undefined;
 }
 
 export interface SwapRoute {

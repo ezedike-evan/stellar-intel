@@ -67,7 +67,7 @@ describe('RateTable', () => {
       />
     );
     const buttons = screen.getAllByRole('button', { name: 'Off-ramp' });
-    fireEvent.click(buttons[0]);
+    fireEvent.click(buttons[0]!);
     expect(onSelectAnchor).toHaveBeenCalledWith(mockRates.rates[0]);
   });
 
