@@ -1,3 +1,5 @@
+import { Horizon } from '@stellar/stellar-sdk';
+
 export interface Config {
   stellarNetwork: 'mainnet' | 'testnet' | 'futurenet';
   horizonUrl: string;
@@ -87,3 +89,13 @@ Object.freeze(config);
 export const HORIZON_URL = config.horizonUrl;
 export const USDC_ISSUER = config.usdcIssuer;
 export const NETWORK_PASSPHRASE = NETWORK_PASSPHRASES[config.stellarNetwork];
+
+/**
+ * Returns a typed Horizon.Server instance wired to the configured horizon URL.
+ * All Horizon access must go through this helper — flipping
+ * NEXT_PUBLIC_HORIZON_URL or NEXT_PUBLIC_STELLAR_NETWORK automatically takes
+ * effect for every caller.
+ */
+export function getHorizonServer(): Horizon.Server {
+  return new Horizon.Server(config.horizonUrl);
+}
