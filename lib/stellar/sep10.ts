@@ -1,13 +1,98 @@
-import { Networks } from '@stellar/stellar-sdk'
+import { Networks, TransactionBuilder } from '@stellar/stellar-sdk'
+import type { Transaction, FeeBumpTransaction } from '@stellar/stellar-sdk'
 import { getWebAuthEndpoint } from './sep1'
 import type { Sep10Auth } from '@/types'
 
+// ─── Typed error ──────────────────────────────────────────────────────────────
+
+export type ChallengeErrorCode = 'FETCH_FAILED' | 'MISSING_FIELD' | 'WRONG_NETWORK' | 'INVALID_XDR'
+
+export class ChallengeError extends Error {
+  constructor(
+    message: string,
+    public readonly code: ChallengeErrorCode
+  ) {
+    super(message)
+    this.name = 'ChallengeError'
+  }
+}
+
+// ─── Challenge types ──────────────────────────────────────────────────────────
+
+export interface Sep10Challenge {
+  transaction: string
+  network_passphrase: string
+  parsed: Transaction | FeeBumpTransaction
+}
+
+// ─── fetchSep10Challenge ──────────────────────────────────────────────────────
+
+export async function fetchSep10Challenge(
+  webAuthEndpoint: string,
+  publicKey: string,
+  homeDomain: string
+): Promise<Sep10Challenge> {
+  const url = new URL(webAuthEndpoint)
+  url.searchParams.set('account', publicKey)
+  url.searchParams.set('home_domain', homeDomain)
+
+  let res: Response
+  try {
+    res = await fetch(url.toString())
+  } catch (err) {
+    throw new ChallengeError(
+      `Network error fetching challenge from ${webAuthEndpoint}: ${String(err)}`,
+      'FETCH_FAILED'
+    )
+  }
+
+  if (!res.ok) {
+    throw new ChallengeError(
+      `Challenge fetch failed: HTTP ${res.status} from ${webAuthEndpoint}`,
+      'FETCH_FAILED'
+    )
+  }
+
+  const data = (await res.json()) as Record<string, unknown>
+
+  const transaction = data['transaction']
+  if (!transaction || typeof transaction !== 'string') {
+    throw new ChallengeError(
+      `Missing "transaction" field in challenge response from ${webAuthEndpoint}`,
+      'MISSING_FIELD'
+    )
+  }
+
+  const network_passphrase = data['network_passphrase']
+  if (!network_passphrase || typeof network_passphrase !== 'string') {
+    throw new ChallengeError(
+      `Missing "network_passphrase" field in challenge response from ${webAuthEndpoint}`,
+      'MISSING_FIELD'
+    )
+  }
+
+  if (network_passphrase !== Networks.PUBLIC) {
+    throw new ChallengeError(
+      `Challenge is for wrong network: "${network_passphrase}". Expected Stellar mainnet.`,
+      'WRONG_NETWORK'
+    )
+  }
+
+  let parsed: Transaction | FeeBumpTransaction
+  try {
+    parsed = TransactionBuilder.fromXDR(transaction, network_passphrase)
+  } catch {
+    throw new ChallengeError(
+      `Challenge XDR is not parseable from ${webAuthEndpoint}`,
+      'INVALID_XDR'
+    )
+  }
+
+  return { transaction, network_passphrase, parsed }
+}
+
 // ─── Challenge fetch ──────────────────────────────────────────────────────────
 
-/**
- * Fetches a SEP-10 challenge transaction from the anchor's web auth endpoint.
- * Validates that the challenge is for Stellar mainnet.
- */
 export async function fetchChallenge(
   webAuthEndpoint: string,
   publicKey: string
@@ -45,10 +130,6 @@ export async function fetchChallenge(
 
 // ─── Challenge signing ────────────────────────────────────────────────────────
 
-/**
- * Signs the challenge XDR using the Freighter browser extension.
- * Throws if the user rejects the signing prompt.
- */
 export async function signChallenge(
   challengeXdr: string,
   networkPassphrase: string
@@ -65,9 +146,6 @@ export async function signChallenge(
 
 // ─── JWT exchange ─────────────────────────────────────────────────────────────
 
-/**
- * Submits the signed challenge XDR to the anchor and receives a JWT in return.
- */
 export async function submitChallenge(
   webAuthEndpoint: string,
   signedXdr: string
@@ -94,20 +172,19 @@ export async function submitChallenge(
 
 // ─── Full auth orchestrator ───────────────────────────────────────────────────
 
-/**
- * Runs the complete SEP-10 authentication flow for an anchor domain.
- * Returns a Sep10Auth object containing the JWT and its expiry.
- */
 export async function authenticate(
   anchorDomain: string,
   publicKey: string
 ): Promise<Sep10Auth> {
   const webAuthEndpoint = await getWebAuthEndpoint(anchorDomain)
+  if (!webAuthEndpoint) {
+    throw new Error(`Anchor "${anchorDomain}" does not support SEP-10 authentication.`)
+  }
   const { transaction, network_passphrase } = await fetchChallenge(webAuthEndpoint, publicKey)
   const signedXdr = await signChallenge(transaction, network_passphrase)
   const jwt = await submitChallenge(webAuthEndpoint, signedXdr)
 
-  const expiresAt = new Date(Date.now() + 24 * 60 * 60 * 1000) // 24 hours
+  const expiresAt = new Date(Date.now() + 24 * 60 * 60 * 1000)
 
   return { jwt, anchorDomain, publicKey, expiresAt }
 }
