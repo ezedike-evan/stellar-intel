@@ -66,6 +66,26 @@ export async function getSep24Transaction(
   }
 }
 
+// ─── Typed errors ─────────────────────────────────────────────────────────────
+
+export class AnchorRateError extends Error {
+  readonly anchorId: string
+
+  constructor(anchorId: string, message: string) {
+    super(message)
+    this.name = 'AnchorRateError'
+    this.anchorId = anchorId
+  }
+}
+
+// ─── Helpers ──────────────────────────────────────────────────────────────────
+
+function parseRate(raw: unknown): number {
+  if (raw === undefined || raw === null) return 0
+  const num = Number(String(raw).replace(/,/g, ''))
+  return Number.isFinite(num) ? num : 0
+}
+
 // ─── Fee fetching ─────────────────────────────────────────────────────────────
 
 /**
@@ -74,8 +94,11 @@ export async function getSep24Transaction(
  */
 export async function fetchAnchorFee(
   params: Sep24FeeParams
-): Promise<{ fee: string; anchorDomain: string }> {
+): Promise<{ fee: string; anchorDomain: string; exchangeRate: number }> {
   const transferServer = await getTransferServer(params.anchorDomain)
+  if (!transferServer) {
+    throw new Error(`Anchor "${params.anchorDomain}" does not support SEP-24.`)
+  }
 
   const url = new URL(`${transferServer}/fee`)
   url.searchParams.set('operation', params.operation)
@@ -114,7 +137,10 @@ export async function fetchAnchorFee(
     )
   }
 
-  return { fee: String(fee), anchorDomain: params.anchorDomain }
+  const rateRaw = data['price'] ?? data['exchange_rate'] ?? data['rate']
+  const exchangeRate = parseRate(rateRaw)
+
+  return { fee: String(fee), anchorDomain: params.anchorDomain, exchangeRate }
 }
 
 /**
@@ -130,7 +156,7 @@ export async function fetchAllAnchorFees(
 
   return Promise.allSettled(
     anchors.map(async (anchor): Promise<AnchorRate> => {
-      const { fee } = await fetchAnchorFee({
+      const { fee, exchangeRate } = await fetchAnchorFee({
         anchorDomain: anchor.homeDomain,
         operation: 'withdraw',
         assetCode: anchor.assetCode,
@@ -142,14 +168,22 @@ export async function fetchAllAnchorFees(
       const feeNum = Number(fee)
       const amountNum = Number(amount)
 
+      if (exchangeRate <= 0) {
+        throw new AnchorRateError(
+          anchor.id,
+          `${anchor.name} returned a zero or missing exchange rate for ${corridor.to} — rate cannot be derived`
+        )
+      }
+
       return {
         anchorId: anchor.id,
         anchorName: anchor.name,
         corridorId,
         fee: feeNum,
         feeType: 'flat',
-        exchangeRate: 0, // populated by computeRateComparison once exchange rates are available
-        totalReceived: computeTotalReceived(amountNum, feeNum, 0, 1),
+        exchangeRate,
+        totalReceived: computeTotalReceived(amountNum, feeNum, 0, exchangeRate),
+        source: 'live' as const,
         updatedAt: new Date(),
       }
     })
