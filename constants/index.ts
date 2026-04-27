@@ -1,10 +1,10 @@
 import type { Country, StellarAsset } from '@/types';
 export { KNOWN_ANCHORS, ANCHORS, CORRIDORS, ANCHOR_HOME_DOMAINS } from './anchors';
 
-export const STELLAR_NETWORK = process.env.NEXT_PUBLIC_STELLAR_NETWORK ?? 'mainnet';
-export const HORIZON_URL = process.env.NEXT_PUBLIC_HORIZON_URL ?? 'https://horizon.stellar.org';
-export const STELLAR_EXPERT_URL =
-  process.env.NEXT_PUBLIC_STELLAR_EXPERT_URL ?? 'https://api.stellar.expert/explorer/public';
+import { env } from '@/lib/env';
+export const STELLAR_NETWORK = env.NEXT_PUBLIC_STELLAR_NETWORK;
+export const HORIZON_URL = env.NEXT_PUBLIC_HORIZON_URL;
+export const STELLAR_EXPERT_URL = env.NEXT_PUBLIC_STELLAR_EXPERT_URL;
 
 export const USDC_ASSET: StellarAsset = {
   code: 'USDC',
