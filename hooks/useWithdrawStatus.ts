@@ -1,7 +1,7 @@
 import useSWR from 'swr'
 import type { WithdrawStatus, WithdrawStatusValue } from '@/types'
 
-const TERMINAL_STATES: WithdrawStatusValue[] = ['completed', 'error', 'refunded']
+const TERMINAL_STATES: WithdrawStatusValue[] = ['completed', 'error', 'refunded', 'no_market', 'too_small', 'too_large']
 
 async function fetcher([transferServer, transactionId, jwt]: [string, string, string]): Promise<WithdrawStatus> {
   const res = await fetch(`${transferServer}/transaction?id=${transactionId}`, {
