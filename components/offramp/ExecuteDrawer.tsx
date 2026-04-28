@@ -1,6 +1,6 @@
 'use client'
 import { useState } from 'react'
-import { authenticate } from '@/lib/stellar/sep10'
+import { authenticate, NetworkMismatchError } from '@/lib/stellar/sep10'
 import { initiateWithdraw, openWithdrawPopup, getWithdrawTransactionRecord } from '@/lib/stellar/sep24'
 import { getTransferServer } from '@/lib/stellar/sep1'
 import { getAnchorById } from '@/lib/stellar/anchors'
@@ -46,6 +46,9 @@ interface ExecuteDrawerProps {
 export function ExecuteDrawer({ rate, amount, publicKey, onClose, onExecuteStarted }: ExecuteDrawerProps) {
   const [step, setStep] = useState<Step>('idle')
   const [errorMsg, setErrorMsg] = useState<string | null>(null)
+  const [errorKind, setErrorKind] = useState<'generic' | 'network-mismatch'>('generic')
+  const [networkExpected, setNetworkExpected] = useState<string | null>(null)
+  const [networkActual, setNetworkActual] = useState<string | null>(null)
   const [txHash, setTxHash] = useState<string | null>(null)
 
   const isOpen = rate !== null
@@ -55,6 +58,9 @@ export function ExecuteDrawer({ rate, amount, publicKey, onClose, onExecuteStart
 
     setStep('authenticating')
     setErrorMsg(null)
+    setErrorKind('generic')
+    setNetworkExpected(null)
+    setNetworkActual(null)
     setTxHash(null)
 
     try {
@@ -105,7 +111,15 @@ export function ExecuteDrawer({ rate, amount, publicKey, onClose, onExecuteStart
       }
       onClose()
     } catch (err) {
-      setErrorMsg((err as Error).message ?? 'Unknown error')
+      if (err instanceof NetworkMismatchError) {
+        setErrorKind('network-mismatch')
+        setNetworkExpected(err.expectedNetworkName)
+        setNetworkActual(err.actualNetworkName)
+        setErrorMsg(err.message)
+      } else {
+        setErrorKind('generic')
+        setErrorMsg(err instanceof Error ? err.message : 'Unknown error')
+      }
       setStep('error')
     }
   }
@@ -176,7 +190,23 @@ export function ExecuteDrawer({ rate, amount, publicKey, onClose, onExecuteStart
           <StepIndicator step={step} />
 
           {/* Error message */}
-          {step === 'error' && errorMsg && (
+          {step === 'error' && errorKind === 'network-mismatch' && networkExpected && (
+            <div
+              role="alert"
+              className="mt-3 rounded-lg border border-amber-300 bg-amber-50 px-3 py-3 text-sm dark:border-amber-700/60 dark:bg-amber-950/30"
+            >
+              <p className="font-semibold text-amber-800 dark:text-amber-300">
+                Switch network in Freighter to {networkExpected}
+              </p>
+              <p className="mt-1 text-amber-700 dark:text-amber-400">
+                Freighter is currently on{' '}
+                <span className="font-mono">{networkActual ?? 'an unknown network'}</span>, but
+                this anchor requires <span className="font-mono">{networkExpected}</span>. Open
+                Freighter, switch networks, then try again.
+              </p>
+            </div>
+          )}
+          {step === 'error' && errorKind === 'generic' && errorMsg && (
             <p className="mt-3 rounded-lg bg-red-50 px-3 py-2 text-sm text-red-600 dark:bg-red-950/30 dark:text-red-400">
               {errorMsg}
             </p>
