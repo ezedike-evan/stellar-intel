@@ -1,9 +1,9 @@
 import useSWR from 'swr'
-import type { WithdrawStatus, WithdrawStatusValue } from '@/types'
+import type { Sep24Transaction, WithdrawStatusValue } from '@/types'
 
 const TERMINAL_STATES: WithdrawStatusValue[] = ['completed', 'error', 'refunded', 'no_market', 'too_small', 'too_large']
 
-async function fetcher([transferServer, transactionId, jwt]: [string, string, string]): Promise<WithdrawStatus> {
+async function fetcher([transferServer, transactionId, jwt]: [string, string, string]): Promise<Sep24Transaction> {
   const res = await fetch(`${transferServer}/transaction?id=${transactionId}`, {
     headers: { Authorization: `Bearer ${jwt}` },
   })
@@ -52,7 +52,7 @@ export function useWithdrawStatus(
       ? ([transferServer, transactionId, jwt] as [string, string, string])
       : null
 
-  const { data, error, isLoading } = useSWR<WithdrawStatus, Error>(key, fetcher, {
+  const { data, error, isLoading } = useSWR<Sep24Transaction, Error>(key, fetcher, {
     refreshInterval: (latestData) => {
       if (!latestData) return 5_000
       return TERMINAL_STATES.includes(latestData.status) ? 0 : 5_000
