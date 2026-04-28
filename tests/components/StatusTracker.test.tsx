@@ -7,6 +7,7 @@ const BASE_PROPS = {
   status: undefined,
   amountIn: undefined,
   amountOut: undefined,
+  currencyCode: 'NGN',
   stellarTransactionId: undefined,
   isLoading: false,
   error: undefined,
@@ -33,17 +34,33 @@ describe('StatusTracker', () => {
     expect(screen.getByText('Awaiting your payment')).toBeInTheDocument()
   })
 
-  it('shows amount in and out when provided', () => {
+  it('shows completion celebration banner with localized amount when completed', () => {
     render(
       <StatusTracker
         {...BASE_PROPS}
         status="completed"
         amountIn="100"
-        amountOut="154840 NGN"
+        amountOut="154840"
+      />
+    )
+    expect(screen.getByText('Delivered')).toBeInTheDocument()
+    // The formatted amount should contain the numeric value
+    expect(screen.getByText(/154,840|154840/)).toBeInTheDocument()
+    // The raw amount detail row should not be shown when completed
+    expect(screen.queryByText('You receive')).not.toBeInTheDocument()
+  })
+
+  it('shows amount details when status is not completed', () => {
+    render(
+      <StatusTracker
+        {...BASE_PROPS}
+        status="pending_external"
+        amountIn="100"
+        amountOut="154840"
       />
     )
     expect(screen.getByText('100 USDC')).toBeInTheDocument()
-    expect(screen.getByText('154840 NGN')).toBeInTheDocument()
+    expect(screen.getByText('You receive')).toBeInTheDocument()
   })
 
   it('shows the error message when error is provided', () => {
