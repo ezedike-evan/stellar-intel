@@ -1,12 +1,20 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest'
 import { StellarToml } from '@stellar/stellar-sdk'
-import { resolveToml, getTransferServer, getWebAuthEndpoint, resolveAllAnchors, _clearTomlCache } from '@/lib/stellar/sep1'
+import {
+  resolveToml,
+  getTransferServer,
+  getWebAuthEndpoint,
+  resolveAllAnchors,
+  _clearTomlCache,
+} from '@/lib/stellar/sep1'
 
 const VALID_TOML = {
   TRANSFER_SERVER_SEP0024: 'https://cowrie.exchange/sep24',
   WEB_AUTH_ENDPOINT: 'https://cowrie.exchange/auth',
   SIGNING_KEY: 'GABCDEF',
-  CURRENCIES: [{ code: 'USDC', issuer: 'GA5ZSEJYB37JRC5AVCIA5MOP4RHTM335X2KGX3IHOJAPP5RE34K4KZVN' }],
+  CURRENCIES: [
+    { code: 'USDC', issuer: 'GA5ZSEJYB37JRC5AVCIA5MOP4RHTM335X2KGX3IHOJAPP5RE34K4KZVN' },
+  ],
 }
 
 beforeEach(() => {
@@ -29,24 +37,28 @@ describe('resolveToml', () => {
     expect(result.WEB_AUTH_ENDPOINT).toBe('https://cowrie.exchange/auth')
   })
 
-  it('throws when TRANSFER_SERVER_SEP0024 is absent', async () => {
+  it('returns sep24 false when TRANSFER_SERVER_SEP0024 is absent', async () => {
     vi.spyOn(StellarToml.Resolver, 'resolve').mockResolvedValue({
       WEB_AUTH_ENDPOINT: 'https://cowrie.exchange/auth',
     } as never)
 
-    await expect(resolveToml('cowrie.exchange')).rejects.toThrow(
-      /Missing TRANSFER_SERVER_SEP0024.*"cowrie\.exchange"/
-    )
+    const result = await resolveToml('cowrie.exchange')
+
+    expect(result.capabilities.sep24).toBe(false)
+    expect(result.capabilities.sep10).toBe(true)
+    expect(result.TRANSFER_SERVER_SEP0024).toBeUndefined()
   })
 
-  it('throws when WEB_AUTH_ENDPOINT is absent', async () => {
+  it('returns sep10 false when WEB_AUTH_ENDPOINT is absent', async () => {
     vi.spyOn(StellarToml.Resolver, 'resolve').mockResolvedValue({
       TRANSFER_SERVER_SEP0024: 'https://cowrie.exchange/sep24',
     } as never)
 
-    await expect(resolveToml('cowrie.exchange')).rejects.toThrow(
-      /Missing WEB_AUTH_ENDPOINT.*"cowrie\.exchange"/
-    )
+    const result = await resolveToml('cowrie.exchange')
+
+    expect(result.capabilities.sep10).toBe(false)
+    expect(result.capabilities.sep24).toBe(true)
+    expect(result.WEB_AUTH_ENDPOINT).toBeUndefined()
   })
 
   it('throws a descriptive error when the network call fails', async () => {
@@ -91,8 +103,8 @@ describe('resolveAllAnchors', () => {
 
     await resolveAllAnchors()
 
-    // ANCHORS has 3 entries: moneygram, cowrie, anclap
-    expect(spy).toHaveBeenCalledTimes(3)
+    // ANCHORS has 4 entries: moneygram, cowrie, flutterwave, anclap
+    expect(spy).toHaveBeenCalledTimes(4)
   })
 
   it('returns partial results when one anchor fails', async () => {

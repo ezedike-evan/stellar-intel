@@ -1,134 +1,16 @@
-import type { Anchor, Corridor, StellarAsset } from '@/types'
-import { USDC_ISSUER } from '../config'
-// ─── USDC asset ───────────────────────────────────────────────────────────────
+// Anchor and corridor data lives in constants/anchors.ts — the single source of truth.
+// This module re-exports that data and adds SEP-1 resolution helpers that belong
+// in lib/stellar (network calls, dynamic imports) rather than in constants.
+export * from '@/constants/anchors'
 
-/** USDC on Stellar mainnet (Circle issuer). */
-export const USDC_ASSET: StellarAsset = {
-  code: 'USDC',
-  issuer: USDC_ISSUER,
-  name: 'USD Coin',
+import { ANCHORS, CORRIDORS } from '@/constants/anchors'
+import type { Anchor, Corridor, Sep1TomlData } from '@/types'
+
+export interface DiscoveredAnchor extends Anchor {
+  sep1: Sep1TomlData
+  transferServerSep24: string
+  webAuthEndpoint: string
 }
-
-// ─── Anchors ──────────────────────────────────────────────────────────────────
-
-/**
- * MoneyGram — all five corridors (USDC → NGN / KES / GHS / MXN / BRL).
- * Confirmed live SEP-24 anchor. USDC withdraw enabled, max $2,500/tx.
- * Cash pickup at MoneyGram agent locations worldwide.
- */
-const MONEYGRAM: Anchor = {
-  id: 'moneygram',
-  name: 'MoneyGram',
-  homeDomain: 'stellar.moneygram.com',
-  corridors: ['usdc-ngn', 'usdc-kes', 'usdc-ghs', 'usdc-mxn', 'usdc-brl'],
-  assetCode: 'USDC',
-  assetIssuer: USDC_ISSUER,
-}
-
-/**
- * Cowrie Exchange — Nigeria corridor (USDC → NGN).
- * Uses SEP-6 (TRANSFER_SERVER), not SEP-24. Included for comparison.
- */
-const COWRIE: Anchor = {
-  id: 'cowrie',
-  name: 'Cowrie Exchange',
-  homeDomain: 'cowrie.exchange',
-  corridors: ['usdc-ngn'],
-  assetCode: 'USDC',
-  assetIssuer: USDC_ISSUER,
-}
-
-/**
- * Anclap — Argentina and Peru corridors (USDC → ARS / PEN).
- * Confirmed live SEP-24 anchor. 2% withdrawal fee.
- */
-const ANCLAP: Anchor = {
-  id: 'anclap',
-  name: 'Anclap',
-  homeDomain: 'anclap.com',
-  corridors: ['usdc-ars', 'usdc-pen'],
-  assetCode: 'USDC',
-  assetIssuer: USDC_ISSUER,
-}
-
-/** All supported anchors. */
-export const ANCHORS: Anchor[] = [MONEYGRAM, COWRIE, ANCLAP] as const
-
-/** Maps anchor ID → home domain for quick lookup during SEP-1 resolution. */
-export const ANCHOR_HOME_DOMAINS: Record<string, string> = {
-  moneygram: 'stellar.moneygram.com',
-  cowrie: 'cowrie.exchange',
-  anclap: 'anclap.com',
-} as const
-
-// ─── Corridors ────────────────────────────────────────────────────────────────
-
-const CORRIDOR_NGN: Corridor = {
-  id: 'usdc-ngn',
-  from: 'USDC',
-  to: 'NGN',
-  countryCode: 'NG',
-  countryName: 'Nigeria',
-}
-
-const CORRIDOR_KES: Corridor = {
-  id: 'usdc-kes',
-  from: 'USDC',
-  to: 'KES',
-  countryCode: 'KE',
-  countryName: 'Kenya',
-}
-
-const CORRIDOR_GHS: Corridor = {
-  id: 'usdc-ghs',
-  from: 'USDC',
-  to: 'GHS',
-  countryCode: 'GH',
-  countryName: 'Ghana',
-}
-
-const CORRIDOR_MXN: Corridor = {
-  id: 'usdc-mxn',
-  from: 'USDC',
-  to: 'MXN',
-  countryCode: 'MX',
-  countryName: 'Mexico',
-}
-
-const CORRIDOR_BRL: Corridor = {
-  id: 'usdc-brl',
-  from: 'USDC',
-  to: 'BRL',
-  countryCode: 'BR',
-  countryName: 'Brazil',
-}
-
-const CORRIDOR_ARS: Corridor = {
-  id: 'usdc-ars',
-  from: 'USDC',
-  to: 'ARS',
-  countryCode: 'AR',
-  countryName: 'Argentina',
-}
-
-const CORRIDOR_PEN: Corridor = {
-  id: 'usdc-pen',
-  from: 'USDC',
-  to: 'PEN',
-  countryCode: 'PE',
-  countryName: 'Peru',
-}
-
-/** All supported corridors. */
-export const CORRIDORS: Corridor[] = [
-  CORRIDOR_NGN,
-  CORRIDOR_KES,
-  CORRIDOR_GHS,
-  CORRIDOR_MXN,
-  CORRIDOR_BRL,
-  CORRIDOR_ARS,
-  CORRIDOR_PEN,
-] as const
 
 // ─── Lookup helpers ───────────────────────────────────────────────────────────
 
@@ -139,7 +21,9 @@ export const CORRIDORS: Corridor[] = [
 export function getAnchorById(id: string): Anchor {
   const anchor = ANCHORS.find((a) => a.id === id)
   if (!anchor) {
-    throw new Error(`Unknown anchor: "${id}". Valid IDs: ${ANCHORS.map((a) => a.id).join(', ')}`)
+    throw new Error(
+      `Unknown anchor: "${id}". Valid IDs: ${ANCHORS.map((a) => a.id).join(', ')}`
+    )
   }
   return anchor
 }
@@ -150,6 +34,38 @@ export function getAnchorById(id: string): Anchor {
  */
 export function getAnchorsByCorridorId(corridorId: string): Anchor[] {
   return ANCHORS.filter((a) => a.corridors.includes(corridorId))
+}
+
+/**
+ * Resolves SEP-1 details for every known anchor that serves the corridor.
+ * Failed anchors are omitted so callers can continue with the live subset.
+ */
+export async function discoverAnchorsForCorridor(corridorId: string): Promise<DiscoveredAnchor[]> {
+  const { resolveToml } = await import('./sep1')
+  const corridorAnchors = ANCHORS.filter((anchor) => anchor.corridors.includes(corridorId))
+
+  const results = await Promise.allSettled(
+    corridorAnchors.map(async (anchor): Promise<DiscoveredAnchor> => {
+      const result = await resolveToml(anchor.homeDomain)
+      if (!result.ok) throw new Error(result.error)
+      const sep1 = result.data
+      if (!sep1.TRANSFER_SERVER_SEP0024 || !sep1.WEB_AUTH_ENDPOINT) {
+        throw new Error(`Anchor "${anchor.id}" does not support SEP-24 or SEP-10.`)
+      }
+      return {
+        ...anchor,
+        sep1,
+        transferServerSep24: sep1.TRANSFER_SERVER_SEP0024,
+        webAuthEndpoint: sep1.WEB_AUTH_ENDPOINT,
+      }
+    })
+  )
+
+  return results
+    .filter((result): result is PromiseFulfilledResult<DiscoveredAnchor> => {
+      return result.status === 'fulfilled'
+    })
+    .map((result) => result.value)
 }
 
 /**

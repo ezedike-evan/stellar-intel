@@ -2,6 +2,30 @@
 import { formatCurrency, formatRate } from '@/lib/utils'
 import type { RateComparison, AnchorRate } from '@/types'
 
+function sourceBadge(source: AnchorRate['source']): React.ReactNode {
+  switch (source) {
+    case 'sep38':
+      return (
+        <span className="rounded-full bg-green-100 px-2 py-0.5 text-xs font-medium text-green-700 dark:bg-green-900/40 dark:text-green-300">
+          SEP-38
+        </span>
+      )
+    case 'sep24-fee':
+      return null
+    case 'unavailable':
+      return (
+        <span className="rounded-full bg-red-100 px-2 py-0.5 text-xs font-medium text-red-700 dark:bg-red-900/40 dark:text-red-300">
+          Unavailable
+        </span>
+      )
+    default: {
+      const _exhaustive: never = source
+      void _exhaustive
+      return null
+    }
+  }
+}
+
 interface RateTableProps {
   rates: RateComparison | undefined
   isLoading: boolean
@@ -67,13 +91,14 @@ export function RateTable({ rates, isLoading, error, onSelectAnchor }: RateTable
 
           {!isLoading && !error && rates?.rates.map((rate) => {
             const isBest = rate.anchorId === rates.bestRateId
+            const isUnavailable = rate.source === 'unavailable'
             const currency = rate.corridorId.split('-')[1]?.toUpperCase() ?? ''
 
             return (
               <tr
                 key={rate.anchorId}
                 className={
-                  isBest
+                  isBest && !isUnavailable
                     ? 'border-t border-blue-200 bg-blue-50/50 dark:border-blue-900 dark:bg-blue-950/20'
                     : 'border-t border-gray-200 dark:border-gray-700'
                 }
@@ -83,33 +108,30 @@ export function RateTable({ rates, isLoading, error, onSelectAnchor }: RateTable
                     <span className="font-medium text-gray-900 dark:text-white">
                       {rate.anchorName}
                     </span>
-                    {isBest && (
+                    {isBest && !isUnavailable && (
                       <span className="rounded-full bg-blue-100 px-2 py-0.5 text-xs font-medium text-blue-700 dark:bg-blue-900/40 dark:text-blue-300">
                         Best Rate
                       </span>
                     )}
-                    {rate.source === 'estimated' && (
-                      <span className="rounded-full bg-amber-100 px-2 py-0.5 text-xs font-medium text-amber-700 dark:bg-amber-900/30 dark:text-amber-400">
-                        Estimated
-                      </span>
-                    )}
+                    {sourceBadge(rate.source)}
                   </div>
                 </td>
                 <td className="px-4 py-3 text-right text-gray-700 dark:text-gray-300">
-                  {formatCurrency(rate.fee, 'USD')}
+                  {isUnavailable ? '—' : formatCurrency(rate.fee, 'USD')}
                 </td>
                 <td className="px-4 py-3 text-right text-gray-700 dark:text-gray-300">
-                  {rate.exchangeRate > 0
-                    ? formatRate(rate.exchangeRate, 'USDC', currency)
-                    : '—'}
+                  {isUnavailable || rate.exchangeRate <= 0
+                    ? '—'
+                    : formatRate(rate.exchangeRate, 'USDC', currency)}
                 </td>
                 <td className="px-4 py-3 text-right font-medium text-gray-900 dark:text-white">
-                  {formatCurrency(rate.totalReceived, currency)}
+                  {isUnavailable ? '—' : formatCurrency(rate.totalReceived, currency)}
                 </td>
                 <td className="px-4 py-3 text-right">
                   <button
                     onClick={() => onSelectAnchor(rate)}
-                    className="rounded-lg bg-blue-600 px-3 py-1.5 text-xs font-medium text-white transition-colors hover:bg-blue-700 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:ring-offset-1"
+                    disabled={isUnavailable}
+                    className="rounded-lg bg-blue-600 px-3 py-1.5 text-xs font-medium text-white transition-colors hover:bg-blue-700 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:ring-offset-1 disabled:opacity-40 disabled:cursor-not-allowed"
                   >
                     Off-ramp
                   </button>

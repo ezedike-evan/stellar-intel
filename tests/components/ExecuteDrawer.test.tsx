@@ -53,6 +53,7 @@ const RATE: AnchorRate = {
   feeType: 'flat',
   exchangeRate: 1580,
   totalReceived: 154840,
+  source: 'sep24-fee' as const,
   updatedAt: new Date(),
 }
 
@@ -99,7 +100,7 @@ beforeEach(() => {
 describe('ExecuteDrawer', () => {
   it('renders the dialog shell but no anchor name when rate is null', () => {
     render(
-      <ExecuteDrawer rate={null} amount="100" publicKey={PUBLIC_KEY} onClose={vi.fn()} />
+      <ExecuteDrawer rate={null} amount="100" publicKey={PUBLIC_KEY} onClose={vi.fn()} onExecuteStarted={vi.fn()} />
     )
     expect(screen.queryByRole('dialog')).toBeInTheDocument()
     // No anchor-specific content should appear
@@ -109,7 +110,7 @@ describe('ExecuteDrawer', () => {
 
   it('shows the anchor name and transaction summary when a rate is provided', () => {
     render(
-      <ExecuteDrawer rate={RATE} amount="100" publicKey={PUBLIC_KEY} onClose={vi.fn()} />
+      <ExecuteDrawer rate={RATE} amount="100" publicKey={PUBLIC_KEY} onClose={vi.fn()} onExecuteStarted={vi.fn()} />
     )
     expect(screen.getByText(/Cowrie/)).toBeInTheDocument()
     expect(screen.getByText('100 USDC')).toBeInTheDocument()
@@ -118,7 +119,7 @@ describe('ExecuteDrawer', () => {
 
   it('runs through the full happy path and shows the tx hash', async () => {
     render(
-      <ExecuteDrawer rate={RATE} amount="100" publicKey={PUBLIC_KEY} onClose={vi.fn()} />
+      <ExecuteDrawer rate={RATE} amount="100" publicKey={PUBLIC_KEY} onClose={vi.fn()} onExecuteStarted={vi.fn()} />
     )
 
     fireEvent.click(screen.getByText('Start Off-ramp'))
@@ -137,7 +138,7 @@ describe('ExecuteDrawer', () => {
     mockAuthenticate.mockRejectedValue(new Error('SEP-10 challenge failed'))
 
     render(
-      <ExecuteDrawer rate={RATE} amount="100" publicKey={PUBLIC_KEY} onClose={vi.fn()} />
+      <ExecuteDrawer rate={RATE} amount="100" publicKey={PUBLIC_KEY} onClose={vi.fn()} onExecuteStarted={vi.fn()} />
     )
 
     fireEvent.click(screen.getByText('Start Off-ramp'))
@@ -150,7 +151,7 @@ describe('ExecuteDrawer', () => {
     mockOpenWithdrawPopup.mockRejectedValue(new Error('User cancelled the transaction'))
 
     render(
-      <ExecuteDrawer rate={RATE} amount="100" publicKey={PUBLIC_KEY} onClose={vi.fn()} />
+      <ExecuteDrawer rate={RATE} amount="100" publicKey={PUBLIC_KEY} onClose={vi.fn()} onExecuteStarted={vi.fn()} />
     )
 
     fireEvent.click(screen.getByText('Start Off-ramp'))
@@ -163,7 +164,7 @@ describe('ExecuteDrawer', () => {
   it('calls onClose when the X button is clicked in idle state', () => {
     const onClose = vi.fn()
     render(
-      <ExecuteDrawer rate={RATE} amount="100" publicKey={PUBLIC_KEY} onClose={onClose} />
+      <ExecuteDrawer rate={RATE} amount="100" publicKey={PUBLIC_KEY} onClose={onClose} onExecuteStarted={vi.fn()} />
     )
     fireEvent.click(screen.getByRole('button', { name: 'Close' }))
     expect(onClose).toHaveBeenCalledOnce()

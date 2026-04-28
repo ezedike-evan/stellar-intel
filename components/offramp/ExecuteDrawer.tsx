@@ -32,6 +32,12 @@ interface ExecuteDrawerProps {
   publicKey: string;
   onClose: () => void;
   onExecuteStarted?: () => void;
+  rate: AnchorRate | null
+  amount: string
+  publicKey: string
+  onClose: () => void
+  /** Called once the Stellar payment is submitted; closes the drawer and hands tracking data to the page. */
+  onExecuteStarted: (transactionId: string, transferServer: string, jwt: string) => void
 }
 
 // ─── Component ────────────────────────────────────────────────────────────────
@@ -46,6 +52,10 @@ export function ExecuteDrawer({
   const [step, setStep] = useState<ExecuteDrawerStep>('idle');
   const [errorMsg, setErrorMsg] = useState<string | null>(null);
   const [txHash, setTxHash] = useState<string | null>(null);
+export function ExecuteDrawer({ rate, amount, publicKey, onClose, onExecuteStarted }: ExecuteDrawerProps) {
+  const [step, setStep] = useState<Step>('idle')
+  const [errorMsg, setErrorMsg] = useState<string | null>(null)
+  const [txHash, setTxHash] = useState<string | null>(null)
 
   const isOpen = rate !== null;
 
@@ -104,6 +114,16 @@ export function ExecuteDrawer({
       const result = await signAndSubmitPayment(tx);
       setTxHash(result.hash ?? null);
       setStep('done');
+      setStep('signing')
+      const result = await signAndSubmitPayment(tx)
+      setTxHash(result.hash ?? null)
+      setStep('done')
+
+      // Hand tracking data to the page, then close so StatusTracker owns the viewport.
+      if (transferServer) {
+        onExecuteStarted(transactionId, transferServer, auth.jwt)
+      }
+      onClose()
     } catch (err) {
       setErrorMsg((err as Error).message ?? 'Unknown error');
       setStep('error');

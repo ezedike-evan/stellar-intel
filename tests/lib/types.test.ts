@@ -37,6 +37,7 @@ describe('AnchorRate', () => {
       feeType: 'flat',
       exchangeRate: 1580,
       totalReceived: 153660,
+      source: 'sep24-fee' as const,
       updatedAt: new Date(),
     }
     expect(rate.anchorId).toBe('cowrie')

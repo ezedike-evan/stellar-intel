@@ -9,6 +9,8 @@ interface StatusTrackerProps {
   stellarTransactionId: string | undefined
   isLoading: boolean
   error: string | undefined
+  onRetryAnchor?: () => void
+  onAdjust?: () => void
 }
 
 const STATUS_LABELS: Record<WithdrawStatusValue, string> = {

@@ -1,6 +1,12 @@
 import { StellarToml } from '@stellar/stellar-sdk'
-import type { Sep1TomlData } from '@/types'
+import type { ResolvedAnchor, Sep1TomlData } from '@/types'
 import { ANCHORS } from './anchors'
+
+// ─── Result type ──────────────────────────────────────────────────────────────
+
+export type TomlResult =
+  | { ok: true; data: Sep1TomlData }
+  | { ok: false; error: string }
 
 // ─── In-memory cache ──────────────────────────────────────────────────────────
 
@@ -13,13 +19,51 @@ interface CacheEntry {
 
 const cache = new Map<string, CacheEntry>()
 
-// ─── Core resolver ────────────────────────────────────────────────────────────
+// ─── Retry configuration ──────────────────────────────────────────────────────
 
-/**
- * Resolves a stellar.toml file for the given domain via SEP-1.
- * Results are cached in memory for 1 hour. Failed resolutions are not cached.
- */
-export async function resolveToml(domain: string): Promise<Sep1TomlData> {
+const RETRY_CONFIG = {
+  maxAttempts: 3,     // 1 initial + 2 retries
+  baseDelayMs: 250,   // 250 ms base
+  backoffFactor: 2,   // 2× exponential: 250 → 500 → 1000
+  totalBudgetMs: 5000 // hard ceiling across all attempts
+} as const
+
+// ─── Internal helpers ─────────────────────────────────────────────────────────
+
+function sleep(ms: number): Promise<void> {
+  return new Promise((resolve) => setTimeout(resolve, ms))
+}
+
+async function withRetry<T>(
+  fn: () => Promise<T>,
+  config = RETRY_CONFIG
+): Promise<T> {
+  const deadline = Date.now() + config.totalBudgetMs
+  let lastError: unknown
+
+  for (let attempt = 0; attempt < config.maxAttempts; attempt++) {
+    try {
+      return await fn()
+    } catch (err) {
+      lastError = err
+
+      // No more attempts or budget exhausted — bail out immediately
+      const isLastAttempt = attempt === config.maxAttempts - 1
+      const delayMs = config.baseDelayMs * config.backoffFactor ** attempt
+      const wouldExceedBudget = Date.now() + delayMs > deadline
+
+      if (isLastAttempt || wouldExceedBudget) break
+
+      await sleep(delayMs)
+    }
+  }
+
+  throw lastError
+}
+
+// ─── Core resolver (internal — throws on failure) ────────────────────────────
+
+async function resolveTomlUnsafe(domain: string): Promise<Sep1TomlData> {
   const cached = cache.get(domain)
   if (cached && cached.expiresAt > Date.now()) {
     return cached.data
@@ -27,7 +71,7 @@ export async function resolveToml(domain: string): Promise<Sep1TomlData> {
 
   let raw: Record<string, unknown>
   try {
-    raw = await StellarToml.Resolver.resolve(domain)
+    raw = await withRetry(() => StellarToml.Resolver.resolve(domain))
   } catch (err) {
     cache.delete(domain)
     throw new Error(
@@ -35,53 +79,49 @@ export async function resolveToml(domain: string): Promise<Sep1TomlData> {
     )
   }
 
-  const transferServer = raw['TRANSFER_SERVER_SEP0024']
-  if (!transferServer || typeof transferServer !== 'string') {
-    cache.delete(domain)
-    throw new Error(
-      `Missing TRANSFER_SERVER_SEP0024 in stellar.toml for "${domain}". ` +
-        `This anchor does not support SEP-24.`
-    )
-  }
-
-  const webAuthEndpoint = raw['WEB_AUTH_ENDPOINT']
-  if (!webAuthEndpoint || typeof webAuthEndpoint !== 'string') {
-    cache.delete(domain)
-    throw new Error(
-      `Missing WEB_AUTH_ENDPOINT in stellar.toml for "${domain}". ` +
-        `This anchor does not support SEP-10 authentication.`
-    )
-  }
+  const transferServer = typeof raw['TRANSFER_SERVER_SEP0024'] === 'string' ? raw['TRANSFER_SERVER_SEP0024'] : undefined
+  const webAuthEndpoint = typeof raw['WEB_AUTH_ENDPOINT'] === 'string' ? raw['WEB_AUTH_ENDPOINT'] : undefined
+  const signingKey = typeof raw['SIGNING_KEY'] === 'string' ? raw['SIGNING_KEY'] : undefined
+  const quoteServer = typeof raw['QUOTE_SERVER'] === 'string' ? raw['QUOTE_SERVER'] : undefined
 
   const data: Sep1TomlData = {
     TRANSFER_SERVER_SEP0024: transferServer,
     WEB_AUTH_ENDPOINT: webAuthEndpoint,
-    SIGNING_KEY: typeof raw['SIGNING_KEY'] === 'string' ? raw['SIGNING_KEY'] : undefined,
+    SIGNING_KEY: signingKey,
     CURRENCIES: Array.isArray(raw['CURRENCIES'])
       ? (raw['CURRENCIES'] as Array<{ code: string; issuer?: string }>)
       : undefined,
+    capabilities: {
+      sep10: Boolean(webAuthEndpoint),
+      sep24: Boolean(transferServer),
+      sep38: Boolean(quoteServer),
+      sep12: Boolean(signingKey),
+    },
   }
 
   cache.set(domain, { data, expiresAt: Date.now() + TTL_MS })
   return data
 }
 
-// ─── Convenience wrappers ─────────────────────────────────────────────────────
-
-/**
- * Returns the SEP-24 transfer server URL for the given anchor domain.
- */
-export async function getTransferServer(domain: string): Promise<string> {
-  const toml = await resolveToml(domain)
-  return toml.TRANSFER_SERVER_SEP0024
+// ─── Public safe resolver (never throws) ─────────────────────────────────────
+export async function resolveToml(domain: string): Promise<TomlResult> {
+  try {
+    const data = await resolveTomlUnsafe(domain)
+    return { ok: true, data }
+  } catch (err) {
+    return { ok: false, error: err instanceof Error ? err.message : String(err) }
+  }
 }
 
-/**
- * Returns the SEP-10 web auth endpoint URL for the given anchor domain.
- */
-export async function getWebAuthEndpoint(domain: string): Promise<string> {
-  const toml = await resolveToml(domain)
-  return toml.WEB_AUTH_ENDPOINT
+// ─── Convenience wrappers ─────────────────────────────────────────────────────
+export async function getTransferServer(domain: string): Promise<string | null> {
+  const result = await resolveToml(domain)
+  return result.ok ? (result.data.TRANSFER_SERVER_SEP0024 ?? null) : null
+}
+
+export async function getWebAuthEndpoint(domain: string): Promise<string | null> {
+  const result = await resolveToml(domain)
+  return result.ok ? (result.data.WEB_AUTH_ENDPOINT ?? null) : null
 }
 
 // ─── Bulk resolver ────────────────────────────────────────────────────────────
@@ -90,12 +130,14 @@ export async function getWebAuthEndpoint(domain: string): Promise<string> {
  * Resolves stellar.toml for all known anchors in parallel.
  * Anchors that fail resolution are logged but do not cause the function to throw.
  */
-export async function resolveAllAnchors(): Promise<Record<string, Sep1TomlData>> {
+export async function resolveAllAnchors(): Promise<Record<string, ResolvedAnchor>> {
   const results = await Promise.allSettled(
-    ANCHORS.map((anchor) => resolveToml(anchor.homeDomain).then((data) => ({ anchor, data })))
+    ANCHORS.map((anchor) =>
+      resolveTomlUnsafe(anchor.homeDomain).then((data) => ({ anchor, data }))
+    )
   )
 
-  const resolved: Record<string, Sep1TomlData> = {}
+  const resolved: Record<string, ResolvedAnchor> = {}
 
   for (const result of results) {
     if (result.status === 'fulfilled') {
@@ -108,7 +150,14 @@ export async function resolveAllAnchors(): Promise<Record<string, Sep1TomlData>>
   return resolved
 }
 
+// ─── Test helpers ─────────────────────────────────────────────────────────────
+
 /** Exposed for testing only — clears the in-memory TOML cache. */
 export function _clearTomlCache(): void {
   cache.clear()
+}
+
+/** Exposed for testing only — injects a pre-validated cache entry. */
+export function _seedTomlCache(domain: string, data: Sep1TomlData): void {
+  cache.set(domain, { data, expiresAt: Date.now() + TTL_MS })
 }
