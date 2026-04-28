@@ -117,15 +117,15 @@ export function RateTable({ rates, isLoading, error, onSelectAnchor }: RateTable
                   </div>
                 </td>
                 <td className="px-4 py-3 text-right text-gray-700 dark:text-gray-300">
-                  {isUnavailable ? '—' : formatCurrency(rate.fee, 'USD')}
+                  {rate.fee !== null ? formatCurrency(rate.fee, 'USD') : '—'}
                 </td>
                 <td className="px-4 py-3 text-right text-gray-700 dark:text-gray-300">
-                  {isUnavailable || rate.exchangeRate <= 0
-                    ? '—'
-                    : formatRate(rate.exchangeRate, 'USDC', currency)}
+                  {rate.exchangeRate !== null && rate.exchangeRate > 0
+                    ? formatRate(rate.exchangeRate, 'USDC', currency)
+                    : '—'}
                 </td>
                 <td className="px-4 py-3 text-right font-medium text-gray-900 dark:text-white">
-                  {isUnavailable ? '—' : formatCurrency(rate.totalReceived, currency)}
+                  {rate.totalReceived !== null ? formatCurrency(rate.totalReceived, currency) : '—'}
                 </td>
                 <td className="px-4 py-3 text-right">
                   <button

@@ -26,10 +26,10 @@ export interface AnchorRate {
   anchorId: string
   anchorName: string
   corridorId: string
-  fee: number // flat fee in USDC
+  fee: number | null // flat fee in USDC; null when anchor is unreachable
   feeType: 'flat' | 'percent' | 'combined'
-  exchangeRate: number // local currency units per 1 USDC
-  totalReceived: number // computed: (amount - fee) * exchangeRate
+  exchangeRate: number | null // local currency units per 1 USDC; null when anchor is unreachable
+  totalReceived: number | null // computed: (amount - fee) * exchangeRate; null when anchor is unreachable
   updatedAt: Date
   /** Discriminates the origin of the rate data. */
   source: 'sep38' | 'sep24-fee' | 'unavailable'
