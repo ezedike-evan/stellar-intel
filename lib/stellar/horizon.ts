@@ -9,6 +9,7 @@ import {
 } from '@stellar/stellar-sdk'
 import { HORIZON_URL } from '@/constants'
 import type { SwapRoute, StellarAsset } from '@/types'
+import { UserRejectedError } from './errors'
 
 export const horizonServer = new Horizon.Server(HORIZON_URL)
 
@@ -107,7 +108,7 @@ export async function signAndSubmitPayment(
   const signResult = await signTransaction(xdr, { networkPassphrase: Networks.PUBLIC })
 
   if (signResult.error) {
-    throw new Error('User rejected the payment transaction')
+    throw new UserRejectedError()
   }
 
   const { TransactionBuilder: TB } = await import('@stellar/stellar-sdk')

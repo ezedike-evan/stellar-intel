@@ -2,6 +2,7 @@ import { Networks, TransactionBuilder } from '@stellar/stellar-sdk'
 import type { Transaction, FeeBumpTransaction } from '@stellar/stellar-sdk'
 import { getWebAuthEndpoint } from './sep1'
 import type { Sep10Auth } from '@/types'
+import { UserRejectedError } from './errors'
 
 // ─── Typed errors ─────────────────────────────────────────────────────────────
 
@@ -168,7 +169,7 @@ export async function signChallenge(
   const result = await signTransaction(challengeXdr, { networkPassphrase })
 
   if (result.error) {
-    throw new Error('User rejected signing')
+    throw new UserRejectedError()
   }
 
   return result.signedTxXdr
