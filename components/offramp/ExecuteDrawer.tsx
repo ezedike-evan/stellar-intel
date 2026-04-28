@@ -1,11 +1,15 @@
-'use client'
-import { useState } from 'react'
-import { authenticate } from '@/lib/stellar/sep10'
-import { initiateWithdraw, openWithdrawPopup, getWithdrawTransactionRecord } from '@/lib/stellar/sep24'
-import { getTransferServer } from '@/lib/stellar/sep1'
-import { getAnchorById } from '@/lib/stellar/anchors'
-import { buildWithdrawPayment, signAndSubmitPayment } from '@/lib/stellar/horizon'
-import type { AnchorRate, ExecuteDrawerStep } from '@/types'
+'use client';
+import { useState } from 'react';
+import { authenticate } from '@/lib/stellar/sep10';
+import {
+  initiateWithdraw,
+  openWithdrawPopup,
+  getWithdrawTransactionRecord,
+} from '@/lib/stellar/sep24';
+import { getTransferServer } from '@/lib/stellar/sep1';
+import { getAnchorById } from '@/lib/stellar/anchors';
+import { buildWithdrawPayment, signAndSubmitPayment } from '@/lib/stellar/horizon';
+import type { AnchorRate, ExecuteDrawerStep } from '@/types';
 
 // ─── Step definitions ─────────────────────────────────────────────────────────
 
@@ -18,41 +22,55 @@ const STEP_LABELS: Record<ExecuteDrawerStep, string> = {
   signing: 'Sign transaction in Freighter…',
   done: 'Transaction submitted',
   error: 'Something went wrong',
-}
+};
 
 // ─── Props ────────────────────────────────────────────────────────────────────
 
 interface ExecuteDrawerProps {
-  rate: AnchorRate | null
-  amount: string
-  publicKey: string
-  onClose: () => void
+  rate: AnchorRate | null;
+  amount: string;
+  publicKey: string;
+  onClose: () => void;
+  onExecuteStarted?: () => void;
 }
 
 // ─── Component ────────────────────────────────────────────────────────────────
 
-export function ExecuteDrawer({ rate, amount, publicKey, onClose }: ExecuteDrawerProps) {
-  const [step, setStep] = useState<ExecuteDrawerStep>('idle')
-  const [errorMsg, setErrorMsg] = useState<string | null>(null)
-  const [txHash, setTxHash] = useState<string | null>(null)
+export function ExecuteDrawer({
+  rate,
+  amount,
+  publicKey,
+  onClose,
+  onExecuteStarted,
+}: ExecuteDrawerProps) {
+  const [step, setStep] = useState<ExecuteDrawerStep>('idle');
+  const [errorMsg, setErrorMsg] = useState<string | null>(null);
+  const [txHash, setTxHash] = useState<string | null>(null);
 
-  const isOpen = rate !== null
+  const isOpen = rate !== null;
 
   async function handleExecute() {
-    if (!rate) return
+    if (!rate || !publicKey) {
+      setErrorMsg('Missing required information to execute off-ramp');
+      return;
+    }
 
-    setStep('authenticating')
-    setErrorMsg(null)
-    setTxHash(null)
+    onExecuteStarted?.();
+    setStep('authenticating');
+    setErrorMsg(null);
+    setTxHash(null);
 
     try {
       // Step 1 — SEP-10 auth
-      const anchor = getAnchorById(rate.anchorId)
-      const auth = await authenticate(anchor.homeDomain, publicKey)
+      const anchor = getAnchorById(rate.anchorId);
+      if (!anchor) {
+        throw new Error(`Anchor not found: ${rate.anchorId}`);
+      }
+      const auth = await authenticate(anchor.homeDomain, publicKey);
 
       // Step 2 — Initiate SEP-24 withdraw
-      setStep('initiating')
-      const transferServer = await getTransferServer(anchor.homeDomain)
+      setStep('initiating');
+      const transferServer = await getTransferServer(anchor.homeDomain);
       const withdrawResp = await initiateWithdraw({
         transferServer,
         assetCode: anchor.assetCode,
@@ -60,15 +78,15 @@ export function ExecuteDrawer({ rate, amount, publicKey, onClose }: ExecuteDrawe
         amount,
         account: publicKey,
         jwt: auth.jwt,
-      })
+      });
 
       // Step 3 — KYC popup
-      setStep('kyc')
-      const transactionId = await openWithdrawPopup(withdrawResp.url)
+      setStep('kyc');
+      const transactionId = await openWithdrawPopup(withdrawResp.url);
 
       // Step 4 — Fetch transaction record
-      setStep('building')
-      const record = await getWithdrawTransactionRecord(transferServer, transactionId, auth.jwt)
+      setStep('building');
+      const record = await getWithdrawTransactionRecord(transferServer, transactionId, auth.jwt);
 
       // Step 5 — Build payment
       const tx = await buildWithdrawPayment({
@@ -79,20 +97,20 @@ export function ExecuteDrawer({ rate, amount, publicKey, onClose }: ExecuteDrawe
         memoType: record.memoType,
         assetCode: anchor.assetCode,
         assetIssuer: anchor.assetIssuer,
-      })
+      });
 
       // Step 6 — Sign and submit
-      setStep('signing')
-      const result = await signAndSubmitPayment(tx)
-      setTxHash(result.hash ?? null)
-      setStep('done')
+      setStep('signing');
+      const result = await signAndSubmitPayment(tx);
+      setTxHash(result.hash ?? null);
+      setStep('done');
     } catch (err) {
-      setErrorMsg((err as Error).message ?? 'Unknown error')
-      setStep('error')
+      setErrorMsg((err as Error).message ?? 'Unknown error');
+      setStep('error');
     }
   }
 
-  const isRunning = !['idle', 'done', 'error'].includes(step)
+  const isRunning = !['idle', 'done', 'error'].includes(step);
 
   return (
     <>
@@ -127,7 +145,12 @@ export function ExecuteDrawer({ rate, amount, publicKey, onClose }: ExecuteDrawe
               className="rounded-lg p-1 text-gray-400 hover:text-gray-600 disabled:opacity-40 dark:hover:text-gray-200"
             >
               <svg className="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
+                <path
+                  strokeLinecap="round"
+                  strokeLinejoin="round"
+                  strokeWidth={2}
+                  d="M6 18L18 6M6 6l12 12"
+                />
               </svg>
             </button>
           </div>
@@ -147,7 +170,8 @@ export function ExecuteDrawer({ rate, amount, publicKey, onClose }: ExecuteDrawe
                 <div className="flex justify-between border-t border-gray-100 pt-2 dark:border-gray-700">
                   <dt className="font-medium text-gray-700 dark:text-gray-300">You receive</dt>
                   <dd className="font-semibold text-green-600 dark:text-green-400">
-                    {rate.totalReceived.toLocaleString()} {rate.corridorId.split('-')[1]?.toUpperCase()}
+                    {rate.totalReceived.toLocaleString()}{' '}
+                    {rate.corridorId.split('-')[1]?.toUpperCase()}
                   </dd>
                 </div>
               </dl>
@@ -187,11 +211,11 @@ export function ExecuteDrawer({ rate, amount, publicKey, onClose }: ExecuteDrawe
                 <div className="flex items-center gap-2">
                   <div className="flex h-8 w-8 items-center justify-center rounded-full bg-white/20">
                     <span className="text-sm font-bold">
-                      {rate.anchorName.charAt(0).toUpperCase()}
+                      {rate.anchorName?.charAt(0).toUpperCase() || 'A'}
                     </span>
                   </div>
                   <span className="text-sm font-medium">
-                    Proving wallet ownership to {rate.anchorName}…
+                    Proving wallet ownership to {rate.anchorName || 'anchor'}…
                   </span>
                 </div>
               </div>
@@ -225,24 +249,31 @@ export function ExecuteDrawer({ rate, amount, publicKey, onClose }: ExecuteDrawe
         </div>
       </div>
     </>
-  )
+  );
 }
 
 // ─── Sub-components ───────────────────────────────────────────────────────────
 
-const ORDERED_STEPS: ExecuteDrawerStep[] = ['authenticating', 'initiating', 'kyc', 'building', 'signing', 'done']
+const ORDERED_STEPS: ExecuteDrawerStep[] = [
+  'authenticating',
+  'initiating',
+  'kyc',
+  'building',
+  'signing',
+  'done',
+];
 
 function StepIndicator({ step }: { step: ExecuteDrawerStep }) {
-  if (step === 'idle') return null
+  if (step === 'idle') return null;
 
   return (
     <ol className="space-y-1">
       {ORDERED_STEPS.map((s) => {
-        const currentIdx = ORDERED_STEPS.indexOf(step === 'error' ? 'authenticating' : step)
-        const thisIdx = ORDERED_STEPS.indexOf(s)
-        const isComplete = step !== 'error' && thisIdx < ORDERED_STEPS.indexOf(step)
-        const isActive = s === step && step !== 'error' && step !== 'done'
-        const isPending = thisIdx > currentIdx && step !== 'done'
+        const currentIdx = ORDERED_STEPS.indexOf(step === 'error' ? 'authenticating' : step);
+        const thisIdx = ORDERED_STEPS.indexOf(s);
+        const isComplete = step !== 'error' && thisIdx < ORDERED_STEPS.indexOf(step);
+        const isActive = s === step && step !== 'error' && step !== 'done';
+        const isPending = thisIdx > currentIdx && step !== 'done';
 
         return (
           <li key={s} className="flex items-center gap-2 text-xs">
@@ -268,10 +299,10 @@ function StepIndicator({ step }: { step: ExecuteDrawerStep }) {
               {STEP_LABELS[s]}
             </span>
           </li>
-        )
+        );
       })}
     </ol>
-  )
+  );
 }
 
 function Spinner() {
@@ -281,6 +312,8 @@ function Spinner() {
       xmlns="http://www.w3.org/2000/svg"
       fill="none"
       viewBox="0 0 24 24"
+      role="status"
+      aria-label="Loading"
     >
       <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" />
       <path
@@ -289,5 +322,5 @@ function Spinner() {
         d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z"
       />
     </svg>
-  )
+  );
 }
