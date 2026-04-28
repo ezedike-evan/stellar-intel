@@ -73,7 +73,7 @@ export interface Sep1TomlData {
 }
 
 /** A resolved anchor with protocol capabilities attached. */
-export type ResolvedAnchor = Sep1TomlData
+export type ResolvedAnchor = Anchor & Sep1TomlData
 
 // ─── SEP-10 ───────────────────────────────────────────────────────────────────
 

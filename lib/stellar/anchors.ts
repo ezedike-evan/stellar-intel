@@ -4,16 +4,15 @@
 export * from '@/constants/anchors'
 
 import { ANCHORS, CORRIDORS } from '@/constants/anchors'
-import type { Anchor, Corridor, Sep1TomlData } from '@/types'
+import type { Anchor, Corridor, ResolvedAnchor, Sep1TomlData } from '@/types'
 
-export interface DiscoveredAnchor extends Anchor {
-  sep1: Sep1TomlData
-  transferServerSep24: string
-  webAuthEndpoint: string
-}
 
 // ─── Lookup helpers ───────────────────────────────────────────────────────────
 
+/**
+ * Returns the anchor with the given ID.
+ * Throws a descriptive error if the ID is not found.
+ */
 /**
  * Returns the anchor with the given ID.
  * Throws a descriptive error if the ID is not found.
@@ -29,6 +28,18 @@ export function getAnchorById(id: string): Anchor {
 }
 
 /**
+ * Resolves SEP-1 details for the anchor with the given ID.
+ * Throws if the anchor is unknown or TOML resolution fails.
+ */
+export async function getResolvedAnchorById(id: string): Promise<ResolvedAnchor> {
+  const anchor = getAnchorById(id)
+  const { resolveToml } = await import('./sep1')
+  const result = await resolveToml(anchor.homeDomain)
+  if (!result.ok) throw new Error(result.error)
+  return { ...anchor, ...result.data }
+}
+
+/**
  * Returns all anchors that serve the given corridor.
  * Returns an empty array if no anchors support the corridor.
  */
@@ -40,12 +51,12 @@ export function getAnchorsByCorridorId(corridorId: string): Anchor[] {
  * Resolves SEP-1 details for every known anchor that serves the corridor.
  * Failed anchors are omitted so callers can continue with the live subset.
  */
-export async function discoverAnchorsForCorridor(corridorId: string): Promise<DiscoveredAnchor[]> {
+export async function discoverAnchorsForCorridor(corridorId: string): Promise<ResolvedAnchor[]> {
   const { resolveToml } = await import('./sep1')
   const corridorAnchors = ANCHORS.filter((anchor) => anchor.corridors.includes(corridorId))
 
   const results = await Promise.allSettled(
-    corridorAnchors.map(async (anchor): Promise<DiscoveredAnchor> => {
+    corridorAnchors.map(async (anchor): Promise<ResolvedAnchor> => {
       const result = await resolveToml(anchor.homeDomain)
       if (!result.ok) throw new Error(result.error)
       const sep1 = result.data
@@ -54,15 +65,13 @@ export async function discoverAnchorsForCorridor(corridorId: string): Promise<Di
       }
       return {
         ...anchor,
-        sep1,
-        transferServerSep24: sep1.TRANSFER_SERVER_SEP0024,
-        webAuthEndpoint: sep1.WEB_AUTH_ENDPOINT,
+        ...sep1,
       }
     })
   )
 
   return results
-    .filter((result): result is PromiseFulfilledResult<DiscoveredAnchor> => {
+    .filter((result): result is PromiseFulfilledResult<ResolvedAnchor> => {
       return result.status === 'fulfilled'
     })
     .map((result) => result.value)

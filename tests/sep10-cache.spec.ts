@@ -10,6 +10,19 @@ const PUBLIC_KEY = 'GABCDEFGHIJKLMNOPQRSTUVWXYZ012345678901234567890123456789'
 const CHALLENGE_XDR = 'AAAAAQAAAAC...'
 const SIGNED_XDR = 'AAAAAQAAAAD...'
 
+const mockResolvedAnchor = (domain: string) => ({
+  id: domain.split('.')[0] || 'anchor',
+  name: domain,
+  homeDomain: domain,
+  corridors: [],
+  assetCode: 'USDC',
+  assetIssuer: 'G...',
+  TRANSFER_SERVER_SEP0024: `https://${domain}/sep24`,
+  WEB_AUTH_ENDPOINT: `https://${domain}/auth`,
+  SIGNING_KEY: 'G...',
+  capabilities: { sep10: true, sep24: true, sep38: false, sep12: false },
+})
+
 vi.mock('@stellar/freighter-api', () => ({
   signTransaction: vi.fn(),
 }))
@@ -44,7 +57,6 @@ beforeEach(async () => {
   vi.restoreAllMocks()
   clearJwtCache()
   setJwtCacheCapacity(32)
-  vi.spyOn(sep1, 'getWebAuthEndpoint').mockResolvedValue(WEB_AUTH_ENDPOINT)
 
   const freighter = await getFreighter()
   vi.mocked(freighter.signTransaction).mockResolvedValue({
@@ -58,7 +70,7 @@ describe('SEP-10 JWT cache', () => {
     const exp = Math.floor(Date.now() / 1000) + 3600
     stubChallengeAndJwt(makeJwt(exp))
 
-    const first = await authenticate(ANCHOR, PUBLIC_KEY)
+    const first = await authenticate(mockResolvedAnchor(ANCHOR), PUBLIC_KEY)
 
     const freighter = await getFreighter()
     vi.mocked(freighter.signTransaction).mockClear()
@@ -66,7 +78,7 @@ describe('SEP-10 JWT cache', () => {
       throw new Error('fetch should not be called on cache hit')
     }))
 
-    const second = await authenticate(ANCHOR, PUBLIC_KEY)
+    const second = await authenticate(mockResolvedAnchor(ANCHOR), PUBLIC_KEY)
 
     expect(second.jwt).toBe(first.jwt)
     expect(second.expiresAt.getTime()).toBe(first.expiresAt.getTime())
@@ -77,7 +89,7 @@ describe('SEP-10 JWT cache', () => {
     const shortExp = Math.floor(Date.now() / 1000) + 1
     stubChallengeAndJwt(makeJwt(shortExp))
 
-    await authenticate(ANCHOR, PUBLIC_KEY)
+    await authenticate(mockResolvedAnchor(ANCHOR), PUBLIC_KEY)
 
     // Advance past expiry
     vi.useFakeTimers()
@@ -89,7 +101,7 @@ describe('SEP-10 JWT cache', () => {
     const newExp = Math.floor(Date.now() / 1000) + 3600
     stubChallengeAndJwt(makeJwt(newExp))
 
-    const fresh = await authenticate(ANCHOR, PUBLIC_KEY)
+    const fresh = await authenticate(mockResolvedAnchor(ANCHOR), PUBLIC_KEY)
 
     expect(freighter.signTransaction).toHaveBeenCalledTimes(1)
     expect(fresh.expiresAt.getTime()).toBe(newExp * 1000)
@@ -101,7 +113,7 @@ describe('SEP-10 JWT cache', () => {
     const exp = Math.floor(Date.now() / 1000) + 3600
     stubChallengeAndJwt(makeJwt(exp))
 
-    await authenticate(ANCHOR, PUBLIC_KEY)
+    await authenticate(mockResolvedAnchor(ANCHOR), PUBLIC_KEY)
     expect(getCachedJwt(ANCHOR, PUBLIC_KEY)).toBeDefined()
 
     // Simulate downstream 401 response → invalidate
@@ -112,7 +124,7 @@ describe('SEP-10 JWT cache', () => {
     vi.mocked(freighter.signTransaction).mockClear()
     stubChallengeAndJwt(makeJwt(exp))
 
-    await authenticate(ANCHOR, PUBLIC_KEY)
+    await authenticate(mockResolvedAnchor(ANCHOR), PUBLIC_KEY)
     expect(freighter.signTransaction).toHaveBeenCalledTimes(1)
   })
 
@@ -121,16 +133,16 @@ describe('SEP-10 JWT cache', () => {
     const exp = Math.floor(Date.now() / 1000) + 3600
 
     stubChallengeAndJwt(makeJwt(exp))
-    await authenticate('a.example', PUBLIC_KEY)
+    await authenticate(mockResolvedAnchor('a.example'), PUBLIC_KEY)
 
     stubChallengeAndJwt(makeJwt(exp))
-    await authenticate('b.example', PUBLIC_KEY)
+    await authenticate(mockResolvedAnchor('b.example'), PUBLIC_KEY)
 
     // Touch 'a' so 'b' becomes the LRU
     expect(getCachedJwt('a.example', PUBLIC_KEY)).toBeDefined()
 
     stubChallengeAndJwt(makeJwt(exp))
-    await authenticate('c.example', PUBLIC_KEY)
+    await authenticate(mockResolvedAnchor('c.example'), PUBLIC_KEY)
 
     expect(getCachedJwt('a.example', PUBLIC_KEY)).toBeDefined()
     expect(getCachedJwt('c.example', PUBLIC_KEY)).toBeDefined()

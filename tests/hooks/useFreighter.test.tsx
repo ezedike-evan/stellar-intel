@@ -1,3 +1,4 @@
+import React from 'react'
 import { describe, it, expect, vi, beforeEach } from 'vitest'
 import { renderHook, act, waitFor } from '@testing-library/react'
 import { useFreighter } from '@/hooks/useFreighter'
@@ -7,7 +8,17 @@ vi.mock('@stellar/freighter-api', () => ({
   getAddress: vi.fn(),
   getNetwork: vi.fn(),
   requestAccess: vi.fn(),
+  WatchWalletChanges: class {
+    watch = vi.fn()
+    stop = vi.fn()
+  }
 }))
+
+import { WalletProvider } from '@/contexts/WalletContext'
+
+const wrapper = ({ children }: { children: React.ReactNode }) => (
+  <WalletProvider>{children}</WalletProvider>
+)
 
 async function getApi() {
   return await import('@stellar/freighter-api')
@@ -27,12 +38,12 @@ describe('useFreighter', () => {
     const api = await getApi()
     vi.mocked(api.isConnected).mockRejectedValue(new Error('Extension not found'))
 
-    const { result } = renderHook(() => useFreighter())
+    const { result } = renderHook(() => useFreighter(), { wrapper })
     await waitFor(() => expect(result.current.isInstalled).toBe(false))
   })
 
   it('isInstalled is true and isConnected is false when extension is present but locked', async () => {
-    const { result } = renderHook(() => useFreighter())
+    const { result } = renderHook(() => useFreighter(), { wrapper })
     await waitFor(() => expect(result.current.isInstalled).toBe(true))
     expect(result.current.isConnected).toBe(false)
   })
@@ -41,7 +52,7 @@ describe('useFreighter', () => {
     const api = await getApi()
     vi.mocked(api.getAddress).mockResolvedValue({ address: 'GPUBLICKEY123' })
 
-    const { result } = renderHook(() => useFreighter())
+    const { result } = renderHook(() => useFreighter(), { wrapper })
     await waitFor(() => expect(result.current.isInstalled).toBe(true))
 
     await act(async () => {
@@ -59,7 +70,7 @@ describe('useFreighter', () => {
     vi.mocked(api.getNetwork).mockResolvedValue({ network: 'TESTNET', networkPassphrase: 'Test SDF Network ; September 2015' })
     vi.mocked(api.getAddress).mockResolvedValue({ address: 'GPUBLICKEY' })
 
-    const { result } = renderHook(() => useFreighter())
+    const { result } = renderHook(() => useFreighter(), { wrapper })
     await waitFor(() => expect(result.current.isConnected).toBe(true))
     expect(result.current.error).toBe('Please switch Freighter to Mainnet')
   })
@@ -69,7 +80,7 @@ describe('useFreighter', () => {
     vi.mocked(api.isConnected).mockResolvedValue({ isConnected: true })
     vi.mocked(api.getAddress).mockResolvedValue({ address: 'GPUBLICKEY' })
 
-    const { result } = renderHook(() => useFreighter())
+    const { result } = renderHook(() => useFreighter(), { wrapper })
     await waitFor(() => expect(result.current.isConnected).toBe(true))
 
     act(() => {

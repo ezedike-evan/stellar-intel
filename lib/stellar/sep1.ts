@@ -141,7 +141,7 @@ export async function resolveAllAnchors(): Promise<Record<string, ResolvedAnchor
 
   for (const result of results) {
     if (result.status === 'fulfilled') {
-      resolved[result.value.anchor.id] = result.value.data
+      resolved[result.value.anchor.id] = { ...result.value.anchor, ...result.value.data }
     } else {
       console.warn('[sep1] resolveAllAnchors failure:', result.reason)
     }

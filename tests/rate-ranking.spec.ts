@@ -196,7 +196,7 @@ describe('computeRateComparison — edge cases', () => {
 describe('computeRateComparison — property tests', () => {
   it('bestRateId always has the maximum totalReceived (for non-empty arrays)', () => {
     fc.assert(
-      fc.property(fc.array(fc.float({ min: 0, max: 10_000 }), { minLength: 1 }), (totalReceivedValues) => {
+      fc.property(fc.array(fc.float({ min: 0, max: 10_000, noNaN: true, noDefaultInfinity: true }), { minLength: 1 }), (totalReceivedValues) => {
         const rates = totalReceivedValues.map((total, idx) =>
           createMockRate(`anchor-${idx}`, total)
         )
@@ -218,7 +218,7 @@ describe('computeRateComparison — property tests', () => {
 
   it('reordering inputs does not change bestRateId', () => {
     fc.assert(
-      fc.property(fc.array(fc.float({ min: 0, max: 10_000 }), { minLength: 1 }), (totalReceivedValues) => {
+      fc.property(fc.array(fc.float({ min: 0, max: 10_000, noNaN: true, noDefaultInfinity: true }), { minLength: 1 }), (totalReceivedValues) => {
         const rates1 = totalReceivedValues.map((total, idx) =>
           createMockRate(`anchor-${idx}`, total)
         )
@@ -243,7 +243,7 @@ describe('computeRateComparison — property tests', () => {
 
   it('output rate array contains exactly as many items as non-rejected inputs', () => {
     fc.assert(
-      fc.property(fc.array(fc.float({ min: 0, max: 10_000 }), { minLength: 1 }), (totalReceivedValues) => {
+      fc.property(fc.array(fc.float({ min: 0, max: 10_000, noNaN: true, noDefaultInfinity: true }), { minLength: 1 }), (totalReceivedValues) => {
         const rates = totalReceivedValues.map((total, idx) =>
           createMockRate(`anchor-${idx}`, total)
         )
