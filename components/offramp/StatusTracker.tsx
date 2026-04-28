@@ -28,9 +28,10 @@ const STATUS_LABELS: Record<WithdrawStatusValue, string> = {
   no_market: 'No market available',
   too_small: 'Amount too small',
   too_large: 'Amount too large',
+  expired: 'Transaction expired',
 }
 
-const TERMINAL: WithdrawStatusValue[] = ['completed', 'refunded', 'error', 'no_market', 'too_small', 'too_large']
+const TERMINAL: WithdrawStatusValue[] = ['completed', 'refunded', 'error', 'no_market', 'too_small', 'too_large', 'expired']
 
 function statusColor(status: WithdrawStatusValue | undefined): string {
   if (!status) return 'text-gray-500'
