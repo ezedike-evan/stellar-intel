@@ -30,6 +30,26 @@ export class Sep10AuthError extends Error {
   }
 }
 
+export class NetworkMismatchError extends Error {
+  constructor(
+    message: string,
+    public readonly expectedPassphrase: string,
+    public readonly expectedNetworkName: string,
+    public readonly actualPassphrase: string,
+    public readonly actualNetworkName: string
+  ) {
+    super(message)
+    this.name = 'NetworkMismatchError'
+  }
+}
+
+function friendlyNetworkName(passphrase: string): string {
+  if (passphrase === Networks.PUBLIC) return 'Mainnet'
+  if (passphrase === Networks.TESTNET) return 'Testnet'
+  if (passphrase === Networks.FUTURENET) return 'Futurenet'
+  return passphrase
+}
+
 // ─── Challenge types ──────────────────────────────────────────────────────────
 
 export interface Sep10Challenge {
@@ -167,7 +187,24 @@ export async function signChallenge(
   challengeXdr: string,
   networkPassphrase: string
 ): Promise<string> {
-  const { signTransaction } = await import('@stellar/freighter-api')
+  const { signTransaction, getNetworkDetails } = await import('@stellar/freighter-api')
+
+  // Pre-flight: Freighter throws an opaque error if the wallet's selected
+  // network doesn't match the passphrase. Detect and surface a clear
+  // "switch network" message before invoking the sign prompt.
+  const details = await getNetworkDetails()
+  if (!details.error && details.networkPassphrase && details.networkPassphrase !== networkPassphrase) {
+    const expectedName = friendlyNetworkName(networkPassphrase)
+    const actualName = details.network || friendlyNetworkName(details.networkPassphrase)
+    throw new NetworkMismatchError(
+      `Switch network in Freighter to ${expectedName}. Freighter is currently on "${actualName}", but this anchor requires ${expectedName}.`,
+      networkPassphrase,
+      expectedName,
+      details.networkPassphrase,
+      actualName
+    )
+  }
+
   const result = await signTransaction(challengeXdr, { networkPassphrase })
 
   if (result.error) {

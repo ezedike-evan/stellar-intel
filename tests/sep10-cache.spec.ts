@@ -12,6 +12,11 @@ const SIGNED_XDR = 'AAAAAQAAAAD...'
 
 vi.mock('@stellar/freighter-api', () => ({
   signTransaction: vi.fn(),
+  getNetworkDetails: vi.fn(async () => ({
+    network: 'PUBLIC',
+    networkUrl: 'https://horizon.stellar.org',
+    networkPassphrase: Networks.PUBLIC,
+  })),
 }))
 
 function makeJwt(expSeconds: number): string {
