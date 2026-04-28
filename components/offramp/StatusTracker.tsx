@@ -5,8 +5,12 @@ interface StatusTrackerProps {
   transactionId: string
   status: WithdrawStatusValue | undefined
   amountIn: string | undefined
+  amountInAsset: string | undefined
   amountOut: string | undefined
+  amountOutAsset: string | undefined
+  amountFee: string | undefined
   stellarTransactionId: string | undefined
+  externalTransactionId: string | undefined
   isLoading: boolean
   error: string | undefined
   onRetryAnchor?: () => void
@@ -54,8 +58,12 @@ export function StatusTracker({
   transactionId,
   status,
   amountIn,
+  amountInAsset,
   amountOut,
+  amountOutAsset,
+  amountFee,
   stellarTransactionId,
+  externalTransactionId,
   isLoading,
   error,
 }: StatusTrackerProps) {
@@ -97,16 +105,40 @@ export function StatusTracker({
           {amountIn && (
             <div className="flex justify-between">
               <dt className="text-gray-500">Sent</dt>
-              <dd className="font-medium text-gray-900 dark:text-white">{amountIn} USDC</dd>
+              <dd className="font-medium text-gray-900 dark:text-white">
+                {amountIn} {parseAsset(amountInAsset) || 'USDC'}
+              </dd>
+            </div>
+          )}
+          {amountFee && (
+            <div className="flex justify-between">
+              <dt className="text-gray-500">Fee</dt>
+              <dd className="font-medium text-gray-700 dark:text-gray-300">
+                {amountFee} {parseAsset(amountInAsset) || 'USDC'}
+              </dd>
             </div>
           )}
           {amountOut && (
             <div className="flex justify-between">
               <dt className="text-gray-500">You receive</dt>
-              <dd className="font-medium text-green-600 dark:text-green-400">{amountOut}</dd>
+              <dd className="font-medium text-green-600 dark:text-green-400">
+                {amountOut} {parseAsset(amountOutAsset)}
+              </dd>
             </div>
           )}
         </dl>
+      )}
+
+      {/* External Transaction ID */}
+      {externalTransactionId && (
+        <div className="mt-4 pt-4 border-t border-gray-100 dark:border-gray-800">
+          <p className="text-xs text-gray-500 uppercase tracking-wider font-semibold mb-1">
+            Bank Transfer ID
+          </p>
+          <p className="text-sm font-mono text-gray-600 dark:text-gray-400 break-all">
+            {externalTransactionId}
+          </p>
+        </div>
       )}
 
       {/* Stellar tx link */}
@@ -120,4 +152,12 @@ export function StatusTracker({
       )}
     </div>
   )
+}
+
+function parseAsset(assetStr: string | undefined): string | null {
+  if (!assetStr) return null
+  if (assetStr === 'stellar:native') return 'XLM'
+  // stellar:USDC:GA5Z... -> USDC
+  const parts = assetStr.split(':')
+  return parts[1] ?? null
 }

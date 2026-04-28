@@ -150,11 +150,14 @@ export type WithdrawStatus =
 export interface Sep24Transaction {
   id: string
   status: WithdrawStatusValue
-  amountIn?: string
-  amountOut?: string
-  amountFee?: string
+  amountIn?: string | undefined
+  amountInAsset?: string | undefined
+  amountOut?: string | undefined
+  amountOutAsset?: string | undefined
+  amountFee?: string | undefined
   updatedAt: Date
-  stellarTransactionId?: string
+  stellarTransactionId?: string | undefined
+  externalTransactionId?: string | undefined
 }
 
 // ─── Post-execute handoff ─────────────────────────────────────────────────────

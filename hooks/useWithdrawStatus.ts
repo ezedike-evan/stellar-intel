@@ -19,19 +19,25 @@ async function fetcher([transferServer, transactionId, jwt]: [string, string, st
     id: String(tx['id'] ?? transactionId),
     status: (tx['status'] as WithdrawStatusValue) ?? 'incomplete',
     amountIn: tx['amount_in'] as string | undefined,
+    amountInAsset: tx['amount_in_asset'] as string | undefined,
     amountOut: tx['amount_out'] as string | undefined,
+    amountOutAsset: tx['amount_out_asset'] as string | undefined,
     amountFee: tx['amount_fee'] as string | undefined,
     updatedAt: new Date(),
     stellarTransactionId: tx['stellar_transaction_id'] as string | undefined,
+    externalTransactionId: tx['external_transaction_id'] as string | undefined,
   }
 }
 
 export interface UseWithdrawStatusResult {
   status: WithdrawStatusValue | undefined
   amountIn: string | undefined
+  amountInAsset: string | undefined
   amountOut: string | undefined
+  amountOutAsset: string | undefined
   amountFee: string | undefined
   stellarTransactionId: string | undefined
+  externalTransactionId: string | undefined
   updatedAt: Date | undefined
   isLoading: boolean
   error: string | undefined
@@ -53,7 +59,7 @@ export function useWithdrawStatus(
       : null
 
   const { data, error, isLoading } = useSWR<Sep24Transaction, Error>(key, fetcher, {
-    refreshInterval: (latestData) => {
+    refreshInterval: (latestData: Sep24Transaction | undefined) => {
       if (!latestData) return 5_000
       return TERMINAL_STATES.includes(latestData.status) ? 0 : 5_000
     },
@@ -63,9 +69,12 @@ export function useWithdrawStatus(
   return {
     status: data?.status,
     amountIn: data?.amountIn,
+    amountInAsset: data?.amountInAsset,
     amountOut: data?.amountOut,
+    amountOutAsset: data?.amountOutAsset,
     amountFee: data?.amountFee,
     stellarTransactionId: data?.stellarTransactionId,
+    externalTransactionId: data?.externalTransactionId,
     updatedAt: data?.updatedAt,
     isLoading,
     error: error?.message,

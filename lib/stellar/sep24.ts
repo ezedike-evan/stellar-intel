@@ -9,6 +9,10 @@ export const TERMINAL_STATES: ReadonlySet<WithdrawStatusValue> = new Set([
   'completed',
   'error',
   'refunded',
+  'expired',
+  'no_market',
+  'too_small',
+  'too_large',
 ])
 
 const KNOWN_STATUSES = new Set<WithdrawStatusValue>([
@@ -60,9 +64,14 @@ export async function getSep24Transaction(
     status: normalizeStatus(tx['status']),
     updatedAt: new Date(),
     ...(tx['amount_in'] !== undefined && { amountIn: tx['amount_in'] as string }),
+    ...(tx['amount_in_asset'] !== undefined && { amountInAsset: tx['amount_in_asset'] as string }),
     ...(tx['amount_out'] !== undefined && { amountOut: tx['amount_out'] as string }),
-    ...(tx['amount_fee'] !== undefined && { amountFee: tx['amount_fee'] as string }),
+    ...(tx['amount_out_asset'] !== undefined && { amountOutAsset: tx['amount_out_asset'] as string }),
+    ...(tx['amount_fee'] !== undefined || (tx['fee_details'] as any)?.total !== undefined) && { 
+      amountFee: (tx['amount_fee'] ?? (tx['fee_details'] as any)?.total) as string 
+    },
     ...(tx['stellar_transaction_id'] !== undefined && { stellarTransactionId: tx['stellar_transaction_id'] as string }),
+    ...(tx['external_transaction_id'] !== undefined && { externalTransactionId: tx['external_transaction_id'] as string }),
   }
 }
 
@@ -311,7 +320,7 @@ export function computeRateComparison(
     return { corridorId, rates: [], bestRateId: '' }
   }
 
-  const best = rates.reduce((a, b) => (b.totalReceived > a.totalReceived ? b : a))
+  const best = rates.reduce((a, b) => ((b.totalReceived ?? 0) > (a.totalReceived ?? 0) ? b : a))
 
   return { corridorId, rates, bestRateId: best.anchorId }
 }
