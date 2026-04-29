@@ -2,115 +2,115 @@
 
 /** A Stellar anchor that supports SEP-24 withdrawals and/or deposits. */
 export interface Anchor {
-  id: string
-  name: string
-  homeDomain: string
-  corridors: string[] // corridor IDs this anchor serves
-  assetCode: string
-  assetIssuer: string
+  id: string;
+  name: string;
+  homeDomain: string;
+  corridors: string[]; // corridor IDs this anchor serves
+  assetCode: string;
+  assetIssuer: string;
 }
 
 /** A payment corridor from one asset to a fiat currency in a given country. */
 export interface Corridor {
-  id: string // e.g. 'usdc-ngn'
-  from: string // asset code, e.g. 'USDC'
-  to: string // fiat currency code, e.g. 'NGN'
-  countryCode: string // ISO 3166-1 alpha-2
-  countryName: string
+  id: string; // e.g. 'usdc-ngn'
+  from: string; // asset code, e.g. 'USDC'
+  to: string; // fiat currency code, e.g. 'NGN'
+  countryCode: string; // ISO 3166-1 alpha-2
+  countryName: string;
 }
 
 // ─── Rate comparison ──────────────────────────────────────────────────────────
 
 /** The fee structure an anchor charges for a given corridor and amount. */
 export interface AnchorRate {
-  anchorId: string
-  anchorName: string
-  corridorId: string
-  fee: number | null // flat fee in USDC; null when anchor is unreachable
-  feeType: 'flat' | 'percent' | 'combined'
-  exchangeRate: number | null // local currency units per 1 USDC; null when anchor is unreachable
-  totalReceived: number | null // computed: (amount - fee) * exchangeRate; null when anchor is unreachable
-  updatedAt: Date
+  anchorId: string;
+  anchorName: string;
+  corridorId: string;
+  fee: number | null; // flat fee in USDC; null when anchor is unreachable
+  feeType: 'flat' | 'percent' | 'combined';
+  exchangeRate: number | null; // local currency units per 1 USDC; null when anchor is unreachable
+  totalReceived: number | null; // computed: (amount - fee) * exchangeRate; null when anchor is unreachable
+  updatedAt: Date;
   /** Discriminates the origin of the rate data. */
-  source: 'sep38' | 'sep24-fee' | 'unavailable'
+  source: 'sep38' | 'sep24-fee' | 'unavailable';
 }
 
 /** The result of comparing all anchor rates for a single corridor. */
 export interface RateComparison {
-  corridorId: string
-  rates: AnchorRate[]
-  bestRateId: string // anchorId of the anchor with the highest totalReceived
+  corridorId: string;
+  rates: AnchorRate[];
+  bestRateId: string; // anchorId of the anchor with the highest totalReceived
 }
 
 // ─── Wallet ───────────────────────────────────────────────────────────────────
 
 /** The current state of the Freighter browser extension. */
 export interface FreighterState {
-  isInstalled: boolean
-  isConnected: boolean
-  publicKey: string | null
-  network: string | null
-  error: string | null
+  isInstalled: boolean;
+  isConnected: boolean;
+  publicKey: string | null;
+  network: string | null;
+  error: string | null;
 }
 
 // ─── SEP-1 ────────────────────────────────────────────────────────────────────
 
 /** Per-anchor protocol capability flags derived from the resolved TOML. */
 export interface AnchorCapabilities {
-  sep10: boolean
-  sep24: boolean
-  sep38: boolean
-  sep12: boolean
+  sep10: boolean;
+  sep24: boolean;
+  sep38: boolean;
+  sep12: boolean;
 }
 
 /** Relevant fields from a stellar.toml file resolved via SEP-1. */
 export interface Sep1TomlData {
-  TRANSFER_SERVER_SEP0024: string | undefined
-  WEB_AUTH_ENDPOINT: string | undefined
-  SIGNING_KEY: string | undefined
-  CURRENCIES: Array<{ code: string; issuer?: string }> | undefined
-  capabilities: AnchorCapabilities
+  TRANSFER_SERVER_SEP0024: string | undefined;
+  WEB_AUTH_ENDPOINT: string | undefined;
+  SIGNING_KEY: string | undefined;
+  CURRENCIES: Array<{ code: string; issuer?: string }> | undefined;
+  capabilities: AnchorCapabilities;
 }
 
 /** A resolved anchor with protocol capabilities attached. */
-export type ResolvedAnchor = Sep1TomlData
+export type ResolvedAnchor = Sep1TomlData;
 
 // ─── SEP-10 ───────────────────────────────────────────────────────────────────
 
 /** A JWT issued by an anchor after successful SEP-10 authentication. */
 export interface Sep10Auth {
-  jwt: string
-  anchorDomain: string
-  publicKey: string
-  expiresAt: Date
+  jwt: string;
+  anchorDomain: string;
+  publicKey: string;
+  expiresAt: Date;
 }
 
 // ─── SEP-24 ───────────────────────────────────────────────────────────────────
 
 /** Parameters for the SEP-24 GET /fee endpoint. */
 export interface Sep24FeeParams {
-  anchorDomain: string
-  operation: 'deposit' | 'withdraw'
-  assetCode: string
-  assetIssuer: string
-  amount: string
-  type: 'bank_account' | 'cash' | 'mobile_money'
+  anchorDomain: string;
+  operation: 'deposit' | 'withdraw';
+  assetCode: string;
+  assetIssuer: string;
+  amount: string;
+  type: 'bank_account' | 'cash' | 'mobile_money';
 }
 
 /** Body sent to POST /transactions/withdraw/interactive. */
 export interface Sep24WithdrawRequest {
-  assetCode: string
-  assetIssuer: string
-  amount: string
-  account: string // user's Stellar public key
-  jwt: string
+  assetCode: string;
+  assetIssuer: string;
+  amount: string;
+  account: string; // user's Stellar public key
+  jwt: string;
 }
 
 /** Response from POST /transactions/withdraw/interactive. */
 export interface Sep24WithdrawResponse {
-  type: 'interactive_customer_info_needed'
-  url: string
-  id: string
+  type: 'interactive_customer_info_needed';
+  url: string;
+  id: string;
 }
 
 /** All possible raw status strings an anchor may return for a SEP-24 transaction. */
@@ -129,7 +129,7 @@ export type WithdrawStatusValue =
   | 'no_market'
   | 'too_small'
   | 'too_large'
-  | 'expired'
+  | 'expired';
 
 /**
  * Canonical app-wide status enum.
@@ -144,81 +144,95 @@ export type WithdrawStatus =
   | 'no_market'
   | 'refunded'
   | 'expired'
-  | 'error'
+  | 'error';
 
 /** The live record of a SEP-24 withdrawal transaction returned by the anchor. */
 export interface Sep24Transaction {
-  id: string
-  status: WithdrawStatusValue
-  amountIn?: string | undefined
-  amountInAsset?: string | undefined
-  amountOut?: string | undefined
-  amountOutAsset?: string | undefined
-  amountFee?: string | undefined
-  updatedAt: Date
-  stellarTransactionId?: string | undefined
-  externalTransactionId?: string | undefined
+  id: string;
+  status: WithdrawStatusValue;
+  amountIn?: string | undefined;
+  amountInAsset?: string | undefined;
+  amountOut?: string | undefined;
+  amountOutAsset?: string | undefined;
+  amountFee?: string | undefined;
+  updatedAt: Date;
+  stellarTransactionId?: string | undefined;
+  externalTransactionId?: string | undefined;
 }
 
 // ─── Post-execute handoff ─────────────────────────────────────────────────────
 
 /** Data passed from ExecuteDrawer to the page after a successful withdrawal initiation. */
 export interface WithdrawHandoffPayload {
-  transactionId: string
-  transferServer: string
-  jwt: string
+  transactionId: string;
+  transferServer: string;
+  jwt: string;
 }
 
 // ─── API ──────────────────────────────────────────────────────────────────────
 
 /** Shape returned by GET /api/rates. */
 export interface ApiRatesResponse {
-  rates: RateComparison
-  fetchedAt: string
+  rates: RateComparison;
+  fetchedAt: string;
 }
 
 /** Shape returned by API routes on error. */
 export interface ApiError {
-  code: string
-  message: string
-  anchorId?: string
+  code: string;
+  message: string;
+  anchorId?: string;
 }
 
 // ─── UI helpers ───────────────────────────────────────────────────────────────
 
 /** A country supported by the off-ramp module. */
 export interface Country {
-  code: string // ISO 3166-1 alpha-2
-  name: string
-  currency: string // ISO 4217
-  currencySymbol: string
-  flag: string
+  code: string; // ISO 3166-1 alpha-2
+  name: string;
+  currency: string; // ISO 4217
+  currencySymbol: string;
+  flag: string;
 }
 
-export type OfframpSortKey = 'rate' | 'fee' | 'time' | 'total'
-export type SortDirection = 'asc' | 'desc'
-export type RiskLevel = 'low' | 'medium' | 'high'
+export type OfframpSortKey = 'rate' | 'fee' | 'time' | 'total';
+export type SortDirection = 'asc' | 'desc';
+export type RiskLevel = 'low' | 'medium' | 'high';
 
 // ─── Stellar assets (used by Horizon swap routing) ────────────────────────────
 
 export interface StellarAsset {
-  code: string
-  issuer?: string
-  name: string
-  logoUrl?: string
+  code: string;
+  issuer?: string;
+  name: string;
+  logoUrl?: string;
 }
 
 export interface SwapRoute {
-  routeId: string
-  source: 'SDEX' | 'Soroswap' | 'Phoenix' | 'Aquarius'
-  fromAsset: StellarAsset
-  toAsset: StellarAsset
-  fromAmount: number
-  toAmount: number
-  price: number
-  priceImpact: number
-  fee: number
-  path: StellarAsset[]
-  estimatedTime: string
-  lastUpdated: Date
+  routeId: string;
+  source: 'SDEX' | 'Soroswap' | 'Phoenix' | 'Aquarius';
+  fromAsset: StellarAsset;
+  toAsset: StellarAsset;
+  fromAmount: number;
+  toAmount: number;
+  price: number;
+  priceImpact: number;
+  fee: number;
+  path: StellarAsset[];
+  estimatedTime: string;
+  lastUpdated: Date;
+}
+
+// ─── KYC iframe ────────────────────────────────────────────────────────────────
+
+/** PostMessage data structure for KYC iframe communication */
+export interface KycPostMessage {
+  type: 'stellar_transaction_created' | 'stellar_cancel';
+  transaction_id?: string;
+}
+
+/** Configuration for KYC iframe component */
+export interface KycIframeConfig {
+  url: string;
+  origin: string;
 }
