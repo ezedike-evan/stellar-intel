@@ -127,6 +127,16 @@ export function ExecuteDrawer({ rate, amount, publicKey, onClose, onExecuteStart
     } catch (err) {
       setErrorMsg((err as Error).message ?? 'Unknown error');
       setStep('error');
+      const message = err instanceof Error ? err.message : 'Unknown error'
+      
+      // Determine if it's a "User Rejected" case to avoid noisy error UI
+      if (message.includes('User rejected')) {
+        setStep('idle') // Just go back to idle instead of showing error screen
+        return
+      }
+
+      setErrorMsg(message)
+      setStep('error')
     }
   }
 
@@ -192,6 +202,7 @@ export function ExecuteDrawer({ rate, amount, publicKey, onClose, onExecuteStart
                   <dd className="font-semibold text-green-600 dark:text-green-400">
                     {rate.totalReceived.toLocaleString()}{' '}
                     {rate.corridorId.split('-')[1]?.toUpperCase()}
+                    {(rate.totalReceived ?? 0).toLocaleString()} {rate.corridorId.split('-')[1]?.toUpperCase()}
                   </dd>
                 </div>
               </dl>
@@ -246,7 +257,7 @@ export function ExecuteDrawer({ rate, amount, publicKey, onClose, onExecuteStart
                 className="flex w-full items-center justify-center gap-2 rounded-xl bg-blue-600 py-3 text-sm font-semibold text-white opacity-75"
               >
                 <Spinner />
-                {STEP_LABELS[step]}
+                {STEP_LABELS[step as Step]}
               </button>
             )}
             {step === 'error' && (

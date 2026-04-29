@@ -1,7 +1,11 @@
 import { Networks, TransactionBuilder } from '@stellar/stellar-sdk'
 import type { Transaction, FeeBumpTransaction } from '@stellar/stellar-sdk'
 import { getWebAuthEndpoint } from './sep1'
+import { getCachedJwt, setCachedJwt, invalidateCachedJwt } from './jwt-cache'
 import type { Sep10Auth } from '@/types'
+import { UserRejectedError } from './errors'
+
+export { invalidateCachedJwt, getCachedJwt } from './jwt-cache'
 
 // ─── Typed errors ─────────────────────────────────────────────────────────────
 
@@ -168,7 +172,7 @@ export async function signChallenge(
   const result = await signTransaction(challengeXdr, { networkPassphrase })
 
   if (result.error) {
-    throw new Error('User rejected signing')
+    throw new UserRejectedError()
   }
 
   return result.signedTxXdr
@@ -215,6 +219,9 @@ export async function authenticate(
   anchorDomain: string,
   publicKey: string
 ): Promise<Sep10Auth> {
+  const cached = getCachedJwt(anchorDomain, publicKey)
+  if (cached) return cached
+
   const webAuthEndpoint = await getWebAuthEndpoint(anchorDomain)
   if (!webAuthEndpoint) {
     throw new Error(`Anchor "${anchorDomain}" does not support SEP-10 authentication.`)
@@ -223,5 +230,16 @@ export async function authenticate(
   const signedXdr = await signChallenge(transaction, network_passphrase)
   const { token: jwt, expiresAt } = await submitChallenge(webAuthEndpoint, signedXdr)
 
-  return { jwt, anchorDomain, publicKey, expiresAt }
+  const auth: Sep10Auth = { jwt, anchorDomain, publicKey, expiresAt }
+  setCachedJwt(auth)
+  return auth
+}
+
+/**
+ * Drop the cached JWT for this anchor/account pair. Call this when a
+ * downstream anchor request returns 401, so the next `authenticate` call
+ * re-runs the full sign flow.
+ */
+export function invalidateSep10Token(anchorDomain: string, publicKey: string): void {
+  invalidateCachedJwt(anchorDomain, publicKey)
 }
