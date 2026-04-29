@@ -1,5 +1,5 @@
 import { StellarToml } from '@stellar/stellar-sdk'
-import type { Sep1TomlData } from '@/types'
+import type { ResolvedAnchor, Sep1TomlData } from '@/types'
 import { ANCHORS } from './anchors'
 
 const TTL_MS = 15 * 60 * 1000 // 15 minutes
@@ -136,12 +136,12 @@ export async function getWebAuthEndpoint(domain: string): Promise<string> {
  * Resolves stellar.toml for all known anchors in parallel.
  * Anchors that fail resolution are skipped.
  */
-export async function resolveAllAnchors(): Promise<Record<string, Sep1TomlData>> {
+export async function resolveAllAnchors(): Promise<Record<string, ResolvedAnchor>> {
   const results = await Promise.allSettled(
     ANCHORS.map((anchor) => resolveAnchor(anchor.homeDomain).then((data) => ({ anchor, data })))
   )
 
-  const resolved: Record<string, Sep1TomlData> = {}
+  const resolved: Record<string, ResolvedAnchor> = {}
 
   for (const result of results) {
     if (result.status === 'fulfilled') {
@@ -155,4 +155,9 @@ export async function resolveAllAnchors(): Promise<Record<string, Sep1TomlData>>
 /** Exposed for testing only - clears the in-memory TOML cache. */
 export function _clearTomlCache(): void {
   cache.clear()
+}
+
+/** Exposed for testing only — injects a pre-validated cache entry. */
+export function _seedTomlCache(domain: string, data: Sep1TomlData): void {
+  cache.set(domain, { data, expiresAt: Date.now() + TTL_MS })
 }

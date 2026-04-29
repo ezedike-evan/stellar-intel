@@ -1,5 +1,6 @@
 'use client'
-import { useState, useCallback } from 'react'
+import { useState, useCallback, useEffect } from 'react'
+import { TERMINAL_STATES } from '@/lib/stellar/sep24'
 import { WalletButton } from '@/components/ui/WalletButton'
 import { AmountInput } from '@/components/ui/AmountInput'
 import { CorridorSelector } from '@/components/ui/CorridorSelector'
@@ -37,6 +38,33 @@ export default function OfframpPage() {
   const handleDrawerClose = useCallback(() => {
     setSelectedRate(null)
   }, [])
+
+  const handleExecuteStarted = useCallback(
+    (transactionId: string, transferServer: string, jwt: string) => {
+      setTrackingTransactionId(transactionId)
+      setTrackingTransferServer(transferServer)
+      setTrackingJwt(jwt)
+    },
+    []
+  )
+
+  // Reputation writer hook: trigger when transaction reaches terminal state
+  useEffect(() => {
+    if (withdrawStatus.status && TERMINAL_STATES.has(withdrawStatus.status)) {
+      console.log('[Reputation] Transaction terminal state reached:', {
+        transactionId: trackingTransactionId,
+        status: withdrawStatus.status,
+        amountIn: withdrawStatus.amountIn,
+        amountInAsset: withdrawStatus.amountInAsset,
+        amountOut: withdrawStatus.amountOut,
+        amountOutAsset: withdrawStatus.amountOutAsset,
+        amountFee: withdrawStatus.amountFee,
+        stellarTransactionId: withdrawStatus.stellarTransactionId,
+        externalTransactionId: withdrawStatus.externalTransactionId,
+        timestamp: new Date().toISOString(),
+      })
+    }
+  }, [withdrawStatus.status, withdrawStatus.amountIn, withdrawStatus.amountOut, withdrawStatus.amountFee, withdrawStatus.stellarTransactionId, withdrawStatus.externalTransactionId, trackingTransactionId])
 
   return (
     <div className="mx-auto max-w-4xl space-y-6 px-4 py-8">
@@ -94,8 +122,12 @@ export default function OfframpPage() {
           transactionId={trackingTransactionId}
           status={withdrawStatus.status}
           amountIn={withdrawStatus.amountIn}
+          amountInAsset={withdrawStatus.amountInAsset}
           amountOut={withdrawStatus.amountOut}
+          amountOutAsset={withdrawStatus.amountOutAsset}
+          amountFee={withdrawStatus.amountFee}
           stellarTransactionId={withdrawStatus.stellarTransactionId}
+          externalTransactionId={withdrawStatus.externalTransactionId}
           isLoading={withdrawStatus.isLoading}
           error={withdrawStatus.error}
         />
@@ -107,6 +139,7 @@ export default function OfframpPage() {
         amount={amount}
         publicKey={publicKey ?? ''}
         onClose={handleDrawerClose}
+        onExecuteStarted={handleExecuteStarted}
       />
     </div>
   )

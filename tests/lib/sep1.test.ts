@@ -171,8 +171,8 @@ describe('resolveAllAnchors', () => {
 
     await resolveAllAnchors()
 
-    // ANCHORS has 3 entries: moneygram, cowrie, anclap
-    expect(spy).toHaveBeenCalledTimes(3)
+    // ANCHORS has 4 entries: moneygram, cowrie, flutterwave, anclap
+    expect(spy).toHaveBeenCalledTimes(4)
   })
 
   it('returns partial results when one anchor fails', async () => {

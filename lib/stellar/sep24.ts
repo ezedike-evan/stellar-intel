@@ -1,7 +1,204 @@
 import { getTransferServer } from './sep1'
 import { getAnchorsByCorridorId, getCorridorById } from './anchors'
 import { computeTotalReceived } from '@/lib/utils'
-import type { Sep24FeeParams, AnchorRate, RateComparison, Sep24WithdrawRequest, Sep24WithdrawResponse } from '@/types'
+import type { Sep24FeeParams, AnchorRate, RateComparison, Sep24WithdrawRequest, Sep24WithdrawResponse, Sep24Transaction, WithdrawStatusValue } from '@/types'
+
+// ─── Transaction polling ──────────────────────────────────────────────────────
+
+export const TERMINAL_STATES: ReadonlySet<WithdrawStatusValue> = new Set([
+  'completed',
+  'error',
+  'refunded',
+  'expired',
+  'no_market',
+  'too_small',
+  'too_large',
+])
+
+const KNOWN_STATUSES = new Set<WithdrawStatusValue>([
+  'incomplete',
+  'pending_user_transfer_start',
+  'pending_user_transfer_complete',
+  'pending_external',
+  'pending_anchor',
+  'pending_stellar',
+  'pending_trust',
+  'pending_user',
+  'completed',
+  'refunded',
+  'error',
+  'no_market',
+  'too_small',
+  'too_large',
+])
+
+function normalizeStatus(raw: unknown): WithdrawStatusValue {
+  if (typeof raw === 'string' && KNOWN_STATUSES.has(raw as WithdrawStatusValue)) {
+    return raw as WithdrawStatusValue
+  }
+  return 'pending_external'
+}
+
+/**
+ * Fetches the current status of a single SEP-24 transaction.
+ * Unknown anchor status strings are normalized to "pending_external" rather than throwing.
+ */
+export async function getSep24Transaction(
+  transferServer: string,
+  transactionId: string,
+  jwt: string
+): Promise<Sep24Transaction> {
+  const res = await fetch(`${transferServer}/transaction?id=${transactionId}`, {
+    headers: { Authorization: `Bearer ${jwt}` },
+  })
+
+  if (!res.ok) {
+    throw new Error(`Transaction fetch failed: HTTP ${res.status}`)
+  }
+
+  const data = (await res.json()) as { transaction?: Record<string, unknown> }
+  const tx = data.transaction ?? {}
+
+  return {
+    id: String(tx['id'] ?? transactionId),
+    status: normalizeStatus(tx['status']),
+    updatedAt: new Date(),
+    ...(tx['amount_in'] !== undefined && { amountIn: tx['amount_in'] as string }),
+    ...(tx['amount_in_asset'] !== undefined && { amountInAsset: tx['amount_in_asset'] as string }),
+    ...(tx['amount_out'] !== undefined && { amountOut: tx['amount_out'] as string }),
+    ...(tx['amount_out_asset'] !== undefined && { amountOutAsset: tx['amount_out_asset'] as string }),
+    ...(tx['amount_fee'] !== undefined || (tx['fee_details'] as any)?.total !== undefined) && { 
+      amountFee: (tx['amount_fee'] ?? (tx['fee_details'] as any)?.total) as string 
+    },
+    ...(tx['stellar_transaction_id'] !== undefined && { stellarTransactionId: tx['stellar_transaction_id'] as string }),
+    ...(tx['external_transaction_id'] !== undefined && { externalTransactionId: tx['external_transaction_id'] as string }),
+  }
+}
+
+// ─── Typed errors ─────────────────────────────────────────────────────────────
+
+export class Sep24WithdrawError extends Error {
+  readonly status: number
+  readonly anchorBody: unknown
+
+  constructor(status: number, anchorBody: unknown, transferServer: string) {
+    super(`Withdraw initiation failed: HTTP ${status} from ${transferServer}`)
+    this.name = 'Sep24WithdrawError'
+    this.status = status
+    this.anchorBody = anchorBody
+  }
+}
+
+export class AnchorRateError extends Error {
+  readonly anchorId: string
+
+  constructor(anchorId: string, message: string) {
+    super(message)
+    this.name = 'AnchorRateError'
+    this.anchorId = anchorId
+  }
+}
+
+// ─── Helpers ──────────────────────────────────────────────────────────────────
+
+function parseRate(raw: unknown): number {
+  if (raw === undefined || raw === null) return 0
+  const num = Number(String(raw).replace(/,/g, ''))
+  return Number.isFinite(num) ? num : 0
+}
+
+// ─── GET /fee (low-level, takes transferServer directly) ─────────────────────
+
+export type Sep24FeeResult = { ok: true; fee: number } | { ok: false; reason: 'unsupported' }
+
+async function fetchWithTimeout(url: string, ms: number): Promise<Response> {
+  const controller = new AbortController()
+  const id = setTimeout(() => controller.abort(), ms)
+  try {
+    return await fetch(url, { signal: controller.signal })
+  } finally {
+    clearTimeout(id)
+  }
+}
+
+/**
+ * Fetches the anchor's fee quote directly from a known transfer server.
+ * Uses a 5-second timeout with one automatic retry on network/timeout failure.
+ * Returns { ok: false, reason: 'unsupported' } for 404s without throwing.
+ */
+export async function getSep24Fee(params: {
+  transferServer: string
+  assetCode: string
+  assetIssuer: string
+  amount: string
+  type: string
+}): Promise<Sep24FeeResult> {
+  const url = new URL(`${params.transferServer}/fee`)
+  url.searchParams.set('operation', 'withdraw')
+  url.searchParams.set('asset_code', params.assetCode)
+  url.searchParams.set('asset_issuer', params.assetIssuer)
+  url.searchParams.set('amount', params.amount)
+  url.searchParams.set('type', params.type)
+  const urlStr = url.toString()
+
+  let res: Response
+  try {
+    res = await fetchWithTimeout(urlStr, 5_000)
+  } catch {
+    res = await fetchWithTimeout(urlStr, 5_000)
+  }
+
+  if (res.status === 404) return { ok: false, reason: 'unsupported' }
+  if (!res.ok) throw new Error(`HTTP ${res.status} from ${params.transferServer}/fee`)
+
+  const data = (await res.json()) as Record<string, unknown>
+  const fee = Number(data['fee'])
+  return Number.isFinite(fee) ? { ok: true, fee } : { ok: false, reason: 'unsupported' }
+}
+
+// ─── GET /info (with 5-minute in-memory cache) ────────────────────────────────
+
+export interface Sep24AssetInfo {
+  enabled: boolean
+  min_amount?: number
+  max_amount?: number
+  fee_fixed?: number
+  fee_percent?: number
+  authentication_required?: boolean
+}
+
+export interface Sep24InfoResponse {
+  deposit: Record<string, Sep24AssetInfo>
+  withdraw: Record<string, Sep24AssetInfo>
+  fee: { enabled: boolean; authentication_required?: boolean }
+  transaction: { enabled: boolean; authentication_required?: boolean }
+  transactions: { enabled: boolean; authentication_required?: boolean }
+}
+
+const INFO_CACHE = new Map<string, { data: Sep24InfoResponse; expiresAt: number }>()
+const INFO_CACHE_TTL_MS = 5 * 60 * 1_000
+
+export function _clearInfoCache(): void {
+  INFO_CACHE.clear()
+}
+
+/**
+ * Fetches and parses the anchor's SEP-24 /info response.
+ * Results are cached per transfer server for 5 minutes.
+ */
+export async function getSep24Info(transferServer: string): Promise<Sep24InfoResponse> {
+  const cached = INFO_CACHE.get(transferServer)
+  if (cached && cached.expiresAt > Date.now()) return cached.data
+
+  const res = await fetch(`${transferServer}/info`)
+  if (!res.ok) {
+    throw new Error(`Failed to fetch /info from ${transferServer}: HTTP ${res.status}`)
+  }
+
+  const data = (await res.json()) as Sep24InfoResponse
+  INFO_CACHE.set(transferServer, { data, expiresAt: Date.now() + INFO_CACHE_TTL_MS })
+  return data
+}
 
 // ─── Fee fetching ─────────────────────────────────────────────────────────────
 
@@ -11,8 +208,11 @@ import type { Sep24FeeParams, AnchorRate, RateComparison, Sep24WithdrawRequest, 
  */
 export async function fetchAnchorFee(
   params: Sep24FeeParams
-): Promise<{ fee: string; anchorDomain: string }> {
+): Promise<{ fee: string; anchorDomain: string; exchangeRate: number }> {
   const transferServer = await getTransferServer(params.anchorDomain)
+  if (!transferServer) {
+    throw new Error(`Anchor "${params.anchorDomain}" does not support SEP-24.`)
+  }
 
   const url = new URL(`${transferServer}/fee`)
   url.searchParams.set('operation', params.operation)
@@ -51,7 +251,10 @@ export async function fetchAnchorFee(
     )
   }
 
-  return { fee: String(fee), anchorDomain: params.anchorDomain }
+  const rateRaw = data['price'] ?? data['exchange_rate'] ?? data['rate']
+  const exchangeRate = parseRate(rateRaw)
+
+  return { fee: String(fee), anchorDomain: params.anchorDomain, exchangeRate }
 }
 
 /**
@@ -67,7 +270,7 @@ export async function fetchAllAnchorFees(
 
   return Promise.allSettled(
     anchors.map(async (anchor): Promise<AnchorRate> => {
-      const { fee } = await fetchAnchorFee({
+      const { fee, exchangeRate } = await fetchAnchorFee({
         anchorDomain: anchor.homeDomain,
         operation: 'withdraw',
         assetCode: anchor.assetCode,
@@ -79,14 +282,22 @@ export async function fetchAllAnchorFees(
       const feeNum = Number(fee)
       const amountNum = Number(amount)
 
+      if (exchangeRate <= 0) {
+        throw new AnchorRateError(
+          anchor.id,
+          `${anchor.name} returned a zero or missing exchange rate for ${corridor.to} — rate cannot be derived`
+        )
+      }
+
       return {
         anchorId: anchor.id,
         anchorName: anchor.name,
         corridorId,
         fee: feeNum,
         feeType: 'flat',
-        exchangeRate: 0, // populated by computeRateComparison once exchange rates are available
-        totalReceived: computeTotalReceived(amountNum, feeNum, 0, 1),
+        exchangeRate,
+        totalReceived: computeTotalReceived(amountNum, feeNum, 0, exchangeRate),
+        source: 'sep24-fee' as const,
         updatedAt: new Date(),
       }
     })
@@ -109,7 +320,7 @@ export function computeRateComparison(
     return { corridorId, rates: [], bestRateId: '' }
   }
 
-  const best = rates.reduce((a, b) => (b.totalReceived > a.totalReceived ? b : a))
+  const best = rates.reduce((a, b) => ((b.totalReceived ?? 0) > (a.totalReceived ?? 0) ? b : a))
 
   return { corridorId, rates, bestRateId: best.anchorId }
 }
@@ -141,7 +352,8 @@ export async function initiateWithdraw(
   })
 
   if (!res.ok) {
-    throw new Error(`Withdraw initiation failed: HTTP ${res.status} from ${transferServer}`)
+    const body = await res.json().catch(() => null)
+    throw new Sep24WithdrawError(res.status, body, transferServer)
   }
 
   const data = (await res.json()) as Record<string, unknown>

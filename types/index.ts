@@ -26,13 +26,13 @@ export interface AnchorRate {
   anchorId: string
   anchorName: string
   corridorId: string
-  fee: number // flat fee in USDC
+  fee: number | null // flat fee in USDC; null when anchor is unreachable
   feeType: 'flat' | 'percent' | 'combined'
-  exchangeRate: number // local currency units per 1 USDC
-  totalReceived: number // computed: (amount - fee) * exchangeRate
+  exchangeRate: number | null // local currency units per 1 USDC; null when anchor is unreachable
+  totalReceived: number | null // computed: (amount - fee) * exchangeRate; null when anchor is unreachable
   updatedAt: Date
-  /** 'live' = fetched directly from the anchor API; 'estimated' = derived from market rates */
-  source?: 'live' | 'estimated'
+  /** Discriminates the origin of the rate data. */
+  source: 'sep38' | 'sep24-fee' | 'unavailable'
 }
 
 /** The result of comparing all anchor rates for a single corridor. */
@@ -68,6 +68,9 @@ export interface ResolvedAnchorToml {
 
 /** Backwards-compatible alias for older SEP-1 callers. */
 export type Sep1TomlData = ResolvedAnchorToml
+
+/** A resolved anchor with protocol capabilities attached. */
+export type ResolvedAnchor = Sep1TomlData
 
 // ─── SEP-10 ───────────────────────────────────────────────────────────────────
 
@@ -107,7 +110,7 @@ export interface Sep24WithdrawResponse {
   id: string
 }
 
-/** All possible status values for a SEP-24 transaction. */
+/** All possible raw status strings an anchor may return for a SEP-24 transaction. */
 export type WithdrawStatusValue =
   | 'incomplete'
   | 'pending_user_transfer_start'
@@ -123,16 +126,44 @@ export type WithdrawStatusValue =
   | 'no_market'
   | 'too_small'
   | 'too_large'
+  | 'expired'
 
-/** The live status of a SEP-24 withdrawal transaction. */
-export interface WithdrawStatus {
+/**
+ * Canonical app-wide status enum.
+ * Raw anchor strings (WithdrawStatusValue) are mapped to this via sep24-status-map.ts.
+ */
+export type WithdrawStatus =
+  | 'pending_user_action'
+  | 'pending_anchor'
+  | 'pending_stellar'
+  | 'pending_external'
+  | 'completed'
+  | 'no_market'
+  | 'refunded'
+  | 'expired'
+  | 'error'
+
+/** The live record of a SEP-24 withdrawal transaction returned by the anchor. */
+export interface Sep24Transaction {
   id: string
   status: WithdrawStatusValue
-  amountIn?: string
-  amountOut?: string
-  amountFee?: string
+  amountIn?: string | undefined
+  amountInAsset?: string | undefined
+  amountOut?: string | undefined
+  amountOutAsset?: string | undefined
+  amountFee?: string | undefined
   updatedAt: Date
-  stellarTransactionId?: string
+  stellarTransactionId?: string | undefined
+  externalTransactionId?: string | undefined
+}
+
+// ─── Post-execute handoff ─────────────────────────────────────────────────────
+
+/** Data passed from ExecuteDrawer to the page after a successful withdrawal initiation. */
+export interface WithdrawHandoffPayload {
+  transactionId: string
+  transferServer: string
+  jwt: string
 }
 
 // ─── API ──────────────────────────────────────────────────────────────────────

@@ -101,11 +101,11 @@ describe('computeRateComparison', () => {
     const results: PromiseSettledResult<AnchorRate>[] = [
       {
         status: 'fulfilled',
-        value: { anchorId: 'cowrie', anchorName: 'Cowrie', corridorId: 'usdc-ngn', fee: 3, feeType: 'flat', exchangeRate: 1580, totalReceived: 97 * 1580, updatedAt: new Date() },
+        value: { anchorId: 'cowrie', anchorName: 'Cowrie', corridorId: 'usdc-ngn', fee: 3, feeType: 'flat', exchangeRate: 1580, totalReceived: 97 * 1580, source: 'sep24-fee' as const, updatedAt: new Date() },
       },
       {
         status: 'fulfilled',
-        value: { anchorId: 'flutterwave', anchorName: 'Flutterwave', corridorId: 'usdc-ngn', fee: 1.5, feeType: 'flat', exchangeRate: 1580, totalReceived: 98.5 * 1580, updatedAt: new Date() },
+        value: { anchorId: 'flutterwave', anchorName: 'Flutterwave', corridorId: 'usdc-ngn', fee: 1.5, feeType: 'flat', exchangeRate: 1580, totalReceived: 98.5 * 1580, source: 'sep24-fee' as const, updatedAt: new Date() },
       },
     ]
 
