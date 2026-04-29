@@ -2,7 +2,7 @@ import { SepError, parseSepErrorBody } from './errors'
 import { getTransferServer } from './sep1'
 import { getAnchorsByCorridorId, getCorridorById } from './anchors'
 import { computeTotalReceived } from '@/lib/utils'
-import type { Sep24FeeParams, AnchorRate, RateComparison, Sep24WithdrawRequest, Sep24WithdrawResponse, Sep24Transaction, WithdrawStatusValue } from '@/types'
+import type { Sep24FeeParams, AnchorRate, RateComparison, Sep24WithdrawRequest, Sep24WithdrawResponse, Sep24Transaction, WithdrawStatusValue, ResolvedAnchor } from '@/types'
 
 // ─── Transaction polling ──────────────────────────────────────────────────────
 
@@ -69,8 +69,8 @@ export async function getSep24Transaction(
     ...(tx['amount_in_asset'] !== undefined && { amountInAsset: tx['amount_in_asset'] as string }),
     ...(tx['amount_out'] !== undefined && { amountOut: tx['amount_out'] as string }),
     ...(tx['amount_out_asset'] !== undefined && { amountOutAsset: tx['amount_out_asset'] as string }),
-    ...(tx['amount_fee'] !== undefined || (tx['fee_details'] as any)?.total !== undefined) && { 
-      amountFee: (tx['amount_fee'] ?? (tx['fee_details'] as any)?.total) as string 
+    ...(tx['amount_fee'] !== undefined || (tx['fee_details'] as { total?: string })?.total !== undefined) && { 
+      amountFee: (tx['amount_fee'] ?? (tx['fee_details'] as { total?: string })?.total) as string 
     },
     ...(tx['stellar_transaction_id'] !== undefined && { stellarTransactionId: tx['stellar_transaction_id'] as string }),
     ...(tx['external_transaction_id'] !== undefined && { externalTransactionId: tx['external_transaction_id'] as string }),
@@ -347,9 +347,15 @@ export function computeRateComparison(
  * Returns the popup URL and transaction ID issued by the anchor.
  */
 export async function initiateWithdraw(
-  params: Sep24WithdrawRequest & { transferServer: string }
+  anchor: ResolvedAnchor,
+  params: Sep24WithdrawRequest
 ): Promise<Sep24WithdrawResponse> {
-  const { transferServer, jwt, assetCode, assetIssuer, amount, account } = params
+  const { jwt, assetCode, assetIssuer, amount, account } = params
+  const transferServer = anchor.TRANSFER_SERVER_SEP0024
+
+  if (!transferServer || !anchor.capabilities.sep24) {
+    throw new Error(`Anchor "${anchor.homeDomain}" does not support SEP-24 withdrawals.`)
+  }
 
   const res = await fetch(`${transferServer}/transactions/withdraw/interactive`, {
     method: 'POST',

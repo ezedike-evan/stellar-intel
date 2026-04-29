@@ -2,7 +2,7 @@ import { Networks, TransactionBuilder } from '@stellar/stellar-sdk'
 import type { Transaction, FeeBumpTransaction } from '@stellar/stellar-sdk'
 import { getWebAuthEndpoint } from './sep1'
 import { getCachedJwt, setCachedJwt, invalidateCachedJwt } from './jwt-cache'
-import type { Sep10Auth } from '@/types'
+import type { ResolvedAnchor, Sep10Auth } from '@/types'
 import { UserRejectedError } from './errors'
 
 export { invalidateCachedJwt, getCachedJwt } from './jwt-cache'
@@ -216,21 +216,21 @@ export async function submitChallenge(
 // ─── Full auth orchestrator ───────────────────────────────────────────────────
 
 export async function authenticate(
-  anchorDomain: string,
+  anchor: ResolvedAnchor,
   publicKey: string
 ): Promise<Sep10Auth> {
-  const cached = getCachedJwt(anchorDomain, publicKey)
+  const cached = getCachedJwt(anchor.homeDomain, publicKey)
   if (cached) return cached
 
-  const webAuthEndpoint = await getWebAuthEndpoint(anchorDomain)
-  if (!webAuthEndpoint) {
-    throw new Error(`Anchor "${anchorDomain}" does not support SEP-10 authentication.`)
+  const webAuthEndpoint = anchor.WEB_AUTH_ENDPOINT
+  if (!webAuthEndpoint || !anchor.capabilities.sep10) {
+    throw new Error(`Anchor "${anchor.homeDomain}" does not support SEP-10 authentication.`)
   }
   const { transaction, network_passphrase } = await fetchChallenge(webAuthEndpoint, publicKey)
   const signedXdr = await signChallenge(transaction, network_passphrase)
   const { token: jwt, expiresAt } = await submitChallenge(webAuthEndpoint, signedXdr)
 
-  const auth: Sep10Auth = { jwt, anchorDomain, publicKey, expiresAt }
+  const auth: Sep10Auth = { jwt, anchorDomain: anchor.homeDomain, publicKey, expiresAt }
   setCachedJwt(auth)
   return auth
 }

@@ -7,7 +7,29 @@ const WEB_AUTH_ENDPOINT = 'https://cowrie.exchange/auth'
 const PUBLIC_KEY = 'GABCDEFGHIJKLMNOPQRSTUVWXYZ012345678901234567890123456789'
 const CHALLENGE_XDR = 'AAAAAQAAAAC...'
 const SIGNED_XDR = 'AAAAAQAAAAD...'
-const JWT = 'eyJhbGciOiJIUzI1NiJ9.test.token'
+function makeJwt(expSeconds: number): string {
+  const b64 = (s: string) => btoa(s).replace(/=+$/, '').replace(/\+/g, '-').replace(/\//g, '_')
+  const header = b64(JSON.stringify({ alg: 'HS256', typ: 'JWT' }))
+  const payload = b64(JSON.stringify({ exp: expSeconds }))
+  return `${header}.${payload}.signature`
+}
+
+const EXP_TIMESTAMP = Math.floor(Date.now() / 1000) + 3600
+const JWT = makeJwt(EXP_TIMESTAMP)
+const EXP_DATE = new Date(EXP_TIMESTAMP * 1000)
+
+const MOCK_RESOLVED_ANCHOR = {
+  id: 'cowrie',
+  name: 'Cowrie',
+  homeDomain: 'cowrie.exchange',
+  corridors: [],
+  assetCode: 'USDC',
+  assetIssuer: 'G...',
+  TRANSFER_SERVER_SEP0024: 'https://cowrie.exchange/sep24',
+  WEB_AUTH_ENDPOINT: WEB_AUTH_ENDPOINT,
+  SIGNING_KEY: 'G...',
+  capabilities: { sep10: true, sep24: true, sep38: false, sep12: false },
+}
 
 vi.mock('@stellar/freighter-api', () => ({
   signTransaction: vi.fn(),
@@ -15,7 +37,6 @@ vi.mock('@stellar/freighter-api', () => ({
 
 beforeEach(() => {
   vi.restoreAllMocks()
-  vi.spyOn(sep1, 'getWebAuthEndpoint').mockResolvedValue(WEB_AUTH_ENDPOINT)
 })
 
 async function getFreighter() {
@@ -89,7 +110,8 @@ describe('submitChallenge', () => {
     })))
 
     const result = await submitChallenge(WEB_AUTH_ENDPOINT, SIGNED_XDR)
-    expect(result).toBe(JWT)
+    expect(result.token).toBe(JWT)
+    expect(result.expiresAt).toEqual(EXP_DATE)
   })
 
   it('throws when token is absent from the response', async () => {
@@ -125,7 +147,7 @@ describe('signChallenge', () => {
     })
 
     await expect(signChallenge(CHALLENGE_XDR, Networks.PUBLIC)).rejects.toThrow(
-      'User rejected signing'
+      'User rejected the request'
     )
   })
 })
@@ -151,7 +173,7 @@ describe('authenticate', () => {
       })
     )
 
-    const result = await authenticate('cowrie.exchange', PUBLIC_KEY)
+    const result = await authenticate(MOCK_RESOLVED_ANCHOR, PUBLIC_KEY)
 
     expect(result.jwt).toBe(JWT)
     expect(result.anchorDomain).toBe('cowrie.exchange')

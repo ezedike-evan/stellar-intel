@@ -15,17 +15,25 @@ import type { FreighterState } from '@/types'
 
 // ─── Mock Freighter API ───────────────────────────────────────────────────────
 
-const mockFreighterApi = {
+const mockFreighterApi = vi.hoisted(() => ({
   isConnected: vi.fn(),
   getAddress: vi.fn(),
   getNetwork: vi.fn(),
+  requestAccess: vi.fn(),
   signTransaction: vi.fn(),
-}
-
-// Mock the dynamic import
-vi.mock('@stellar/freighter-api', () => ({
-  ...mockFreighterApi,
+  WatchWalletChanges: class {
+    watch = vi.fn()
+    stop = vi.fn()
+  }
 }))
+
+vi.mock('@stellar/freighter-api', () => mockFreighterApi)
+
+import { WalletProvider } from '@/contexts/WalletContext'
+
+const wrapper = ({ children }: { children: React.ReactNode }) => (
+  <WalletProvider>{children}</WalletProvider>
+)
 
 // ─── Helpers ──────────────────────────────────────────────────────────────────
 
@@ -73,7 +81,7 @@ describe('useFreighter — detect', () => {
   it('detects when Freighter extension is installed', async () => {
     mockFreighterInstalled(false)
 
-    const { result } = renderHook(() => useFreighter())
+    const { result } = renderHook(() => useFreighter(), { wrapper })
 
     await waitFor(() => {
       expect(result.current.isInstalled).toBe(true)
@@ -83,7 +91,7 @@ describe('useFreighter — detect', () => {
   it('sets isInstalled to false when Freighter is not available', async () => {
     mockFreighterNotInstalled()
 
-    const { result } = renderHook(() => useFreighter())
+    const { result } = renderHook(() => useFreighter(), { wrapper })
 
     // Even if API is unavailable, initial state should reflect that
     expect(result.current.isInstalled).toBe(false)
@@ -92,7 +100,7 @@ describe('useFreighter — detect', () => {
   it('sets isConnected to false initially when detected but not connected', async () => {
     mockFreighterInstalled(false)
 
-    const { result } = renderHook(() => useFreighter())
+    const { result } = renderHook(() => useFreighter(), { wrapper })
 
     await waitFor(() => {
       expect(result.current.isInstalled).toBe(true)
@@ -103,7 +111,7 @@ describe('useFreighter — detect', () => {
   it('sets publicKey to null when extension is detected but not connected', async () => {
     mockFreighterInstalled(false)
 
-    const { result } = renderHook(() => useFreighter())
+    const { result } = renderHook(() => useFreighter(), { wrapper })
 
     await waitFor(() => {
       expect(result.current.publicKey).toBeNull()
@@ -118,7 +126,7 @@ describe('useFreighter — connect', () => {
     const testKey = 'GBRPYHIL2CI3WHZDTOOQFC6EB4KJJGUJEANS3D57CCOD5JIHVYXKOM77'
     mockFreighterInstalled(true, 'PUBLIC', testKey)
 
-    const { result } = renderHook(() => useFreighter())
+    const { result } = renderHook(() => useFreighter(), { wrapper })
 
     await waitFor(() => {
       expect(result.current.isConnected).toBe(true)
@@ -129,7 +137,7 @@ describe('useFreighter — connect', () => {
   it('sets network to PUBLIC when connected on mainnet', async () => {
     mockFreighterInstalled(true, 'PUBLIC')
 
-    const { result } = renderHook(() => useFreighter())
+    const { result } = renderHook(() => useFreighter(), { wrapper })
 
     await waitFor(() => {
       expect(result.current.network).toBe('PUBLIC')
@@ -139,7 +147,7 @@ describe('useFreighter — connect', () => {
   it('reflects connected state when extension API reports connected', async () => {
     mockFreighterInstalled(true, 'PUBLIC')
 
-    const { result } = renderHook(() => useFreighter())
+    const { result } = renderHook(() => useFreighter(), { wrapper })
 
     await waitFor(() => {
       expect(result.current.isInstalled).toBe(true)
@@ -150,7 +158,7 @@ describe('useFreighter — connect', () => {
   it('clears error state on successful connection', async () => {
     mockFreighterInstalled(true, 'PUBLIC')
 
-    const { result } = renderHook(() => useFreighter())
+    const { result } = renderHook(() => useFreighter(), { wrapper })
 
     await waitFor(() => {
       expect(result.current.error).toBeNull()
@@ -164,7 +172,7 @@ describe('useFreighter — disconnect', () => {
   it('clears publicKey when disconnected', async () => {
     // Start connected
     mockFreighterInstalled(true, 'PUBLIC')
-    const { result, rerender } = renderHook(() => useFreighter())
+    const { result, rerender } = renderHook(() => useFreighter(), { wrapper })
 
     await waitFor(() => {
       expect(result.current.isConnected).toBe(true)
@@ -184,7 +192,7 @@ describe('useFreighter — disconnect', () => {
   it('sets isConnected to false when user disconnects', async () => {
     mockFreighterInstalled(false)
 
-    const { result } = renderHook(() => useFreighter())
+    const { result } = renderHook(() => useFreighter(), { wrapper })
 
     await waitFor(() => {
       expect(result.current.isConnected).toBe(false)
@@ -194,7 +202,7 @@ describe('useFreighter — disconnect', () => {
   it('clears network when disconnected', async () => {
     // Start connected
     mockFreighterInstalled(true, 'PUBLIC')
-    const { result, rerender } = renderHook(() => useFreighter())
+    const { result, rerender } = renderHook(() => useFreighter(), { wrapper })
 
     await waitFor(() => {
       expect(result.current.network).toBe('PUBLIC')
@@ -216,7 +224,7 @@ describe('useFreighter — network-change', () => {
   it('updates network when switched away from mainnet', async () => {
     // Start on PUBLIC (mainnet)
     mockFreighterInstalled(true, 'PUBLIC')
-    const { result, rerender } = renderHook(() => useFreighter())
+    const { result, rerender } = renderHook(() => useFreighter(), { wrapper })
 
     await waitFor(() => {
       expect(result.current.network).toBe('PUBLIC')
@@ -234,7 +242,7 @@ describe('useFreighter — network-change', () => {
   it('detects network mismatch (non-mainnet)', async () => {
     mockFreighterInstalled(true, 'TESTNET')
 
-    const { result } = renderHook(() => useFreighter())
+    const { result } = renderHook(() => useFreighter(), { wrapper })
 
     await waitFor(() => {
       expect(result.current.isConnected).toBe(true)
@@ -247,7 +255,7 @@ describe('useFreighter — network-change', () => {
 
     // Start on PUBLIC
     mockFreighterInstalled(true, 'PUBLIC', testKey)
-    const { result, rerender } = renderHook(() => useFreighter())
+    const { result, rerender } = renderHook(() => useFreighter(), { wrapper })
 
     await waitFor(() => {
       expect(result.current.publicKey).toBe(testKey)
@@ -265,7 +273,7 @@ describe('useFreighter — network-change', () => {
   it('restores mainnet-connected state when network switched back', async () => {
     // Start on PUBLIC
     mockFreighterInstalled(true, 'PUBLIC')
-    const { result, rerender } = renderHook(() => useFreighter())
+    const { result, rerender } = renderHook(() => useFreighter(), { wrapper })
 
     await waitFor(() => {
       expect(result.current.network).toBe('PUBLIC')
@@ -295,7 +303,7 @@ describe('useFreighter — error handling', () => {
   it('handles extension detection errors gracefully', async () => {
     mockFreighterNotInstalled()
 
-    const { result } = renderHook(() => useFreighter())
+    const { result } = renderHook(() => useFreighter(), { wrapper })
 
     await waitFor(() => {
       // Should not throw, should set isInstalled to false
@@ -306,7 +314,7 @@ describe('useFreighter — error handling', () => {
   it('does not update state after unmount', async () => {
     mockFreighterInstalled(true, 'PUBLIC')
 
-    const { result, unmount } = renderHook(() => useFreighter())
+    const { result, unmount } = renderHook(() => useFreighter(), { wrapper })
 
     unmount()
 
@@ -317,7 +325,7 @@ describe('useFreighter — error handling', () => {
   it('maintains initial state until API resolves', () => {
     mockFreighterInstalled(false)
 
-    const { result } = renderHook(() => useFreighter())
+    const { result } = renderHook(() => useFreighter(), { wrapper })
 
     // Initial state before resolution
     expect(result.current.isInstalled).toBe(false)

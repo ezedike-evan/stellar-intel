@@ -27,14 +27,20 @@ describe('resolveToml', () => {
     vi.spyOn(StellarToml.Resolver, 'resolve').mockResolvedValue(VALID_TOML as never)
 
     const result = await resolveToml('cowrie.exchange')
-    expect(result.TRANSFER_SERVER_SEP0024).toBe('https://cowrie.exchange/sep24')
+    expect(result.ok).toBe(true)
+    if (result.ok) {
+      expect(result.data.TRANSFER_SERVER_SEP0024).toBe('https://cowrie.exchange/sep24')
+    }
   })
 
   it('returns the correct WEB_AUTH_ENDPOINT', async () => {
     vi.spyOn(StellarToml.Resolver, 'resolve').mockResolvedValue(VALID_TOML as never)
 
     const result = await resolveToml('cowrie.exchange')
-    expect(result.WEB_AUTH_ENDPOINT).toBe('https://cowrie.exchange/auth')
+    expect(result.ok).toBe(true)
+    if (result.ok) {
+      expect(result.data.WEB_AUTH_ENDPOINT).toBe('https://cowrie.exchange/auth')
+    }
   })
 
   it('returns sep24 false when TRANSFER_SERVER_SEP0024 is absent', async () => {
@@ -44,9 +50,12 @@ describe('resolveToml', () => {
 
     const result = await resolveToml('cowrie.exchange')
 
-    expect(result.capabilities.sep24).toBe(false)
-    expect(result.capabilities.sep10).toBe(true)
-    expect(result.TRANSFER_SERVER_SEP0024).toBeUndefined()
+    expect(result.ok).toBe(true)
+    if (result.ok) {
+      expect(result.data.capabilities.sep24).toBe(false)
+      expect(result.data.capabilities.sep10).toBe(true)
+      expect(result.data.TRANSFER_SERVER_SEP0024).toBeUndefined()
+    }
   })
 
   it('returns sep10 false when WEB_AUTH_ENDPOINT is absent', async () => {
@@ -56,17 +65,22 @@ describe('resolveToml', () => {
 
     const result = await resolveToml('cowrie.exchange')
 
-    expect(result.capabilities.sep10).toBe(false)
-    expect(result.capabilities.sep24).toBe(true)
-    expect(result.WEB_AUTH_ENDPOINT).toBeUndefined()
+    expect(result.ok).toBe(true)
+    if (result.ok) {
+      expect(result.data.capabilities.sep10).toBe(false)
+      expect(result.data.capabilities.sep24).toBe(true)
+      expect(result.data.WEB_AUTH_ENDPOINT).toBeUndefined()
+    }
   })
 
   it('throws a descriptive error when the network call fails', async () => {
     vi.spyOn(StellarToml.Resolver, 'resolve').mockRejectedValue(new Error('Network timeout'))
 
-    await expect(resolveToml('cowrie.exchange')).rejects.toThrow(
-      /Failed to resolve stellar\.toml for "cowrie\.exchange"/
-    )
+    const result = await resolveToml('cowrie.exchange')
+    expect(result.ok).toBe(false)
+    if (!result.ok) {
+      expect(result.error).toMatch(/Failed to resolve stellar\.toml for "cowrie\.exchange"/)
+    }
   })
 
   it('returns the cached result on a second call without re-fetching', async () => {
@@ -103,8 +117,8 @@ describe('resolveAllAnchors', () => {
 
     await resolveAllAnchors()
 
-    // ANCHORS has 4 entries: moneygram, cowrie, flutterwave, anclap
-    expect(spy).toHaveBeenCalledTimes(4)
+    // ANCHORS has 3 entries: moneygram, cowrie, anclap
+    expect(spy).toHaveBeenCalledTimes(3)
   })
 
   it('returns partial results when one anchor fails', async () => {
@@ -115,6 +129,8 @@ describe('resolveAllAnchors', () => {
 
     const result = await resolveAllAnchors()
     expect(result['moneygram']).toBeDefined()
+    expect(result['moneygram']?.homeDomain).toBe('stellar.moneygram.com')
+    expect(result['moneygram']?.TRANSFER_SERVER_SEP0024).toBe('https://cowrie.exchange/sep24')
     expect(result['cowrie']).toBeDefined()
     expect(result['anclap']).toBeUndefined()
   })

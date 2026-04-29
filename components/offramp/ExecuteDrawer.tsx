@@ -2,8 +2,7 @@
 import { useState } from 'react'
 import { authenticate } from '@/lib/stellar/sep10'
 import { initiateWithdraw, openWithdrawPopup, getWithdrawTransactionRecord } from '@/lib/stellar/sep24'
-import { getTransferServer } from '@/lib/stellar/sep1'
-import { getAnchorById } from '@/lib/stellar/anchors'
+import { getResolvedAnchorById } from '@/lib/stellar/anchors'
 import { buildWithdrawPayment, signAndSubmitPayment } from '@/lib/stellar/horizon'
 import type { AnchorRate } from '@/types'
 
@@ -58,15 +57,15 @@ export function ExecuteDrawer({ rate, amount, publicKey, onClose, onExecuteStart
     setTxHash(null)
 
     try {
+      // Step 0 — Resolve anchor capabilities
+      const anchor = await getResolvedAnchorById(rate.anchorId)
+
       // Step 1 — SEP-10 auth
-      const anchor = getAnchorById(rate.anchorId)
-      const auth = await authenticate(anchor.homeDomain, publicKey)
+      const auth = await authenticate(anchor, publicKey)
 
       // Step 2 — Initiate SEP-24 withdraw
       setStep('initiating')
-      const transferServer = await getTransferServer(anchor.homeDomain)
-      const withdrawResp = await initiateWithdraw({
-        transferServer,
+      const withdrawResp = await initiateWithdraw(anchor, {
         assetCode: anchor.assetCode,
         assetIssuer: anchor.assetIssuer,
         amount,
@@ -80,7 +79,7 @@ export function ExecuteDrawer({ rate, amount, publicKey, onClose, onExecuteStart
 
       // Step 4 — Fetch transaction record
       setStep('building')
-      const record = await getWithdrawTransactionRecord(transferServer, transactionId, auth.jwt)
+      const record = await getWithdrawTransactionRecord(anchor.TRANSFER_SERVER_SEP0024!, transactionId, auth.jwt)
 
       // Step 5 — Build payment
       const tx = await buildWithdrawPayment({
@@ -100,8 +99,8 @@ export function ExecuteDrawer({ rate, amount, publicKey, onClose, onExecuteStart
       setStep('done')
 
       // Hand tracking data to the page, then close so StatusTracker owns the viewport.
-      if (transferServer) {
-        onExecuteStarted(transactionId, transferServer, auth.jwt)
+      if (anchor.TRANSFER_SERVER_SEP0024) {
+        onExecuteStarted(transactionId, anchor.TRANSFER_SERVER_SEP0024, auth.jwt)
       }
       onClose()
     } catch (err) {
