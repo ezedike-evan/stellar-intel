@@ -1,6 +1,7 @@
 'use client'
 import { formatCurrency, formatRate } from '@/lib/utils'
 import type { RateComparison, AnchorRate } from '@/types'
+import { Skeleton } from '@/components/ui/Skeleton'
 
 function sourceBadge(source: AnchorRate['source']): React.ReactNode {
   switch (source) {
@@ -33,19 +34,15 @@ interface RateTableProps {
   onSelectAnchor: (rate: AnchorRate) => void
 }
 
-function SkeletonRow() {
-  return (
-    <tr className="border-t border-gray-200 dark:border-gray-700">
-      {[1, 2, 3, 4, 5].map((i) => (
-        <td key={i} className="px-4 py-3">
-          <div className="h-4 animate-pulse rounded bg-gray-200 dark:bg-gray-700" />
-        </td>
-      ))}
-    </tr>
-  )
-}
-
 export function RateTable({ rates, isLoading, error, onSelectAnchor }: RateTableProps) {
+  if (isLoading && (!rates || rates.rates.length === 0)) {
+    return (
+      <div className="overflow-hidden rounded-xl border border-gray-200 dark:border-gray-700">
+        <Skeleton rows={5} />
+      </div>
+    )
+  }
+
   return (
     <div className="overflow-hidden rounded-xl border border-gray-200 dark:border-gray-700">
       <table className="w-full text-sm">
@@ -59,13 +56,6 @@ export function RateTable({ rates, isLoading, error, onSelectAnchor }: RateTable
           </tr>
         </thead>
         <tbody>
-          {isLoading && (
-            <>
-              <SkeletonRow />
-              <SkeletonRow />
-              <SkeletonRow />
-            </>
-          )}
 
           {!isLoading && error && (
             <tr>
