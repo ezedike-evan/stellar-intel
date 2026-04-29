@@ -1,6 +1,8 @@
 'use client'
 import { formatCurrency, formatRate } from '@/lib/utils'
 import type { RateComparison, AnchorRate } from '@/types'
+import Skeleton from "@/components/ui/skeleton";
+ 
 
 function sourceBadge(source: AnchorRate['source']): React.ReactNode {
   switch (source) {
@@ -43,6 +45,33 @@ function SkeletonRow() {
       ))}
     </tr>
   )
+}
+
+export function RateTable({ rates, loading, refreshInflight }) {
+  const isRefreshing = refreshInflight || loading;
+
+  if (isRefreshing) {
+    return (
+      <div>
+        {[...Array(5)].map((_, i) => (
+          <Skeleton key={i} className="h-10 w-full my-2" />
+        ))}
+      </div>
+    );
+  }
+
+  return (
+    <table>
+      <tbody>
+        {rates.map((rate) => (
+          <tr key={rate.id}>
+            <td>{rate.pair}</td>
+            <td>{rate.value}</td>
+          </tr>
+        ))}
+      </tbody>
+    </table>
+  );
 }
 
 export function RateTable({ rates, isLoading, error, onSelectAnchor }: RateTableProps) {
