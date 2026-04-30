@@ -196,6 +196,19 @@ export type OfframpSortKey = 'rate' | 'fee' | 'time' | 'total'
 export type SortDirection = 'asc' | 'desc'
 export type RiskLevel = 'low' | 'medium' | 'high'
 
+// ─── ExecuteDrawer state machine ─────────────────────────────────────────────
+
+/** Steps in the ExecuteDrawer off-ramp flow state machine. */
+export type ExecuteDrawerStep =
+  | 'idle'
+  | 'authenticating'
+  | 'initiating'
+  | 'kyc'
+  | 'building'
+  | 'signing'
+  | 'done'
+  | 'error'
+
 // ─── Stellar assets (used by Horizon swap routing) ────────────────────────────
 
 export interface StellarAsset {

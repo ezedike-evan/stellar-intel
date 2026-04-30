@@ -5,23 +5,13 @@ import { initiateWithdraw, openWithdrawPopup, getWithdrawTransactionRecord } fro
 import { getTransferServer } from '@/lib/stellar/sep1'
 import { getAnchorById } from '@/lib/stellar/anchors'
 import { buildWithdrawPayment, signAndSubmitPayment } from '@/lib/stellar/horizon'
-import type { AnchorRate } from '@/types'
+import type { AnchorRate, ExecuteDrawerStep } from '@/types'
 
 // ─── Step definitions ─────────────────────────────────────────────────────────
 
-type Step =
-  | 'idle'
-  | 'authenticating'
-  | 'initiating'
-  | 'kyc'
-  | 'building'
-  | 'signing'
-  | 'done'
-  | 'error'
-
-const STEP_LABELS: Record<Step, string> = {
+const STEP_LABELS: Record<ExecuteDrawerStep, string> = {
   idle: 'Ready',
-  authenticating: 'Authenticating with anchor…',
+  authenticating: 'Proving wallet ownership to anchor…',
   initiating: 'Initiating withdrawal…',
   kyc: 'Complete KYC in popup…',
   building: 'Building payment transaction…',
@@ -44,7 +34,7 @@ interface ExecuteDrawerProps {
 // ─── Component ────────────────────────────────────────────────────────────────
 
 export function ExecuteDrawer({ rate, amount, publicKey, onClose, onExecuteStarted }: ExecuteDrawerProps) {
-  const [step, setStep] = useState<Step>('idle')
+  const [step, setStep] = useState<ExecuteDrawerStep>('idle')
   const [errorMsg, setErrorMsg] = useState<string | null>(null)
   const [txHash, setTxHash] = useState<string | null>(null)
 
@@ -60,6 +50,7 @@ export function ExecuteDrawer({ rate, amount, publicKey, onClose, onExecuteStart
     try {
       // Step 1 — SEP-10 auth
       const anchor = getAnchorById(rate.anchorId)
+      if (!anchor) throw new Error(`Anchor not found: ${rate.anchorId}`)
       const auth = await authenticate(anchor.homeDomain, publicKey)
 
       // Step 2 — Initiate SEP-24 withdraw
@@ -199,7 +190,22 @@ export function ExecuteDrawer({ rate, amount, publicKey, onClose, onExecuteStart
                 Start Off-ramp
               </button>
             )}
-            {isRunning && (
+            {step === 'authenticating' && rate && (
+              <div className="flex w-full items-center justify-center gap-3 rounded-xl bg-blue-600 py-4 text-white">
+                <Spinner />
+                <div className="flex items-center gap-2">
+                  <div className="flex h-8 w-8 items-center justify-center rounded-full bg-white/20">
+                    <span className="text-sm font-bold">
+                      {rate.anchorName?.charAt(0).toUpperCase() ?? 'A'}
+                    </span>
+                  </div>
+                  <span className="text-sm font-medium">
+                    Proving wallet ownership to {rate.anchorName ?? 'anchor'}…
+                  </span>
+                </div>
+              </div>
+            )}
+            {isRunning && step !== 'authenticating' && (
               <button
                 disabled
                 className="flex w-full items-center justify-center gap-2 rounded-xl bg-blue-600 py-3 text-sm font-semibold text-white opacity-75"
@@ -233,9 +239,9 @@ export function ExecuteDrawer({ rate, amount, publicKey, onClose, onExecuteStart
 
 // ─── Sub-components ───────────────────────────────────────────────────────────
 
-const ORDERED_STEPS: Step[] = ['authenticating', 'initiating', 'kyc', 'building', 'signing', 'done']
+const ORDERED_STEPS: ExecuteDrawerStep[] = ['authenticating', 'initiating', 'kyc', 'building', 'signing', 'done']
 
-function StepIndicator({ step }: { step: Step }) {
+function StepIndicator({ step }: { step: ExecuteDrawerStep }) {
   if (step === 'idle') return null
 
   return (
@@ -284,6 +290,8 @@ function Spinner() {
       xmlns="http://www.w3.org/2000/svg"
       fill="none"
       viewBox="0 0 24 24"
+      role="status"
+      aria-label="Loading"
     >
       <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" />
       <path
