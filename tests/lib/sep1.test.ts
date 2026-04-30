@@ -1,6 +1,7 @@
-import { describe, it, expect, vi, beforeEach } from 'vitest'
-import { StellarToml } from '@stellar/stellar-sdk'
+import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest'
+import { Networks, StellarToml } from '@stellar/stellar-sdk'
 import {
+  resolveAnchor,
   resolveToml,
   getTransferServer,
   getWebAuthEndpoint,
@@ -10,8 +11,10 @@ import {
 
 const VALID_TOML = {
   TRANSFER_SERVER_SEP0024: 'https://cowrie.exchange/sep24',
+  ANCHOR_QUOTE_SERVER: 'https://cowrie.exchange/quotes',
   WEB_AUTH_ENDPOINT: 'https://cowrie.exchange/auth',
   SIGNING_KEY: 'GABCDEF',
+  NETWORK_PASSPHRASE: Networks.PUBLIC,
   CURRENCIES: [
     { code: 'USDC', issuer: 'GA5ZSEJYB37JRC5AVCIA5MOP4RHTM335X2KGX3IHOJAPP5RE34K4KZVN' },
   ],
@@ -20,62 +23,107 @@ const VALID_TOML = {
 beforeEach(() => {
   _clearTomlCache()
   vi.restoreAllMocks()
+  vi.useRealTimers()
 })
 
-describe('resolveToml', () => {
-  it('returns the correct TRANSFER_SERVER_SEP0024', async () => {
-    vi.spyOn(StellarToml.Resolver, 'resolve').mockResolvedValue(VALID_TOML as never)
+afterEach(() => {
+  vi.useRealTimers()
+})
 
-    const result = await resolveToml('cowrie.exchange')
-    expect(result.TRANSFER_SERVER_SEP0024).toBe('https://cowrie.exchange/sep24')
-  })
+describe('resolveAnchor', () => {
+  it('calls StellarToml.Resolver.resolve and extracts SEP-1 fields', async () => {
+    const spy = vi.spyOn(StellarToml.Resolver, 'resolve').mockResolvedValue(VALID_TOML as never)
 
-  it('returns the correct WEB_AUTH_ENDPOINT', async () => {
-    vi.spyOn(StellarToml.Resolver, 'resolve').mockResolvedValue(VALID_TOML as never)
+    const result = await resolveAnchor('cowrie.exchange')
 
-    const result = await resolveToml('cowrie.exchange')
-    expect(result.WEB_AUTH_ENDPOINT).toBe('https://cowrie.exchange/auth')
-  })
-
-  it('returns sep24 false when TRANSFER_SERVER_SEP0024 is absent', async () => {
-    vi.spyOn(StellarToml.Resolver, 'resolve').mockResolvedValue({
-      WEB_AUTH_ENDPOINT: 'https://cowrie.exchange/auth',
-    } as never)
-
-    const result = await resolveToml('cowrie.exchange')
-
-    expect(result.capabilities.sep24).toBe(false)
-    expect(result.capabilities.sep10).toBe(true)
-    expect(result.TRANSFER_SERVER_SEP0024).toBeUndefined()
-  })
-
-  it('returns sep10 false when WEB_AUTH_ENDPOINT is absent', async () => {
-    vi.spyOn(StellarToml.Resolver, 'resolve').mockResolvedValue({
+    expect(spy).toHaveBeenCalledWith('cowrie.exchange')
+    expect(result).toEqual({
+      domain: 'cowrie.exchange',
       TRANSFER_SERVER_SEP0024: 'https://cowrie.exchange/sep24',
-    } as never)
+      ANCHOR_QUOTE_SERVER: 'https://cowrie.exchange/quotes',
+      WEB_AUTH_ENDPOINT: 'https://cowrie.exchange/auth',
+      SIGNING_KEY: 'GABCDEF',
+      NETWORK_PASSPHRASE: Networks.PUBLIC,
+      CURRENCIES: [
+        { code: 'USDC', issuer: 'GA5ZSEJYB37JRC5AVCIA5MOP4RHTM335X2KGX3IHOJAPP5RE34K4KZVN' },
+      ],
+    })
+  })
 
-    const result = await resolveToml('cowrie.exchange')
+  it('normalizes domain casing for cache keys', async () => {
+    const spy = vi.spyOn(StellarToml.Resolver, 'resolve').mockResolvedValue(VALID_TOML as never)
 
-    expect(result.capabilities.sep10).toBe(false)
-    expect(result.capabilities.sep24).toBe(true)
-    expect(result.WEB_AUTH_ENDPOINT).toBeUndefined()
+    await resolveAnchor(' Cowrie.Exchange ')
+    await resolveAnchor('cowrie.exchange')
+
+    expect(spy).toHaveBeenCalledTimes(1)
+    expect(spy).toHaveBeenCalledWith('cowrie.exchange')
+  })
+
+  it('returns nullable fields when optional TOML values are absent', async () => {
+    vi.spyOn(StellarToml.Resolver, 'resolve').mockResolvedValue({} as never)
+
+    const result = await resolveAnchor('cowrie.exchange')
+
+    expect(result.TRANSFER_SERVER_SEP0024).toBeNull()
+    expect(result.ANCHOR_QUOTE_SERVER).toBeNull()
+    expect(result.WEB_AUTH_ENDPOINT).toBeNull()
+    expect(result.SIGNING_KEY).toBeNull()
+    expect(result.NETWORK_PASSPHRASE).toBeNull()
+    expect(result.CURRENCIES).toEqual([])
   })
 
   it('throws a descriptive error when the network call fails', async () => {
     vi.spyOn(StellarToml.Resolver, 'resolve').mockRejectedValue(new Error('Network timeout'))
 
-    await expect(resolveToml('cowrie.exchange')).rejects.toThrow(
+    await expect(resolveAnchor('cowrie.exchange')).rejects.toThrow(
       /Failed to resolve stellar\.toml for "cowrie\.exchange"/
     )
   })
 
-  it('returns the cached result on a second call without re-fetching', async () => {
+  it('returns a cache hit in under 1ms', async () => {
     const spy = vi.spyOn(StellarToml.Resolver, 'resolve').mockResolvedValue(VALID_TOML as never)
 
-    await resolveToml('cowrie.exchange')
-    await resolveToml('cowrie.exchange')
+    await resolveAnchor('cowrie.exchange')
 
+    const startedAt = performance.now()
+    const cached = await resolveAnchor('cowrie.exchange')
+    const elapsedMs = performance.now() - startedAt
+
+    expect(cached.WEB_AUTH_ENDPOINT).toBe('https://cowrie.exchange/auth')
+    expect(elapsedMs).toBeLessThan(1)
     expect(spy).toHaveBeenCalledTimes(1)
+  })
+
+  it('refreshes the cached TOML after the 15-minute TTL expires', async () => {
+    vi.useFakeTimers()
+    vi.setSystemTime(new Date('2026-01-01T00:00:00.000Z'))
+
+    const spy = vi
+      .spyOn(StellarToml.Resolver, 'resolve')
+      .mockResolvedValueOnce(VALID_TOML as never)
+      .mockResolvedValueOnce({
+        ...VALID_TOML,
+        WEB_AUTH_ENDPOINT: 'https://cowrie.exchange/new-auth',
+      } as never)
+
+    await resolveAnchor('cowrie.exchange')
+    vi.setSystemTime(new Date('2026-01-01T00:15:00.001Z'))
+
+    const refreshed = await resolveAnchor('cowrie.exchange')
+
+    expect(refreshed.WEB_AUTH_ENDPOINT).toBe('https://cowrie.exchange/new-auth')
+    expect(spy).toHaveBeenCalledTimes(2)
+  })
+})
+
+describe('resolveToml', () => {
+  it('keeps the old resolver name as an alias for resolveAnchor', async () => {
+    vi.spyOn(StellarToml.Resolver, 'resolve').mockResolvedValue(VALID_TOML as never)
+
+    const result = await resolveToml('cowrie.exchange')
+
+    expect(result.ANCHOR_QUOTE_SERVER).toBe('https://cowrie.exchange/quotes')
   })
 })
 
@@ -86,6 +134,16 @@ describe('getTransferServer', () => {
     const url = await getTransferServer('cowrie.exchange')
     expect(url).toBe('https://cowrie.exchange/sep24')
   })
+
+  it('throws when TRANSFER_SERVER_SEP0024 is absent', async () => {
+    vi.spyOn(StellarToml.Resolver, 'resolve').mockResolvedValue({
+      WEB_AUTH_ENDPOINT: 'https://cowrie.exchange/auth',
+    } as never)
+
+    await expect(getTransferServer('cowrie.exchange')).rejects.toThrow(
+      /Missing TRANSFER_SERVER_SEP0024.*"cowrie\.exchange"/
+    )
+  })
 })
 
 describe('getWebAuthEndpoint', () => {
@@ -94,6 +152,16 @@ describe('getWebAuthEndpoint', () => {
 
     const url = await getWebAuthEndpoint('cowrie.exchange')
     expect(url).toBe('https://cowrie.exchange/auth')
+  })
+
+  it('throws when WEB_AUTH_ENDPOINT is absent', async () => {
+    vi.spyOn(StellarToml.Resolver, 'resolve').mockResolvedValue({
+      TRANSFER_SERVER_SEP0024: 'https://cowrie.exchange/sep24',
+    } as never)
+
+    await expect(getWebAuthEndpoint('cowrie.exchange')).rejects.toThrow(
+      /Missing WEB_AUTH_ENDPOINT.*"cowrie\.exchange"/
+    )
   })
 })
 
