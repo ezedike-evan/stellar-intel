@@ -1,3 +1,4 @@
+import { SepError, parseSepErrorBody } from './errors'
 import { getTransferServer } from './sep1'
 import { getAnchorsByCorridorId, getCorridorById } from './anchors'
 import { computeTotalReceived } from '@/lib/utils'
@@ -53,7 +54,8 @@ export async function getSep24Transaction(
   })
 
   if (!res.ok) {
-    throw new Error(`Transaction fetch failed: HTTP ${res.status}`)
+    const body: unknown = typeof res.json === 'function' ? await res.json().catch(() => null) : null
+    throw parseSepErrorBody(body, res.status)
   }
 
   const data = (await res.json()) as { transaction?: Record<string, unknown> }
@@ -173,7 +175,10 @@ export async function getSep24Fee(params: {
   }
 
   if (res.status === 404) return { ok: false, reason: 'unsupported' }
-  if (!res.ok) throw new Error(`HTTP ${res.status} from ${params.transferServer}/fee`)
+  if (!res.ok) {
+    const body: unknown = typeof res.json === 'function' ? await res.json().catch(() => null) : null
+    throw parseSepErrorBody(body, res.status)
+  }
 
   const data = (await res.json()) as Record<string, unknown>
   const fee = Number(data['fee'])
@@ -220,7 +225,13 @@ export async function getSep24Info(transferServer: string): Promise<Sep24InfoRes
 
   const res = await fetch(`${transferServer}/info`)
   if (!res.ok) {
-    throw new Error(`Failed to fetch /info from ${transferServer}: HTTP ${res.status}`)
+    const body: unknown = typeof res.json === 'function' ? await res.json().catch(() => null) : null
+    throw new SepError(
+      `Failed to fetch /info from ${transferServer}: HTTP ${res.status}`,
+      `INFO_FETCH_FAILED`,
+      res.status,
+      body,
+    )
   }
 
   const data = (await res.json()) as Sep24InfoResponse
@@ -270,8 +281,12 @@ export async function fetchAnchorFee(
   }
 
   if (!res.ok) {
-    throw new Error(
-      `HTTP ${res.status} from ${params.anchorDomain} fee endpoint`
+    const body: unknown = typeof res.json === 'function' ? await res.json().catch(() => null) : null
+    throw new SepError(
+      `HTTP ${res.status} from ${params.anchorDomain} fee endpoint`,
+      `FEE_FETCH_FAILED`,
+      res.status,
+      body,
     )
   }
 
@@ -387,7 +402,7 @@ export async function initiateWithdraw(
   })
 
   if (!res.ok) {
-    const body = await res.json().catch(() => null)
+    const body: unknown = typeof res.json === 'function' ? await res.json().catch(() => null) : null
     throw new Sep24WithdrawError(res.status, body, transferServer)
   }
 
@@ -481,7 +496,13 @@ export async function getWithdrawTransactionRecord(
   })
 
   if (!res.ok) {
-    throw new Error(`Failed to fetch transaction record: HTTP ${res.status}`)
+    const body: unknown = typeof res.json === 'function' ? await res.json().catch(() => null) : null
+    throw new SepError(
+      `Failed to fetch transaction record: HTTP ${res.status}`,
+      `TRANSACTION_RECORD_FAILED`,
+      res.status,
+      body,
+    )
   }
 
   const data = (await res.json()) as { transaction?: Record<string, unknown> }
