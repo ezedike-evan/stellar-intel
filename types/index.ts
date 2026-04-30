@@ -146,6 +146,21 @@ export type WithdrawStatus =
   | 'expired'
   | 'error'
 
+/** Payment breakdown for a refunded SEP-24 transaction. */
+export interface Sep24RefundPayment {
+  id: string
+  id_type: string
+  amount: string
+  fee: string
+}
+
+/** Refund details for a SEP-24 transaction. */
+export interface Sep24Refunds {
+  amount_refunded: string
+  amount_fee: string
+  payments: Sep24RefundPayment[]
+}
+
 /** The live record of a SEP-24 withdrawal transaction returned by the anchor. */
 export interface Sep24Transaction {
   id: string
@@ -158,6 +173,7 @@ export interface Sep24Transaction {
   updatedAt: Date
   stellarTransactionId?: string | undefined
   externalTransactionId?: string | undefined
+  refunds?: Sep24Refunds | undefined
 }
 
 // ─── Post-execute handoff ─────────────────────────────────────────────────────

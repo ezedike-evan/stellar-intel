@@ -26,6 +26,7 @@ async function fetcher([transferServer, transactionId, jwt]: [string, string, st
     updatedAt: new Date(),
     stellarTransactionId: tx['stellar_transaction_id'] as string | undefined,
     externalTransactionId: tx['external_transaction_id'] as string | undefined,
+    refunds: tx['refunds'] as Sep24Transaction['refunds'],
   }
 }
 
@@ -38,6 +39,7 @@ export interface UseWithdrawStatusResult {
   amountFee: string | undefined
   stellarTransactionId: string | undefined
   externalTransactionId: string | undefined
+  refunds: Sep24Transaction['refunds'] | undefined
   updatedAt: Date | undefined
   isLoading: boolean
   error: string | undefined
@@ -75,6 +77,7 @@ export function useWithdrawStatus(
     amountFee: data?.amountFee,
     stellarTransactionId: data?.stellarTransactionId,
     externalTransactionId: data?.externalTransactionId,
+    refunds: data?.refunds,
     updatedAt: data?.updatedAt,
     isLoading,
     error: error?.message,
