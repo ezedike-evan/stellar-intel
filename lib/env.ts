@@ -16,6 +16,7 @@ export const envSchema = z.object({
     .url()
     .optional()
     .default('https://api.stellar.expert/explorer/public'),
+  NEXT_PUBLIC_FEE_BUDGET_PCT: z.coerce.number().min(0).max(100).default(10),
 })
 
 export type Env = z.infer<typeof envSchema>
