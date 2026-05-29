@@ -106,6 +106,27 @@ export interface Sep38Info {
   assets: Sep38Asset[];
 }
 
+/** Request parameters for the SEP-38 GET /prices indicative price feed. */
+export interface Sep38PricesParams {
+  sell_asset: string;
+  sell_amount: string;
+  sell_delivery_method?: string;
+  buy_delivery_method?: string;
+  country_code?: string;
+}
+
+/** A single indicative buy option from the SEP-38 GET /prices response. */
+export interface Sep38IndicativePrice {
+  /** The SEP-38 identifier of the asset that can be bought (raw `asset` field). */
+  asset: string;
+  /** Alias of `asset`: the asset the user would buy with the sell asset. */
+  buy_asset: string;
+  /** Indicative unit price of buy_asset in terms of sell_asset, as a decimal string. */
+  price: string;
+  /** Indicative total price for the requested sell_amount, including fees. */
+  total_price: string;
+}
+
 // ─── SEP-10 ───────────────────────────────────────────────────────────────────
 
 /** A JWT issued by an anchor after successful SEP-10 authentication. */

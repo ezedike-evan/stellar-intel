@@ -1,4 +1,20 @@
-import type { Sep38Asset, Sep38DeliveryMethod, Sep38Info } from '@/types';
+import type {
+  Sep38Asset,
+  Sep38DeliveryMethod,
+  Sep38IndicativePrice,
+  Sep38Info,
+  Sep38PricesParams,
+} from '@/types';
+
+// ─── Errors ─────────────────────────────────────────────────────────────────
+
+/** Thrown when a SEP-38 response cannot be parsed into the expected schema. */
+export class Sep38ParseError extends Error {
+  constructor(message: string) {
+    super(message);
+    this.name = 'Sep38ParseError';
+  }
+}
 
 // ─── In-memory cache ──────────────────────────────────────────────────────────
 
@@ -115,6 +131,92 @@ export async function getSep38Info(quoteServer: string): Promise<Sep38Info> {
 
   cache.set(base, { data, expiresAt: Date.now() + TTL_MS });
   return data;
+}
+
+function parsePrices(raw: Record<string, unknown>): Sep38IndicativePrice[] {
+  const buyAssets = raw['buy_assets'];
+  if (!Array.isArray(buyAssets)) {
+    throw new Sep38ParseError('SEP-38 /prices response is missing a "buy_assets" array');
+  }
+
+  return buyAssets.map((entry, index) => {
+    if (!isRecord(entry)) {
+      throw new Sep38ParseError(`SEP-38 /prices buy_assets[${index}] is not an object`);
+    }
+
+    const asset = entry['asset'];
+    if (typeof asset !== 'string' || asset.length === 0) {
+      throw new Sep38ParseError(`SEP-38 /prices buy_assets[${index}] is missing a string "asset"`);
+    }
+
+    const price = entry['price'];
+    if (typeof price !== 'string' || price.length === 0) {
+      throw new Sep38ParseError(`SEP-38 /prices buy_assets[${index}] is missing a string "price"`);
+    }
+
+    // GET /prices returns a single indicative price per buy asset; total_price
+    // mirrors it unless the anchor provides a distinct value.
+    const totalPrice = typeof entry['total_price'] === 'string' ? entry['total_price'] : price;
+
+    return { asset, buy_asset: asset, price, total_price: totalPrice };
+  });
+}
+
+// ─── Indicative prices endpoint ─────────────────────────────────────────────────
+
+/**
+ * Fetches indicative (non-firm) prices from an anchor's SEP-38 GET /prices
+ * endpoint for a given sell asset and amount — used when a user browses without
+ * committing to a firm quote.
+ *
+ * Indicative prices change frequently and are intentionally NOT cached. A
+ * malformed response (missing buy_assets, or an entry lacking a string
+ * asset/price) throws a {@link Sep38ParseError}.
+ */
+export async function getSep38Prices(
+  quoteServer: string,
+  params: Sep38PricesParams
+): Promise<Sep38IndicativePrice[]> {
+  const base = normalizeQuoteServer(quoteServer);
+
+  if (!params.sell_asset || !params.sell_amount) {
+    throw new Error('sell_asset and sell_amount are required');
+  }
+
+  const url = new URL(`${base}/prices`);
+  url.searchParams.set('sell_asset', params.sell_asset);
+  url.searchParams.set('sell_amount', params.sell_amount);
+  if (params.sell_delivery_method) {
+    url.searchParams.set('sell_delivery_method', params.sell_delivery_method);
+  }
+  if (params.buy_delivery_method) {
+    url.searchParams.set('buy_delivery_method', params.buy_delivery_method);
+  }
+  if (params.country_code) {
+    url.searchParams.set('country_code', params.country_code);
+  }
+
+  const controller = new AbortController();
+  const timeout = setTimeout(() => controller.abort(), REQUEST_TIMEOUT_MS);
+
+  let res: Response;
+  try {
+    res = await fetch(url.toString(), { signal: controller.signal });
+  } catch (err) {
+    if ((err as Error).name === 'AbortError') {
+      throw new Error(`SEP-38 /prices request to ${base} timed out after 10 seconds`);
+    }
+    throw err;
+  } finally {
+    clearTimeout(timeout);
+  }
+
+  if (!res.ok) {
+    throw new Error(`HTTP ${res.status} from ${base} SEP-38 /prices endpoint`);
+  }
+
+  const raw = (await res.json()) as Record<string, unknown>;
+  return parsePrices(raw);
 }
 
 // ─── Test helpers ─────────────────────────────────────────────────────────────
