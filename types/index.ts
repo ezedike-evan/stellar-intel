@@ -127,6 +127,32 @@ export interface Sep38IndicativePrice {
   total_price: string;
 }
 
+/** The downstream protocol a SEP-38 firm quote will be used with. */
+export type Sep38QuoteContext = 'sep6' | 'sep24' | 'sep31';
+
+/** Request parameters for SEP-38 POST /quote (firm quote creation). */
+export interface Sep38QuoteParams {
+  sell_asset: string;
+  buy_asset: string;
+  sell_amount: string;
+  context: Sep38QuoteContext;
+  buy_delivery_method?: string;
+  sell_delivery_method?: string;
+  country_code?: string;
+  /** RFC 3339 timestamp; the quote must remain valid until at least this time. */
+  expire_after?: string;
+}
+
+/** A firm SEP-38 quote returned by POST /quote. */
+export interface Sep38Quote {
+  id: string;
+  /** RFC 3339 timestamp after which the quote is no longer honored. */
+  expires_at: string;
+  price: string;
+  sell_amount: string;
+  buy_amount: string;
+}
+
 // ─── SEP-10 ───────────────────────────────────────────────────────────────────
 
 /** A JWT issued by an anchor after successful SEP-10 authentication. */

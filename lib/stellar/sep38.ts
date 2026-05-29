@@ -4,6 +4,8 @@ import type {
   Sep38IndicativePrice,
   Sep38Info,
   Sep38PricesParams,
+  Sep38Quote,
+  Sep38QuoteParams,
 } from '@/types';
 
 // ─── Errors ─────────────────────────────────────────────────────────────────
@@ -217,6 +219,112 @@ export async function getSep38Prices(
 
   const raw = (await res.json()) as Record<string, unknown>;
   return parsePrices(raw);
+}
+
+function requireString(raw: Record<string, unknown>, field: string, endpoint: string): string {
+  const value = raw[field];
+  if (typeof value !== 'string' || value.length === 0) {
+    throw new Sep38ParseError(`SEP-38 ${endpoint} response is missing a string "${field}"`);
+  }
+  return value;
+}
+
+function parseQuote(raw: Record<string, unknown>): Sep38Quote {
+  const id = requireString(raw, 'id', '/quote');
+  const expiresAt = requireString(raw, 'expires_at', '/quote');
+  const price = requireString(raw, 'price', '/quote');
+  const sellAmount = requireString(raw, 'sell_amount', '/quote');
+  const buyAmount = requireString(raw, 'buy_amount', '/quote');
+
+  const expiresMs = Date.parse(expiresAt);
+  if (Number.isNaN(expiresMs)) {
+    throw new Sep38ParseError(`SEP-38 quote "expires_at" is not a valid timestamp: "${expiresAt}"`);
+  }
+  if (expiresMs <= Date.now()) {
+    throw new Sep38ParseError(`SEP-38 quote "expires_at" is not in the future: "${expiresAt}"`);
+  }
+
+  return {
+    id,
+    expires_at: expiresAt,
+    price,
+    sell_amount: sellAmount,
+    buy_amount: buyAmount,
+  };
+}
+
+// ─── Firm quote endpoint ──────────────────────────────────────────────────────
+
+/**
+ * Creates a firm SEP-38 quote via POST /quote. Authenticated with a SEP-10 JWT.
+ *
+ * Firm quotes are single-use and time-bound, so the response is not cached. The
+ * returned quote is validated to have a parsable `expires_at` in the future;
+ * otherwise a {@link Sep38ParseError} is thrown. Missing required fields also
+ * throw a {@link Sep38ParseError}.
+ */
+export async function postSep38Quote(
+  quoteServer: string,
+  jwt: string,
+  params: Sep38QuoteParams
+): Promise<Sep38Quote> {
+  const base = normalizeQuoteServer(quoteServer);
+
+  if (!jwt) {
+    throw new Error('A SEP-10 JWT is required to request a firm quote');
+  }
+  if (!params.sell_asset || !params.buy_asset || !params.sell_amount) {
+    throw new Error('sell_asset, buy_asset and sell_amount are required');
+  }
+
+  const body: Record<string, string> = {
+    sell_asset: params.sell_asset,
+    buy_asset: params.buy_asset,
+    sell_amount: params.sell_amount,
+    context: params.context,
+  };
+  if (params.buy_delivery_method) {
+    body['buy_delivery_method'] = params.buy_delivery_method;
+  }
+  if (params.sell_delivery_method) {
+    body['sell_delivery_method'] = params.sell_delivery_method;
+  }
+  if (params.country_code) {
+    body['country_code'] = params.country_code;
+  }
+  if (params.expire_after) {
+    body['expire_after'] = params.expire_after;
+  }
+
+  const controller = new AbortController();
+  const timeout = setTimeout(() => controller.abort(), REQUEST_TIMEOUT_MS);
+
+  let res: Response;
+  try {
+    res = await fetch(`${base}/quote`, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        Authorization: `Bearer ${jwt}`,
+      },
+      body: JSON.stringify(body),
+      signal: controller.signal,
+    });
+  } catch (err) {
+    if ((err as Error).name === 'AbortError') {
+      throw new Error(`SEP-38 /quote request to ${base} timed out after 10 seconds`);
+    }
+    throw err;
+  } finally {
+    clearTimeout(timeout);
+  }
+
+  if (!res.ok) {
+    throw new Error(`HTTP ${res.status} from ${base} SEP-38 /quote endpoint`);
+  }
+
+  const raw = (await res.json()) as Record<string, unknown>;
+  return parseQuote(raw);
 }
 
 // ─── Test helpers ─────────────────────────────────────────────────────────────
