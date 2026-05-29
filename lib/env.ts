@@ -1,9 +1,7 @@
 import { z } from 'zod'
 
 export const envSchema = z.object({
-  NEXT_PUBLIC_STELLAR_NETWORK: z.enum(['mainnet', 'testnet', 'futurenet'], {
-    errorMap: () => ({ message: 'Must be one of: mainnet, testnet, futurenet' }),
-  }),
+  NEXT_PUBLIC_STELLAR_NETWORK: z.enum(['mainnet', 'testnet', 'futurenet'] as const),
   NEXT_PUBLIC_HORIZON_URL: z.string().url({
     message: 'Must be a valid URL (e.g. https://horizon.stellar.org)',
   }),
@@ -28,6 +26,7 @@ export function parseEnv(): Env {
     NEXT_PUBLIC_USDC_ISSUER: process.env.NEXT_PUBLIC_USDC_ISSUER,
     NEXT_PUBLIC_APP_NAME: process.env.NEXT_PUBLIC_APP_NAME,
     NEXT_PUBLIC_STELLAR_EXPERT_URL: process.env.NEXT_PUBLIC_STELLAR_EXPERT_URL,
+  NEXT_PUBLIC_FEE_BUDGET_PCT: process.env.NEXT_PUBLIC_FEE_BUDGET_PCT,
   })
 
   if (!result.success) {
