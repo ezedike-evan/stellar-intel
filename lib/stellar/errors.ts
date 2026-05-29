@@ -1,16 +1,131 @@
+// ─── Stable error codes ───────────────────────────────────────────────────────
+
+export const ErrorCode = {
+  // Network
+  NETWORK_UNREACHABLE: 'NETWORK_UNREACHABLE',
+  NETWORK_MISMATCH: 'NETWORK_MISMATCH',
+  // Anchor
+  ANCHOR_HTTP_ERROR: 'ANCHOR_HTTP_ERROR',
+  ANCHOR_INVALID_RESPONSE: 'ANCHOR_INVALID_RESPONSE',
+  ANCHOR_RATE_UNAVAILABLE: 'ANCHOR_RATE_UNAVAILABLE',
+  // User
+  USER_REJECTED: 'USER_REJECTED',
+  USER_WALLET_MISSING: 'USER_WALLET_MISSING',
+  // Timeout
+  REQUEST_TIMEOUT: 'REQUEST_TIMEOUT',
+} as const
+
+export type ErrorCode = (typeof ErrorCode)[keyof typeof ErrorCode]
+
+// ─── Root base class ──────────────────────────────────────────────────────────
+
 /**
- * Base class for all Stellar-related wallet errors.
+ * Root base class for all Stellar Intel errors.
+ * Carries a stable `code` for exhaustive switch handling.
+ */
+export abstract class StellarIntelError extends Error {
+  abstract readonly code: ErrorCode
+
+  constructor(message: string) {
+    super(message)
+    // Restore prototype chain for instanceof checks across transpilation targets
+    Object.setPrototypeOf(this, new.target.prototype)
+  }
+}
+
+// ─── Subclasses ───────────────────────────────────────────────────────────────
+
+export class NetworkError extends StellarIntelError {
+  readonly code: ErrorCode
+
+  constructor(
+    message: string,
+    code: Extract<ErrorCode, 'NETWORK_UNREACHABLE' | 'NETWORK_MISMATCH'> = ErrorCode.NETWORK_UNREACHABLE
+  ) {
+    super(message)
+    this.name = 'NetworkError'
+    this.code = code
+  }
+}
+
+export class AnchorError extends StellarIntelError {
+  readonly code: ErrorCode
+  readonly httpStatus: number
+  readonly raw: unknown
+
+  constructor(
+    message: string,
+    code: Extract<ErrorCode, 'ANCHOR_HTTP_ERROR' | 'ANCHOR_INVALID_RESPONSE' | 'ANCHOR_RATE_UNAVAILABLE'> = ErrorCode.ANCHOR_HTTP_ERROR,
+    httpStatus = 0,
+    raw: unknown = null
+  ) {
+    super(message)
+    this.name = 'AnchorError'
+    this.code = code
+    this.httpStatus = httpStatus
+    this.raw = raw
+  }
+}
+
+export class UserError extends StellarIntelError {
+  readonly code: ErrorCode
+
+  constructor(
+    message: string,
+    code: Extract<ErrorCode, 'USER_REJECTED' | 'USER_WALLET_MISSING'> = ErrorCode.USER_REJECTED
+  ) {
+    super(message)
+    this.name = 'UserError'
+    this.code = code
+  }
+}
+
+export class TimeoutError extends StellarIntelError {
+  readonly code = ErrorCode.REQUEST_TIMEOUT as const
+
+  constructor(message: string) {
+    super(message)
+    this.name = 'TimeoutError'
+  }
+}
+
+// ─── Type guards ──────────────────────────────────────────────────────────────
+
+export function isStellarIntelError(err: unknown): err is StellarIntelError {
+  return err instanceof StellarIntelError
+}
+
+export function isNetworkError(err: unknown): err is NetworkError {
+  return err instanceof NetworkError
+}
+
+export function isAnchorError(err: unknown): err is AnchorError {
+  return err instanceof AnchorError
+}
+
+export function isUserError(err: unknown): err is UserError {
+  return err instanceof UserError
+}
+
+export function isTimeoutError(err: unknown): err is TimeoutError {
+  return err instanceof TimeoutError
+}
+
+// ─── Legacy wallet error hierarchy (preserved for existing consumers) ─────────
+
+/**
+ * @deprecated Extend StellarIntelError subclasses instead.
+ * Kept for backward compatibility with WalletContext and horizon.ts consumers.
  */
 export class WalletError extends Error {
   constructor(message: string) {
     super(message)
     this.name = 'WalletError'
+    Object.setPrototypeOf(this, new.target.prototype)
   }
 }
 
-/**
- * Thrown when the user explicitly rejects a transaction or connection request.
- */
+/** Thrown when the user explicitly rejects a transaction or connection request. */
 export class UserRejectedError extends WalletError {
   constructor() {
     super('User rejected the request')
@@ -18,20 +133,7 @@ export class UserRejectedError extends WalletError {
   }
 }
 
-/**
- * Thrown when there is a network mismatch (e.g. Testnet vs Mainnet)
- * or the horizon server is unreachable.
- */
-export class NetworkError extends WalletError {
-  constructor(message: string) {
-    super(message)
-    this.name = 'NetworkError'
-  }
-}
-
-/**
- * Thrown when the wallet extension is missing, locked, or failing to respond.
- */
+/** Thrown when there is a network mismatch or the horizon server is unreachable. */
 export class ConnectionError extends WalletError {
   constructor(message: string) {
     super(message)
@@ -39,15 +141,15 @@ export class ConnectionError extends WalletError {
   }
 }
 
-/**
- * Fallback for unclassified errors.
- */
+/** Fallback for unclassified errors. */
 export class UnknownWalletError extends WalletError {
   constructor(message: string) {
     super(message)
     this.name = 'UnknownWalletError'
   }
 }
+
+// ─── SepError (preserved for existing SEP-24/SEP-10 consumers) ───────────────
 
 /**
  * Thrown when a SEP-24 HTTP request fails. Normalizes all anchor error
@@ -64,6 +166,7 @@ export class SepError extends Error {
     this.code = code
     this.httpStatus = httpStatus
     this.raw = raw
+    Object.setPrototypeOf(this, new.target.prototype)
   }
 }
 
