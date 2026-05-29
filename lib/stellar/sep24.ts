@@ -47,10 +47,12 @@ function normalizeStatus(raw: unknown): WithdrawStatusValue {
 export async function getSep24Transaction(
   transferServer: string,
   transactionId: string,
-  jwt: string
+  jwt: string,
+  signal?: AbortSignal
 ): Promise<Sep24Transaction> {
   const res = await fetch(`${transferServer}/transaction?id=${transactionId}`, {
     headers: { Authorization: `Bearer ${jwt}` },
+    signal,
   })
 
   if (!res.ok) {
@@ -381,7 +383,8 @@ export function computeRateComparison(
  */
 export async function initiateWithdraw(
   anchor: ResolvedAnchor,
-  params: Sep24WithdrawRequest
+  params: Sep24WithdrawRequest,
+  signal?: AbortSignal
 ): Promise<Sep24WithdrawResponse> {
   const { jwt, assetCode, assetIssuer, amount, account } = params
   const transferServer = anchor.TRANSFER_SERVER_SEP0024
@@ -405,6 +408,7 @@ export async function initiateWithdraw(
       account,
       lang: 'en',
     }),
+    signal,
   })
 
   if (!res.ok) {
@@ -495,10 +499,12 @@ export function openWithdrawPopup(url: string): Promise<string> {
 export async function getWithdrawTransactionRecord(
   transferServer: string,
   transactionId: string,
-  jwt: string
+  jwt: string,
+  signal?: AbortSignal
 ): Promise<{ withdrawAnchorAccount: string; memo: string; memoType: string }> {
   const res = await fetch(`${transferServer}/transaction?id=${transactionId}`, {
     headers: { Authorization: `Bearer ${jwt}` },
+    signal,
   })
 
   if (!res.ok) {

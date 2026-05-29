@@ -129,12 +129,13 @@ export async function fetchSep10Challenge(
 
 export async function fetchChallenge(
   webAuthEndpoint: string,
-  publicKey: string
+  publicKey: string,
+  signal?: AbortSignal
 ): Promise<{ transaction: string; network_passphrase: string }> {
   const url = new URL(webAuthEndpoint)
   url.searchParams.set('account', publicKey)
 
-  const res = await fetch(url.toString())
+  const res = await fetch(url.toString(), { signal })
   if (!res.ok) {
     throw new Error(`Challenge fetch failed: HTTP ${res.status} from ${webAuthEndpoint}`)
   }
@@ -182,12 +183,14 @@ export async function signChallenge(
 
 export async function submitChallenge(
   webAuthEndpoint: string,
-  signedXdr: string
+  signedXdr: string,
+  signal?: AbortSignal
 ): Promise<{ token: string; expiresAt: Date }> {
   const res = await fetch(webAuthEndpoint, {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify({ transaction: signedXdr }),
+    signal,
   })
 
   if (!res.ok) {
@@ -217,7 +220,8 @@ export async function submitChallenge(
 
 export async function authenticate(
   anchor: ResolvedAnchor,
-  publicKey: string
+  publicKey: string,
+  signal?: AbortSignal
 ): Promise<Sep10Auth> {
   const cached = getCachedJwt(anchor.homeDomain, publicKey)
   if (cached) return cached
@@ -226,9 +230,9 @@ export async function authenticate(
   if (!webAuthEndpoint || !anchor.capabilities.sep10) {
     throw new Error(`Anchor "${anchor.homeDomain}" does not support SEP-10 authentication.`)
   }
-  const { transaction, network_passphrase } = await fetchChallenge(webAuthEndpoint, publicKey)
+  const { transaction, network_passphrase } = await fetchChallenge(webAuthEndpoint, publicKey, signal)
   const signedXdr = await signChallenge(transaction, network_passphrase)
-  const { token: jwt, expiresAt } = await submitChallenge(webAuthEndpoint, signedXdr)
+  const { token: jwt, expiresAt } = await submitChallenge(webAuthEndpoint, signedXdr, signal)
 
   const auth: Sep10Auth = { jwt, anchorDomain: anchor.homeDomain, publicKey, expiresAt }
   setCachedJwt(auth)
