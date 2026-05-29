@@ -271,3 +271,18 @@ export interface KycIframeConfig {
   url: string;
   origin: string;
 }
+
+// ─── Intent schema (re-exported from types/intent.ts) ───────────────────────────
+
+export type {
+  Intent,
+  SignedIntent,
+  DeliveryHint,
+  IntentPreferences,
+  AnchorQuote,
+  UnsignedTransaction,
+  PlanLeg,
+  Plan,
+  Outcome,
+  OutcomeType,
+} from './intent'
