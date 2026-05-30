@@ -19,6 +19,17 @@ export class UserRejectedError extends WalletError {
 }
 
 /**
+ * Thrown when there is a user-side or client error.
+ */
+export class UserError extends WalletError {
+  constructor(message: string) {
+    super(message)
+    this.name = 'UserError'
+  }
+}
+
+
+/**
  * Thrown when there is a network mismatch (e.g. Testnet vs Mainnet)
  * or the horizon server is unreachable.
  */
