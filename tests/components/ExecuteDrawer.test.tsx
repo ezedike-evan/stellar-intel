@@ -21,6 +21,7 @@ vi.mock('@/lib/stellar/sep1', () => ({
 
 vi.mock('@/lib/stellar/anchors', () => ({
   getAnchorById: vi.fn(),
+  getResolvedAnchorById: vi.fn(),
 }))
 
 vi.mock('@/lib/stellar/horizon', () => ({
@@ -40,6 +41,7 @@ const mockOpenWithdrawPopup = vi.mocked(sep24.openWithdrawPopup)
 const mockGetWithdrawTransactionRecord = vi.mocked(sep24.getWithdrawTransactionRecord)
 const mockGetTransferServer = vi.mocked(sep1.getTransferServer)
 const mockGetAnchorById = vi.mocked(anchors.getAnchorById)
+const mockGetResolvedAnchorById = vi.mocked(anchors.getResolvedAnchorById)
 const mockBuildWithdrawPayment = vi.mocked(horizon.buildWithdrawPayment)
 const mockSignAndSubmitPayment = vi.mocked(horizon.signAndSubmitPayment)
 
@@ -66,20 +68,28 @@ const ANCHOR = {
   assetIssuer: 'GA5ZSEJYB37JRC5AVCIA5MOP4RHTM335X2KGX3IHOJAPP5RE34K4KZVN',
 }
 
-const AUTH = {
-  jwt: 'test.jwt.token',
-  anchorDomain: 'cowrie.exchange',
-  publicKey: 'GABCDE',
-  expiresAt: new Date(Date.now() + 86400_000),
+const RESOLVED_ANCHOR = {
+  ...ANCHOR,
+  TRANSFER_SERVER_SEP0024: 'https://transfer.cowrie.exchange',
+  WEB_AUTH_ENDPOINT: 'https://auth.cowrie.exchange',
+  SIGNING_KEY: 'G...',
+  capabilities: { sep10: true, sep24: true, sep38: false, sep12: false },
 }
 
 const PUBLIC_KEY = 'GABCDEFGHIJKLMNOPQRSTUVWXYZ012345678901234567890123456789'
 
+const AUTH = {
+  jwt: 'test.jwt.token',
+  anchorDomain: 'cowrie.exchange',
+  publicKey: PUBLIC_KEY,
+  expiresAt: new Date(Date.now() + 86400_000),
+}
+
 beforeEach(() => {
   vi.clearAllMocks()
   mockGetAnchorById.mockReturnValue(ANCHOR)
+  mockGetResolvedAnchorById.mockResolvedValue(RESOLVED_ANCHOR)
   mockAuthenticate.mockResolvedValue(AUTH)
-  mockGetTransferServer.mockResolvedValue('https://transfer.cowrie.exchange')
   mockInitiateWithdraw.mockResolvedValue({
     type: 'interactive_customer_info_needed',
     url: 'https://anchor.example/kyc',
@@ -126,8 +136,8 @@ describe('ExecuteDrawer', () => {
 
     await waitFor(() => expect(screen.getByText('Transaction submitted')).toBeInTheDocument())
 
-    expect(mockAuthenticate).toHaveBeenCalledWith('cowrie.exchange', PUBLIC_KEY)
-    expect(mockInitiateWithdraw).toHaveBeenCalled()
+    expect(mockAuthenticate).toHaveBeenCalledWith(RESOLVED_ANCHOR, PUBLIC_KEY)
+    expect(mockInitiateWithdraw).toHaveBeenCalledWith(RESOLVED_ANCHOR, expect.anything())
     expect(mockOpenWithdrawPopup).toHaveBeenCalledWith('https://anchor.example/kyc')
     expect(mockBuildWithdrawPayment).toHaveBeenCalled()
     expect(mockSignAndSubmitPayment).toHaveBeenCalled()

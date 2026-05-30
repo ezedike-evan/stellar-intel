@@ -3,8 +3,24 @@ import { initiateWithdraw, Sep24WithdrawError } from '@/lib/stellar/sep24'
 
 const TRANSFER_SERVER = 'https://cowrie.exchange/sep24'
 
+const MOCK_ANCHOR = {
+  id: 'cowrie',
+  name: 'Cowrie',
+  homeDomain: 'cowrie.exchange',
+  corridors: ['usdc-ngn'],
+  assetCode: 'USDC',
+  assetIssuer: 'GA5ZSEJYB37JRC5AVCIA5MOP4RHTM335X2KGX3IHOJAPP5RE34K4KZVN',
+}
+
+const RESOLVED_ANCHOR = {
+  ...MOCK_ANCHOR,
+  TRANSFER_SERVER_SEP0024: TRANSFER_SERVER,
+  WEB_AUTH_ENDPOINT: 'https://cowrie.exchange/auth',
+  SIGNING_KEY: 'G...',
+  capabilities: { sep10: true, sep24: true, sep38: false, sep12: false },
+}
+
 const PARAMS = {
-  transferServer: TRANSFER_SERVER,
   jwt: 'test-jwt',
   assetCode: 'USDC',
   assetIssuer: 'GA5ZSEJYB37JRC5AVCIA5MOP4RHTM335X2KGX3IHOJAPP5RE34K4KZVN',
@@ -29,7 +45,7 @@ describe('initiateWithdraw — POST /transactions/withdraw/interactive', () => {
       }),
     })))
 
-    const result = await initiateWithdraw(PARAMS)
+    const result = await initiateWithdraw(RESOLVED_ANCHOR, PARAMS)
     expect(result.id).toBe('txn-xyz')
     expect(result.url).toBe('https://anchor.io/kyc/session-abc')
     expect(result.type).toBe('interactive_customer_info_needed')
@@ -49,7 +65,7 @@ describe('initiateWithdraw — POST /transactions/withdraw/interactive', () => {
       }
     }))
 
-    await initiateWithdraw(PARAMS)
+    await initiateWithdraw(RESOLVED_ANCHOR, PARAMS)
     expect(body['asset_code']).toBe('USDC')
     expect(body['asset_issuer']).toBe('GA5ZSEJYB37JRC5AVCIA5MOP4RHTM335X2KGX3IHOJAPP5RE34K4KZVN')
     expect(body['amount']).toBe('100')
@@ -70,7 +86,7 @@ describe('initiateWithdraw — POST /transactions/withdraw/interactive', () => {
       }
     }))
 
-    await initiateWithdraw(PARAMS)
+    await initiateWithdraw(RESOLVED_ANCHOR, PARAMS)
     expect(headers['Authorization']).toBe('Bearer test-jwt')
   })
 
@@ -82,7 +98,7 @@ describe('initiateWithdraw — POST /transactions/withdraw/interactive', () => {
       json: async () => anchorBody,
     })))
 
-    const caught = await initiateWithdraw(PARAMS).catch((e: unknown) => e)
+    const caught = await initiateWithdraw(RESOLVED_ANCHOR, PARAMS).catch((e: unknown) => e)
     expect(caught).toBeInstanceOf(Sep24WithdrawError)
     const err = caught as Sep24WithdrawError
     expect(err.status).toBe(422)
@@ -96,7 +112,7 @@ describe('initiateWithdraw — POST /transactions/withdraw/interactive', () => {
       json: async () => ({ error: 'forbidden' }),
     })))
 
-    await expect(initiateWithdraw(PARAMS)).rejects.toThrow(/403/)
+    await expect(initiateWithdraw(RESOLVED_ANCHOR, PARAMS)).rejects.toThrow(/403/)
   })
 
   it('throws when response type is not interactive_customer_info_needed', async () => {
@@ -105,7 +121,7 @@ describe('initiateWithdraw — POST /transactions/withdraw/interactive', () => {
       json: async () => ({ type: 'error', error: 'not supported' }),
     })))
 
-    await expect(initiateWithdraw(PARAMS)).rejects.toThrow(/Unexpected response type/)
+    await expect(initiateWithdraw(RESOLVED_ANCHOR, PARAMS)).rejects.toThrow(/Unexpected response type/)
   })
 
   it('throws when url field is absent from the response', async () => {
@@ -114,6 +130,6 @@ describe('initiateWithdraw — POST /transactions/withdraw/interactive', () => {
       json: async () => ({ type: 'interactive_customer_info_needed', id: 'txn-1' }),
     })))
 
-    await expect(initiateWithdraw(PARAMS)).rejects.toThrow(/"url"/)
+    await expect(initiateWithdraw(RESOLVED_ANCHOR, PARAMS)).rejects.toThrow(/"url"/)
   })
 })

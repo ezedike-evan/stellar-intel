@@ -3,6 +3,20 @@ import { useState, useEffect, useRef } from 'react'
 
 const POSITIVE_DECIMAL_RE = /^\d*\.?\d{0,7}$/
 
+const SUGGESTED_AMOUNTS = [50, 100, 500]
+
+function formatChipLabel(value: number): string {
+  try {
+    return new Intl.NumberFormat('en-US', {
+      style: 'currency',
+      currency: 'USD',
+      maximumFractionDigits: 0,
+    }).format(value)
+  } catch {
+    return `$${value}`
+  }
+}
+
 function validate(raw: string): string | null {
   if (!POSITIVE_DECIMAL_RE.test(raw)) return null
   const n = Number(raw)
@@ -31,6 +45,14 @@ export function AmountInput({ value, onChange, disabled }: AmountInputProps) {
       if (debounceRef.current) clearTimeout(debounceRef.current)
     }
   }, [])
+
+  function handleChipClick(value: number) {
+    const str = String(value)
+    if (debounceRef.current) clearTimeout(debounceRef.current)
+    setRaw(str)
+    setError(null)
+    onChange(str)
+  }
 
   function handleChange(e: React.ChangeEvent<HTMLInputElement>) {
     const input = e.target.value
@@ -82,6 +104,19 @@ export function AmountInput({ value, onChange, disabled }: AmountInputProps) {
         <span className="pointer-events-none absolute inset-y-0 right-3 flex items-center text-sm font-medium text-gray-400">
           USDC
         </span>
+      </div>
+      <div className="mt-2 flex gap-2">
+        {SUGGESTED_AMOUNTS.map((amount) => (
+          <button
+            key={amount}
+            type="button"
+            disabled={disabled}
+            onClick={() => handleChipClick(amount)}
+            className="rounded-md border border-gray-300 bg-white px-3 py-1 text-xs font-medium text-gray-700 transition-colors hover:border-blue-400 hover:bg-blue-50 hover:text-blue-700 disabled:opacity-50 dark:border-gray-600 dark:bg-gray-800 dark:text-gray-300 dark:hover:border-blue-500 dark:hover:bg-blue-950/30 dark:hover:text-blue-400"
+          >
+            {formatChipLabel(amount)}
+          </button>
+        ))}
       </div>
       {error ? (
         <p id="amount-error" role="alert" className="mt-1 text-xs text-red-500">

@@ -5,6 +5,23 @@ import type { AnchorRate } from '@/types'
 
 const TRANSFER_SERVER = 'https://cowrie.exchange/sep24'
 
+const MOCK_ANCHOR = {
+  id: 'cowrie',
+  name: 'Cowrie',
+  homeDomain: 'cowrie.exchange',
+  corridors: ['usdc-ngn'],
+  assetCode: 'USDC',
+  assetIssuer: 'GA5ZSEJYB37JRC5AVCIA5MOP4RHTM335X2KGX3IHOJAPP5RE34K4KZVN',
+}
+
+const RESOLVED_ANCHOR = {
+  ...MOCK_ANCHOR,
+  TRANSFER_SERVER_SEP0024: TRANSFER_SERVER,
+  WEB_AUTH_ENDPOINT: 'https://cowrie.exchange/auth',
+  SIGNING_KEY: 'G...',
+  capabilities: { sep10: true, sep24: true, sep38: false, sep12: false },
+}
+
 beforeEach(() => {
   vi.restoreAllMocks()
   vi.spyOn(sep1, 'getTransferServer').mockResolvedValue(TRANSFER_SERVER)
@@ -82,7 +99,7 @@ describe('fetchAllAnchorFees', () => {
     let callCount = 0
     vi.stubGlobal('fetch', vi.fn(async () => {
       callCount++
-      if (callCount === 1) return { ok: true, json: async () => ({ fee: '2.00' }) }
+      if (callCount === 1) return { ok: true, json: async () => ({ fee: '2.00', exchange_rate: '1580' }) }
       throw new Error('network error')
     }))
 
@@ -128,7 +145,6 @@ describe('computeRateComparison', () => {
 
 describe('initiateWithdraw', () => {
   const params = {
-    transferServer: TRANSFER_SERVER,
     jwt: 'test-jwt',
     assetCode: 'USDC',
     assetIssuer: 'GA5ZSEJYB37JRC5AVCIA5MOP4RHTM335X2KGX3IHOJAPP5RE34K4KZVN',
@@ -146,7 +162,7 @@ describe('initiateWithdraw', () => {
       }
     }))
 
-    await initiateWithdraw(params)
+    await initiateWithdraw(RESOLVED_ANCHOR, params)
     const body = JSON.parse(capturedBody)
     expect(body.asset_code).toBe('USDC')
     expect(body.amount).toBe('100')
@@ -159,7 +175,7 @@ describe('initiateWithdraw', () => {
       json: async () => ({ type: 'error', error: 'not supported' }),
     })))
 
-    await expect(initiateWithdraw(params)).rejects.toThrow(/Unexpected response type/)
+    await expect(initiateWithdraw(RESOLVED_ANCHOR, params)).rejects.toThrow(/Unexpected response type/)
   })
 
   it('throws when url is absent from the response', async () => {
@@ -168,7 +184,7 @@ describe('initiateWithdraw', () => {
       json: async () => ({ type: 'interactive_customer_info_needed', id: 'txn-1' }),
     })))
 
-    await expect(initiateWithdraw(params)).rejects.toThrow(/"url"/)
+    await expect(initiateWithdraw(RESOLVED_ANCHOR, params)).rejects.toThrow(/"url"/)
   })
 })
 

@@ -42,6 +42,7 @@ async function tick(ms: number) {
 describe('resolveToml — retry & typed result', () => {
   beforeEach(() => {
     _clearTomlCache()
+    vi.clearAllMocks()
     vi.useFakeTimers()
   })
 
@@ -128,7 +129,7 @@ describe('resolveToml — retry & typed result', () => {
 
   // ── 4. Missing required field → typed error, not exception ────────────────
 
-  it('returns { ok: false } when TRANSFER_SERVER_SEP0024 is absent', async () => {
+  it('returns { ok: true } but sep24: false when TRANSFER_SERVER_SEP0024 is absent', async () => {
     const mockResolve = await getMockedResolve()
     mockResolve.mockResolvedValueOnce({
       WEB_AUTH_ENDPOINT: 'https://anchor.example.com/auth',
@@ -138,14 +139,14 @@ describe('resolveToml — retry & typed result', () => {
     await tick(0)
     const result = await promise
 
-    expect(result.ok).toBe(false)
-    if (result.ok) throw new Error('type guard')
-    expect(result.error).toMatch(/TRANSFER_SERVER_SEP0024/)
-    // Only one attempt — the field-validation error is not retried
+    expect(result.ok).toBe(true)
+    if (!result.ok) throw new Error('type guard')
+    expect(result.data.capabilities.sep24).toBe(false)
+    expect(result.data.capabilities.sep10).toBe(true)
     expect(mockResolve).toHaveBeenCalledTimes(1)
   })
 
-  it('returns { ok: false } when WEB_AUTH_ENDPOINT is absent', async () => {
+  it('returns { ok: true } but sep10: false when WEB_AUTH_ENDPOINT is absent', async () => {
     const mockResolve = await getMockedResolve()
     mockResolve.mockResolvedValueOnce({
       TRANSFER_SERVER_SEP0024: 'https://anchor.example.com/sep24',
@@ -156,9 +157,10 @@ describe('resolveToml — retry & typed result', () => {
     await tick(0)
     const result = await promise
 
-    expect(result.ok).toBe(false)
-    if (result.ok) throw new Error('type guard')
-    expect(result.error).toMatch(/WEB_AUTH_ENDPOINT/)
+    expect(result.ok).toBe(true)
+    if (!result.ok) throw new Error('type guard')
+    expect(result.data.capabilities.sep10).toBe(false)
+    expect(result.data.capabilities.sep24).toBe(true)
     expect(mockResolve).toHaveBeenCalledTimes(1)
   })
 

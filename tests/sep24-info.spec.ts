@@ -19,6 +19,7 @@ function buildMockInfo() {
 beforeEach(() => {
   vi.restoreAllMocks()
   _clearInfoCache()
+  process.env.TEST_SEP24_INFO = '1'
 })
 
 // ─── getSep24Info ─────────────────────────────────────────────────────────────

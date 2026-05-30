@@ -96,7 +96,7 @@ jobs:
     needs: [anchor-domains, reputation-integrity]
     if: failure()
     steps:
-      - uses: actions/github-script@v7
+      - uses: actions/github-script@v9
         with:
           script: |
             const title = `[nightly] integrity failure — ${new Date().toISOString().slice(0,10)}`;
