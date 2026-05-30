@@ -355,6 +355,98 @@ export async function fetchAllAnchorFees(
 }
 
 /**
+ * Per-corridor solicitation deadline. Anchors that have not responded within
+ * this window are dropped from the comparison rather than blocking it.
+ */
+export const SOLICITOR_DEADLINE_MS = 2_000
+
+/**
+ * Thrown when an anchor's quote solicitation exceeds the configured deadline.
+ */
+export class DeadlineExceededError extends Error {
+  readonly anchorId: string
+  readonly deadlineMs: number
+
+  constructor(anchorId: string, deadlineMs: number) {
+    super(`Anchor "${anchorId}" did not respond within ${deadlineMs}ms deadline`)
+    this.name = 'DeadlineExceededError'
+    this.anchorId = anchorId
+    this.deadlineMs = deadlineMs
+  }
+}
+
+/**
+ * Fans out SEP-24 fee quote requests to all anchors for a corridor concurrently,
+ * enforcing a hard deadline so that slow anchors cannot block fast ones.
+ *
+ * Concurrency model:
+ *  - All anchor fetches are launched simultaneously via Promise.allSettled.
+ *  - Each individual fetch races against a per-anchor deadline timer.
+ *  - Anchors that exceed the deadline contribute a rejected PromiseSettledResult
+ *    (reason: DeadlineExceededError) without preventing other anchors' results.
+ *  - No unhandled promise rejections: Promise.allSettled absorbs every outcome.
+ *
+ * @param amount     Sell amount (string, passed through to the fee endpoint).
+ * @param corridorId Corridor identifier (e.g. 'usdc-ngn').
+ * @param deadlineMs Maximum milliseconds to wait per anchor (default: SOLICITOR_DEADLINE_MS).
+ * @returns          Settled results — fulfilled = valid quote, rejected = failure or timeout.
+ */
+export async function solicitAnchorQuotes(
+  amount: string,
+  corridorId: string,
+  deadlineMs: number = SOLICITOR_DEADLINE_MS
+): Promise<PromiseSettledResult<AnchorRate>[]> {
+  const anchors = getAnchorsByCorridorId(corridorId)
+  const corridor = getCorridorById(corridorId)
+
+  // Fan out: one Promise per anchor, each racing against its own deadline.
+  const racedPromises = anchors.map((anchor): Promise<AnchorRate> => {
+    const fetchPromise = (async (): Promise<AnchorRate> => {
+      const { fee, exchangeRate } = await fetchAnchorFee({
+        anchorDomain: anchor.homeDomain,
+        operation: 'withdraw',
+        assetCode: anchor.assetCode,
+        assetIssuer: anchor.assetIssuer,
+        amount,
+        type: 'bank_account',
+      })
+
+      const feeNum = Number(fee)
+      const amountNum = Number(amount)
+
+      if (exchangeRate <= 0) {
+        throw new AnchorRateError(
+          anchor.id,
+          `${anchor.name} returned a zero or missing exchange rate for ${corridor.to} — rate cannot be derived`
+        )
+      }
+
+      return {
+        anchorId: anchor.id,
+        anchorName: anchor.name,
+        corridorId,
+        fee: feeNum,
+        feeType: 'flat',
+        exchangeRate,
+        totalReceived: computeTotalReceived(amountNum, feeNum, 0, exchangeRate),
+        source: 'sep24-fee' as const,
+        updatedAt: new Date(),
+      }
+    })()
+
+    const deadlinePromise = new Promise<AnchorRate>((_, reject) =>
+      setTimeout(() => reject(new DeadlineExceededError(anchor.id, deadlineMs)), deadlineMs)
+    )
+
+    // Promise.race: whichever settles first wins for this anchor slot.
+    return Promise.race([fetchPromise, deadlinePromise])
+  })
+
+  // Collect all outcomes — fulfilled or rejected — without throwing.
+  return Promise.allSettled(racedPromises)
+}
+
+/**
  * Builds a RateComparison from an array of settled AnchorRate results.
  * Filters out failed fetches and determines the best rate by highest totalReceived.
  */
