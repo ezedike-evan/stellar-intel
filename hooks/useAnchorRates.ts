@@ -4,6 +4,25 @@ import type { ApiRatesResponse, RateComparison } from '@/types';
 
 const RATES_REFRESH_INTERVAL_MS = 30_000;
 
+/**
+ * How long a fetched quote is considered valid before a refresh is needed.
+ * Anchors typically issue quotes valid for 30 seconds.
+ */
+export const QUOTE_VALIDITY_MS = 30_000;
+
+/**
+ * Refresh is triggered when any row has less than this many milliseconds of
+ * validity remaining. Set to 5 000 ms per Issue #087.
+ */
+export const REFRESH_THRESHOLD_MS = 5_000;
+
+/**
+ * How often the watcher polls updatedAt timestamps to check for near-expiry.
+ * Kept at 1 s so the trigger fires within 1 s of the threshold being crossed
+ * without causing excessive re-renders.
+ */
+export const EXPIRY_POLL_INTERVAL_MS = 1_000;
+
 function getVisibilitySnapshot(): boolean {
   return typeof document === 'undefined' || !document.hidden;
 }
@@ -67,6 +86,51 @@ export function useAnchorRates(corridorId: string, amount: string): UseAnchorRat
     }
 
     wasDocumentVisible.current = isDocumentVisible;
+  }, [hasRateQuery, isDocumentVisible, mutate]);
+
+  // ─── Auto-refresh watcher (near-expiry) ──────────────────────────────────────
+  //
+  // Polls every EXPIRY_POLL_INTERVAL_MS. When ANY rate row has less than
+  // REFRESH_THRESHOLD_MS of its QUOTE_VALIDITY_MS window remaining, a refresh is
+  // triggered for the whole corridor. A ref flag prevents concurrent or
+  // back-to-back refresh spam: once a refresh is in-flight the watcher skips
+  // until the data updates. The watcher only runs while the document is visible
+  // so it honours the tab-hidden pause behaviour.
+  const dataRef = useRef<RateComparison | undefined>(data);
+  dataRef.current = data;
+
+  const refreshingRef = useRef(false);
+
+  useEffect(() => {
+    if (!hasRateQuery || !isDocumentVisible) return;
+
+    const intervalId = setInterval(() => {
+      const current = dataRef.current;
+      if (!current || refreshingRef.current) return;
+
+      const now = Date.now();
+      const anyNearExpiry = current.rates.some((rate) => {
+        if (!rate.updatedAt) return false;
+        const age = now - new Date(rate.updatedAt).getTime();
+        const remaining = QUOTE_VALIDITY_MS - age;
+        return remaining < REFRESH_THRESHOLD_MS;
+      });
+
+      if (anyNearExpiry) {
+        refreshingRef.current = true;
+
+        mutate()
+          .catch(() => {
+            // Silently swallow refresh errors — the existing stale data remains
+            // displayed and the next poll cycle will retry.
+          })
+          .finally(() => {
+            refreshingRef.current = false;
+          });
+      }
+    }, EXPIRY_POLL_INTERVAL_MS);
+
+    return () => clearInterval(intervalId);
   }, [hasRateQuery, isDocumentVisible, mutate]);
 
   const refresh = useCallback(async () => {
