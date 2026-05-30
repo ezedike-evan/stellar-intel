@@ -1,227 +1,173 @@
-import { Networks, TransactionBuilder } from '@stellar/stellar-sdk'
-import type { Transaction, FeeBumpTransaction } from '@stellar/stellar-sdk'
-import { getWebAuthEndpoint } from './sep1'
-import type { Sep10Auth } from '@/types'
+import { Keypair, StrKey, xdr } from '@stellar/stellar-sdk';
+import axios, { AxiosInstance } from 'axios';
 
-// ─── Typed errors ─────────────────────────────────────────────────────────────
+// Types
+export interface Sep10AuthResult {
+  jwt: string;
+  expiresAt: Date;
+}
 
-export type ChallengeErrorCode = 'FETCH_FAILED' | 'MISSING_FIELD' | 'WRONG_NETWORK' | 'INVALID_XDR'
+export interface Sep10ChallengeResponse {
+  transaction: string;
+  network_passphrase?: string;
+}
 
-export class ChallengeError extends Error {
-  constructor(
-    message: string,
-    public readonly code: ChallengeErrorCode
-  ) {
-    super(message)
-    this.name = 'ChallengeError'
+export interface Sep10TokenResponse {
+  token: string;
+  expires_in?: number;
+}
+
+// Custom Error Types
+export class Sep10Error extends Error {
+  constructor(message: string) {
+    super(message);
+    this.name = 'Sep10Error';
   }
 }
 
-export class Sep10AuthError extends Error {
-  constructor(
-    message: string,
-    public readonly status: number
-  ) {
-    super(message)
-    this.name = 'Sep10AuthError'
+export class ChallengeError extends Sep10Error {
+  constructor(message: string) {
+    super(`Challenge request failed: ${message}`);
+    this.name = 'ChallengeError';
   }
 }
 
-// ─── Challenge types ──────────────────────────────────────────────────────────
-
-export interface Sep10Challenge {
-  transaction: string
-  network_passphrase: string
-  parsed: Transaction | FeeBumpTransaction
+export class SigningError extends Sep10Error {
+  constructor(message: string) {
+    super(`Failed to sign challenge: ${message}`);
+    this.name = 'SigningError';
+  }
 }
 
-// ─── Helpers ──────────────────────────────────────────────────────────────────
-
-function decodeJwtExp(token: string): number {
-  const parts = token.split('.')
-  if (parts.length !== 3) {
-    throw new Error('Invalid JWT: expected 3 dot-separated segments')
+export class TokenExchangeError extends Sep10Error {
+  constructor(message: string) {
+    super(`Token exchange failed: ${message}`);
+    this.name = 'TokenExchangeError';
   }
-  const base64 = (parts[1] as string).replace(/-/g, '+').replace(/_/g, '/')
-  let payload: Record<string, unknown>
-  try {
-    payload = JSON.parse(atob(base64)) as Record<string, unknown>
-  } catch {
-    throw new Error('JWT payload could not be decoded')
-  }
-  if (typeof payload['exp'] !== 'number') {
-    throw new Error('JWT is missing a numeric "exp" claim')
-  }
-  return payload['exp']
 }
 
-// ─── fetchSep10Challenge ──────────────────────────────────────────────────────
-
-export async function fetchSep10Challenge(
-  webAuthEndpoint: string,
-  publicKey: string,
-  homeDomain: string
-): Promise<Sep10Challenge> {
-  const url = new URL(webAuthEndpoint)
-  url.searchParams.set('account', publicKey)
-  url.searchParams.set('home_domain', homeDomain)
-
-  let res: Response
-  try {
-    res = await fetch(url.toString())
-  } catch (err) {
-    throw new ChallengeError(
-      `Network error fetching challenge from ${webAuthEndpoint}: ${String(err)}`,
-      'FETCH_FAILED'
-    )
+export class InvalidChallengeError extends Sep10Error {
+  constructor(message: string) {
+    super(`Invalid challenge received: ${message}`);
+    this.name = 'InvalidChallengeError';
   }
-
-  if (!res.ok) {
-    throw new ChallengeError(
-      `Challenge fetch failed: HTTP ${res.status} from ${webAuthEndpoint}`,
-      'FETCH_FAILED'
-    )
-  }
-
-  const data = (await res.json()) as Record<string, unknown>
-
-  const transaction = data['transaction']
-  if (!transaction || typeof transaction !== 'string') {
-    throw new ChallengeError(
-      `Missing "transaction" field in challenge response from ${webAuthEndpoint}`,
-      'MISSING_FIELD'
-    )
-  }
-
-  const network_passphrase = data['network_passphrase']
-  if (!network_passphrase || typeof network_passphrase !== 'string') {
-    throw new ChallengeError(
-      `Missing "network_passphrase" field in challenge response from ${webAuthEndpoint}`,
-      'MISSING_FIELD'
-    )
-  }
-
-  if (network_passphrase !== Networks.PUBLIC) {
-    throw new ChallengeError(
-      `Challenge is for wrong network: "${network_passphrase}". Expected Stellar mainnet.`,
-      'WRONG_NETWORK'
-    )
-  }
-
-  let parsed: Transaction | FeeBumpTransaction
-  try {
-    parsed = TransactionBuilder.fromXDR(transaction, network_passphrase)
-  } catch {
-    throw new ChallengeError(
-      `Challenge XDR is not parseable from ${webAuthEndpoint}`,
-      'INVALID_XDR'
-    )
-  }
-
-  return { transaction, network_passphrase, parsed }
 }
-
-// ─── Challenge fetch ──────────────────────────────────────────────────────────
-
-export async function fetchChallenge(
-  webAuthEndpoint: string,
-  publicKey: string
-): Promise<{ transaction: string; network_passphrase: string }> {
-  const url = new URL(webAuthEndpoint)
-  url.searchParams.set('account', publicKey)
-
-  const res = await fetch(url.toString())
-  if (!res.ok) {
-    throw new Error(`Challenge fetch failed: HTTP ${res.status} from ${webAuthEndpoint}`)
-  }
-
-  const data = (await res.json()) as Record<string, unknown>
-
-  const transaction = data['transaction']
-  if (!transaction || typeof transaction !== 'string') {
-    throw new Error(`Missing "transaction" field in challenge response from ${webAuthEndpoint}`)
-  }
-
-  const network_passphrase = data['network_passphrase']
-  if (!network_passphrase || typeof network_passphrase !== 'string') {
-    throw new Error(
-      `Missing "network_passphrase" field in challenge response from ${webAuthEndpoint}`
-    )
-  }
-
-  if (network_passphrase !== Networks.PUBLIC) {
-    throw new Error(
-      `Challenge is for wrong network: "${network_passphrase}". Expected Stellar mainnet.`
-    )
-  }
-
-  return { transaction, network_passphrase }
-}
-
-// ─── Challenge signing ────────────────────────────────────────────────────────
-
-export async function signChallenge(
-  challengeXdr: string,
-  networkPassphrase: string
-): Promise<string> {
-  const { signTransaction } = await import('@stellar/freighter-api')
-  const result = await signTransaction(challengeXdr, { networkPassphrase })
-
-  if (result.error) {
-    throw new Error('User rejected signing')
-  }
-
-  return result.signedTxXdr
-}
-
-// ─── JWT exchange ─────────────────────────────────────────────────────────────
-
-export async function submitChallenge(
-  webAuthEndpoint: string,
-  signedXdr: string
-): Promise<{ token: string; expiresAt: Date }> {
-  const res = await fetch(webAuthEndpoint, {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ transaction: signedXdr }),
-  })
-
-  if (!res.ok) {
-    throw new Sep10AuthError(
-      `JWT exchange failed: HTTP ${res.status} from ${webAuthEndpoint}`,
-      res.status
-    )
-  }
-
-  const data = (await res.json()) as Record<string, unknown>
-  const token = data['token']
-
-  if (!token || typeof token !== 'string') {
-    throw new Error(`Missing "token" field in JWT response from ${webAuthEndpoint}`)
-  }
-
-  const exp = decodeJwtExp(token)
-  const nowSeconds = Math.floor(Date.now() / 1000)
-  if (exp <= nowSeconds) {
-    throw new Error(`JWT has already expired (exp: ${exp})`)
-  }
-
-  return { token, expiresAt: new Date(exp * 1000) }
-}
-
-// ─── Full auth orchestrator ───────────────────────────────────────────────────
 
 export async function authenticate(
-  anchorDomain: string,
-  publicKey: string
-): Promise<Sep10Auth> {
-  const webAuthEndpoint = await getWebAuthEndpoint(anchorDomain)
-  if (!webAuthEndpoint) {
-    throw new Error(`Anchor "${anchorDomain}" does not support SEP-10 authentication.`)
+  anchorUrl: string,
+  publicKey: string,
+  secretKey: string,
+  options?: {
+    timeout?: number;
+    networkPassphrase?: string;
+    httpClient?: AxiosInstance;
   }
-  const { transaction, network_passphrase } = await fetchChallenge(webAuthEndpoint, publicKey)
-  const signedXdr = await signChallenge(transaction, network_passphrase)
-  const { token: jwt, expiresAt } = await submitChallenge(webAuthEndpoint, signedXdr)
+): Promise<Sep10AuthResult> {
+  const timeout = options?.timeout || 10000;
+  const httpClient = options?.httpClient || axios.create({ timeout });
 
-  return { jwt, anchorDomain, publicKey, expiresAt }
+  // Step 1: Request challenge from anchor
+  let challengeResponse: Sep10ChallengeResponse;
+  try {
+    const response = await httpClient.get(`${anchorUrl}/auth`, {
+      params: { account: publicKey },
+      timeout,
+    });
+    challengeResponse = response.data;
+  } catch (error) {
+    if (axios.isAxiosError(error)) {
+      throw new ChallengeError(
+        error.response?.data?.message || error.message || 'Network error'
+      );
+    }
+    throw new ChallengeError(String(error));
+  }
+
+  // Step 2: Validate challenge
+  if (!challengeResponse.transaction) {
+    throw new InvalidChallengeError('No transaction envelope in challenge');
+  }
+
+  // Step 3: Decode and verify the challenge transaction
+  let transaction: xdr.TransactionEnvelope;
+  try {
+    const envelopeXdr = challengeResponse.transaction;
+    transaction = xdr.TransactionEnvelope.fromXDR(envelopeXdr, 'base64');
+  } catch (error) {
+    throw new InvalidChallengeError('Failed to decode transaction XDR');
+  }
+
+  // Step 4: Sign the challenge with the provided secret key
+  let signedTransaction: string;
+  try {
+    const keypair = Keypair.fromSecret(secretKey);
+    const sourceAccount = transaction.v1().tx().sourceAccount();
+    
+    const accountId = StrKey.encodeEd25519PublicKey(sourceAccount.ed25519());
+    if (accountId !== publicKey) {
+      throw new InvalidChallengeError('Challenge is not for the provided account');
+    }
+
+    const signature = keypair.signDecorated(transaction.v1().tx().hash());
+    const signatures = transaction.v1().signatures();
+    signatures.push(signature);
+    
+    const newTx = new xdr.TransactionEnvelope.envelopeTypeTx(
+      new xdr.TransactionV1Envelope({
+        tx: transaction.v1().tx(),
+        signatures: signatures,
+      })
+    );
+    
+    signedTransaction = newTx.toXDR('base64');
+  } catch (error) {
+    if (error instanceof InvalidChallengeError) {
+      throw error;
+    }
+    throw new SigningError(error instanceof Error ? error.message : 'Unknown signing error');
+  }
+
+  // Step 5: Exchange signed challenge for JWT token
+  let tokenResponse: Sep10TokenResponse;
+  try {
+    const response = await httpClient.post(
+      `${anchorUrl}/auth`,
+      { transaction: signedTransaction },
+      { headers: { 'Content-Type': 'application/json' }, timeout }
+    );
+    tokenResponse = response.data;
+  } catch (error) {
+    if (axios.isAxiosError(error)) {
+      throw new TokenExchangeError(error.response?.data?.message || error.message || 'Token exchange failed');
+    }
+    throw new TokenExchangeError(String(error));
+  }
+
+  if (!tokenResponse.token) {
+    throw new TokenExchangeError('No token received from anchor');
+  }
+
+  const expiresIn = tokenResponse.expires_in || 3600;
+  const expiresAt = new Date(Date.now() + expiresIn * 1000);
+
+  return { jwt: tokenResponse.token, expiresAt };
+}
+
+export async function validateToken(
+  jwt: string,
+  anchorUrl: string,
+  options?: { timeout?: number; httpClient?: AxiosInstance }
+): Promise<boolean> {
+  const timeout = options?.timeout || 5000;
+  const httpClient = options?.httpClient || axios.create({ timeout });
+
+  try {
+    const response = await httpClient.get(`${anchorUrl}/auth/validate`, {
+      headers: { Authorization: `Bearer ${jwt}` },
+      timeout,
+    });
+    return response.status === 200 && response.data?.valid === true;
+  } catch {
+    return false;
+  }
 }
