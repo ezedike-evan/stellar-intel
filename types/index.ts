@@ -71,6 +71,12 @@ export interface Sep1TomlData {
   WEB_AUTH_ENDPOINT: string | null;
   SIGNING_KEY: string | null;
   NETWORK_PASSPHRASE: string | null;
+  /** SEP-1 [DOCUMENTATION]: organization website (https). */
+  ORG_URL: string | null;
+  /** SEP-1 [DOCUMENTATION]: user support email. */
+  ORG_SUPPORT_EMAIL: string | null;
+  /** Optional non-standard support page URL some anchors publish. */
+  ORG_SUPPORT_URL: string | null;
   CURRENCIES: Array<{ code: string; issuer?: string }>;
   capabilities: AnchorCapabilities;
 }

@@ -29,11 +29,11 @@ export default function OfframpPage() {
   const [amount, setAmount] = useState('100')
   const [selectedRate, setSelectedRate] = useState<AnchorRate | null>(null)
 
-  // Post-execute status tracking
   const [trackingTransactionId, setTrackingTransactionId] = useState<string | null>(null)
   const [trackingTransferServer, setTrackingTransferServer] = useState<string | null>(null)
   const [trackingJwt, setTrackingJwt] = useState<string | null>(null)
   const [trackingNonce, setTrackingNonce] = useState<string | null>(null)
+  const [trackingAnchorHomeDomain, setTrackingAnchorHomeDomain] = useState<string | null>(null)
 
   const { isConnected, publicKey, network } = useWallet()
   const { rates, isLoading, error, mutate, refreshInflight } = useAnchorRates(corridorId, amount)
@@ -44,7 +44,6 @@ export default function OfframpPage() {
     trackingJwt
   )
 
-  // Rehydrate tracking state from URL + sessionStorage on mount
   useEffect(() => {
     const params = parseTrackingParams(searchParams.toString())
     if (!params) return
@@ -54,7 +53,7 @@ export default function OfframpPage() {
     setTrackingTransferServer(params.transferServer)
     setTrackingJwt(jwt)
     setTrackingNonce(params.nonce)
-  // eslint-disable-next-line react-hooks/exhaustive-deps
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [])
 
   const handleSelectAnchor = useCallback((rate: AnchorRate) => {
@@ -66,7 +65,7 @@ export default function OfframpPage() {
   }, [])
 
   const handleExecuteStarted = useCallback(
-    (transactionId: string, transferServer: string, jwt: string) => {
+    (transactionId: string, transferServer: string, jwt: string, anchorHomeDomain: string) => {
       const nonce = generateNonce()
       saveJwtToSession(nonce, jwt)
       router.replace(`?${buildTrackingSearch({ transactionId, transferServer, nonce })}`)
@@ -74,11 +73,11 @@ export default function OfframpPage() {
       setTrackingTransferServer(transferServer)
       setTrackingJwt(jwt)
       setTrackingNonce(nonce)
+      setTrackingAnchorHomeDomain(anchorHomeDomain)
     },
     [router]
   )
 
-  // Clear URL + sessionStorage once a terminal state is confirmed
   useEffect(() => {
     if (withdrawStatus.status && TERMINAL_STATES.has(withdrawStatus.status) && trackingNonce) {
       clearJwtFromSession(trackingNonce)
@@ -86,27 +85,8 @@ export default function OfframpPage() {
     }
   }, [withdrawStatus.status, trackingNonce, router])
 
-  // Reputation writer hook: trigger when transaction reaches terminal state
-  useEffect(() => {
-    if (withdrawStatus.status && TERMINAL_STATES.has(withdrawStatus.status)) {
-      console.log('[Reputation] Transaction terminal state reached:', {
-        transactionId: trackingTransactionId,
-        status: withdrawStatus.status,
-        amountIn: withdrawStatus.amountIn,
-        amountInAsset: withdrawStatus.amountInAsset,
-        amountOut: withdrawStatus.amountOut,
-        amountOutAsset: withdrawStatus.amountOutAsset,
-        amountFee: withdrawStatus.amountFee,
-        stellarTransactionId: withdrawStatus.stellarTransactionId,
-        externalTransactionId: withdrawStatus.externalTransactionId,
-        timestamp: new Date().toISOString(),
-      })
-    }
-  }, [withdrawStatus.status, withdrawStatus.amountIn, withdrawStatus.amountOut, withdrawStatus.amountFee, withdrawStatus.stellarTransactionId, withdrawStatus.externalTransactionId, trackingTransactionId])
-
   return (
     <div className="mx-auto max-w-4xl space-y-6 px-4 py-8">
-      {/* Page header */}
       <div className="flex items-start justify-between">
         <div>
           <h1 className="text-2xl font-bold text-gray-900 dark:text-white">Off-ramp Comparator</h1>
@@ -117,20 +97,17 @@ export default function OfframpPage() {
         <WalletButton />
       </div>
 
-      {/* Inputs row */}
       <div className="grid grid-cols-1 gap-4 rounded-xl border border-gray-200 bg-gray-50 p-4 dark:border-gray-700 dark:bg-gray-800/50 sm:grid-cols-2">
         <CorridorSelector value={corridorId} onChange={setCorridorId} />
         <AmountInput value={amount} onChange={setAmount} />
       </div>
 
-      {/* Not connected notice */}
       {!isConnected && (
         <div className="rounded-xl border border-yellow-200 bg-yellow-50 px-4 py-3 text-sm text-yellow-800 dark:border-yellow-800/40 dark:bg-yellow-950/20 dark:text-yellow-300">
           Connect your Freighter wallet to execute an off-ramp.
         </div>
       )}
 
-      {/* Rate table */}
       <div>
         <div className="mb-3 flex items-center justify-between">
           <h2 className="text-sm font-semibold text-gray-700 dark:text-gray-300">
@@ -157,10 +134,10 @@ export default function OfframpPage() {
         />
       </div>
 
-      {/* Status tracker — shown after execute */}
       {trackingTransactionId && (
         <StatusTracker
           transactionId={trackingTransactionId}
+          {...(trackingAnchorHomeDomain ? { anchorHomeDomain: trackingAnchorHomeDomain } : {})}
           status={withdrawStatus.status}
           amountIn={withdrawStatus.amountIn}
           amountInAsset={withdrawStatus.amountInAsset}
@@ -170,12 +147,12 @@ export default function OfframpPage() {
           currencyCode={corridorId.split('-')[1]?.toUpperCase() ?? 'USD'}
           stellarTransactionId={withdrawStatus.stellarTransactionId}
           externalTransactionId={withdrawStatus.externalTransactionId}
+          refunds={withdrawStatus.refunds}
           isLoading={withdrawStatus.isLoading}
           error={withdrawStatus.error}
         />
       )}
 
-      {/* Execute drawer */}
       <ExecuteDrawer
         rate={selectedRate}
         amount={amount}
