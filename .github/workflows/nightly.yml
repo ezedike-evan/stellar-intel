@@ -27,13 +27,12 @@ jobs:
       - name: Resolve every anchor .well-known/stellar.toml
         id: probe
         run: |
-          # Extract anchor domains from constants/index.ts so we do not drift
-          # from the app's source of truth.
+          # Extract anchor home domains from constants/anchors.ts — the single
+          # source of truth for anchor definitions (uses homeDomain: field).
           mapfile -t DOMAINS < <(node -e "
-            const path = require('path');
             const fs = require('fs');
-            const src = fs.readFileSync('constants/index.ts', 'utf8');
-            const re = /domain:\s*['\"]([^'\"]+)['\"]/g;
+            const src = fs.readFileSync('constants/anchors.ts', 'utf8');
+            const re = /homeDomain:\s*['\"]([^'\"]+)['\"]/g;
             const seen = new Set();
             let m;
             while ((m = re.exec(src))) seen.add(m[1]);
