@@ -1,5 +1,5 @@
 'use client'
-import { CORRIDORS } from '@/lib/stellar/anchors'
+import { CORRIDORS } from '@/constants/anchors'
 
 const COUNTRY_FLAGS: Record<string, string> = {
   NG: '🇳🇬',

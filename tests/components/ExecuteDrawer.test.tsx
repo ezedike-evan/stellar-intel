@@ -21,6 +21,7 @@ vi.mock('@/lib/stellar/sep1', () => ({
 
 vi.mock('@/lib/stellar/anchors', () => ({
   getAnchorById: vi.fn(),
+  getResolvedAnchorById: vi.fn(),
 }))
 
 vi.mock('@/lib/stellar/horizon', () => ({
@@ -40,6 +41,7 @@ const mockOpenWithdrawPopup = vi.mocked(sep24.openWithdrawPopup)
 const mockGetWithdrawTransactionRecord = vi.mocked(sep24.getWithdrawTransactionRecord)
 const mockGetTransferServer = vi.mocked(sep1.getTransferServer)
 const mockGetAnchorById = vi.mocked(anchors.getAnchorById)
+const mockGetResolvedAnchorById = vi.mocked(anchors.getResolvedAnchorById)
 const mockBuildWithdrawPayment = vi.mocked(horizon.buildWithdrawPayment)
 const mockSignAndSubmitPayment = vi.mocked(horizon.signAndSubmitPayment)
 
@@ -53,6 +55,7 @@ const RATE: AnchorRate = {
   feeType: 'flat',
   exchangeRate: 1580,
   totalReceived: 154840,
+  source: 'sep24-fee' as const,
   updatedAt: new Date(),
 }
 
@@ -65,20 +68,28 @@ const ANCHOR = {
   assetIssuer: 'GA5ZSEJYB37JRC5AVCIA5MOP4RHTM335X2KGX3IHOJAPP5RE34K4KZVN',
 }
 
-const AUTH = {
-  jwt: 'test.jwt.token',
-  anchorDomain: 'cowrie.exchange',
-  publicKey: 'GABCDE',
-  expiresAt: new Date(Date.now() + 86400_000),
+const RESOLVED_ANCHOR = {
+  ...ANCHOR,
+  TRANSFER_SERVER_SEP0024: 'https://transfer.cowrie.exchange',
+  WEB_AUTH_ENDPOINT: 'https://auth.cowrie.exchange',
+  SIGNING_KEY: 'G...',
+  capabilities: { sep10: true, sep24: true, sep38: false, sep12: false },
 }
 
 const PUBLIC_KEY = 'GABCDEFGHIJKLMNOPQRSTUVWXYZ012345678901234567890123456789'
 
+const AUTH = {
+  jwt: 'test.jwt.token',
+  anchorDomain: 'cowrie.exchange',
+  publicKey: PUBLIC_KEY,
+  expiresAt: new Date(Date.now() + 86400_000),
+}
+
 beforeEach(() => {
   vi.clearAllMocks()
   mockGetAnchorById.mockReturnValue(ANCHOR)
+  mockGetResolvedAnchorById.mockResolvedValue(RESOLVED_ANCHOR)
   mockAuthenticate.mockResolvedValue(AUTH)
-  mockGetTransferServer.mockResolvedValue('https://transfer.cowrie.exchange')
   mockInitiateWithdraw.mockResolvedValue({
     type: 'interactive_customer_info_needed',
     url: 'https://anchor.example/kyc',
@@ -99,7 +110,7 @@ beforeEach(() => {
 describe('ExecuteDrawer', () => {
   it('renders the dialog shell but no anchor name when rate is null', () => {
     render(
-      <ExecuteDrawer rate={null} amount="100" publicKey={PUBLIC_KEY} onClose={vi.fn()} />
+      <ExecuteDrawer rate={null} amount="100" publicKey={PUBLIC_KEY} onClose={vi.fn()} onExecuteStarted={vi.fn()} />
     )
     expect(screen.queryByRole('dialog')).toBeInTheDocument()
     // No anchor-specific content should appear
@@ -109,7 +120,7 @@ describe('ExecuteDrawer', () => {
 
   it('shows the anchor name and transaction summary when a rate is provided', () => {
     render(
-      <ExecuteDrawer rate={RATE} amount="100" publicKey={PUBLIC_KEY} onClose={vi.fn()} />
+      <ExecuteDrawer rate={RATE} amount="100" publicKey={PUBLIC_KEY} onClose={vi.fn()} onExecuteStarted={vi.fn()} />
     )
     expect(screen.getByText(/Cowrie/)).toBeInTheDocument()
     expect(screen.getByText('100 USDC')).toBeInTheDocument()
@@ -118,15 +129,15 @@ describe('ExecuteDrawer', () => {
 
   it('runs through the full happy path and shows the tx hash', async () => {
     render(
-      <ExecuteDrawer rate={RATE} amount="100" publicKey={PUBLIC_KEY} onClose={vi.fn()} />
+      <ExecuteDrawer rate={RATE} amount="100" publicKey={PUBLIC_KEY} onClose={vi.fn()} onExecuteStarted={vi.fn()} />
     )
 
     fireEvent.click(screen.getByText('Start Off-ramp'))
 
     await waitFor(() => expect(screen.getByText('Transaction submitted')).toBeInTheDocument())
 
-    expect(mockAuthenticate).toHaveBeenCalledWith('cowrie.exchange', PUBLIC_KEY)
-    expect(mockInitiateWithdraw).toHaveBeenCalled()
+    expect(mockAuthenticate).toHaveBeenCalledWith(RESOLVED_ANCHOR, PUBLIC_KEY)
+    expect(mockInitiateWithdraw).toHaveBeenCalledWith(RESOLVED_ANCHOR, expect.anything())
     expect(mockOpenWithdrawPopup).toHaveBeenCalledWith('https://anchor.example/kyc')
     expect(mockBuildWithdrawPayment).toHaveBeenCalled()
     expect(mockSignAndSubmitPayment).toHaveBeenCalled()
@@ -137,7 +148,7 @@ describe('ExecuteDrawer', () => {
     mockAuthenticate.mockRejectedValue(new Error('SEP-10 challenge failed'))
 
     render(
-      <ExecuteDrawer rate={RATE} amount="100" publicKey={PUBLIC_KEY} onClose={vi.fn()} />
+      <ExecuteDrawer rate={RATE} amount="100" publicKey={PUBLIC_KEY} onClose={vi.fn()} onExecuteStarted={vi.fn()} />
     )
 
     fireEvent.click(screen.getByText('Start Off-ramp'))
@@ -150,7 +161,7 @@ describe('ExecuteDrawer', () => {
     mockOpenWithdrawPopup.mockRejectedValue(new Error('User cancelled the transaction'))
 
     render(
-      <ExecuteDrawer rate={RATE} amount="100" publicKey={PUBLIC_KEY} onClose={vi.fn()} />
+      <ExecuteDrawer rate={RATE} amount="100" publicKey={PUBLIC_KEY} onClose={vi.fn()} onExecuteStarted={vi.fn()} />
     )
 
     fireEvent.click(screen.getByText('Start Off-ramp'))
@@ -163,7 +174,7 @@ describe('ExecuteDrawer', () => {
   it('calls onClose when the X button is clicked in idle state', () => {
     const onClose = vi.fn()
     render(
-      <ExecuteDrawer rate={RATE} amount="100" publicKey={PUBLIC_KEY} onClose={onClose} />
+      <ExecuteDrawer rate={RATE} amount="100" publicKey={PUBLIC_KEY} onClose={onClose} onExecuteStarted={vi.fn()} />
     )
     fireEvent.click(screen.getByRole('button', { name: 'Close' }))
     expect(onClose).toHaveBeenCalledOnce()

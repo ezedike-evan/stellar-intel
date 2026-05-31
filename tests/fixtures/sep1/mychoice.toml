@@ -1,0 +1,3 @@
+TRANSFER_SERVER_SEP0024="https://api.mychoice.io/sep24"
+WEB_AUTH_ENDPOINT="https://api.mychoice.io/auth"
+SIGNING_KEY="GAMYCHOICE"

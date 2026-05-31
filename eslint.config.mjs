@@ -17,6 +17,18 @@ const eslintConfig = defineConfig([
       'no-console': 'warn',
       'no-unused-vars': 'error',
       '@typescript-eslint/no-explicit-any': 'error',
+      'no-restricted-imports': [
+        'error',
+        {
+          patterns: [
+            {
+              group: ['**/estimatedRates', '**/estimatedRates.ts'],
+              message:
+                'Estimated rates are banned (#005). Show source: "unavailable" with null fields instead. See lib/stellar/estimatedRates.ts for context.',
+            },
+          ],
+        },
+      ],
     },
   },
   // Override default ignores of eslint-config-next.

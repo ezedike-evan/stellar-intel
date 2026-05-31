@@ -3,17 +3,21 @@ import { render, screen, fireEvent } from '@testing-library/react'
 import { AmountInput } from '@/components/ui/AmountInput'
 
 describe('AmountInput', () => {
-  it('calls onChange with the typed value', () => {
+  it('calls onChange with the typed value', async () => {
+    vi.useFakeTimers()
     const onChange = vi.fn()
     render(<AmountInput value="" onChange={onChange} />)
-    fireEvent.change(screen.getByRole('spinbutton'), { target: { value: '100' } })
+    fireEvent.change(screen.getByRole('textbox'), { target: { value: '100' } })
+    
+    vi.advanceTimersByTime(250)
     expect(onChange).toHaveBeenCalledWith('100')
+    vi.useRealTimers()
   })
 
   it('does not call onChange for negative values', () => {
     const onChange = vi.fn()
     render(<AmountInput value="" onChange={onChange} />)
-    fireEvent.change(screen.getByRole('spinbutton'), { target: { value: '-10' } })
+    fireEvent.change(screen.getByRole('textbox'), { target: { value: '-10' } })
     expect(onChange).not.toHaveBeenCalled()
   })
 

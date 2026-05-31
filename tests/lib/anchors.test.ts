@@ -32,6 +32,7 @@ describe('ANCHORS', () => {
     expect(cowrie.corridors).toEqual(['usdc-ngn'])
   })
 
+
   it('Anclap covers usdc-ars and usdc-pen', () => {
     const anclap = ANCHORS.find((a) => a.id === 'anclap')!
     expect(anclap.corridors).toContain('usdc-ars')
@@ -47,7 +48,15 @@ describe('CORRIDORS', () => {
   it('contains the expected corridor IDs', () => {
     const ids = CORRIDORS.map((c) => c.id)
     expect(ids).toEqual(
-      expect.arrayContaining(['usdc-ngn', 'usdc-kes', 'usdc-ghs', 'usdc-mxn', 'usdc-brl', 'usdc-ars', 'usdc-pen'])
+      expect.arrayContaining([
+        'usdc-ngn',
+        'usdc-kes',
+        'usdc-ghs',
+        'usdc-mxn',
+        'usdc-brl',
+        'usdc-ars',
+        'usdc-pen',
+      ])
     )
   })
 })
@@ -60,6 +69,7 @@ describe('ANCHOR_HOME_DOMAINS', () => {
   it('maps cowrie to cowrie.exchange', () => {
     expect(ANCHOR_HOME_DOMAINS['cowrie']).toBe('cowrie.exchange')
   })
+
 
   it('maps anclap to anclap.com', () => {
     expect(ANCHOR_HOME_DOMAINS['anclap']).toBe('anclap.com')
@@ -93,22 +103,22 @@ describe('getAnchorsByCorridorId', () => {
     expect(ids).toHaveLength(2)
   })
 
+  it('returns MoneyGram for usdc-kes', () => {
+    const anchors = getAnchorsByCorridorId('usdc-kes')
+    const ids = anchors.map((a) => a.id)
+    expect(ids).toEqual(['moneygram'])
+  })
+
   it('returns only MoneyGram for usdc-mxn', () => {
     const anchors = getAnchorsByCorridorId('usdc-mxn')
     expect(anchors).toHaveLength(1)
-    expect(anchors[0].id).toBe('moneygram')
-  })
-
-  it('returns only MoneyGram for usdc-kes', () => {
-    const anchors = getAnchorsByCorridorId('usdc-kes')
-    expect(anchors).toHaveLength(1)
-    expect(anchors[0].id).toBe('moneygram')
+    expect(anchors[0]?.id).toBe('moneygram')
   })
 
   it('returns only Anclap for usdc-ars', () => {
     const anchors = getAnchorsByCorridorId('usdc-ars')
     expect(anchors).toHaveLength(1)
-    expect(anchors[0].id).toBe('anclap')
+    expect(anchors[0]?.id).toBe('anclap')
   })
 
   it('returns an empty array for an unknown corridor', () => {

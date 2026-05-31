@@ -11,6 +11,7 @@ const makeRate = (anchorId: string, totalReceived: number): AnchorRate => ({
   feeType: 'flat',
   exchangeRate: 1580,
   totalReceived,
+  source: 'sep24-fee' as const,
   updatedAt: new Date(),
 })
 

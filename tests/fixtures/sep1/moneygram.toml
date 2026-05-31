@@ -1,0 +1,3 @@
+TRANSFER_SERVER_SEP0024="https://api.stellar.moneygram.com/auth/sep24"
+WEB_AUTH_ENDPOINT="https://api.stellar.moneygram.com/auth/openid"
+SIGNING_KEY="GAMONEYGRAM"

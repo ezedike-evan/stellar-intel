@@ -1,0 +1,18 @@
+#!/usr/bin/env sh
+# Stellar Intel — pre-push hook.
+# Mirrors the CI check job: format, lint, typecheck, tests.
+# Fix failures locally before pushing — do not use --no-verify to bypass this.
+
+set -e
+
+echo "→ Prettier (format:check)"
+npm run format:check
+
+echo "→ ESLint (zero warnings)"
+npm run lint
+
+echo "→ TypeScript"
+npm run typecheck
+
+echo "→ Unit tests"
+npm run test
