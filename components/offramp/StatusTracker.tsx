@@ -3,6 +3,7 @@ import type { WithdrawStatusValue, Sep24Transaction } from '@/types';
 import { formatDeliveredAmount } from '@/lib/format';
 import { Timeline } from './Timeline';
 import { STELLAR_EXPERT_URL } from '@/constants';
+import { CopyButton } from '@/components/ui/CopyButton';
 
 interface StatusTrackerProps {
   transactionId: string;
@@ -99,7 +100,10 @@ export function StatusTracker({
           <h3 className="text-sm font-semibold text-gray-900 dark:text-white">
             Transaction Status
           </h3>
-          <p className="mt-0.5 font-mono text-xs text-gray-400">{transactionId}</p>
+          <div className="mt-0.5 flex items-center gap-2">
+            <p className="font-mono text-xs text-gray-400">{transactionId}</p>
+            <CopyButton text={transactionId} />
+          </div>
         </div>
         {!isTerminal && (
           <span className="flex items-center gap-1 text-xs text-gray-400">
