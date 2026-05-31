@@ -129,6 +129,24 @@ export interface WithdrawStatus {
   stellarTransactionId?: string
 }
 
+// ─── SEP-38 ───────────────────────────────────────────────────────────────────
+
+/** A firm quote from an anchor for asset conversion (SEP-38). */
+export interface Sep38Quote {
+  id: string
+  anchorDomain: string
+  anchorId: string
+  sellAsset: string // e.g. 'USDC:GA5ZSEJYB37JRC5AVCIA5MOP4RHTM335X2KGX3IHOJAPP5RE34K4KZVN'
+  buyAsset: string // e.g. 'NGN:stellar_anchor_issuer'
+  sellAmount: string
+  buyAmount: string
+  exchangeRate: number // local currency units per 1 USDC
+  fee: number // fee in USDC
+  totalReceived: number // computed: (sellAmount - fee) * exchangeRate
+  expiresAt: Date // ISO 8601 timestamp
+  createdAt: Date
+}
+
 // ─── API ──────────────────────────────────────────────────────────────────────
 
 /** Shape returned by GET /api/rates. */
