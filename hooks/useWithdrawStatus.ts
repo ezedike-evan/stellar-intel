@@ -3,9 +3,13 @@ import type { Sep24Transaction, WithdrawStatusValue } from '@/types'
 
 const TERMINAL_STATES: WithdrawStatusValue[] = ['completed', 'error', 'refunded', 'no_market', 'too_small', 'too_large']
 
-async function fetcher([transferServer, transactionId, jwt]: [string, string, string]): Promise<Sep24Transaction> {
+async function fetcher(
+  [transferServer, transactionId, jwt]: [string, string, string],
+  { signal }: { signal?: AbortSignal } = {}
+): Promise<Sep24Transaction> {
   const res = await fetch(`${transferServer}/transaction?id=${transactionId}`, {
     headers: { Authorization: `Bearer ${jwt}` },
+    signal,
   })
 
   if (!res.ok) {

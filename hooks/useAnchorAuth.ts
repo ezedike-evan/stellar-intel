@@ -62,7 +62,7 @@ export function useAnchorAuth(anchorDomain: string | null, publicKey: string | n
     setError(null)
 
     try {
-      const auth: Sep10Auth = await authenticate(anchorDomain, publicKey)
+      const auth: Sep10Auth = await authenticate(anchorDomain, publicKey, signal)
 
       // Check if request was cancelled
       if (signal.aborted) {

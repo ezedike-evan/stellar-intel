@@ -1,189 +1,151 @@
-import { authenticate, invalidateSep10Token } from './sep10'
-import { parseSepErrorBody } from './errors'
-import type { ResolvedAnchor } from '@/types'
+import { parseSepErrorBody } from './errors';
 
-// ─── Request / response types ──────────────────────────────────────────────────
+const PRICE_PATH = '/price';
 
-/** Parameters for a SEP-38 firm quote (POST /quote). */
-export interface Sep38FirmQuoteRequest {
-  /** Asset the user is selling, in SEP-38 form (e.g. "stellar:USDC:G..."). */
-  sellAsset: string
-  /** Asset the user wants to buy, in SEP-38 form (e.g. "iso4217:NGN"). */
-  buyAsset: string
-  /** Amount of sellAsset. Mutually exclusive with buyAmount. */
-  sellAmount?: string
-  /** Amount of buyAsset. Mutually exclusive with sellAmount. */
-  buyAmount?: string
-  /** Flow the quote will be used in. Defaults to the anchor's choice when omitted. */
-  context?: 'sep6' | 'sep24' | 'sep31'
-  sellDeliveryMethod?: string
-  buyDeliveryMethod?: string
-  countryCode?: string
-  /** ISO-8601 timestamp the quote must remain valid until. */
-  expireAfter?: string
+export interface Sep38PriceParams {
+  quoteServer: string;
+  sell_asset: string;
+  buy_asset: string;
+  sell_amount: string;
+  buy_delivery_method?: string;
+  context: string;
 }
 
-/** Fee breakdown attached to a firm quote. */
+export interface Sep38FeeDetail {
+  name: string;
+  amount: string;
+  description?: string;
+}
+
 export interface Sep38Fee {
-  total: string
-  asset: string
-  details?: Array<{ name: string; amount: string; description?: string }>
+  total: string;
+  asset: string;
+  details?: Sep38FeeDetail[];
 }
 
-/** A firm quote issued by an anchor's SEP-38 quote server. */
-export interface Sep38FirmQuote {
-  id: string
-  expiresAt: Date
-  price: string
-  totalPrice: string
-  sellAsset: string
-  sellAmount: string
-  buyAsset: string
-  buyAmount: string
-  fee?: Sep38Fee
+export interface Sep38PriceResponse {
+  price: string;
+  sell_amount: string;
+  buy_amount: string;
+  total_price?: string;
+  fee?: Sep38Fee;
 }
 
-// ─── Helpers ────────────────────────────────────────────────────────────────────
-
-function getQuoteServer(anchor: ResolvedAnchor): string {
-  const server = anchor.ANCHOR_QUOTE_SERVER
-  if (!server || !anchor.capabilities.sep38) {
-    throw new Error(`Anchor "${anchor.homeDomain}" does not support SEP-38 firm quotes.`)
+function assertNonEmpty(value: string, fieldName: keyof Sep38PriceParams): void {
+  if (value.trim().length === 0) {
+    throw new Error(`SEP-38 /price requires a non-empty "${fieldName}"`);
   }
-  return server.replace(/\/+$/, '')
 }
 
-async function readErrorBody(res: Response): Promise<unknown> {
-  return typeof res.json === 'function' ? await res.json().catch(() => null) : null
+function isRecord(value: unknown): value is Record<string, unknown> {
+  return typeof value === 'object' && value !== null && !Array.isArray(value);
+}
+
+function getRequiredString(data: Record<string, unknown>, fieldName: string): string {
+  const value = data[fieldName];
+  if (typeof value !== 'string' || value.trim().length === 0) {
+    throw new Error(`Invalid SEP-38 /price response: missing "${fieldName}"`);
+  }
+  return value;
+}
+
+function parseFee(raw: unknown): Sep38Fee | undefined {
+  if (raw === undefined) return undefined;
+  if (!isRecord(raw)) {
+    throw new Error('Invalid SEP-38 /price response: "fee" must be an object');
+  }
+
+  const fee: Sep38Fee = {
+    total: getRequiredString(raw, 'total'),
+    asset: getRequiredString(raw, 'asset'),
+  };
+
+  const details = raw['details'];
+  if (details !== undefined) {
+    if (!Array.isArray(details)) {
+      throw new Error('Invalid SEP-38 /price response: "fee.details" must be an array');
+    }
+
+    fee.details = details.map((detail) => {
+      if (!isRecord(detail)) {
+        throw new Error('Invalid SEP-38 /price response: each fee detail must be an object');
+      }
+
+      const parsed: Sep38FeeDetail = {
+        name: getRequiredString(detail, 'name'),
+        amount: getRequiredString(detail, 'amount'),
+      };
+
+      if (typeof detail['description'] === 'string') {
+        parsed.description = detail['description'];
+      }
+
+      return parsed;
+    });
+  }
+
+  return fee;
+}
+
+function buildPriceUrl(params: Sep38PriceParams): string {
+  assertNonEmpty(params.quoteServer, 'quoteServer');
+  assertNonEmpty(params.sell_asset, 'sell_asset');
+  assertNonEmpty(params.buy_asset, 'buy_asset');
+  assertNonEmpty(params.sell_amount, 'sell_amount');
+  assertNonEmpty(params.context, 'context');
+
+  const quoteServer = params.quoteServer.replace(/\/+$/, '');
+  const url = new URL(`${quoteServer}${PRICE_PATH}`);
+  url.searchParams.set('sell_asset', params.sell_asset);
+  url.searchParams.set('buy_asset', params.buy_asset);
+  url.searchParams.set('sell_amount', params.sell_amount);
+  url.searchParams.set('context', params.context);
+
+  if (params.buy_delivery_method && params.buy_delivery_method.trim().length > 0) {
+    url.searchParams.set('buy_delivery_method', params.buy_delivery_method);
+  }
+
+  return url.toString();
+}
+
+function parsePriceResponse(data: unknown): Sep38PriceResponse {
+  if (!isRecord(data)) {
+    throw new Error('Invalid SEP-38 /price response: expected an object');
+  }
+
+  const response: Sep38PriceResponse = {
+    price: getRequiredString(data, 'price'),
+    sell_amount: getRequiredString(data, 'sell_amount'),
+    buy_amount: getRequiredString(data, 'buy_amount'),
+  };
+
+  if (typeof data['total_price'] === 'string') {
+    response.total_price = data['total_price'];
+  }
+
+  const fee = parseFee(data['fee']);
+  if (fee) response.fee = fee;
+
+  return response;
 }
 
 /**
- * Runs an authenticated request against the anchor, transparently refreshing the
- * SEP-10 JWT on a 401.
+ * Fetches an indicative SEP-38 price for a specific asset pair.
  *
- * The first attempt uses whatever token `authenticate` returns (cached when
- * valid). If the anchor rejects it with 401, the cached token is dropped and a
- * single fresh sign flow is run before re-attempting exactly once. A second 401
- * is surfaced to the caller rather than looping.
+ * This wraps GET /price and intentionally supports the sell_amount path needed
+ * by the off-ramp comparator. Firm quotes belong to POST /quote.
  */
-async function authenticatedRequest(
-  anchor: ResolvedAnchor,
-  publicKey: string,
-  url: string,
-  init: RequestInit
-): Promise<Response> {
-  const withAuth = (jwt: string): RequestInit => ({
-    ...init,
-    headers: { ...init.headers, Authorization: `Bearer ${jwt}` },
-  })
-
-  const { jwt } = await authenticate(anchor, publicKey)
-  const res = await fetch(url, withAuth(jwt))
-
-  if (res.status !== 401) return res
-
-  // Token was stale/revoked — drop it and re-authenticate once, then retry.
-  invalidateSep10Token(anchor.homeDomain, publicKey)
-  const { jwt: freshJwt } = await authenticate(anchor, publicKey)
-  return fetch(url, withAuth(freshJwt))
-}
-
-// ─── POST /quote — firm quote ────────────────────────────────────────────────────
-
-function toRequestBody(params: Sep38FirmQuoteRequest): Record<string, string> {
-  const body: Record<string, string> = {
-    sell_asset: params.sellAsset,
-    buy_asset: params.buyAsset,
-  }
-  if (params.sellAmount !== undefined) body['sell_amount'] = params.sellAmount
-  if (params.buyAmount !== undefined) body['buy_amount'] = params.buyAmount
-  if (params.context !== undefined) body['context'] = params.context
-  if (params.sellDeliveryMethod !== undefined) body['sell_delivery_method'] = params.sellDeliveryMethod
-  if (params.buyDeliveryMethod !== undefined) body['buy_delivery_method'] = params.buyDeliveryMethod
-  if (params.countryCode !== undefined) body['country_code'] = params.countryCode
-  if (params.expireAfter !== undefined) body['expire_after'] = params.expireAfter
-  return body
-}
-
-function parseFirmQuote(data: Record<string, unknown>): Sep38FirmQuote {
-  const id = data['id']
-  if (typeof id !== 'string' || id.length === 0) {
-    throw new Error('SEP-38 quote response is missing a string "id" field')
-  }
-
-  const expiresAtRaw = data['expires_at']
-  if (typeof expiresAtRaw !== 'string') {
-    throw new Error('SEP-38 quote response is missing a string "expires_at" field')
-  }
-  const expiresAt = new Date(expiresAtRaw)
-  if (Number.isNaN(expiresAt.getTime())) {
-    throw new Error(`SEP-38 quote "expires_at" is not a valid date: "${expiresAtRaw}"`)
-  }
-
-  const fee = data['fee']
-  return {
-    id,
-    expiresAt,
-    price: String(data['price'] ?? ''),
-    totalPrice: String(data['total_price'] ?? ''),
-    sellAsset: String(data['sell_asset'] ?? ''),
-    sellAmount: String(data['sell_amount'] ?? ''),
-    buyAsset: String(data['buy_asset'] ?? ''),
-    buyAmount: String(data['buy_amount'] ?? ''),
-    ...(fee !== undefined && fee !== null && typeof fee === 'object'
-      ? { fee: fee as Sep38Fee }
-      : {}),
-  }
-}
-
-/**
- * Requests a firm quote from the anchor's SEP-38 quote server.
- *
- * Requires the anchor's SEP-10 JWT; the token is fetched from (or refreshed
- * into) the shared JWT cache and automatically renewed once on a 401.
- */
-export async function requestFirmQuote(
-  anchor: ResolvedAnchor,
-  publicKey: string,
-  params: Sep38FirmQuoteRequest
-): Promise<Sep38FirmQuote> {
-  const quoteServer = getQuoteServer(anchor)
-  const url = `${quoteServer}/quote`
-  const body = JSON.stringify(toRequestBody(params))
-
-  const res = await authenticatedRequest(anchor, publicKey, url, {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
-    body,
-  })
+export async function getSep38Price(params: Sep38PriceParams): Promise<Sep38PriceResponse> {
+  const url = buildPriceUrl(params);
+  const res = await fetch(url, {
+    headers: { Accept: 'application/json' },
+  });
 
   if (!res.ok) {
-    throw parseSepErrorBody(await readErrorBody(res), res.status)
+    const body: unknown =
+      typeof res.json === 'function' ? await res.json().catch(() => null) : null;
+    throw parseSepErrorBody(body, res.status);
   }
 
-  const data = (await res.json()) as Record<string, unknown>
-  return parseFirmQuote(data)
-}
-
-// ─── DELETE /quote/:id ────────────────────────────────────────────────────────────
-
-/**
- * Deletes a previously issued firm quote (DELETE /quote/:id).
- *
- * Requires the anchor's SEP-10 JWT and, like {@link requestFirmQuote},
- * auto-refreshes the token once on a 401.
- */
-export async function deleteFirmQuote(
-  anchor: ResolvedAnchor,
-  publicKey: string,
-  quoteId: string
-): Promise<void> {
-  const quoteServer = getQuoteServer(anchor)
-  const url = `${quoteServer}/quote/${encodeURIComponent(quoteId)}`
-
-  const res = await authenticatedRequest(anchor, publicKey, url, { method: 'DELETE' })
-
-  if (!res.ok) {
-    throw parseSepErrorBody(await readErrorBody(res), res.status)
-  }
+  return parsePriceResponse(await res.json());
 }
