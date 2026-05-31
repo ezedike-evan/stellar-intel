@@ -395,6 +395,8 @@ function parseQuote(raw: Record<string, unknown>): Sep38Quote {
   const price = requireString(raw, 'price', '/quote');
   const sellAmount = requireString(raw, 'sell_amount', '/quote');
   const buyAmount = requireString(raw, 'buy_amount', '/quote');
+  const totalPrice = typeof raw['total_price'] === 'string' ? raw['total_price'] : price;
+  const fee = isRecord(raw['fee']) ? raw['fee'] : {};
 
   const expiresMs = Date.parse(expiresAt);
   if (Number.isNaN(expiresMs)) {
@@ -404,7 +406,19 @@ function parseQuote(raw: Record<string, unknown>): Sep38Quote {
     throw new Sep38ParseError(`SEP-38 quote "expires_at" is not in the future: "${expiresAt}"`);
   }
 
-  return { id, expires_at: expiresAt, price, sell_amount: sellAmount, buy_amount: buyAmount };
+  return {
+    id,
+    expires_at: expiresAt,
+    price,
+    total_price: totalPrice,
+    sell_amount: sellAmount,
+    buy_amount: buyAmount,
+    fee: {
+      total: typeof fee['total'] === 'string' ? fee['total'] : '0',
+      percent: typeof fee['percent'] === 'string' ? fee['percent'] : '0',
+    },
+    context: 'sep24',
+  };
 }
 
 // ─── Firm quote endpoint ──────────────────────────────────────────────────────
@@ -512,3 +526,92 @@ export async function deleteSep38Quote(
   throw new Error(`HTTP ${res.status} from ${base} SEP-38 /quote cancellation`);
 }
 
+// ─── Quote expiry tracking ───────────────────────────────────────────────────
+
+export type QuoteExpiryQuote = {
+  expiresAt?: Date | string;
+  expires_at?: string;
+};
+
+function getQuoteExpiryTime(quote: QuoteExpiryQuote): number {
+  const expiresAt = quote.expiresAt ?? quote.expires_at;
+
+  if (expiresAt === undefined) {
+    throw new Sep38ParseError('SEP-38 quote is missing an expiry timestamp');
+  }
+
+  const expiryTime = expiresAt instanceof Date ? expiresAt.getTime() : Date.parse(expiresAt);
+  if (Number.isNaN(expiryTime)) {
+    throw new Sep38ParseError('SEP-38 quote expiry timestamp is invalid');
+  }
+
+  return expiryTime;
+}
+
+/** Returns whole seconds remaining before a SEP-38 quote expires. */
+export function getRemainingSeconds(quote: QuoteExpiryQuote): number {
+  return Math.floor((getQuoteExpiryTime(quote) - Date.now()) / 1000);
+}
+
+/** Returns true when the quote is expired at the current time. */
+export function isQuoteExpired(quote: QuoteExpiryQuote): boolean {
+  return getRemainingSeconds(quote) <= 0;
+}
+
+export class QuoteExpiredEvent<TQuote extends QuoteExpiryQuote = QuoteExpiryQuote> extends Event {
+  readonly quote: TQuote;
+
+  constructor(quote: TQuote) {
+    super('isExpired', { bubbles: true });
+    this.quote = quote;
+  }
+}
+
+export function watchQuoteExpiry<TQuote extends QuoteExpiryQuote>(
+  quote: TQuote,
+  target?: EventTarget
+): { target: EventTarget; abort: () => void } {
+  const emitter = target ?? new EventTarget();
+  let aborted = false;
+  let timeoutId: ReturnType<typeof setTimeout> | null = null;
+
+  const emitExpiry = () => {
+    if (!aborted) {
+      emitter.dispatchEvent(new QuoteExpiredEvent(quote));
+    }
+  };
+
+  timeoutId = setTimeout(emitExpiry, Math.max(0, getQuoteExpiryTime(quote) - Date.now()));
+
+  return {
+    target: emitter,
+    abort: () => {
+      aborted = true;
+      if (timeoutId !== null) {
+        clearTimeout(timeoutId);
+        timeoutId = null;
+      }
+    },
+  };
+}
+
+export function onQuoteExpired<TQuote extends QuoteExpiryQuote>(
+  quote: TQuote,
+  callback: (expiredQuote: TQuote) => void,
+  target?: EventTarget
+): () => void {
+  const { target: emitter, abort } = watchQuoteExpiry(quote, target);
+
+  const listener = (event: Event) => {
+    if (event instanceof QuoteExpiredEvent) {
+      callback(event.quote as TQuote);
+    }
+  };
+
+  emitter.addEventListener('isExpired', listener);
+
+  return () => {
+    emitter.removeEventListener('isExpired', listener);
+    abort();
+  };
+}
