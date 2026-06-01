@@ -1,7 +1,7 @@
-import { NextRequest, NextResponse } from 'next/server'
-import { SignedIntentEnvelopeSchema } from '@/types/intent'
-import { verifyEnvelope } from '@/lib/intent/envelope'
-import type { ApiError } from '@/types'
+import { NextRequest, NextResponse } from 'next/server';
+import { SignedIntentEnvelopeSchema } from '@/types/intent';
+import { verifyEnvelope } from '@/lib/intent/envelope';
+import type { ApiError } from '@/types';
 
 // ─── POST /api/intent/offramp ─────────────────────────────────────────────────
 
@@ -16,24 +16,21 @@ import type { ApiError } from '@/types'
  */
 export async function POST(req: NextRequest): Promise<NextResponse> {
   // ── Parse body ──────────────────────────────────────────────────────────────
-  let body: unknown
+  let body: unknown;
   try {
-    body = await req.json()
+    body = await req.json();
   } catch {
     return NextResponse.json<ApiError>(
       { code: 'INVALID_JSON', message: 'Request body must be valid JSON.' },
       { status: 400 }
-    )
+    );
   }
 
   // ── Validate envelope shape ─────────────────────────────────────────────────
-  const parsed = SignedIntentEnvelopeSchema.safeParse(body)
+  const parsed = SignedIntentEnvelopeSchema.safeParse(body);
   if (!parsed.success) {
-    const message = parsed.error.issues.map((i) => i.message).join('; ')
-    return NextResponse.json<ApiError>(
-      { code: 'INVALID_ENVELOPE', message },
-      { status: 400 }
-    )
+    const message = parsed.error.issues.map((i) => i.message).join('; ');
+    return NextResponse.json<ApiError>({ code: 'INVALID_ENVELOPE', message }, { status: 400 });
   }
 
   // ── Verify signature ────────────────────────────────────────────────────────
@@ -43,16 +40,13 @@ export async function POST(req: NextRequest): Promise<NextResponse> {
     return NextResponse.json<ApiError>(
       { code: 'INVALID_SIGNATURE', message: 'Envelope signature verification failed.' },
       { status: 401 }
-    )
+    );
   }
 
   // ── Route intent ────────────────────────────────────────────────────────────
   // Signature is valid — hand off to the off-ramp intent router.
   // TODO: invoke anchor-specific withdrawal flow via intent router.
-  const { intent } = parsed.data
+  const { intent } = parsed.data;
 
-  return NextResponse.json(
-    { ok: true, intent },
-    { status: 200 }
-  )
+  return NextResponse.json({ ok: true, intent }, { status: 200 });
 }

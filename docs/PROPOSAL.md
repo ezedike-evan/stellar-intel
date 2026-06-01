@@ -5,14 +5,14 @@
 > so a dollar reaches a bank account in Lagos, Buenos Aires, or Manila with
 > the certainty of a tracked parcel, not the hope of a carrier pigeon.
 
-| | |
-| --- | --- |
-| **Submitted by** | Evan Ezedike &nbsp;·&nbsp; `@Ezedike-Evan` &nbsp;·&nbsp; egwomevan323@gmail.com |
-| **Repository** | [github.com/Ezedike-Evan/stellar-intel](https://github.com/Ezedike-Evan/stellar-intel) |
-| **Live demo** | [stellar-intel.vercel.app](https://stellar-intel.vercel.app) |
-| **License** | MIT |
-| **Resubmission date** | 2026-04-30 (target) |
-| **Supersedes** | First submission, declined on the two bugs documented in [§ 5 Credibility-fix log](#5-credibility-fix-log) |
+|                       |                                                                                                            |
+| --------------------- | ---------------------------------------------------------------------------------------------------------- |
+| **Submitted by**      | Evan Ezedike &nbsp;·&nbsp; `@Ezedike-Evan` &nbsp;·&nbsp; egwomevan323@gmail.com                            |
+| **Repository**        | [github.com/Ezedike-Evan/stellar-intel](https://github.com/Ezedike-Evan/stellar-intel)                     |
+| **Live demo**         | [stellar-intel.vercel.app](https://stellar-intel.vercel.app)                                               |
+| **License**           | MIT                                                                                                        |
+| **Resubmission date** | 2026-04-30 (target)                                                                                        |
+| **Supersedes**        | First submission, declined on the two bugs documented in [§ 5 Credibility-fix log](#5-credibility-fix-log) |
 
 ---
 
@@ -194,19 +194,19 @@ layer for any AI that needs to move money through a stablecoin corridor.
 
 All live in the repository today, on `main`, under MIT license.
 
-| Area | Shipped | Evidence |
-| --- | --- | --- |
-| **Anchors integrated** | MoneyGram (SEP-24 confirmed), Cowrie (NGN), Anclap (ARS, PEN) | `lib/stellar/anchors.ts`, commits `be007c7`, `45a82eb` |
-| **Corridors live** | 7: NGN, KES, GHS, MXN, BRL, ARS, PEN | `CORRIDORS` registry, `lib/stellar/anchors.ts` |
-| **SEP-10 auth** | Full challenge-sign-verify flow via Freighter | `lib/stellar/sep10.ts`, `ExecuteDrawer` step 2 |
-| **SEP-24 flow** | 6-step interactive withdrawal with error recovery | `components/offramp/ExecuteDrawer.tsx`, commit `45a82eb` |
-| **Rate aggregation** | Parallel SEP-38 quote solicitor, net-landed-value ranking | `hooks/useRates.ts`, `components/offramp/RateTable.tsx` |
-| **Status tracking** | Polling tracker wired to a live `transactionId`, with refund & terminal states | `components/offramp/StatusTracker.tsx`, commit `548a09b` |
-| **Offramp page** | Full off-ramp assembly — corridor → quote → sign → execute → track | `app/offramp/page.tsx`, commit `548a09b` |
-| **Env hardening** | Browser-safe env validation, graceful offline fallback | commit `5d40936` |
-| **Tests** | Vitest unit suites for anchor registry, SEP-1 TOML parsing, horizon helpers | `tests/` |
-| **CI** | 11 workflows: ci, bundle-size, codeql, data-health, deploy, dependency-review, lighthouse, pr-title, release, stale, api-availability | `.github/workflows/` |
-| **License & governance** | MIT, CONTRIBUTING, Changelog, issue + PR templates | repo root |
+| Area                     | Shipped                                                                                                                               | Evidence                                                 |
+| ------------------------ | ------------------------------------------------------------------------------------------------------------------------------------- | -------------------------------------------------------- |
+| **Anchors integrated**   | MoneyGram (SEP-24 confirmed), Cowrie (NGN), Anclap (ARS, PEN)                                                                         | `lib/stellar/anchors.ts`, commits `be007c7`, `45a82eb`   |
+| **Corridors live**       | 7: NGN, KES, GHS, MXN, BRL, ARS, PEN                                                                                                  | `CORRIDORS` registry, `lib/stellar/anchors.ts`           |
+| **SEP-10 auth**          | Full challenge-sign-verify flow via Freighter                                                                                         | `lib/stellar/sep10.ts`, `ExecuteDrawer` step 2           |
+| **SEP-24 flow**          | 6-step interactive withdrawal with error recovery                                                                                     | `components/offramp/ExecuteDrawer.tsx`, commit `45a82eb` |
+| **Rate aggregation**     | Parallel SEP-38 quote solicitor, net-landed-value ranking                                                                             | `hooks/useRates.ts`, `components/offramp/RateTable.tsx`  |
+| **Status tracking**      | Polling tracker wired to a live `transactionId`, with refund & terminal states                                                        | `components/offramp/StatusTracker.tsx`, commit `548a09b` |
+| **Offramp page**         | Full off-ramp assembly — corridor → quote → sign → execute → track                                                                    | `app/offramp/page.tsx`, commit `548a09b`                 |
+| **Env hardening**        | Browser-safe env validation, graceful offline fallback                                                                                | commit `5d40936`                                         |
+| **Tests**                | Vitest unit suites for anchor registry, SEP-1 TOML parsing, horizon helpers                                                           | `tests/`                                                 |
+| **CI**                   | 11 workflows: ci, bundle-size, codeql, data-health, deploy, dependency-review, lighthouse, pr-title, release, stale, api-availability | `.github/workflows/`                                     |
+| **License & governance** | MIT, CONTRIBUTING, Changelog, issue + PR templates                                                                                    | repo root                                                |
 
 The v1 product compares rates across three anchors and seven corridors in real
 time, executes an off-ramp end-to-end, and tracks it to completion without
@@ -220,10 +220,10 @@ on.
 Two bugs sank the first submission. Both are fixed on `main`; both have
 regression tests.
 
-| # | Bug | Symptom (before) | Root cause | Fix | Evidence (after) |
-| --- | --- | --- | --- | --- | --- |
-| 1 | **`exchangeRate` returns `0` on Cowrie USDC→NGN** (issue.md #001) | Cowrie rows rendered `₦0` per USDC, making the whole rate table unusable for the headline corridor. | Decimal parse treated `sell_amount` as integer atomic units, but Cowrie's SEP-38 response delivers it as a decimal string. Fee was also being subtracted twice. | Rewrote the rate adapter to branch on `sell_amount` type, asserted the invariant in a unit test. | `tests/anchors.cowrie.exchangeRate.spec.ts` — `exchangeRate > 0` for every sampled quote. |
-| 2 | **`StatusTracker` never mounts** (issue.md #002) | After a successful withdrawal, the page still showed the "connect wallet" card — the user had no way to know anything happened. | `ExecuteDrawer` completed the withdrawal but never propagated `{ transactionId, transferServer, jwt }` back to the page, so the tracker's mount condition was permanently false. | Added an `onSuccess` prop that lifts the tracking tuple to the page; drawer closes on success and `StatusTracker` owns the viewport. | Commit `45a82eb`; e2e test `tests/offramp-e2e.spec.ts` — successful execute renders `StatusTracker` with a live id. |
+| #   | Bug                                                               | Symptom (before)                                                                                                                | Root cause                                                                                                                                                                       | Fix                                                                                                                                  | Evidence (after)                                                                                                    |
+| --- | ----------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------ | ------------------------------------------------------------------------------------------------------------------- |
+| 1   | **`exchangeRate` returns `0` on Cowrie USDC→NGN** (issue.md #001) | Cowrie rows rendered `₦0` per USDC, making the whole rate table unusable for the headline corridor.                             | Decimal parse treated `sell_amount` as integer atomic units, but Cowrie's SEP-38 response delivers it as a decimal string. Fee was also being subtracted twice.                  | Rewrote the rate adapter to branch on `sell_amount` type, asserted the invariant in a unit test.                                     | `tests/anchors.cowrie.exchangeRate.spec.ts` — `exchangeRate > 0` for every sampled quote.                           |
+| 2   | **`StatusTracker` never mounts** (issue.md #002)                  | After a successful withdrawal, the page still showed the "connect wallet" card — the user had no way to know anything happened. | `ExecuteDrawer` completed the withdrawal but never propagated `{ transactionId, transferServer, jwt }` back to the page, so the tracker's mount condition was permanently false. | Added an `onSuccess` prop that lifts the tracking tuple to the page; drawer closes on success and `StatusTracker` owns the viewport. | Commit `45a82eb`; e2e test `tests/offramp-e2e.spec.ts` — successful execute renders `StatusTracker` with a live id. |
 
 Both fixes are covered by CI on every PR. The `data-health` workflow runs
 nightly against production anchors to ensure the Cowrie rate path stays
@@ -237,16 +237,16 @@ Each wave is a ship-stop with merge-ready PRs, not a wish list. Full ticket
 expansion lives in [`issue.md`](../issue.md) (250 tracked issues) and
 [`docs/ROADMAP.md`](ROADMAP.md).
 
-| Wave | Theme | Key deliverables | Gate |
-| --- | --- | --- | --- |
-| **v1.0 Executable** (✅ shipped) | A correct, demonstrable off-ramp | 3 anchors, 7 corridors, SEP-10/24 complete, StatusTracker live | This submission |
-| **v1.1 Hardening** | Reliability & coverage | Retry/backoff on anchor timeouts; refund UX; dispute modal; 80%+ coverage on `lib/stellar/*` | 30 days post-grant |
-| **v1.2 Router + Seeds** | Multi-anchor split routing | Solver v1 picks the minimum-cost combination; nightly synthetic probes seed corridor coverage | 60 days |
-| **v1.3 Polish** | Grant-reviewer UX | Cookbook, benchmarks, live oracle explorer, anchor onboarding kit | 90 days |
-| **v2 Observable** | Public reputation API + Soroban oracle mainnet | `GET /v1/public/scores`; on-chain reads from Soroban; per-corridor leaderboard UI | 120 days |
-| **v3 Guaranteed** | Intent-level guarantees | Deadline enforcement, slippage bounds, partial-fill handling | 180 days |
-| **v4 Universal** | MCP agent surface GA + SDK | `@stellarintel/sdk` on npm, `@stellarintel/mcp` on npm, embeddable widget | 240 days |
-| **v5 Institutional** | Compliance-grade primitives | Jurisdictional memo, SBOM, non-custody attestation, institutional reporting | 365 days |
+| Wave                             | Theme                                          | Key deliverables                                                                              | Gate               |
+| -------------------------------- | ---------------------------------------------- | --------------------------------------------------------------------------------------------- | ------------------ |
+| **v1.0 Executable** (✅ shipped) | A correct, demonstrable off-ramp               | 3 anchors, 7 corridors, SEP-10/24 complete, StatusTracker live                                | This submission    |
+| **v1.1 Hardening**               | Reliability & coverage                         | Retry/backoff on anchor timeouts; refund UX; dispute modal; 80%+ coverage on `lib/stellar/*`  | 30 days post-grant |
+| **v1.2 Router + Seeds**          | Multi-anchor split routing                     | Solver v1 picks the minimum-cost combination; nightly synthetic probes seed corridor coverage | 60 days            |
+| **v1.3 Polish**                  | Grant-reviewer UX                              | Cookbook, benchmarks, live oracle explorer, anchor onboarding kit                             | 90 days            |
+| **v2 Observable**                | Public reputation API + Soroban oracle mainnet | `GET /v1/public/scores`; on-chain reads from Soroban; per-corridor leaderboard UI             | 120 days           |
+| **v3 Guaranteed**                | Intent-level guarantees                        | Deadline enforcement, slippage bounds, partial-fill handling                                  | 180 days           |
+| **v4 Universal**                 | MCP agent surface GA + SDK                     | `@stellarintel/sdk` on npm, `@stellarintel/mcp` on npm, embeddable widget                     | 240 days           |
+| **v5 Institutional**             | Compliance-grade primitives                    | Jurisdictional memo, SBOM, non-custody attestation, institutional reporting                   | 365 days           |
 
 ---
 
@@ -276,13 +276,13 @@ We are requesting the standard Stellar Community Fund Tier-2 grant. A detailed
 budget breakdown lives in the companion document submitted to the committee.
 Headline allocation:
 
-| Bucket | Share | Purpose |
-| --- | --- | --- |
-| Core engineering | ~55% | v1.1–v1.3 waves, Soroban oracle publisher, MCP server |
-| Contributor funnel | ~15% | Good-first-issue triage, office hours, contributor swag, bounty pool |
-| Anchor outreach | ~10% | Travel to one Stellar Meridian event; in-person integration work with 2 anchors |
-| Audit & security | ~15% | Soroban contract audit (one firm), SEP-24 flow review, SBOM tooling |
-| Infra & ops | ~5% | Vercel production, monitoring, status page, log drains |
+| Bucket             | Share | Purpose                                                                         |
+| ------------------ | ----- | ------------------------------------------------------------------------------- |
+| Core engineering   | ~55%  | v1.1–v1.3 waves, Soroban oracle publisher, MCP server                           |
+| Contributor funnel | ~15%  | Good-first-issue triage, office hours, contributor swag, bounty pool            |
+| Anchor outreach    | ~10%  | Travel to one Stellar Meridian event; in-person integration work with 2 anchors |
+| Audit & security   | ~15%  | Soroban contract audit (one firm), SEP-24 flow review, SBOM tooling             |
+| Infra & ops        | ~5%   | Vercel production, monitoring, status page, log drains                          |
 
 Every deliverable is gated on a merged PR with CI green and a dated release
 tag. Fund release against milestones, not dates.
@@ -291,14 +291,14 @@ tag. Fund release against milestones, not dates.
 
 ## 9. Risks and mitigations
 
-| Risk | Likelihood | Impact | Mitigation |
-| --- | --- | --- | --- |
-| An anchor disputes a reputation outcome | Medium | Medium | Dispute modal (issue.md #166); every outcome is user-signed and replayable from the ledger, so the dispute resolves on evidence, not opinion. |
-| MSB / VASP classification risk | Low | High | [`docs/NON_CUSTODY.md`](NON_CUSTODY.md) + [`docs/JURISDICTIONAL.md`](JURISDICTIONAL.md): every leg is signed by the user, anchor takes custody under SEP-24, Stellar enforces atomicity. We never touch funds. |
-| Anchor churn (one of the three goes dark) | Medium | Low | Registry design already handles dynamic anchor add/remove; synthetic probes surface outages within 30 minutes. |
-| Soroban oracle consumer ergonomics | Medium | Medium | Ship a Rust + TS consumer library alongside the contract; seed three reference integrations in the cookbook. |
-| Solo-maintainer bus factor | High | High | This grant funds the contributor ladder: `docs/CONTRIBUTOR_LADDER.md` defines Triager → Reviewer → Maintainer with merge-count criteria. Target: two additional reviewers by end of v1.3. |
-| Agent misuse (agent drains a wallet) | Low | High | MCP surface is **advisory + user-signed** — every `execute_intent` call must be signed by the user's wallet. No held keys, no autonomous spend. |
+| Risk                                      | Likelihood | Impact | Mitigation                                                                                                                                                                                                     |
+| ----------------------------------------- | ---------- | ------ | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| An anchor disputes a reputation outcome   | Medium     | Medium | Dispute modal (issue.md #166); every outcome is user-signed and replayable from the ledger, so the dispute resolves on evidence, not opinion.                                                                  |
+| MSB / VASP classification risk            | Low        | High   | [`docs/NON_CUSTODY.md`](NON_CUSTODY.md) + [`docs/JURISDICTIONAL.md`](JURISDICTIONAL.md): every leg is signed by the user, anchor takes custody under SEP-24, Stellar enforces atomicity. We never touch funds. |
+| Anchor churn (one of the three goes dark) | Medium     | Low    | Registry design already handles dynamic anchor add/remove; synthetic probes surface outages within 30 minutes.                                                                                                 |
+| Soroban oracle consumer ergonomics        | Medium     | Medium | Ship a Rust + TS consumer library alongside the contract; seed three reference integrations in the cookbook.                                                                                                   |
+| Solo-maintainer bus factor                | High       | High   | This grant funds the contributor ladder: `docs/CONTRIBUTOR_LADDER.md` defines Triager → Reviewer → Maintainer with merge-count criteria. Target: two additional reviewers by end of v1.3.                      |
+| Agent misuse (agent drains a wallet)      | Low        | High   | MCP surface is **advisory + user-signed** — every `execute_intent` call must be signed by the user's wallet. No held keys, no autonomous spend.                                                                |
 
 ---
 

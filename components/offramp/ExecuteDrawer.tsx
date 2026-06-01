@@ -33,7 +33,13 @@ interface ExecuteDrawerProps {
 
 // ─── Component ────────────────────────────────────────────────────────────────
 
-export function ExecuteDrawer({ rate, amount, publicKey, onClose, onExecuteStarted }: ExecuteDrawerProps) {
+export function ExecuteDrawer({
+  rate,
+  amount,
+  publicKey,
+  onClose,
+  onExecuteStarted,
+}: ExecuteDrawerProps) {
   const [step, setStep] = useState<ExecuteDrawerStep>('idle');
   const [errorMsg, setErrorMsg] = useState<string | null>(null);
   const [txHash, setTxHash] = useState<string | null>(null);
@@ -314,7 +320,7 @@ export function ExecuteDrawer({ rate, amount, publicKey, onClose, onExecuteStart
             </h3>
             <p className="mb-6 text-sm text-gray-600 dark:text-gray-400">
               Are you sure you want to cancel the off-ramp process? This will close the KYC form and
-              you'll need to start over.
+              you&apos;ll need to start over.
             </p>
             <div className="flex gap-3">
               <button

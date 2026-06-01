@@ -1,4 +1,4 @@
-import { z } from 'zod'
+import { z } from 'zod';
 
 export const envSchema = z.object({
   NEXT_PUBLIC_STELLAR_NETWORK: z.enum(['mainnet', 'testnet', 'futurenet'], {
@@ -16,9 +16,9 @@ export const envSchema = z.object({
     .url()
     .optional()
     .default('https://api.stellar.expert/explorer/public'),
-})
+});
 
-export type Env = z.infer<typeof envSchema>
+export type Env = z.infer<typeof envSchema>;
 
 export function parseEnv(): Env {
   const result = envSchema.safeParse({
@@ -27,18 +27,18 @@ export function parseEnv(): Env {
     NEXT_PUBLIC_USDC_ISSUER: process.env.NEXT_PUBLIC_USDC_ISSUER,
     NEXT_PUBLIC_APP_NAME: process.env.NEXT_PUBLIC_APP_NAME,
     NEXT_PUBLIC_STELLAR_EXPERT_URL: process.env.NEXT_PUBLIC_STELLAR_EXPERT_URL,
-  })
+  });
 
   if (!result.success) {
     const lines = result.error.issues.map(
       (issue) => `  ${String(issue.path[0])}: ${issue.message}`
-    )
+    );
     throw new Error(
       `❌ Invalid environment variables:\n${lines.join('\n')}\n\nCheck your .env.local file.`
-    )
+    );
   }
 
-  return result.data
+  return result.data;
 }
 
-export const env = parseEnv()
+export const env = parseEnv();

@@ -1,11 +1,11 @@
-import useSWR from "swr";
-import type { ApiRatesResponse, RateComparison } from "@/types";
-import { useState, useCallback } from "react";
+import useSWR from 'swr';
+import type { ApiRatesResponse, RateComparison } from '@/types';
+import { useState, useCallback } from 'react';
 
 async function fetcher([, corridorId, amount]: [string, string, string]): Promise<RateComparison> {
-  const url = new URL("/api/rates", window.location.origin);
-  url.searchParams.set("corridor", corridorId);
-  url.searchParams.set("amount", amount);
+  const url = new URL('/api/rates', window.location.origin);
+  url.searchParams.set('corridor', corridorId);
+  url.searchParams.set('amount', amount);
 
   const res = await fetch(url.toString());
 
@@ -18,7 +18,6 @@ async function fetcher([, corridorId, amount]: [string, string, string]): Promis
   return data.rates;
 }
 
-
 export interface UseAnchorRatesResult {
   rates: RateComparison | undefined;
   isLoading: boolean;
@@ -27,18 +26,11 @@ export interface UseAnchorRatesResult {
   refreshInflight: boolean;
 }
 
-
-export function useAnchorRates(
-  corridorId: string,
-  amount: string
-): UseAnchorRatesResult {
+export function useAnchorRates(corridorId: string, amount: string): UseAnchorRatesResult {
   const [refreshInflight, setRefreshInflight] = useState(false);
 
-  const { data, error, isLoading, mutate } = useSWR<
-    RateComparison,
-    Error
-  >(
-    corridorId && amount ? ["/api/rates", corridorId, amount] : null,
+  const { data, error, isLoading, mutate } = useSWR<RateComparison, Error>(
+    corridorId && amount ? ['/api/rates', corridorId, amount] : null,
     fetcher,
     {
       refreshInterval: 30_000,
