@@ -45,7 +45,12 @@ function formatMetric(entry: AnchorLeaderboardEntry, key: LeaderboardSortKey) {
   }
 }
 
-function buildSortLink(key: LeaderboardSortKey, selectedCorridor: string | null, currentSort: LeaderboardSortKey, currentDirection: LeaderboardDirection) {
+function buildSortLink(
+  key: LeaderboardSortKey,
+  selectedCorridor: string | null,
+  currentSort: LeaderboardSortKey,
+  currentDirection: LeaderboardDirection
+) {
   const nextDirection: LeaderboardDirection =
     currentSort === key ? (currentDirection === 'desc' ? 'asc' : 'desc') : 'desc';
   const search = new URLSearchParams();
@@ -61,7 +66,9 @@ export function Leaderboard({ entries, selectedCorridor, sortKey, direction }: L
       <table className="w-full text-sm">
         <thead>
           <tr className="border-b border-gray-200 bg-gray-50 dark:border-gray-700 dark:bg-gray-800/50">
-            <th className="px-4 py-3 text-left font-medium text-gray-600 dark:text-gray-400">Anchor</th>
+            <th className="px-4 py-3 text-left font-medium text-gray-600 dark:text-gray-400">
+              Anchor
+            </th>
             {COLUMNS.map((column) => {
               const active = column.key === sortKey;
               return (
@@ -91,7 +98,9 @@ export function Leaderboard({ entries, selectedCorridor, sortKey, direction }: L
         <tbody>
           {entries.map((entry) => (
             <tr key={entry.anchorId} className="border-t border-gray-200 dark:border-gray-700">
-              <td className="px-4 py-4 font-medium text-gray-900 dark:text-white">{entry.anchorName}</td>
+              <td className="px-4 py-4 font-medium text-gray-900 dark:text-white">
+                {entry.anchorName}
+              </td>
               <td className="px-4 py-4 text-right text-gray-700 dark:text-gray-300">
                 {formatMetric(entry, 'composite')}
               </td>
@@ -108,7 +117,10 @@ export function Leaderboard({ entries, selectedCorridor, sortKey, direction }: L
           ))}
           {entries.length === 0 && (
             <tr>
-              <td colSpan={5} className="px-4 py-8 text-center text-sm text-gray-500 dark:text-gray-400">
+              <td
+                colSpan={5}
+                className="px-4 py-8 text-center text-sm text-gray-500 dark:text-gray-400"
+              >
                 No anchors available for this corridor.
               </td>
             </tr>

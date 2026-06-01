@@ -12,31 +12,28 @@ export default function AdminDisputesPage() {
   const [actionStates, setActionStates] = useState<Record<string, ActionState>>({});
   const [errorMsg, setErrorMsg] = useState('');
 
-  const fetchDisputes = useCallback(
-    async (key: string) => {
-      setFetchState('loading');
-      setErrorMsg('');
-      try {
-        const res = await fetch('/api/admin/disputes', {
-          headers: { 'x-admin-key': key },
-        });
-        if (res.status === 401) {
-          setErrorMsg('Invalid admin key.');
-          setAdminKey('');
-          setFetchState('error');
-          return;
-        }
-        if (!res.ok) throw new Error('Failed to load disputes');
-        const data: Dispute[] = await res.json();
-        setDisputes(data);
-        setFetchState('idle');
-      } catch {
-        setErrorMsg('Could not load disputes. Check your connection.');
+  const fetchDisputes = useCallback(async (key: string) => {
+    setFetchState('loading');
+    setErrorMsg('');
+    try {
+      const res = await fetch('/api/admin/disputes', {
+        headers: { 'x-admin-key': key },
+      });
+      if (res.status === 401) {
+        setErrorMsg('Invalid admin key.');
+        setAdminKey('');
         setFetchState('error');
+        return;
       }
-    },
-    []
-  );
+      if (!res.ok) throw new Error('Failed to load disputes');
+      const data: Dispute[] = await res.json();
+      setDisputes(data);
+      setFetchState('idle');
+    } catch {
+      setErrorMsg('Could not load disputes. Check your connection.');
+      setFetchState('error');
+    }
+  }, []);
 
   useEffect(() => {
     if (adminKey) fetchDisputes(adminKey);
@@ -66,9 +63,7 @@ export default function AdminDisputesPage() {
     return (
       <div className="mx-auto max-w-sm py-16">
         <h1 className="mb-6 text-xl font-semibold text-gray-900 dark:text-white">Admin login</h1>
-        {errorMsg && (
-          <p className="mb-4 text-sm text-red-600 dark:text-red-400">{errorMsg}</p>
-        )}
+        {errorMsg && <p className="mb-4 text-sm text-red-600 dark:text-red-400">{errorMsg}</p>}
         <form
           onSubmit={(e) => {
             e.preventDefault();
@@ -108,9 +103,7 @@ export default function AdminDisputesPage() {
         </button>
       </div>
 
-      {errorMsg && (
-        <p className="mb-4 text-sm text-red-600 dark:text-red-400">{errorMsg}</p>
-      )}
+      {errorMsg && <p className="mb-4 text-sm text-red-600 dark:text-red-400">{errorMsg}</p>}
 
       {disputes.length === 0 && fetchState === 'idle' && (
         <p className="text-sm text-gray-500 dark:text-gray-400">No disputes in the queue.</p>
@@ -163,12 +156,9 @@ export default function AdminDisputesPage() {
 
 function StatusBadge({ status }: { status: Dispute['status'] }) {
   const styles = {
-    pending:
-      'bg-yellow-100 text-yellow-800 dark:bg-yellow-900/30 dark:text-yellow-400',
-    accepted:
-      'bg-green-100 text-green-800 dark:bg-green-900/30 dark:text-green-400',
-    rejected:
-      'bg-red-100 text-red-800 dark:bg-red-900/30 dark:text-red-400',
+    pending: 'bg-yellow-100 text-yellow-800 dark:bg-yellow-900/30 dark:text-yellow-400',
+    accepted: 'bg-green-100 text-green-800 dark:bg-green-900/30 dark:text-green-400',
+    rejected: 'bg-red-100 text-red-800 dark:bg-red-900/30 dark:text-red-400',
   };
   return (
     <span

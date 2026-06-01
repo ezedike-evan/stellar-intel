@@ -12,10 +12,7 @@ export async function GET(
   const corridor = searchParams.get('corridor');
 
   if (!corridor) {
-    return NextResponse.json(
-      { error: 'corridor query parameter is required' },
-      { status: 400 }
-    );
+    return NextResponse.json({ error: 'corridor query parameter is required' }, { status: 400 });
   }
 
   const windows = ([7, 30, 90] as const).map((days) =>

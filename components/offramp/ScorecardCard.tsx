@@ -104,9 +104,7 @@ export function ScorecardCard({
         >
           <span
             className={
-              stale
-                ? 'text-yellow-600 dark:text-yellow-400'
-                : 'text-gray-400 dark:text-gray-500'
+              stale ? 'text-yellow-600 dark:text-yellow-400' : 'text-gray-400 dark:text-gray-500'
             }
           >
             {stale ? 'Stale — ' : ''}Data as of {formatRelativeTime(lastRefresh)}

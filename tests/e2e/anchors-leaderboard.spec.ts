@@ -9,7 +9,9 @@ test.describe('Anchor leaderboard page', () => {
     await page.goto('/anchors');
     await page.waitForLoadState('networkidle');
 
-    await expect(page.getByRole('heading', { name: /The best Stellar anchor reputation scores/i })).toBeVisible();
+    await expect(
+      page.getByRole('heading', { name: /The best Stellar anchor reputation scores/i })
+    ).toBeVisible();
     await expect(page.getByRole('combobox', { name: /corridor/i })).toBeVisible();
     await expect(page.getByRole('columnheader', { name: /Composite score/i })).toBeVisible();
     await expect(page.getByRole('columnheader', { name: /Fill rate/i })).toBeVisible();

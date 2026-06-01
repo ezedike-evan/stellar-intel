@@ -101,7 +101,7 @@ describe('IntentV1Schema field validation', () => {
 
   it('rejects a nonce with non-hex characters', () => {
     expect(() =>
-      IntentV1Schema.parse({ ...VALID, nonce: 'z1b2c3d4e5f6a1b2c3d4e5f6a1b2c3d4' }),
+      IntentV1Schema.parse({ ...VALID, nonce: 'z1b2c3d4e5f6a1b2c3d4e5f6a1b2c3d4' })
     ).toThrow();
   });
 });

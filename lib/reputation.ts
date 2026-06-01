@@ -20,10 +20,13 @@ export interface AnchorLeaderboardData {
   direction: LeaderboardDirection;
 }
 
-const DEFAULT_METRICS: Record<string, Omit<AnchorLeaderboardEntry, 'anchorId' | 'anchorName' | 'corridorId'>> = {
+const DEFAULT_METRICS: Record<
+  string,
+  Omit<AnchorLeaderboardEntry, 'anchorId' | 'anchorName' | 'corridorId'>
+> = {
   moneygram: { composite: 91.8, fillRate: 0.95, settleP50: 22, slippage: 1.1 },
   cowrie: { composite: 92.4, fillRate: 0.96, settleP50: 16, slippage: 0.7 },
-  anclap: { composite: 87.8, fillRate: 0.90, settleP50: 25, slippage: 1.9 },
+  anclap: { composite: 87.8, fillRate: 0.9, settleP50: 25, slippage: 1.9 },
 };
 
 const CORRIDOR_METRICS: Record<
@@ -50,7 +53,7 @@ const CORRIDOR_METRICS: Record<
     anclap: { composite: 88.1, fillRate: 0.91, settleP50: 24, slippage: 2.0 },
   },
   'usdc-pen': {
-    anclap: { composite: 87.4, fillRate: 0.90, settleP50: 26, slippage: 2.2 },
+    anclap: { composite: 87.4, fillRate: 0.9, settleP50: 26, slippage: 2.2 },
   },
 };
 
@@ -69,7 +72,10 @@ function normalizeDirection(value: string | undefined): LeaderboardDirection {
   return value === 'asc' ? 'asc' : 'desc';
 }
 
-function getAnchorMetrics(anchorId: string, corridorId?: string): Omit<AnchorLeaderboardEntry, 'anchorId' | 'anchorName' | 'corridorId'> {
+function getAnchorMetrics(
+  anchorId: string,
+  corridorId?: string
+): Omit<AnchorLeaderboardEntry, 'anchorId' | 'anchorName' | 'corridorId'> {
   if (corridorId && CORRIDOR_METRICS[corridorId]?.[anchorId]) {
     return CORRIDOR_METRICS[corridorId]![anchorId]!;
   }
@@ -115,7 +121,9 @@ export function buildLeaderboardData(
 
   return {
     entries: sortLeaderboard(entries, sortKey, direction),
-    corridorId: CORRIDORS.some((corridor) => corridor.id === corridorId) ? corridorId ?? null : null,
+    corridorId: CORRIDORS.some((corridor) => corridor.id === corridorId)
+      ? (corridorId ?? null)
+      : null,
     sortKey,
     direction,
   };

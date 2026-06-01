@@ -24,6 +24,9 @@ const STEP_LABELS: Record<ExecuteDrawerStep, string> = {
 
 // ─── Props ────────────────────────────────────────────────────────────────────
 
+// Distance in px a downward swipe must travel before the bottom sheet dismisses.
+const DISMISS_THRESHOLD = 120;
+
 interface ExecuteDrawerProps {
   rate: AnchorRate | null;
   amount: string;
@@ -89,6 +92,11 @@ function ExecuteDrawerContent({
   const [kycOrigin, setKycOrigin] = useState<string | null>(null);
   const [showConfirmDialog, setShowConfirmDialog] = useState(false);
 
+  // Live downward-drag offset (px) of the mobile bottom sheet while a swipe is in
+  // progress. 0 means the sheet is at rest. Driven by the touch handlers below.
+  const [dragOffset, setDragOffset] = useState(0);
+  const touchStartY = useRef<number | null>(null);
+
   // Holds the resolve/reject for the KYC Promise so KycIframe callbacks can
   // settle it without touching window globals.
   const kycResolveRef = useRef<((transactionId: string) => void) | null>(null);
@@ -117,6 +125,35 @@ function ExecuteDrawerContent({
     return () => window.removeEventListener('keydown', handleKeyDown);
   }, [isOpen, step]);
 
+  // Lock background scroll while the drawer is open. Pinning <body> with
+  // position:fixed (rather than overflow:hidden alone) is what makes the lock
+  // stick on iOS Safari, where touch scrolling otherwise leaks through.
+  useEffect(() => {
+    if (!isOpen) return;
+
+    const { body } = document;
+    const scrollY = window.scrollY;
+    const prev = {
+      position: body.style.position,
+      top: body.style.top,
+      width: body.style.width,
+      overflow: body.style.overflow,
+    };
+
+    body.style.position = 'fixed';
+    body.style.top = `-${scrollY}px`;
+    body.style.width = '100%';
+    body.style.overflow = 'hidden';
+
+    return () => {
+      body.style.position = prev.position;
+      body.style.top = prev.top;
+      body.style.width = prev.width;
+      body.style.overflow = prev.overflow;
+      window.scrollTo(0, scrollY);
+    };
+  }, [isOpen]);
+
   async function handleExecute() {
     if (!rate) return;
 
@@ -137,13 +174,17 @@ function ExecuteDrawerContent({
 
       // Step 2 — Initiate SEP-24 withdraw
       setStep('initiating');
-      const withdrawResp = await initiateWithdraw(anchor, {
-        assetCode: anchor.assetCode,
-        assetIssuer: anchor.assetIssuer,
-        amount,
-        account: publicKey,
-        jwt: auth.jwt,
-      }, signal);
+      const withdrawResp = await initiateWithdraw(
+        anchor,
+        {
+          assetCode: anchor.assetCode,
+          assetIssuer: anchor.assetIssuer,
+          amount,
+          account: publicKey,
+          jwt: auth.jwt,
+        },
+        signal
+      );
 
       // Step 3 — KYC iframe
       setStep('kyc');
@@ -164,7 +205,12 @@ function ExecuteDrawerContent({
       // Step 4 — Fetch transaction record
       setStep('building');
       const transferServer = anchor.TRANSFER_SERVER_SEP0024!;
-      const record = await getWithdrawTransactionRecord(transferServer, transactionId, auth.jwt, signal);
+      const record = await getWithdrawTransactionRecord(
+        transferServer,
+        transactionId,
+        auth.jwt,
+        signal
+      );
 
       // Step 5 — Build payment
       const tx = await buildWithdrawPayment({
@@ -217,6 +263,37 @@ function ExecuteDrawerContent({
 
   const isRunning = !['idle', 'done', 'error'].includes(step);
 
+  // ─── Bottom-sheet swipe-to-dismiss (mobile only) ────────────────────────────
+  // CSS-first: these handlers only feed a translateY offset; app/globals.css
+  // owns the snap-back animation and disables the transition mid-drag. The grab
+  // handle is hidden at ≥640px (sm:hidden), so this never fires on the desktop
+  // side-panel layout.
+  const handleSwipeStart = (event: ReactTouchEvent) => {
+    touchStartY.current = event.touches[0].clientY;
+  };
+
+  const handleSwipeMove = (event: ReactTouchEvent) => {
+    if (touchStartY.current === null) return;
+    const delta = event.touches[0].clientY - touchStartY.current;
+    setDragOffset(delta > 0 ? delta : 0); // only track downward drags
+  };
+
+  const handleSwipeEnd = () => {
+    if (touchStartY.current === null) return;
+    const dismissed = dragOffset > DISMISS_THRESHOLD;
+    touchStartY.current = null;
+    setDragOffset(0); // release: CSS transitions the sheet back to rest
+
+    if (!dismissed) return;
+    // Mirror the Escape/backdrop behaviour: confirm before tearing down an
+    // in-flight flow, otherwise just close.
+    if (isRunning) {
+      setShowConfirmDialog(true);
+    } else {
+      onClose();
+    }
+  };
+
   const handleKycComplete = (transactionId: string) => {
     kycResolveRef.current?.(transactionId);
   };
@@ -255,11 +332,26 @@ function ExecuteDrawerContent({
         role="dialog"
         aria-modal="true"
         aria-label="Execute off-ramp"
-        className={`fixed bottom-0 left-0 right-0 z-50 rounded-t-2xl bg-white shadow-2xl transition-transform duration-300 dark:bg-gray-900 sm:bottom-auto sm:left-auto sm:right-8 sm:top-1/2 sm:w-96 sm:-translate-y-1/2 sm:rounded-2xl ${
+        data-dragging={dragOffset > 0 ? 'true' : undefined}
+        style={dragOffset > 0 ? { transform: `translateY(${dragOffset}px)` } : undefined}
+        className={`bottom-sheet fixed bottom-0 left-0 right-0 z-50 rounded-t-2xl bg-white shadow-2xl transition-transform duration-300 dark:bg-gray-900 sm:bottom-auto sm:left-auto sm:right-8 sm:top-1/2 sm:w-96 sm:-translate-y-1/2 sm:rounded-2xl ${
           isOpen ? 'translate-y-0' : 'translate-y-full sm:translate-y-full'
         }`}
       >
-        <div className="p-6">
+        {/* Grab handle — swipe down to dismiss. Mobile bottom sheet only. */}
+        <div
+          className="bottom-sheet-handle flex justify-center pt-3 sm:hidden"
+          onTouchStart={handleSwipeStart}
+          onTouchMove={handleSwipeMove}
+          onTouchEnd={handleSwipeEnd}
+        >
+          <span
+            aria-hidden="true"
+            className="h-1.5 w-10 rounded-full bg-gray-300 dark:bg-gray-600"
+          />
+        </div>
+
+        <div className="px-6 pb-6 pt-4 sm:p-6">
           {/* Header */}
           <div className="mb-5 flex items-center justify-between">
             <h2 className="text-lg font-semibold text-gray-900 dark:text-white">

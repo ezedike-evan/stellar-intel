@@ -23,8 +23,7 @@ function resetKeysChanged(
   next: readonly unknown[] = []
 ): boolean {
   return (
-    previous.length !== next.length ||
-    previous.some((key, index) => !Object.is(key, next[index]))
+    previous.length !== next.length || previous.some((key, index) => !Object.is(key, next[index]))
   );
 }
 

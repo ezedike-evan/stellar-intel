@@ -64,8 +64,7 @@ export function computeCorridorAggregate(
   const p95SettlementMs = times[Math.floor(times.length * 0.95)] ?? null;
 
   const successRate = successCount / relevant.length;
-  const speedScore =
-    p50SettlementMs !== null ? Math.max(0, 1 - p50SettlementMs / 3600000) : 0;
+  const speedScore = p50SettlementMs !== null ? Math.max(0, 1 - p50SettlementMs / 3600000) : 0;
   const compositeScore = Math.round((successRate * 0.7 + speedScore * 0.3) * 100) / 100;
 
   return {
@@ -83,9 +82,7 @@ export function computeCorridorAggregate(
   };
 }
 
-export function groupByCorridor(
-  events: SettlementEvent[]
-): Map<string, SettlementEvent[]> {
+export function groupByCorridor(events: SettlementEvent[]): Map<string, SettlementEvent[]> {
   const map = new Map<string, SettlementEvent[]>();
   for (const e of events) {
     const key = `${e.anchorId}::${e.corridor}`;
@@ -133,8 +130,17 @@ export function computeWindowAggregate(
   const bucketStart = bucketStartFor(now, windowDays);
 
   if (relevant.length === 0) {
-    return { anchorId, windowDays, bucketStart, txCount: 0, successCount: 0,
-      avgSettlementMs: null, p50SettlementMs: null, p95SettlementMs: null, compositeScore: null };
+    return {
+      anchorId,
+      windowDays,
+      bucketStart,
+      txCount: 0,
+      successCount: 0,
+      avgSettlementMs: null,
+      p50SettlementMs: null,
+      p95SettlementMs: null,
+      compositeScore: null,
+    };
   }
 
   const successCount = relevant.filter((e) => e.success).length;
@@ -146,8 +152,17 @@ export function computeWindowAggregate(
   const speedScore = p50SettlementMs !== null ? Math.max(0, 1 - p50SettlementMs / 3600000) : 0;
   const compositeScore = Math.round((successRate * 0.7 + speedScore * 0.3) * 100) / 100;
 
-  return { anchorId, windowDays, bucketStart, txCount: relevant.length, successCount,
-    avgSettlementMs, p50SettlementMs, p95SettlementMs, compositeScore };
+  return {
+    anchorId,
+    windowDays,
+    bucketStart,
+    txCount: relevant.length,
+    successCount,
+    avgSettlementMs,
+    p50SettlementMs,
+    p95SettlementMs,
+    compositeScore,
+  };
 }
 
 export function incrementalUpdate(
@@ -161,8 +176,8 @@ export function incrementalUpdate(
       ? Math.round((current.avgSettlementMs * current.txCount + newEvent.settlementMs) / txCount)
       : newEvent.settlementMs;
   const successRate = successCount / txCount;
-  const speedScore = current.p50SettlementMs !== null
-    ? Math.max(0, 1 - current.p50SettlementMs / 3600000) : 0;
+  const speedScore =
+    current.p50SettlementMs !== null ? Math.max(0, 1 - current.p50SettlementMs / 3600000) : 0;
   const compositeScore = Math.round((successRate * 0.7 + speedScore * 0.3) * 100) / 100;
   return { ...current, txCount, successCount, avgSettlementMs, compositeScore };
 }
