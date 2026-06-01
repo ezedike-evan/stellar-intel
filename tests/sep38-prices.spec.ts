@@ -129,11 +129,19 @@ describe('getSep38Prices', () => {
     ).rejects.toThrow(/HTTP 500.*SEP-38 \/prices/);
   });
 
-  it('requires sell_asset and sell_amount', async () => {
+  it('rejects an empty sell_asset with a Sep38ParseError', async () => {
     mockFetch(REAL_PRICES_RESPONSE);
 
     await expect(
       getSep38Prices(QUOTE_SERVER, { sell_asset: '', sell_amount: '100' })
-    ).rejects.toThrow(/sell_asset and sell_amount are required/);
+    ).rejects.toBeInstanceOf(Sep38ParseError);
+  });
+
+  it('rejects an empty sell_amount with a Sep38ParseError', async () => {
+    mockFetch(REAL_PRICES_RESPONSE);
+
+    await expect(
+      getSep38Prices(QUOTE_SERVER, { sell_asset: USDC, sell_amount: '' })
+    ).rejects.toBeInstanceOf(Sep38ParseError);
   });
 });

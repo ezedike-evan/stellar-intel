@@ -158,6 +158,8 @@ function parsePrices(raw: Record<string, unknown>): Sep38IndicativePrice[] {
     // mirrors it unless the anchor provides a distinct value.
     const totalPrice = typeof entry['total_price'] === 'string' ? entry['total_price'] : price;
 
+    // buy_asset is a named alias for asset — both are required by the issue spec
+    // so callers can use the semantically clearer field name.
     return { asset, buy_asset: asset, price, total_price: totalPrice };
   });
 }
@@ -180,7 +182,7 @@ export async function getSep38Prices(
   const base = normalizeQuoteServer(quoteServer);
 
   if (!params.sell_asset || !params.sell_amount) {
-    throw new Error('sell_asset and sell_amount are required');
+    throw new Sep38ParseError('sell_asset and sell_amount are required');
   }
 
   const url = new URL(`${base}/prices`);
