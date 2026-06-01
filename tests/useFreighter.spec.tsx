@@ -15,17 +15,43 @@ import type { FreighterState } from '@/types'
 
 // ─── Mock Freighter API ───────────────────────────────────────────────────────
 
-const mockFreighterApi = vi.hoisted(() => ({
-  isConnected: vi.fn(),
-  getAddress: vi.fn(),
-  getNetwork: vi.fn(),
-  requestAccess: vi.fn(),
-  signTransaction: vi.fn(),
-  WatchWalletChanges: class {
-    watch = vi.fn()
-    stop = vi.fn()
+const mockFreighterApi = vi.hoisted(() => {
+  const api = {
+    isConnected: vi.fn(),
+    getAddress: vi.fn(),
+    getNetwork: vi.fn(),
+    requestAccess: vi.fn(),
+    signTransaction: vi.fn(),
+    WatchWalletChanges: class {
+      private _cb: ((r: { address?: string; network?: string }) => void) | null = null
+      private _timer: ReturnType<typeof setInterval> | null = null
+
+      watch(cb: (r: { address?: string; network?: string }) => void) {
+        this._cb = cb
+        this._timer = setInterval(async () => {
+          if (!this._cb) return
+          try {
+            const conn = await api.isConnected()
+            if (conn?.isConnected) {
+              const [addr, net] = await Promise.all([api.getAddress(), api.getNetwork()])
+              this._cb({ address: addr?.publicKey ?? addr?.address, network: net?.network ?? undefined })
+            } else {
+              this._cb({})
+            }
+          } catch {
+            this._cb({})
+          }
+        }, 50)
+      }
+
+      stop() {
+        if (this._timer) clearInterval(this._timer)
+        this._cb = null
+      }
+    }
   }
-}))
+  return api
+})
 
 vi.mock('@stellar/freighter-api', () => mockFreighterApi)
 

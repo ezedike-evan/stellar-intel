@@ -3,7 +3,7 @@ import { useState, useEffect, useCallback, useRef } from 'react'
 import type { FreighterState } from '@/types'
 
 const STORAGE_KEY = 'freighter_connected'
-const POLL_MS = 300
+const POLL_MS = 5000
 
 const INITIAL_STATE: FreighterState = {
   isInstalled: false,
@@ -26,6 +26,8 @@ export function useFreighter() {
 
   useEffect(() => {
     let cancelled = false
+    let intervalId: ReturnType<typeof setInterval> | null = null
+    const watcherHandle = { current: null as { stop: () => void } | null }
 
     async function detect() {
       try {
@@ -66,12 +68,48 @@ export function useFreighter() {
       }
     }
 
-    detect()
-    const interval = setInterval(detect, POLL_MS)
+    async function init() {
+      await detect()
+
+      try {
+        const { WatchWalletChanges } = await import('@stellar/freighter-api')
+        if (cancelled) return
+
+        const watcher = new WatchWalletChanges(POLL_MS)
+        watcherHandle.current = watcher
+        watcher.watch((result: { address?: string; network?: string }) => {
+          if (cancelled || !mountedRef.current) return
+          const pk = result.address ?? null
+          const networkName = result.network ?? null
+          const networkError =
+            pk && networkName !== 'PUBLIC' ? 'Please switch Freighter to Mainnet' : null
+
+          setState((s) => {
+            if (s.publicKey === pk && s.network === networkName && s.error === networkError) return s
+            return {
+              ...s,
+              isInstalled: true,
+              isConnected: !!pk,
+              publicKey: pk,
+              network: networkName,
+              error: networkError,
+            }
+          })
+        })
+      } catch {
+        // WatchWalletChanges unavailable; fall back to 5s polling
+        if (!cancelled) {
+          intervalId = setInterval(detect, POLL_MS)
+        }
+      }
+    }
+
+    init()
 
     return () => {
       cancelled = true
-      clearInterval(interval)
+      watcherHandle.current?.stop()
+      if (intervalId) clearInterval(intervalId)
     }
   }, [])
 

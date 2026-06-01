@@ -6,6 +6,7 @@ import {
   getTransferServer,
   getWebAuthEndpoint,
   resolveAllAnchors,
+  resolveAnchorSupportHref,
   _clearTomlCache,
 } from '@/lib/stellar/sep1'
 
@@ -44,6 +45,9 @@ describe('resolveAnchor', () => {
       WEB_AUTH_ENDPOINT: 'https://cowrie.exchange/auth',
       SIGNING_KEY: 'GABCDEF',
       NETWORK_PASSPHRASE: Networks.PUBLIC,
+      ORG_URL: null,
+      ORG_SUPPORT_EMAIL: null,
+      ORG_SUPPORT_URL: null,
       CURRENCIES: [
         { code: 'USDC', issuer: 'GA5ZSEJYB37JRC5AVCIA5MOP4RHTM335X2KGX3IHOJAPP5RE34K4KZVN' },
       ],
@@ -76,7 +80,30 @@ describe('resolveAnchor', () => {
     expect(result.WEB_AUTH_ENDPOINT).toBeNull()
     expect(result.SIGNING_KEY).toBeNull()
     expect(result.NETWORK_PASSPHRASE).toBeNull()
+    expect(result.ORG_URL).toBeNull()
+    expect(result.ORG_SUPPORT_EMAIL).toBeNull()
+    expect(result.ORG_SUPPORT_URL).toBeNull()
     expect(result.CURRENCIES).toEqual([])
+  })
+
+  it('extracts ORG_SUPPORT_URL when present in TOML', async () => {
+    vi.spyOn(StellarToml.Resolver, 'resolve').mockResolvedValue({
+      ...VALID_TOML,
+      ORG_SUPPORT_URL: 'https://support.cowrie.exchange',
+    } as never)
+
+    const result = await resolveAnchor('cowrie.exchange')
+    expect(result.ORG_SUPPORT_URL).toBe('https://support.cowrie.exchange')
+  })
+
+  it('extracts ORG_SUPPORT_EMAIL when present in TOML', async () => {
+    vi.spyOn(StellarToml.Resolver, 'resolve').mockResolvedValue({
+      ...VALID_TOML,
+      ORG_SUPPORT_EMAIL: 'support@cowrie.exchange',
+    } as never)
+
+    const result = await resolveAnchor('cowrie.exchange')
+    expect(result.ORG_SUPPORT_EMAIL).toBe('support@cowrie.exchange')
   })
 
   it('sets sep24 false and sep10 true when TRANSFER_SERVER_SEP0024 is absent', async () => {
@@ -233,5 +260,58 @@ describe('resolveAllAnchors', () => {
     expect(result['moneygram']?.TRANSFER_SERVER_SEP0024).toBe('https://cowrie.exchange/sep24')
     expect(result['cowrie']).toBeDefined()
     expect(result['anclap']).toBeUndefined()
+  })
+})
+
+describe('resolveAnchorSupportHref', () => {
+  it('prefers ORG_SUPPORT_URL over email', () => {
+    const href = resolveAnchorSupportHref({
+      domain: 'cowrie.exchange',
+      TRANSFER_SERVER_SEP0024: null,
+      ANCHOR_QUOTE_SERVER: null,
+      WEB_AUTH_ENDPOINT: null,
+      SIGNING_KEY: null,
+      NETWORK_PASSPHRASE: null,
+      ORG_URL: 'https://www.cowrie.exchange',
+      ORG_SUPPORT_EMAIL: 'support@cowrie.exchange',
+      ORG_SUPPORT_URL: 'https://support.cowrie.exchange',
+      CURRENCIES: [],
+      capabilities: { sep10: false, sep24: false, sep38: false, sep12: false },
+    })
+    expect(href).toBe('https://support.cowrie.exchange')
+  })
+
+  it('returns mailto for ORG_SUPPORT_EMAIL when no support URL', () => {
+    const href = resolveAnchorSupportHref({
+      domain: 'cowrie.exchange',
+      TRANSFER_SERVER_SEP0024: null,
+      ANCHOR_QUOTE_SERVER: null,
+      WEB_AUTH_ENDPOINT: null,
+      SIGNING_KEY: null,
+      NETWORK_PASSPHRASE: null,
+      ORG_URL: 'https://www.cowrie.exchange',
+      ORG_SUPPORT_EMAIL: 'support@cowrie.exchange',
+      ORG_SUPPORT_URL: null,
+      CURRENCIES: [],
+      capabilities: { sep10: false, sep24: false, sep38: false, sep12: false },
+    })
+    expect(href).toBe('mailto:support@cowrie.exchange')
+  })
+
+  it('falls back to https ORG_URL when email and support URL are absent', () => {
+    const href = resolveAnchorSupportHref({
+      domain: 'cowrie.exchange',
+      TRANSFER_SERVER_SEP0024: null,
+      ANCHOR_QUOTE_SERVER: null,
+      WEB_AUTH_ENDPOINT: null,
+      SIGNING_KEY: null,
+      NETWORK_PASSPHRASE: null,
+      ORG_URL: 'https://www.cowrie.exchange',
+      ORG_SUPPORT_EMAIL: null,
+      ORG_SUPPORT_URL: null,
+      CURRENCIES: [],
+      capabilities: { sep10: false, sep24: false, sep38: false, sep12: false },
+    })
+    expect(href).toBe('https://www.cowrie.exchange')
   })
 })

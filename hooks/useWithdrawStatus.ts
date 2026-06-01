@@ -1,11 +1,24 @@
+import { useCallback, useEffect, useRef } from 'react'
 import useSWR from 'swr'
+import { TERMINAL_STATES } from '@/lib/stellar/sep24'
 import type { Sep24Transaction, WithdrawStatusValue } from '@/types'
 
-const TERMINAL_STATES: WithdrawStatusValue[] = ['completed', 'error', 'refunded', 'no_market', 'too_small', 'too_large']
+export const WITHDRAW_POLL_INITIAL_MS = 2_000
+export const WITHDRAW_POLL_MAX_MS = 30_000
+export const WITHDRAW_POLL_MULTIPLIER = 1.5
 
-async function fetcher([transferServer, transactionId, jwt]: [string, string, string]): Promise<Sep24Transaction> {
+/** Next poll delay after a successful fetch with unchanged status. O(1) time, O(1) space. */
+export function computeNextWithdrawPollIntervalMs(currentMs: number): number {
+  return Math.min(Math.round(currentMs * WITHDRAW_POLL_MULTIPLIER), WITHDRAW_POLL_MAX_MS)
+}
+
+async function fetchTransaction(
+  [transferServer, transactionId, jwt]: [string, string, string],
+  signal?: AbortSignal
+): Promise<Sep24Transaction> {
   const res = await fetch(`${transferServer}/transaction?id=${transactionId}`, {
     headers: { Authorization: `Bearer ${jwt}` },
+    ...(signal !== undefined ? { signal } : {}),
   })
 
   if (!res.ok) {
@@ -46,24 +59,51 @@ export interface UseWithdrawStatusResult {
 }
 
 /**
- * Polls the anchor's SEP-24 transaction endpoint every 5 seconds.
- * Polling stops automatically when the transaction reaches a terminal state.
- * Fetching is disabled when any parameter is null.
+ * Polls the anchor SEP-24 /transaction endpoint with exponential backoff
+ * (2s -> x1.5 -> cap 30s). Resets to 2s on status change; stops on terminal states.
  */
 export function useWithdrawStatus(
   transferServer: string | null,
   transactionId: string | null,
   jwt: string | null
 ): UseWithdrawStatusResult {
+  const pollIntervalMsRef = useRef(WITHDRAW_POLL_INITIAL_MS)
+  const lastStatusRef = useRef<WithdrawStatusValue | undefined>(undefined)
+  const abortRef = useRef<AbortController | null>(null)
+
   const key =
     transferServer && transactionId && jwt
       ? ([transferServer, transactionId, jwt] as [string, string, string])
       : null
 
+  useEffect(() => {
+    pollIntervalMsRef.current = WITHDRAW_POLL_INITIAL_MS
+    lastStatusRef.current = undefined
+    abortRef.current = new AbortController()
+    return () => {
+      abortRef.current?.abort()
+      abortRef.current = null
+    }
+  }, [transferServer, transactionId, jwt])
+
+  const fetcher = useCallback(
+    (swrKey: [string, string, string]) =>
+      fetchTransaction(swrKey, abortRef.current?.signal),
+    []
+  )
+
   const { data, error, isLoading } = useSWR<Sep24Transaction, Error>(key, fetcher, {
-    refreshInterval: (latestData: Sep24Transaction | undefined) => {
-      if (!latestData) return 5_000
-      return TERMINAL_STATES.includes(latestData.status) ? 0 : 5_000
+    refreshInterval(latestData) {
+      if (!latestData) return WITHDRAW_POLL_INITIAL_MS
+      return TERMINAL_STATES.has(latestData.status) ? 0 : pollIntervalMsRef.current
+    },
+    onSuccess(data) {
+      if (lastStatusRef.current !== data.status) {
+        lastStatusRef.current = data.status
+        pollIntervalMsRef.current = WITHDRAW_POLL_INITIAL_MS
+        return
+      }
+      pollIntervalMsRef.current = computeNextWithdrawPollIntervalMs(pollIntervalMsRef.current)
     },
     revalidateOnFocus: false,
   })

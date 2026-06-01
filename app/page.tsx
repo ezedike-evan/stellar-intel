@@ -10,16 +10,16 @@ export default function HomePage() {
       <section className="py-12 text-center">
         <div className="mb-4 inline-flex items-center gap-2 rounded-full bg-blue-50 px-4 py-1.5 text-sm font-medium text-blue-700 dark:bg-blue-950 dark:text-blue-300">
           <Zap className="h-3.5 w-3.5" />
-          Built on Stellar
+          Stellar Execution Layer
         </div>
         <h1 className="mb-4 text-4xl font-bold tracking-tight text-gray-900 dark:text-white md:text-5xl">
-          Find the best rates on Stellar,
+          Where stablecoin transactions
           <br />
-          <span className="text-blue-600">in real time.</span>
+          <span className="text-blue-600">happen on Stellar.</span>
         </h1>
         <p className="mx-auto max-w-2xl text-lg text-gray-600 dark:text-gray-400">
-          Compare off-ramp rates across Stellar anchors for Nigeria, Kenya, Ghana, Mexico, and more
-          — then execute directly, in one click.
+          Stellar Intel is the execution layer for cross-border stablecoin flows — execute USDC
+          off-ramps across anchors for Nigeria, Kenya, Ghana, Mexico, and more in one click.
         </p>
       </section>
 
@@ -39,7 +39,7 @@ export default function HomePage() {
       {/* Module card */}
       <section>
         <h2 className="mb-6 text-xl font-semibold text-gray-900 dark:text-white">
-          Choose a comparator
+          Start transacting
         </h2>
         <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-4">
           <Link href="/offramp">
@@ -49,7 +49,7 @@ export default function HomePage() {
               </div>
               <h3 className="mb-2 font-semibold text-gray-900 dark:text-white">Off-ramp</h3>
               <p className="text-sm text-gray-500 dark:text-gray-400">
-                Compare USDC withdrawal rates across Stellar anchors by country and corridor.
+                Execute USDC off-ramps across Stellar anchors by country and corridor.
               </p>
             </Card>
           </Link>

@@ -1,7 +1,13 @@
 'use client'
+import { useEffect, useRef, useState } from 'react'
 import type { WithdrawStatusValue, Sep24Transaction } from '@/types'
 import { formatDeliveredAmount } from '@/lib/format'
+import { resolveAnchorSupportHref, resolveToml } from '@/lib/stellar/sep1'
 import { Timeline } from './Timeline'
+import { STELLAR_EXPERT_URL } from '@/constants'
+import { CopyButton } from '@/components/ui/CopyButton'
+
+const PENDING_ANCHOR_STALL_MS = 10 * 60 * 1000
 
 interface StatusTrackerProps {
   transactionId: string
@@ -18,8 +24,11 @@ interface StatusTrackerProps {
   refunds?: Sep24Transaction['refunds']
   isLoading: boolean
   error: string | undefined
+  /** Anchor home domain for SEP-1 support contact lookup. */
+  anchorHomeDomain?: string
   onRetryAnchor?: () => void
   onAdjust?: () => void
+  onDisputeOpen?: (transactionId: string) => void
 }
 
 const STATUS_LABELS: Record<WithdrawStatusValue, string> = {
@@ -40,7 +49,17 @@ const STATUS_LABELS: Record<WithdrawStatusValue, string> = {
   expired: 'Transaction expired',
 }
 
-const TERMINAL: WithdrawStatusValue[] = ['completed', 'refunded', 'error', 'no_market', 'too_small', 'too_large', 'expired']
+const TERMINAL: WithdrawStatusValue[] = [
+  'completed',
+  'refunded',
+  'error',
+  'no_market',
+  'too_small',
+  'too_large',
+  'expired',
+]
+
+const DISPUTABLE: WithdrawStatusValue[] = ['completed', 'refunded', 'error']
 
 function statusColor(status: WithdrawStatusValue | undefined): string {
   if (!status) return 'text-gray-500'
@@ -59,6 +78,10 @@ function statusDot(status: WithdrawStatusValue | undefined): string {
   return 'bg-blue-500 animate-pulse'
 }
 
+function isValidStellarTxId(id: string): boolean {
+  return /^[0-9a-fA-F]{64}$/.test(id)
+}
+
 export function StatusTracker({
   transactionId,
   status,
@@ -73,9 +96,55 @@ export function StatusTracker({
   refunds,
   isLoading,
   error,
+  anchorHomeDomain,
+  onDisputeOpen,
 }: StatusTrackerProps) {
   const isTerminal = status ? TERMINAL.includes(status) : false
   const isCompleted = status === 'completed'
+  const canDispute = isTerminal && status != null && DISPUTABLE.includes(status)
+
+  const [anchorSupportUrl, setAnchorSupportUrl] = useState<string | null>(null)
+  const pendingAnchorSinceRef = useRef<number | null>(null)
+  const [showStalledSupport, setShowStalledSupport] = useState(false)
+
+  useEffect(() => {
+    if (!anchorHomeDomain) {
+      setAnchorSupportUrl(null)
+      return
+    }
+    let cancelled = false
+    void resolveToml(anchorHomeDomain).then((result) => {
+      if (!cancelled && result.ok) {
+        setAnchorSupportUrl(resolveAnchorSupportHref(result.data))
+      }
+    })
+    return () => {
+      cancelled = true
+    }
+  }, [anchorHomeDomain])
+
+  useEffect(() => {
+    if (status === 'pending_anchor') {
+      pendingAnchorSinceRef.current ??= Date.now()
+    } else {
+      pendingAnchorSinceRef.current = null
+      setShowStalledSupport(false)
+    }
+  }, [status])
+
+  useEffect(() => {
+    if (status !== 'pending_anchor' || !anchorSupportUrl || pendingAnchorSinceRef.current === null) {
+      return
+    }
+    const elapsed = Date.now() - pendingAnchorSinceRef.current
+    const remaining = PENDING_ANCHOR_STALL_MS - elapsed
+    if (remaining <= 0) {
+      setShowStalledSupport(true)
+      return
+    }
+    const timerId = window.setTimeout(() => setShowStalledSupport(true), remaining)
+    return () => window.clearTimeout(timerId)
+  }, [status, anchorSupportUrl])
 
   return (
     <div
@@ -87,8 +156,13 @@ export function StatusTracker({
     >
       <div className="mb-4 flex items-start justify-between">
         <div>
-          <h3 className="text-sm font-semibold text-gray-900 dark:text-white">Transaction Status</h3>
-          <p className="mt-0.5 font-mono text-xs text-gray-400">{transactionId}</p>
+          <h3 className="text-sm font-semibold text-gray-900 dark:text-white">
+            Transaction Status
+          </h3>
+          <div className="mt-0.5 flex items-center gap-2">
+            <p className="font-mono text-xs text-gray-400">{transactionId}</p>
+            <CopyButton text={transactionId} />
+          </div>
         </div>
         {!isTerminal && (
           <span className="flex items-center gap-1 text-xs text-gray-400">
@@ -98,7 +172,6 @@ export function StatusTracker({
         )}
       </div>
 
-      {/* Completion celebration */}
       {isCompleted && amountOut && (
         <div className="mb-4 animate-in fade-in slide-in-from-bottom-2 duration-500">
           <p className="text-xs font-medium uppercase tracking-wide text-green-600 dark:text-green-400">
@@ -110,7 +183,6 @@ export function StatusTracker({
         </div>
       )}
 
-      {/* Status badge */}
       <div className="mb-4 flex items-center gap-2">
         <span className={`h-2.5 w-2.5 rounded-full ${statusDot(status)}`} />
         <span className={`text-sm font-medium ${statusColor(status)}`}>
@@ -118,14 +190,26 @@ export function StatusTracker({
         </span>
       </div>
 
-      {/* Error message */}
       {error && (
         <p className="mb-4 rounded-lg bg-red-50 px-3 py-2 text-xs text-red-600 dark:bg-red-950/30 dark:text-red-400">
           {error}
         </p>
       )}
 
-      {/* Amount details — hidden when celebration banner or refund card is shown */}
+      {showStalledSupport && anchorSupportUrl && (
+        <p className="mb-4 rounded-lg bg-amber-50 px-3 py-2 text-xs text-amber-800 dark:bg-amber-950/30 dark:text-amber-300">
+          This withdrawal is taking longer than expected.{' '}
+          <a
+            href={anchorSupportUrl}
+            target="_blank"
+            rel="noopener noreferrer"
+            className="font-medium underline"
+          >
+            Contact anchor support
+          </a>
+        </p>
+      )}
+
       {(amountIn || amountOut) && !isCompleted && status !== 'refunded' && (
         <dl className="mb-4 space-y-1.5 text-sm">
           {amountIn && (
@@ -155,10 +239,11 @@ export function StatusTracker({
         </dl>
       )}
 
-      {/* Refund details */}
       {status === 'refunded' && refunds && (
         <div className="mb-4 mt-2 rounded-lg bg-yellow-50 p-4 dark:bg-yellow-900/20">
-          <h4 className="mb-2 text-sm font-semibold text-yellow-800 dark:text-yellow-300">Refund Details</h4>
+          <h4 className="mb-2 text-sm font-semibold text-yellow-800 dark:text-yellow-300">
+            Refund Details
+          </h4>
           <dl className="space-y-1.5 text-sm">
             {refunds.amount_refunded && (
               <div className="flex justify-between">
@@ -177,21 +262,27 @@ export function StatusTracker({
               </div>
             )}
           </dl>
-          
+
           {refunds.payments && refunds.payments.length > 0 && (
             <div className="mt-3 pt-3 border-t border-yellow-200/50 dark:border-yellow-700/50">
-              <p className="text-xs font-semibold text-yellow-800 dark:text-yellow-300 mb-2">Refund Payments</p>
+              <p className="text-xs font-semibold text-yellow-800 dark:text-yellow-300 mb-2">
+                Refund Payments
+              </p>
               <div className="space-y-2">
                 {refunds.payments.map((p, i) => (
                   <div key={i} className="text-xs bg-white/50 dark:bg-black/20 rounded p-2">
                     <div className="flex justify-between mb-1">
                       <span className="text-yellow-700 dark:text-yellow-400">Amount</span>
-                      <span className="font-medium text-yellow-900 dark:text-yellow-200">{p.amount}</span>
+                      <span className="font-medium text-yellow-900 dark:text-yellow-200">
+                        {p.amount}
+                      </span>
                     </div>
                     {p.fee && (
                       <div className="flex justify-between mb-1">
                         <span className="text-yellow-700 dark:text-yellow-400">Fee</span>
-                        <span className="font-medium text-yellow-900 dark:text-yellow-200">{p.fee}</span>
+                        <span className="font-medium text-yellow-900 dark:text-yellow-200">
+                          {p.fee}
+                        </span>
                       </div>
                     )}
                     <div className="mt-1 pt-1 border-t border-yellow-200/30 dark:border-yellow-700/30">
@@ -207,7 +298,6 @@ export function StatusTracker({
         </div>
       )}
 
-      {/* External Transaction ID */}
       {externalTransactionId && (
         <div className="mt-4 pt-4 border-t border-gray-100 dark:border-gray-800">
           <p className="text-xs text-gray-500 uppercase tracking-wider font-semibold mb-1">
@@ -219,18 +309,32 @@ export function StatusTracker({
         </div>
       )}
 
-      {/* Stellar tx link */}
-      {stellarTransactionId && (
+      {stellarTransactionId && isValidStellarTxId(stellarTransactionId) && (
         <p className="text-xs text-gray-500">
           Stellar tx:{' '}
-          <span className="font-mono text-gray-700 dark:text-gray-300">
+          <a
+            href={`${STELLAR_EXPERT_URL}/tx/${stellarTransactionId}`}
+            target="_blank"
+            rel="noopener noreferrer"
+            className="font-mono text-blue-600 hover:underline dark:text-blue-400"
+          >
             {stellarTransactionId.slice(0, 16)}…
-          </span>
+          </a>
         </p>
       )}
 
-      {/* Vertical Timeline */}
       <Timeline status={status} />
+
+      {canDispute && onDisputeOpen && (
+        <div className="mt-4 pt-4 border-t border-gray-100 dark:border-gray-800">
+          <button
+            onClick={() => onDisputeOpen(transactionId)}
+            className="text-xs font-medium text-gray-400 hover:text-red-500 dark:hover:text-red-400 underline transition-colors"
+          >
+            Flag incorrect outcome
+          </button>
+        </div>
+      )}
     </div>
   )
 }
@@ -238,7 +342,6 @@ export function StatusTracker({
 function parseAsset(assetStr: string | undefined): string | null {
   if (!assetStr) return null
   if (assetStr === 'stellar:native') return 'XLM'
-  // stellar:USDC:GA5Z... -> USDC
   const parts = assetStr.split(':')
   return parts[1] ?? null
 }

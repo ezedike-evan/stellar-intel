@@ -10,8 +10,6 @@ import {
   UnknownWalletError,
 } from '@/lib/stellar/errors'
 
-import { WatchWalletChanges } from '@stellar/freighter-api'
-
 // Freighter API is a browser extension — import lazily to avoid SSR errors
 async function getFreighterApi() {
   const mod = await import('@stellar/freighter-api')
@@ -80,40 +78,57 @@ export function WalletProvider({ children }: { children: React.ReactNode }) {
       }
     }
 
-    checkInstalled()
+    let intervalId: ReturnType<typeof setInterval> | null = null
+    let watcher: { stop: () => void } | null = null
 
-    // Watch for live changes (account/network switches)
-    const watcher = new WatchWalletChanges(2000)
-    watcher.watch((result: { address?: string; network?: string }) => {
-      if (!mountedRef.current) return
+    async function init() {
+      await checkInstalled()
+      if (cancelled) return
 
-      const networkName = result.network ?? null
-      const networkError =
-        networkName !== 'PUBLIC' ? 'Please switch Freighter to Mainnet' : null
+      // Subscribe to live wallet changes; fall back to 5s polling if unavailable
+      try {
+        const { WatchWalletChanges } = await getFreighterApi()
+        if (cancelled) return
 
-      setState((s: FreighterState) => {
-        // Only update if something actually changed to prevent re-render loops
-        if (
-          s.publicKey === result.address &&
-          s.network === networkName &&
-          s.error === networkError
-        ) {
-          return s
-        }
+        const w = new WatchWalletChanges(5000)
+        watcher = w
+        w.watch((result: { address?: string; network?: string }) => {
+          if (!mountedRef.current) return
 
-        return {
-          ...s,
-          isConnected: !!result.address,
-          publicKey: result.address ?? null,
-          network: networkName,
-          error: networkError,
-        }
-      })
-    })
+          const networkName = result.network ?? null
+          const networkError =
+            networkName !== 'PUBLIC' ? 'Please switch Freighter to Mainnet' : null
+
+          setState((s: FreighterState) => {
+            if (
+              s.publicKey === result.address &&
+              s.network === networkName &&
+              s.error === networkError
+            ) {
+              return s
+            }
+
+            return {
+              ...s,
+              isConnected: !!result.address,
+              publicKey: result.address ?? null,
+              network: networkName,
+              error: networkError,
+            }
+          })
+        })
+      } catch {
+        // WatchWalletChanges unavailable; poll every 5s as fallback
+        if (!cancelled) intervalId = setInterval(checkInstalled, 5000)
+      }
+    }
+
+    init()
 
     return () => {
       cancelled = true
-      watcher.stop()
+      watcher?.stop()
+      if (intervalId) clearInterval(intervalId)
     }
   }, [])
 

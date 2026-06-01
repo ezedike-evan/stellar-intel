@@ -1,10 +1,10 @@
 'use client'
-import { useFreighter } from '@/hooks/useFreighter'
+import { useWallet } from '@/contexts/WalletContext'
 import { truncatePublicKey } from '@/lib/utils'
 import { Button } from './Button'
 
 export function WalletButton() {
-  const { isInstalled, isConnected, publicKey, network, connect, error } = useFreighter()
+  const { isInstalled, isConnected, publicKey, network, connect, error } = useWallet()
 
   // State 1: not-detected — Freighter extension is not installed
   if (!isInstalled) {

@@ -27,8 +27,8 @@ jobs:
       - name: Resolve every anchor .well-known/stellar.toml
         id: probe
         run: |
-          # Extract anchor home domains from constants/anchors.ts — the single
-          # source of truth for anchor definitions (uses homeDomain: field).
+          # Extract anchor domains from constants/anchors.ts so we do not drift
+          # from the app's source of truth.
           mapfile -t DOMAINS < <(node -e "
             const fs = require('fs');
             const src = fs.readFileSync('constants/anchors.ts', 'utf8');
@@ -40,7 +40,7 @@ jobs:
           ")
 
           if [ ${#DOMAINS[@]} -eq 0 ]; then
-            echo "::warning::No anchor domains found in constants/index.ts; skipping"
+            echo "::warning::No anchor domains found in constants/anchors.ts; skipping"
             echo "summary=no-domains-detected" >> "$GITHUB_OUTPUT"
             exit 0
           fi
@@ -95,7 +95,7 @@ jobs:
     needs: [anchor-domains, reputation-integrity]
     if: failure()
     steps:
-      - uses: actions/github-script@v7
+      - uses: actions/github-script@v9
         with:
           script: |
             const title = `[nightly] integrity failure — ${new Date().toISOString().slice(0,10)}`;
