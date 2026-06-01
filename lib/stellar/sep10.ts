@@ -1,6 +1,6 @@
 import { Networks, TransactionBuilder } from '@stellar/stellar-sdk'
 import type { Transaction, FeeBumpTransaction } from '@stellar/stellar-sdk'
-import { getWebAuthEndpoint } from './sep1'
+import { getWebAuthEndpoint, resolveAnchor } from './sep1'
 import { getCachedJwt, setCachedJwt, invalidateCachedJwt } from './jwt-cache'
 import type { ResolvedAnchor, Sep10Auth } from '@/types'
 import { UserRejectedError, WalletError } from './errors'
@@ -265,9 +265,14 @@ export async function submitChallenge(
 // ─── Full auth orchestrator ───────────────────────────────────────────────────
 
 export async function authenticate(
-  anchor: ResolvedAnchor,
+  anchorOrDomain: ResolvedAnchor | string,
   publicKey: string
 ): Promise<Sep10Auth> {
+  const anchor =
+    typeof anchorOrDomain === 'string'
+      ? await resolveAuthenticationAnchor(anchorOrDomain)
+      : anchorOrDomain
+
   const cached = getCachedJwt(anchor.homeDomain, publicKey)
   if (cached) return cached
 
@@ -282,6 +287,23 @@ export async function authenticate(
   const auth: Sep10Auth = { jwt, anchorDomain: anchor.homeDomain, publicKey, expiresAt }
   setCachedJwt(auth)
   return auth
+}
+
+async function resolveAuthenticationAnchor(domain: string): Promise<ResolvedAnchor> {
+  const sep1 = await resolveAnchor(domain)
+  if (!sep1.capabilities.sep10) {
+    throw new Error(`Anchor "${domain}" does not support SEP-10 authentication.`)
+  }
+
+  return {
+    id: domain,
+    name: domain,
+    homeDomain: domain,
+    corridors: [],
+    assetCode: '',
+    assetIssuer: '',
+    ...sep1,
+  }
 }
 
 /**

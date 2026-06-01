@@ -26,19 +26,19 @@ Two guiding principles:
 
 Every PR runs, in order of earliest failure:
 
-| Gate | Command | Fails on |
-|------|---------|----------|
-| **Prettier** | `npm run format:check` | Any unformatted diff. Rerun `npm run format` to fix. |
-| **ESLint (zero warnings)** | `npm run lint` | Any `no-explicit-any`, `no-unused-vars`, `no-console`, Next.js core-web-vital rule. |
-| **TypeScript** | `npm run typecheck` | Any type error under the strict flag set below. |
-| **Vitest** | `npm run test` | Any failing unit test. Coverage uploaded to Codecov. |
-| **Next build** | `npm run build` | Build error, missing env var at build-time, circular import. |
-| **Commitlint** | workflow `commitlint` | Commit that does not match `<type>[(scope)]: <subject>`. |
-| **PR title** | workflow `pr-title` | PR title not following Conventional Commits. |
-| **Dependency review** | workflow `dependency-review` | New dep with GPL / AGPL licence or CVE ≥ moderate. |
-| **Bundle size** | workflow `bundle-size` | > 10 kB total JS growth vs. base branch without a size label. |
-| **Lighthouse** | workflow `lighthouse` | Posted as comment; informational unless performance degrades sharply. |
-| **CodeQL** | workflow `codeql` | Security-extended + security-and-quality queries. |
+| Gate                       | Command                      | Fails on                                                                            |
+| -------------------------- | ---------------------------- | ----------------------------------------------------------------------------------- |
+| **Prettier**               | `npm run format:check`       | Any unformatted diff. Rerun `npm run format` to fix.                                |
+| **ESLint (zero warnings)** | `npm run lint`               | Any `no-explicit-any`, `no-unused-vars`, `no-console`, Next.js core-web-vital rule. |
+| **TypeScript**             | `npm run typecheck`          | Any type error under the strict flag set below.                                     |
+| **Vitest**                 | `npm run test`               | Any failing unit test. Coverage uploaded to Codecov.                                |
+| **Next build**             | `npm run build`              | Build error, missing env var at build-time, circular import.                        |
+| **Commitlint**             | workflow `commitlint`        | Commit that does not match `<type>[(scope)]: <subject>`.                            |
+| **PR title**               | workflow `pr-title`          | PR title not following Conventional Commits.                                        |
+| **Dependency review**      | workflow `dependency-review` | New dep with GPL / AGPL licence or CVE ≥ moderate.                                  |
+| **Bundle size**            | workflow `bundle-size`       | > 10 kB total JS growth vs. base branch without a size label.                       |
+| **Lighthouse**             | workflow `lighthouse`        | Posted as comment; informational unless performance degrades sharply.               |
+| **CodeQL**                 | workflow `codeql`            | Security-extended + security-and-quality queries.                                   |
 
 Run the full local equivalent with `npm run test:release`.
 
@@ -48,13 +48,13 @@ Run the full local equivalent with `npm run test:release`.
 
 Enabled in `tsconfig.json`:
 
-| Flag | Catches |
-|------|---------|
-| `strict` | All the standard strict-mode checks (`strictNullChecks`, `noImplicitAny`, …). |
-| `noUncheckedIndexedAccess` | `arr[i]` is inferred as `T \| undefined`, forcing explicit null checks on index access. |
-| `noImplicitOverride` | Subclass methods must use `override`, preventing accidental parent-method shadowing. |
-| `exactOptionalPropertyTypes` | `{ x?: T }` and `{ x?: T \| undefined }` are distinct. Prevents "undefined leaked through an optional". |
-| `noFallthroughCasesInSwitch` | Every non-empty `case` ends in a terminator. |
+| Flag                               | Catches                                                                                                    |
+| ---------------------------------- | ---------------------------------------------------------------------------------------------------------- |
+| `strict`                           | All the standard strict-mode checks (`strictNullChecks`, `noImplicitAny`, …).                              |
+| `noUncheckedIndexedAccess`         | `arr[i]` is inferred as `T \| undefined`, forcing explicit null checks on index access.                    |
+| `noImplicitOverride`               | Subclass methods must use `override`, preventing accidental parent-method shadowing.                       |
+| `exactOptionalPropertyTypes`       | `{ x?: T }` and `{ x?: T \| undefined }` are distinct. Prevents "undefined leaked through an optional".    |
+| `noFallthroughCasesInSwitch`       | Every non-empty `case` ends in a terminator.                                                               |
 | `forceConsistentCasingInFileNames` | Prevents import-path case drift between macOS/Windows (case-insensitive FS) and Linux CI (case-sensitive). |
 
 These are deliberately opinionated. If a flag blocks you, prefer adding
