@@ -1,4 +1,8 @@
 import { parseSepErrorBody } from './errors';
+import type { Sep1TomlData } from '@/types';
+import { Sep38PriceSchema } from './sep38-schemas';
+import type { Sep38Price } from './sep38-schemas';
+export type { Sep38Price, Sep38Prices, Sep38Info, Sep38Quote } from './sep38-schemas';
 
 const PRICE_PATH = '/price';
 
@@ -11,80 +15,10 @@ export interface Sep38PriceParams {
   context: string;
 }
 
-export interface Sep38FeeDetail {
-  name: string;
-  amount: string;
-  description?: string;
-}
-
-export interface Sep38Fee {
-  total: string;
-  asset: string;
-  details?: Sep38FeeDetail[];
-}
-
-export interface Sep38PriceResponse {
-  price: string;
-  sell_amount: string;
-  buy_amount: string;
-  total_price?: string;
-  fee?: Sep38Fee;
-}
-
 function assertNonEmpty(value: string, fieldName: keyof Sep38PriceParams): void {
   if (value.trim().length === 0) {
     throw new Error(`SEP-38 /price requires a non-empty "${fieldName}"`);
   }
-}
-
-function isRecord(value: unknown): value is Record<string, unknown> {
-  return typeof value === 'object' && value !== null && !Array.isArray(value);
-}
-
-function getRequiredString(data: Record<string, unknown>, fieldName: string): string {
-  const value = data[fieldName];
-  if (typeof value !== 'string' || value.trim().length === 0) {
-    throw new Error(`Invalid SEP-38 /price response: missing "${fieldName}"`);
-  }
-  return value;
-}
-
-function parseFee(raw: unknown): Sep38Fee | undefined {
-  if (raw === undefined) return undefined;
-  if (!isRecord(raw)) {
-    throw new Error('Invalid SEP-38 /price response: "fee" must be an object');
-  }
-
-  const fee: Sep38Fee = {
-    total: getRequiredString(raw, 'total'),
-    asset: getRequiredString(raw, 'asset'),
-  };
-
-  const details = raw['details'];
-  if (details !== undefined) {
-    if (!Array.isArray(details)) {
-      throw new Error('Invalid SEP-38 /price response: "fee.details" must be an array');
-    }
-
-    fee.details = details.map((detail) => {
-      if (!isRecord(detail)) {
-        throw new Error('Invalid SEP-38 /price response: each fee detail must be an object');
-      }
-
-      const parsed: Sep38FeeDetail = {
-        name: getRequiredString(detail, 'name'),
-        amount: getRequiredString(detail, 'amount'),
-      };
-
-      if (typeof detail['description'] === 'string') {
-        parsed.description = detail['description'];
-      }
-
-      return parsed;
-    });
-  }
-
-  return fee;
 }
 
 function buildPriceUrl(params: Sep38PriceParams): string {
@@ -108,25 +42,17 @@ function buildPriceUrl(params: Sep38PriceParams): string {
   return url.toString();
 }
 
-function parsePriceResponse(data: unknown): Sep38PriceResponse {
-  if (!isRecord(data)) {
-    throw new Error('Invalid SEP-38 /price response: expected an object');
+/**
+ * Asserts that an anchor advertises ANCHOR_QUOTE_SERVER in its stellar.toml.
+ * Throws if the anchor is not SEP-38 capable; returns the quote server URL otherwise.
+ */
+export function assertSep38Capable(toml: Sep1TomlData): string {
+  if (!toml.capabilities.sep38 || !toml.ANCHOR_QUOTE_SERVER) {
+    throw new Error(
+      `Anchor "${toml.domain}" does not advertise ANCHOR_QUOTE_SERVER and cannot be used for SEP-38.`
+    );
   }
-
-  const response: Sep38PriceResponse = {
-    price: getRequiredString(data, 'price'),
-    sell_amount: getRequiredString(data, 'sell_amount'),
-    buy_amount: getRequiredString(data, 'buy_amount'),
-  };
-
-  if (typeof data['total_price'] === 'string') {
-    response.total_price = data['total_price'];
-  }
-
-  const fee = parseFee(data['fee']);
-  if (fee) response.fee = fee;
-
-  return response;
+  return toml.ANCHOR_QUOTE_SERVER;
 }
 
 /**
@@ -135,7 +61,7 @@ function parsePriceResponse(data: unknown): Sep38PriceResponse {
  * This wraps GET /price and intentionally supports the sell_amount path needed
  * by the off-ramp comparator. Firm quotes belong to POST /quote.
  */
-export async function getSep38Price(params: Sep38PriceParams): Promise<Sep38PriceResponse> {
+export async function getSep38Price(params: Sep38PriceParams): Promise<Sep38Price> {
   const url = buildPriceUrl(params);
   const res = await fetch(url, {
     headers: { Accept: 'application/json' },
@@ -147,5 +73,9 @@ export async function getSep38Price(params: Sep38PriceParams): Promise<Sep38Pric
     throw parseSepErrorBody(body, res.status);
   }
 
-  return parsePriceResponse(await res.json());
+  const result = Sep38PriceSchema.safeParse(await res.json());
+  if (!result.success) {
+    throw new Error(`SEP-38 /price response schema error: ${result.error.message}`);
+  }
+  return result.data;
 }
