@@ -23,6 +23,7 @@ export interface SettlementEvent {
   completedAt: Date;
   settlementMs: number;
   success: boolean;
+  disputed?: boolean;
 }
 
 export function computeCorridorAggregate(
@@ -34,7 +35,7 @@ export function computeCorridorAggregate(
 ): CorridorAggregate {
   const cutoff = new Date(now.getTime() - windowDays * 86400000);
   const relevant = events.filter(
-    (e) => e.anchorId === anchorId && e.corridor === corridor && e.completedAt >= cutoff
+    (e) => e.anchorId === anchorId && e.corridor === corridor && e.completedAt >= cutoff && !e.disputed
   );
 
   const bucketStart = new Date(now);
@@ -127,7 +128,7 @@ export function computeWindowAggregate(
 ): AggregateWindow {
   const cutoff = new Date(now.getTime() - windowDays * 86400000);
   const relevant = events.filter(
-    (e) => e.anchorId === anchorId && e.completedAt >= cutoff
+    (e) => e.anchorId === anchorId && e.completedAt >= cutoff && !e.disputed
   );
   const bucketStart = bucketStartFor(now, windowDays);
 
