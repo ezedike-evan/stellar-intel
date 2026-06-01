@@ -1,19 +1,8 @@
-<<<<<<< HEAD
-import useSWR from 'swr';
-import type { ApiRatesResponse, RateComparison } from '@/types';
-import { useState, useCallback } from 'react';
-
-async function fetcher([, corridorId, amount]: [string, string, string]): Promise<RateComparison> {
-  const url = new URL('/api/rates', window.location.origin);
-  url.searchParams.set('corridor', corridorId);
-  url.searchParams.set('amount', amount);
-=======
 import { useCallback, useEffect, useRef, useState, useSyncExternalStore } from 'react';
 import useSWR from 'swr';
 import type { ApiRatesResponse, RateComparison } from '@/types';
 
 const RATES_REFRESH_INTERVAL_MS = 30_000;
->>>>>>> origin/main
 
 /**
  * How long a fetched quote is considered valid before a refresh is needed.
@@ -84,15 +73,6 @@ export function useAnchorRates(corridorId: string, amount: string): UseAnchorRat
   const swrKey: [string, string, string] | null =
     hasRateQuery && isDocumentVisible ? ['/api/rates', corridorId, amount] : null;
 
-<<<<<<< HEAD
-  const { data, error, isLoading, mutate } = useSWR<RateComparison, Error>(
-    corridorId && amount ? ['/api/rates', corridorId, amount] : null,
-    fetcher,
-    {
-      refreshInterval: 30_000,
-      revalidateOnFocus: true,
-      dedupingInterval: 5_000,
-=======
   const { data, error, isLoading, mutate } = useSWR<RateComparison, Error>(swrKey, fetcher, {
     refreshInterval: RATES_REFRESH_INTERVAL_MS,
     refreshWhenHidden: false,
@@ -103,7 +83,6 @@ export function useAnchorRates(corridorId: string, amount: string): UseAnchorRat
   useEffect(() => {
     if (!wasDocumentVisible.current && isDocumentVisible && hasRateQuery) {
       void mutate();
->>>>>>> origin/main
     }
 
     wasDocumentVisible.current = isDocumentVisible;
