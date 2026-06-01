@@ -1,9 +1,9 @@
-'use client'
-import { useState, useEffect, useRef } from 'react'
+'use client';
+import { useState, useEffect, useRef } from 'react';
 
-const POSITIVE_DECIMAL_RE = /^\d*\.?\d{0,7}$/
+const POSITIVE_DECIMAL_RE = /^\d*\.?\d{0,7}$/;
 
-const SUGGESTED_AMOUNTS = [50, 100, 500]
+const SUGGESTED_AMOUNTS = [50, 100, 500];
 
 function formatChipLabel(value: number): string {
   try {
@@ -11,74 +11,76 @@ function formatChipLabel(value: number): string {
       style: 'currency',
       currency: 'USD',
       maximumFractionDigits: 0,
-    }).format(value)
+    }).format(value);
   } catch {
-    return `$${value}`
+    return `$${value}`;
   }
 }
 
 function validate(raw: string): string | null {
-  if (!POSITIVE_DECIMAL_RE.test(raw)) return null
-  const n = Number(raw)
-  if (!Number.isFinite(n) || n <= 0) return null
-  return raw
+  if (!POSITIVE_DECIMAL_RE.test(raw)) return null;
+  const n = Number(raw);
+  if (!Number.isFinite(n) || n <= 0) return null;
+  return raw;
 }
 
 interface AmountInputProps {
-  value: string
-  onChange: (value: string) => void
-  disabled?: boolean
+  value: string;
+  onChange: (value: string) => void;
+  disabled?: boolean;
 }
 
 export function AmountInput({ value, onChange, disabled }: AmountInputProps) {
-  const [raw, setRaw] = useState(value)
-  const [error, setError] = useState<string | null>(null)
-  const debounceRef = useRef<ReturnType<typeof setTimeout> | null>(null)
+  const [raw, setRaw] = useState(value);
+  const [error, setError] = useState<string | null>(null);
+  const debounceRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   useEffect(() => {
-    setRaw(value)
-    setError(null)
-  }, [value])
+    // eslint-disable-next-line react-hooks/set-state-in-effect
+    setRaw(value);
+
+    setError(null);
+  }, [value]);
 
   useEffect(() => {
     return () => {
-      if (debounceRef.current) clearTimeout(debounceRef.current)
-    }
-  }, [])
+      if (debounceRef.current) clearTimeout(debounceRef.current);
+    };
+  }, []);
 
   function handleChipClick(value: number) {
-    const str = String(value)
-    if (debounceRef.current) clearTimeout(debounceRef.current)
-    setRaw(str)
-    setError(null)
-    onChange(str)
+    const str = String(value);
+    if (debounceRef.current) clearTimeout(debounceRef.current);
+    setRaw(str);
+    setError(null);
+    onChange(str);
   }
 
   function handleChange(e: React.ChangeEvent<HTMLInputElement>) {
-    const input = e.target.value
-    setRaw(input)
+    const input = e.target.value;
+    setRaw(input);
 
-    if (debounceRef.current) clearTimeout(debounceRef.current)
+    if (debounceRef.current) clearTimeout(debounceRef.current);
 
     if (input === '') {
-      setError(null)
-      debounceRef.current = setTimeout(() => onChange(''), 250)
-      return
+      setError(null);
+      debounceRef.current = setTimeout(() => onChange(''), 250);
+      return;
     }
 
     if (input.endsWith('.')) {
-      setError(null)
-      return
+      setError(null);
+      return;
     }
 
-    const validated = validate(input)
+    const validated = validate(input);
     if (validated === null) {
-      setError('Enter a positive number with up to 7 decimal places')
-      return
+      setError('Enter a positive number with up to 7 decimal places');
+      return;
     }
 
-    setError(null)
-    debounceRef.current = setTimeout(() => onChange(validated), 250)
+    setError(null);
+    debounceRef.current = setTimeout(() => onChange(validated), 250);
   }
 
   return (
@@ -128,5 +130,5 @@ export function AmountInput({ value, onChange, disabled }: AmountInputProps) {
         </p>
       )}
     </div>
-  )
+  );
 }

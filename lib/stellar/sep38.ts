@@ -1,125 +1,151 @@
-import type { Sep38Asset, Sep38DeliveryMethod, Sep38Info } from '@/types';
+import { parseSepErrorBody } from './errors';
 
-// ─── In-memory cache ──────────────────────────────────────────────────────────
+const PRICE_PATH = '/price';
 
-const TTL_MS = 10 * 60 * 1000; // 10 minutes
-const REQUEST_TIMEOUT_MS = 10_000;
-
-interface CacheEntry {
-  data: Sep38Info;
-  expiresAt: number;
+export interface Sep38PriceParams {
+  quoteServer: string;
+  sell_asset: string;
+  buy_asset: string;
+  sell_amount: string;
+  buy_delivery_method?: string;
+  context: string;
 }
 
-const cache = new Map<string, CacheEntry>();
+export interface Sep38FeeDetail {
+  name: string;
+  amount: string;
+  description?: string;
+}
 
-// ─── Internal helpers ─────────────────────────────────────────────────────────
+export interface Sep38Fee {
+  total: string;
+  asset: string;
+  details?: Sep38FeeDetail[];
+}
+
+export interface Sep38PriceResponse {
+  price: string;
+  sell_amount: string;
+  buy_amount: string;
+  total_price?: string;
+  fee?: Sep38Fee;
+}
+
+function assertNonEmpty(value: string, fieldName: keyof Sep38PriceParams): void {
+  if (value.trim().length === 0) {
+    throw new Error(`SEP-38 /price requires a non-empty "${fieldName}"`);
+  }
+}
 
 function isRecord(value: unknown): value is Record<string, unknown> {
   return typeof value === 'object' && value !== null && !Array.isArray(value);
 }
 
-/** Normalizes a quote server URL into a stable cache key and base for requests. */
-function normalizeQuoteServer(quoteServer: string): string {
-  const trimmed = quoteServer.trim();
-  if (!trimmed) {
-    throw new Error('Quote server URL is required');
+function getRequiredString(data: Record<string, unknown>, fieldName: string): string {
+  const value = data[fieldName];
+  if (typeof value !== 'string' || value.trim().length === 0) {
+    throw new Error(`Invalid SEP-38 /price response: missing "${fieldName}"`);
   }
-  return trimmed.replace(/\/+$/, '');
+  return value;
 }
 
-function parseDeliveryMethods(value: unknown): Sep38DeliveryMethod[] {
-  if (!Array.isArray(value)) {
-    return [];
+function parseFee(raw: unknown): Sep38Fee | undefined {
+  if (raw === undefined) return undefined;
+  if (!isRecord(raw)) {
+    throw new Error('Invalid SEP-38 /price response: "fee" must be an object');
   }
 
-  return value.flatMap((method) => {
-    if (!isRecord(method) || typeof method['name'] !== 'string') {
-      return [];
+  const fee: Sep38Fee = {
+    total: getRequiredString(raw, 'total'),
+    asset: getRequiredString(raw, 'asset'),
+  };
+
+  const details = raw['details'];
+  if (details !== undefined) {
+    if (!Array.isArray(details)) {
+      throw new Error('Invalid SEP-38 /price response: "fee.details" must be an array');
     }
 
-    return [
-      {
-        name: method['name'],
-        description: typeof method['description'] === 'string' ? method['description'] : '',
-      },
-    ];
-  });
-}
+    fee.details = details.map((detail) => {
+      if (!isRecord(detail)) {
+        throw new Error('Invalid SEP-38 /price response: each fee detail must be an object');
+      }
 
-function parseCountryCodes(value: unknown): string[] {
-  if (!Array.isArray(value)) {
-    return [];
-  }
-  return value.filter((code): code is string => typeof code === 'string');
-}
+      const parsed: Sep38FeeDetail = {
+        name: getRequiredString(detail, 'name'),
+        amount: getRequiredString(detail, 'amount'),
+      };
 
-function parseAssets(value: unknown): Sep38Asset[] {
-  if (!Array.isArray(value)) {
-    return [];
+      if (typeof detail['description'] === 'string') {
+        parsed.description = detail['description'];
+      }
+
+      return parsed;
+    });
   }
 
-  return value.flatMap((entry) => {
-    if (!isRecord(entry) || typeof entry['asset'] !== 'string') {
-      return [];
-    }
-
-    return [
-      {
-        asset: entry['asset'],
-        sellDeliveryMethods: parseDeliveryMethods(entry['sell_delivery_methods']),
-        buyDeliveryMethods: parseDeliveryMethods(entry['buy_delivery_methods']),
-        countryCodes: parseCountryCodes(entry['country_codes']),
-      },
-    ];
-  });
+  return fee;
 }
 
-// ─── Discovery endpoint ─────────────────────────────────────────────────────────
+function buildPriceUrl(params: Sep38PriceParams): string {
+  assertNonEmpty(params.quoteServer, 'quoteServer');
+  assertNonEmpty(params.sell_asset, 'sell_asset');
+  assertNonEmpty(params.buy_asset, 'buy_asset');
+  assertNonEmpty(params.sell_amount, 'sell_amount');
+  assertNonEmpty(params.context, 'context');
+
+  const quoteServer = params.quoteServer.replace(/\/+$/, '');
+  const url = new URL(`${quoteServer}${PRICE_PATH}`);
+  url.searchParams.set('sell_asset', params.sell_asset);
+  url.searchParams.set('buy_asset', params.buy_asset);
+  url.searchParams.set('sell_amount', params.sell_amount);
+  url.searchParams.set('context', params.context);
+
+  if (params.buy_delivery_method && params.buy_delivery_method.trim().length > 0) {
+    url.searchParams.set('buy_delivery_method', params.buy_delivery_method);
+  }
+
+  return url.toString();
+}
+
+function parsePriceResponse(data: unknown): Sep38PriceResponse {
+  if (!isRecord(data)) {
+    throw new Error('Invalid SEP-38 /price response: expected an object');
+  }
+
+  const response: Sep38PriceResponse = {
+    price: getRequiredString(data, 'price'),
+    sell_amount: getRequiredString(data, 'sell_amount'),
+    buy_amount: getRequiredString(data, 'buy_amount'),
+  };
+
+  if (typeof data['total_price'] === 'string') {
+    response.total_price = data['total_price'];
+  }
+
+  const fee = parseFee(data['fee']);
+  if (fee) response.fee = fee;
+
+  return response;
+}
 
 /**
- * Fetches the SEP-38 GET /info discovery response from an anchor's quote server,
- * returning the typed list of supported assets and their delivery methods.
+ * Fetches an indicative SEP-38 price for a specific asset pair.
  *
- * Results are cached in memory for 10 minutes per quote server. Failed requests
- * are not cached.
+ * This wraps GET /price and intentionally supports the sell_amount path needed
+ * by the off-ramp comparator. Firm quotes belong to POST /quote.
  */
-export async function getSep38Info(quoteServer: string): Promise<Sep38Info> {
-  const base = normalizeQuoteServer(quoteServer);
-
-  const cached = cache.get(base);
-  if (cached && cached.expiresAt > Date.now()) {
-    return cached.data;
-  }
-
-  const controller = new AbortController();
-  const timeout = setTimeout(() => controller.abort(), REQUEST_TIMEOUT_MS);
-
-  let res: Response;
-  try {
-    res = await fetch(`${base}/info`, { signal: controller.signal });
-  } catch (err) {
-    if ((err as Error).name === 'AbortError') {
-      throw new Error(`SEP-38 /info request to ${base} timed out after 10 seconds`);
-    }
-    throw err;
-  } finally {
-    clearTimeout(timeout);
-  }
+export async function getSep38Price(params: Sep38PriceParams): Promise<Sep38PriceResponse> {
+  const url = buildPriceUrl(params);
+  const res = await fetch(url, {
+    headers: { Accept: 'application/json' },
+  });
 
   if (!res.ok) {
-    throw new Error(`HTTP ${res.status} from ${base} SEP-38 /info endpoint`);
+    const body: unknown =
+      typeof res.json === 'function' ? await res.json().catch(() => null) : null;
+    throw parseSepErrorBody(body, res.status);
   }
 
-  const raw = (await res.json()) as Record<string, unknown>;
-  const data: Sep38Info = { assets: parseAssets(raw['assets']) };
-
-  cache.set(base, { data, expiresAt: Date.now() + TTL_MS });
-  return data;
-}
-
-// ─── Test helpers ─────────────────────────────────────────────────────────────
-
-/** Exposed for testing only — clears the in-memory SEP-38 /info cache. */
-export function _clearSep38Cache(): void {
-  cache.clear();
+  return parsePriceResponse(await res.json());
 }

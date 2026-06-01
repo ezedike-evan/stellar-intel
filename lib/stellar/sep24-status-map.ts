@@ -1,4 +1,4 @@
-import type { WithdrawStatus, WithdrawStatusValue } from '@/types'
+import type { WithdrawStatus, WithdrawStatusValue } from '@/types';
 
 /**
  * Maps every raw SEP-24 anchor status string to the canonical WithdrawStatus enum.
@@ -22,9 +22,9 @@ export const STATUS_MAP: Record<WithdrawStatusValue, WithdrawStatus> = {
   too_small: 'error',
   too_large: 'error',
   error: 'error',
-}
+};
 
 /** Converts a raw anchor status string into the canonical WithdrawStatus. */
 export function mapToCanonical(raw: WithdrawStatusValue): WithdrawStatus {
-  return STATUS_MAP[raw]
+  return STATUS_MAP[raw];
 }
