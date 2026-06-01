@@ -6,7 +6,10 @@ import { Sun, Moon } from 'lucide-react';
 import { Button } from '@/components/ui/Button';
 import { useTheme } from '@/hooks/useTheme';
 
-const NAV_LINKS = [{ href: '/offramp', label: 'Off-ramp' }];
+const NAV_LINKS = [
+  { href: '/offramp', label: 'Off-ramp' },
+  { href: '/anchors', label: 'Anchors' },
+];
 
 export function Navbar() {
   const pathname = usePathname();
