@@ -2,10 +2,7 @@
 import type { WithdrawStatusValue, Sep24Transaction } from '@/types';
 import { formatDeliveredAmount } from '@/lib/format';
 import { Timeline } from './Timeline';
-<<<<<<< HEAD
-=======
 import { STELLAR_EXPERT_URL } from '@/constants';
->>>>>>> origin/main
 
 interface StatusTrackerProps {
   transactionId: string;
@@ -24,6 +21,7 @@ interface StatusTrackerProps {
   error: string | undefined;
   onRetryAnchor?: () => void;
   onAdjust?: () => void;
+  onDisputeOpen?: (transactionId: string) => void;
 }
 
 const STATUS_LABELS: Record<WithdrawStatusValue, string> = {
@@ -54,6 +52,8 @@ const TERMINAL: WithdrawStatusValue[] = [
   'expired',
 ];
 
+const DISPUTABLE: WithdrawStatusValue[] = ['completed', 'refunded', 'error'];
+
 function statusColor(status: WithdrawStatusValue | undefined): string {
   if (!status) return 'text-gray-500';
   if (status === 'completed') return 'text-green-600 dark:text-green-400';
@@ -71,6 +71,10 @@ function statusDot(status: WithdrawStatusValue | undefined): string {
   return 'bg-blue-500 animate-pulse';
 }
 
+function isValidStellarTxId(id: string): boolean {
+  return /^[0-9a-fA-F]{64}$/.test(id);
+}
+
 export function StatusTracker({
   transactionId,
   status,
@@ -85,9 +89,11 @@ export function StatusTracker({
   refunds,
   isLoading,
   error,
+  onDisputeOpen,
 }: StatusTrackerProps) {
   const isTerminal = status ? TERMINAL.includes(status) : false;
   const isCompleted = status === 'completed';
+  const canDispute = isTerminal && status != null && DISPUTABLE.includes(status);
 
   return (
     <div
@@ -139,7 +145,7 @@ export function StatusTracker({
         </p>
       )}
 
-      {/* Amount details — hidden when celebration banner or refund card is shown */}
+      {/* Amount details */}
       {(amountIn || amountOut) && !isCompleted && status !== 'refunded' && (
         <dl className="mb-4 space-y-1.5 text-sm">
           {amountIn && (
@@ -258,21 +264,25 @@ export function StatusTracker({
 
       {/* Vertical Timeline */}
       <Timeline status={status} />
+
+      {/* Flag incorrect outcome */}
+      {canDispute && onDisputeOpen && (
+        <div className="mt-4 pt-4 border-t border-gray-100 dark:border-gray-800">
+          <button
+            onClick={() => onDisputeOpen(transactionId)}
+            className="text-xs font-medium text-gray-400 hover:text-red-500 dark:hover:text-red-400 underline transition-colors"
+          >
+            Flag incorrect outcome
+          </button>
+        </div>
+      )}
     </div>
   );
-<<<<<<< HEAD
-=======
-}
-
-function isValidStellarTxId(id: string): boolean {
-  return /^[0-9a-fA-F]{64}$/.test(id);
->>>>>>> origin/main
 }
 
 function parseAsset(assetStr: string | undefined): string | null {
   if (!assetStr) return null;
   if (assetStr === 'stellar:native') return 'XLM';
-  // stellar:USDC:GA5Z... -> USDC
   const parts = assetStr.split(':');
   return parts[1] ?? null;
 }
