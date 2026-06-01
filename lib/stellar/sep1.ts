@@ -80,6 +80,7 @@ function toSep1TomlData(domain: string, raw: Record<string, unknown>): Sep1TomlD
     capabilities: {
       sep10: Boolean(webAuthEndpoint),
       sep24: Boolean(transferServer),
+      /** Derived from ANCHOR_QUOTE_SERVER presence — the authoritative source for SEP-38 capability. */
       sep38: Boolean(quoteServer),
       sep12: Boolean(signingKey),
     },

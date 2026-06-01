@@ -1,4 +1,5 @@
 import { parseSepErrorBody } from './errors';
+import type { Sep1TomlData } from '@/types';
 
 const PRICE_PATH = '/price';
 
@@ -127,6 +128,19 @@ function parsePriceResponse(data: unknown): Sep38PriceResponse {
   if (fee) response.fee = fee;
 
   return response;
+}
+
+/**
+ * Asserts that an anchor advertises ANCHOR_QUOTE_SERVER in its stellar.toml.
+ * Throws if the anchor is not SEP-38 capable; returns the quote server URL otherwise.
+ */
+export function assertSep38Capable(toml: Sep1TomlData): string {
+  if (!toml.capabilities.sep38 || !toml.ANCHOR_QUOTE_SERVER) {
+    throw new Error(
+      `Anchor "${toml.domain}" does not advertise ANCHOR_QUOTE_SERVER and cannot be used for SEP-38.`
+    );
+  }
+  return toml.ANCHOR_QUOTE_SERVER;
 }
 
 /**
