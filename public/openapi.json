@@ -1,0 +1,286 @@
+{
+  "openapi": "3.1.0",
+  "info": {
+    "title": "Stellar Intel API",
+    "version": "1.2.0",
+    "description": "Intent router and anchor rate aggregation API for the Stellar Intel platform."
+  },
+  "servers": [
+    {
+      "url": "https://stellar-intel.vercel.app",
+      "description": "Production"
+    }
+  ],
+  "components": {
+    "schemas": {
+      "OfframpIntent": {
+        "type": "object",
+        "properties": {
+          "anchorId": {
+            "type": "string",
+            "minLength": 1
+          },
+          "corridorId": {
+            "type": "string",
+            "minLength": 1
+          },
+          "amount": {
+            "type": "string",
+            "pattern": "^\\d+(\\.\\d{1,7})?$"
+          },
+          "publicKey": {
+            "type": "string",
+            "pattern": "^G[A-Z0-9]{55}$"
+          }
+        },
+        "required": [
+          "anchorId",
+          "corridorId",
+          "amount",
+          "publicKey"
+        ]
+      },
+      "SignedIntentEnvelope": {
+        "type": "object",
+        "properties": {
+          "intent": {
+            "$ref": "#/components/schemas/OfframpIntent"
+          },
+          "hash": {
+            "type": "string",
+            "pattern": "^[0-9a-f]{64}$"
+          },
+          "signature": {
+            "type": "string",
+            "minLength": 1
+          },
+          "publicKey": {
+            "type": "string",
+            "pattern": "^G[A-Z0-9]{55}$"
+          }
+        },
+        "required": [
+          "intent",
+          "hash",
+          "signature",
+          "publicKey"
+        ]
+      },
+      "IntentV1": {
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "string",
+            "minLength": 1
+          },
+          "from": {
+            "type": "string",
+            "minLength": 1,
+            "description": "Source asset identifier (e.g. \"stellar:USDC:GA5...\")"
+          },
+          "to": {
+            "type": "string",
+            "minLength": 1,
+            "description": "Destination fiat identifier (e.g. \"iso4217:NGN\")"
+          },
+          "amount": {
+            "type": "string",
+            "pattern": "^\\d+(\\.\\d+)?$"
+          },
+          "floor": {
+            "type": "string",
+            "pattern": "^\\d+(\\.\\d+)?$"
+          },
+          "deadline": {
+            "type": "string",
+            "description": "RFC 3339 datetime after which the intent must not execute"
+          },
+          "recipient": {
+            "type": "string",
+            "minLength": 1
+          },
+          "nonce": {
+            "type": "string",
+            "pattern": "^[0-9a-f]{32}$/i",
+            "description": "128-bit random hex for replay protection"
+          },
+          "metadata": {
+            "type": "object",
+            "additionalProperties": {}
+          }
+        },
+        "required": [
+          "id",
+          "from",
+          "to",
+          "amount",
+          "floor",
+          "deadline",
+          "recipient",
+          "nonce"
+        ]
+      },
+      "OfframpRoute": {
+        "type": "object",
+        "properties": {
+          "anchorId": {
+            "type": "string"
+          },
+          "anchorDomain": {
+            "type": "string"
+          },
+          "corridorId": {
+            "type": "string"
+          },
+          "estimatedFee": {
+            "type": "string"
+          },
+          "estimatedReceived": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "anchorId",
+          "anchorDomain",
+          "corridorId",
+          "estimatedFee",
+          "estimatedReceived"
+        ]
+      },
+      "OfframpIntentResponse": {
+        "type": "object",
+        "properties": {
+          "route": {
+            "$ref": "#/components/schemas/OfframpRoute"
+          },
+          "unsignedTx": {
+            "type": "string",
+            "description": "XDR-encoded unsigned Stellar transaction"
+          },
+          "quoteId": {
+            "type": "string",
+            "description": "Hex-encoded SHA-256 quote identifier"
+          }
+        },
+        "required": [
+          "route",
+          "unsignedTx",
+          "quoteId"
+        ]
+      },
+      "ApiError": {
+        "type": "object",
+        "properties": {
+          "code": {
+            "type": "string",
+            "description": "Machine-readable error code"
+          },
+          "message": {
+            "type": "string",
+            "description": "Human-readable error description"
+          }
+        },
+        "required": [
+          "code",
+          "message"
+        ]
+      },
+      "IntentRequest": {
+        "type": "object",
+        "properties": {
+          "type": {
+            "type": "string",
+            "enum": [
+              "offramp"
+            ]
+          },
+          "sourceAsset": {
+            "type": "string",
+            "minLength": 1
+          },
+          "destinationAsset": {
+            "type": "string",
+            "minLength": 1
+          },
+          "amount": {
+            "type": "string",
+            "pattern": "^\\d+(\\.\\d+)?$"
+          },
+          "sender": {
+            "type": "string",
+            "minLength": 1,
+            "description": "Stellar public key of the sender"
+          },
+          "recipient": {
+            "type": "string",
+            "minLength": 1,
+            "description": "Destination address for the payout"
+          }
+        },
+        "required": [
+          "type",
+          "sourceAsset",
+          "destinationAsset",
+          "amount",
+          "sender",
+          "recipient"
+        ]
+      }
+    },
+    "parameters": {}
+  },
+  "paths": {
+    "/api/intent/offramp": {
+      "post": {
+        "summary": "Submit an off-ramp intent",
+        "description": "Resolves an anchor route for the given asset corridor, builds an unsigned Stellar payment transaction, and returns a quote ID.",
+        "tags": [
+          "Intent"
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/IntentRequest"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Route resolved and unsigned transaction built",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/OfframpIntentResponse"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Validation error or no route found",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiError"
+                }
+              }
+            }
+          },
+          "500": {
+            "description": "Transaction build failure",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiError"
+                }
+              }
+            }
+          }
+        }
+      }
+    }
+  },
+  "webhooks": {}
+}

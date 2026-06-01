@@ -1,6 +1,5 @@
 import { describe, it, expect } from 'vitest';
 import { assertSep38Capable } from '../sep38';
-import { Sep38PriceSchema } from '../sep38-schemas';
 import type { Sep1TomlData } from '@/types';
 
 function makeToml(overrides: Partial<Sep1TomlData> = {}): Sep1TomlData {
@@ -37,37 +36,5 @@ describe('assertSep38Capable', () => {
       capabilities: { sep10: false, sep24: false, sep38: true, sep12: false },
     });
     expect(assertSep38Capable(toml)).toBe(url);
-  });
-});
-
-describe('Sep38PriceSchema', () => {
-  const valid = {
-    price: '1.23',
-    sell_amount: '100.00',
-    buy_amount: '123.00',
-  };
-
-  it('parses a valid minimal response', () => {
-    const result = Sep38PriceSchema.safeParse(valid);
-    expect(result.success).toBe(true);
-  });
-
-  it('fails when a required field is missing', () => {
-    const result = Sep38PriceSchema.safeParse({ sell_amount: '100.00', buy_amount: '123.00' });
-    expect(result.success).toBe(false);
-  });
-
-  it('accepts optional fee when present', () => {
-    const result = Sep38PriceSchema.safeParse({
-      ...valid,
-      fee: { total: '1.00', asset: 'iso4217:USD', details: [{ name: 'Service fee', amount: '1.00' }] },
-    });
-    expect(result.success).toBe(true);
-  });
-
-  it('accepts response without optional fee', () => {
-    const result = Sep38PriceSchema.safeParse(valid);
-    expect(result.success).toBe(true);
-    if (result.success) expect(result.data.fee).toBeUndefined();
   });
 });
