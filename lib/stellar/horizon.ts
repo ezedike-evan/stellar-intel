@@ -218,12 +218,13 @@ export async function getStrictSendPaths(
   };
 
   const toAsset = toAssets[0];
+  if (!toAsset) return [];
   return data._embedded.records.map((r, i) => {
     const toAmt = parseFloat(r.destination_amount);
     const fromAmt = parseFloat(r.source_amount);
     const intermediates: StellarAsset[] = r.path.map((p) => ({
       code: p.asset_code ?? 'XLM',
-      issuer: p.asset_issuer,
+      ...(p.asset_issuer ? { issuer: p.asset_issuer } : {}),
       name: p.asset_code ?? 'XLM',
     }));
 

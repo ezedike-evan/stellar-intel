@@ -28,6 +28,12 @@ export function getAnchorById(id: string): Anchor {
  * Resolves SEP-1 details for the anchor with the given ID.
  * Throws if the anchor is unknown or TOML resolution fails.
  */
+export async function getResolvedAnchorByDomain(homeDomain: string): Promise<ResolvedAnchor> {
+  const anchor = ANCHORS.find((a) => a.homeDomain === homeDomain);
+  if (!anchor) throw new Error(`No anchor found for domain "${homeDomain}"`);
+  return getResolvedAnchorById(anchor.id);
+}
+
 export async function getResolvedAnchorById(id: string): Promise<ResolvedAnchor> {
   const anchor = getAnchorById(id);
   const { resolveToml } = await import('./sep1');

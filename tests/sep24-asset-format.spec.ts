@@ -117,7 +117,7 @@ describe('initiateWithdraw asset formats', () => {
       'fetch',
       vi.fn(async (url: string, init?: RequestInit) => {
         if (url.endsWith('/info')) return { ok: true, json: async () => buildMockInfo(false) };
-        capturedBody = init?.body;
+        capturedBody = (init?.body ?? '') as string;
         return {
           ok: true,
           json: async () => ({ type: 'interactive_customer_info_needed', url: 'test', id: '123' }),
@@ -146,7 +146,7 @@ describe('initiateWithdraw asset formats', () => {
       'fetch',
       vi.fn(async (url: string, init?: RequestInit) => {
         if (url.endsWith('/info')) return { ok: true, json: async () => buildMockInfo(true) };
-        capturedBody = init?.body;
+        capturedBody = (init?.body ?? '') as string;
         return {
           ok: true,
           json: async () => ({ type: 'interactive_customer_info_needed', url: 'test', id: '123' }),
