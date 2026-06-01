@@ -1,114 +1,164 @@
-<<<<<<< HEAD
-import { NextRequest, NextResponse } from 'next/server';
-import { SignedIntentEnvelopeSchema } from '@/types/intent';
-import { verifyEnvelope } from '@/lib/intent/envelope';
-import type { ApiError } from '@/types';
+import { NextRequest, NextResponse } from 'next/server'
+import { z } from 'zod'
+import { Asset, Networks, TransactionBuilder, Operation, Memo, BASE_FEE, Account } from '@stellar/stellar-sdk'
+import { hashIntent } from '@/lib/intent/hash'
+import { USDC_ISSUER } from '@/lib/config'
+import type { Intent } from '@/lib/intent/hash'
+import type { ApiError } from '@/types'
 
-// ─── POST /api/intent/offramp ─────────────────────────────────────────────────
+// ─── Request schema ────────────────────────────────────────────────────────────
 
-/**
- * Accepts a signed off-ramp intent envelope, verifies the Ed25519 signature,
- * then forwards the intent to the routing layer.
- *
- * Responses:
- *   200 — envelope accepted, intent queued for routing
- *   400 — malformed JSON or envelope fails Zod validation
- *   401 — signature verification failed
- */
-export async function POST(req: NextRequest): Promise<NextResponse> {
-  // ── Parse body ──────────────────────────────────────────────────────────────
-  let body: unknown;
+const IntentSchema = z.object({
+  type: z.literal('offramp'),
+  sourceAsset: z.string().min(1),
+  destinationAsset: z.string().min(1),
+  amount: z.string().regex(/^\d+(\.\d+)?$/, 'amount must be a positive decimal string'),
+  sender: z.string().min(1),
+  recipient: z.string().min(1),
+})
+
+// ─── Response types ────────────────────────────────────────────────────────────
+
+export interface OfframpRoute {
+  anchorId: string
+  anchorDomain: string
+  corridorId: string
+  estimatedFee: string
+  estimatedReceived: string
+}
+
+export interface OfframpIntentResponse {
+  route: OfframpRoute
+  unsignedTx: string
+  quoteId: string
+}
+
+// ─── Anchor routing (simple first-match by corridor) ──────────────────────────
+
+const ANCHOR_ROUTING: Record<string, { anchorId: string; anchorDomain: string; anchorAccount: string }> = {
+  'usdc-ngn': {
+    anchorId: 'cowrie',
+    anchorDomain: 'cowrie.exchange',
+    anchorAccount: 'GAIJ3VXNY7RPPLGVVCLGBK7NPHLL5ZRKATHETOA7M7UPZPAAHEGQQIY2',
+  },
+  'usdc-kes': {
+    anchorId: 'flutterwave',
+    anchorDomain: 'flutterwave.com',
+    anchorAccount: 'GC6PVZIZYHHROHYBBOZDJ5ZZI4RH6LDSHRT4K7BA5QGZFKMZ6HAZUQAK',
+  },
+}
+
+function resolveRoute(sourceAsset: string, destinationAsset: string): OfframpRoute | null {
+  const corridorId = `${sourceAsset.toLowerCase()}-${destinationAsset.toLowerCase()}`
+  const anchor = ANCHOR_ROUTING[corridorId]
+  if (!anchor) return null
+  return {
+    anchorId: anchor.anchorId,
+    anchorDomain: anchor.anchorDomain,
+    corridorId,
+    estimatedFee: '2',
+    estimatedReceived: '0',
+  }
+}
+
+// ─── Unsigned transaction builder ─────────────────────────────────────────────
+
+function buildUnsignedOfframpTx(
+  senderPublicKey: string,
+  anchorAccount: string,
+  amount: string,
+  assetCode: string,
+  assetIssuer: string,
+  quoteId: string
+): string {
+  const asset = new Asset(assetCode, assetIssuer)
+  const account = new Account(senderPublicKey, '0')
+
+  const tx = new TransactionBuilder(account, {
+    fee: BASE_FEE,
+    networkPassphrase: Networks.PUBLIC,
+  })
+    .addOperation(
+      Operation.payment({
+        destination: anchorAccount,
+        asset,
+        amount,
+      })
+    )
+    .addMemo(Memo.hash(Buffer.from(quoteId, 'hex')))
+    .setTimeout(300)
+    .build()
+
+  return tx.toXDR()
+}
+
+// ─── Route handler ────────────────────────────────────────────────────────────
+
+export async function POST(request: NextRequest): Promise<NextResponse> {
+  let body: unknown
   try {
-    body = await req.json();
+    body = await request.json()
   } catch {
     return NextResponse.json<ApiError>(
-      { code: 'INVALID_JSON', message: 'Request body must be valid JSON.' },
+      { code: 'INVALID_JSON', message: 'Request body must be valid JSON' },
       { status: 400 }
-    );
+    )
   }
 
-  // ── Validate envelope shape ─────────────────────────────────────────────────
-  const parsed = SignedIntentEnvelopeSchema.safeParse(body);
+  const parsed = IntentSchema.safeParse(body)
   if (!parsed.success) {
-    const message = parsed.error.issues.map((i) => i.message).join('; ');
-    return NextResponse.json<ApiError>({ code: 'INVALID_ENVELOPE', message }, { status: 400 });
-  }
-
-  // ── Verify signature ────────────────────────────────────────────────────────
-  // verifyEnvelope re-canonicalizes the intent, re-hashes it, and checks the
-  // Ed25519 signature. Returns false on any mismatch or bad key material.
-  if (!verifyEnvelope(parsed.data)) {
+    const first = parsed.error.issues[0]
     return NextResponse.json<ApiError>(
-      { code: 'INVALID_SIGNATURE', message: 'Envelope signature verification failed.' },
-      { status: 401 }
-    );
+      {
+        code: 'VALIDATION_ERROR',
+        message: first?.message ?? 'Invalid intent payload',
+      },
+      { status: 400 }
+    )
   }
 
-  // ── Route intent ────────────────────────────────────────────────────────────
-  // Signature is valid — hand off to the off-ramp intent router.
-  // TODO: invoke anchor-specific withdrawal flow via intent router.
-  const { intent } = parsed.data;
+  const intent = parsed.data as Intent
+  const route = resolveRoute(intent.sourceAsset, intent.destinationAsset)
 
-  return NextResponse.json({ ok: true, intent }, { status: 200 });
-}
-=======
-import { NextResponse } from 'next/server'
-import { registerIntentReplay } from '@/lib/intent/replay'
-
-type IntentPayload = {
-  account?: unknown
-  nonce?: unknown
-  deadline?: unknown
-  intentHash?: unknown
-}
-
-type IntentReplayBody = {
-  publicKey?: unknown
-  account?: unknown
-  nonce?: unknown
-  deadline?: unknown
-  intentHash?: unknown
-  intent?: IntentPayload
-}
-
-function readString(value: unknown): string | null {
-  return typeof value === 'string' && value.trim().length > 0 ? value.trim() : null
-}
-
-function pickValue(...values: unknown[]): string | null {
-  for (const value of values) {
-    const text = readString(value)
-    if (text) return text
-  }
-  return null
-}
-
-function jsonError(status: number, code: string, message: string): NextResponse {
-  return NextResponse.json({ code, message }, { status })
-}
-
-export async function POST(request: Request): Promise<Response> {
-  const body = (await request.json().catch(() => null)) as IntentReplayBody | null
-
-  if (!body || typeof body !== 'object') {
-    return jsonError(400, 'invalid_request', 'Request body must be valid JSON.')
+  if (!route) {
+    return NextResponse.json<ApiError>(
+      {
+        code: 'NO_ROUTE',
+        message: `No route found for ${intent.sourceAsset} → ${intent.destinationAsset}`,
+      },
+      { status: 400 }
+    )
   }
 
-  const publicKey = pickValue(body.publicKey, body.account, body.intent?.account)
-  const nonce = pickValue(body.nonce, body.intent?.nonce)
-  const deadline = pickValue(body.deadline, body.intent?.deadline)
-  const intentHash = pickValue(body.intentHash, body.intent?.intentHash)
+  const quoteId = await hashIntent(intent)
+  const anchorEntry = ANCHOR_ROUTING[route.corridorId]
 
-  if (!publicKey || !nonce || !deadline || !intentHash) {
-    return jsonError(400, 'invalid_request', 'Expected publicKey, nonce, deadline, and intentHash.')
+  if (!anchorEntry) {
+    return NextResponse.json<ApiError>(
+      { code: 'NO_ROUTE', message: 'Anchor configuration missing' },
+      { status: 400 }
+    )
   }
 
-  const result = registerIntentReplay({ publicKey, nonce, deadline })
-
-  if (!result.ok) {
-    return jsonError(result.status, result.code, result.message)
+  let unsignedTx: string
+  try {
+    unsignedTx = buildUnsignedOfframpTx(
+      intent.sender,
+      anchorEntry.anchorAccount,
+      intent.amount,
+      intent.sourceAsset,
+      USDC_ISSUER,
+      quoteId
+    )
+  } catch (err) {
+    return NextResponse.json<ApiError>(
+      {
+        code: 'TX_BUILD_FAILED',
+        message: err instanceof Error ? err.message : 'Failed to build transaction',
+      },
+      { status: 500 }
+    )
   }
 
-  return NextResponse.json({ ok: true, intentHash }, { status: 200 })
+  return NextResponse.json<OfframpIntentResponse>({ route, unsignedTx, quoteId })
 }
->>>>>>> origin/main
