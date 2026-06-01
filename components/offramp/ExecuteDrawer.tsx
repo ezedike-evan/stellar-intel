@@ -33,7 +33,13 @@ interface ExecuteDrawerProps {
 
 // ─── Component ────────────────────────────────────────────────────────────────
 
-export function ExecuteDrawer({ rate, amount, publicKey, onClose, onExecuteStarted }: ExecuteDrawerProps) {
+export function ExecuteDrawer({
+  rate,
+  amount,
+  publicKey,
+  onClose,
+  onExecuteStarted,
+}: ExecuteDrawerProps) {
   const [step, setStep] = useState<ExecuteDrawerStep>('idle');
   const [errorMsg, setErrorMsg] = useState<string | null>(null);
   const [txHash, setTxHash] = useState<string | null>(null);
@@ -45,6 +51,15 @@ export function ExecuteDrawer({ rate, amount, publicKey, onClose, onExecuteStart
   // settle it without touching window globals.
   const kycResolveRef = useRef<((transactionId: string) => void) | null>(null);
   const kycRejectRef = useRef<((error: Error) => void) | null>(null);
+
+  // Abort controller for in-flight network requests — cancelled on unmount.
+  const abortRef = useRef<AbortController | null>(null);
+
+  useEffect(() => {
+    return () => {
+      abortRef.current?.abort();
+    };
+  }, []);
 
   const isOpen = rate !== null;
 
@@ -63,6 +78,10 @@ export function ExecuteDrawer({ rate, amount, publicKey, onClose, onExecuteStart
   async function handleExecute() {
     if (!rate) return;
 
+    abortRef.current?.abort();
+    abortRef.current = new AbortController();
+    const { signal } = abortRef.current;
+
     setStep('authenticating');
     setErrorMsg(null);
     setTxHash(null);
@@ -72,7 +91,7 @@ export function ExecuteDrawer({ rate, amount, publicKey, onClose, onExecuteStart
       const anchor = await getResolvedAnchorById(rate.anchorId);
 
       // Step 1 — SEP-10 auth
-      const auth = await authenticate(anchor, publicKey);
+      const auth = await authenticate(anchor, publicKey, signal);
 
       // Step 2 — Initiate SEP-24 withdraw
       setStep('initiating');
@@ -82,7 +101,7 @@ export function ExecuteDrawer({ rate, amount, publicKey, onClose, onExecuteStart
         amount,
         account: publicKey,
         jwt: auth.jwt,
-      });
+      }, signal);
 
       // Step 3 — KYC iframe
       setStep('kyc');
@@ -103,7 +122,7 @@ export function ExecuteDrawer({ rate, amount, publicKey, onClose, onExecuteStart
       // Step 4 — Fetch transaction record
       setStep('building');
       const transferServer = anchor.TRANSFER_SERVER_SEP0024!;
-      const record = await getWithdrawTransactionRecord(transferServer, transactionId, auth.jwt);
+      const record = await getWithdrawTransactionRecord(transferServer, transactionId, auth.jwt, signal);
 
       // Step 5 — Build payment
       const tx = await buildWithdrawPayment({
@@ -127,6 +146,9 @@ export function ExecuteDrawer({ rate, amount, publicKey, onClose, onExecuteStart
       onClose();
     } catch (err) {
       const message = err instanceof Error ? err.message : 'Unknown error';
+
+      // Ignore aborted requests (component unmounted mid-flow).
+      if ((err as Error).name === 'AbortError') return;
 
       // Determine if it's a "User Rejected" case to avoid noisy error UI.
       if (message.includes('User rejected') || message.includes('User cancelled')) {
@@ -314,7 +336,7 @@ export function ExecuteDrawer({ rate, amount, publicKey, onClose, onExecuteStart
             </h3>
             <p className="mb-6 text-sm text-gray-600 dark:text-gray-400">
               Are you sure you want to cancel the off-ramp process? This will close the KYC form and
-              you'll need to start over.
+              you&apos;ll need to start over.
             </p>
             <div className="flex gap-3">
               <button

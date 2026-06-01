@@ -87,7 +87,7 @@ export function KycIframe({ url, origin, onComplete, onCancel, onError }: KycIfr
               Unable to load KYC form
             </h3>
             <p className="mb-4 text-sm text-gray-600 dark:text-gray-400">
-              The anchor's KYC form couldn't be loaded in this frame.
+              The anchor&apos;s KYC form couldn&apos;t be loaded in this frame.
             </p>
             <button
               onClick={openInNewTab}
