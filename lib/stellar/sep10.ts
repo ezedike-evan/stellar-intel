@@ -3,7 +3,7 @@ import type { Transaction, FeeBumpTransaction } from '@stellar/stellar-sdk'
 import { getWebAuthEndpoint, resolveAnchor } from './sep1'
 import { getCachedJwt, setCachedJwt, invalidateCachedJwt } from './jwt-cache'
 import type { ResolvedAnchor, Sep10Auth } from '@/types'
-import { UserRejectedError } from './errors'
+import { UserRejectedError, WalletError } from './errors'
 
 export { invalidateCachedJwt, getCachedJwt } from './jwt-cache'
 
@@ -18,6 +18,37 @@ export class ChallengeError extends Error {
   ) {
     super(message)
     this.name = 'ChallengeError'
+  }
+}
+
+/**
+ * Thrown before signing when Freighter's selected network doesn't match the
+ * network the anchor's challenge is for. Carries friendly names for both sides
+ * so the UI can tell the user exactly which network to switch to.
+ */
+export class NetworkMismatchError extends WalletError {
+  constructor(
+    public readonly expectedNetwork: string,
+    public readonly walletNetwork: string
+  ) {
+    super(
+      `Switch network in Freighter to ${expectedNetwork}. It is currently set to ${walletNetwork}.`
+    )
+    this.name = 'NetworkMismatchError'
+  }
+}
+
+/** Maps a Stellar network passphrase to a human-readable network name. */
+export function networkNameForPassphrase(passphrase: string): string {
+  switch (passphrase) {
+    case Networks.PUBLIC:
+      return 'Mainnet (Public)'
+    case Networks.TESTNET:
+      return 'Testnet'
+    case Networks.FUTURENET:
+      return 'Futurenet'
+    default:
+      return passphrase
   }
 }
 
@@ -168,7 +199,25 @@ export async function signChallenge(
   challengeXdr: string,
   networkPassphrase: string
 ): Promise<string> {
-  const { signTransaction } = await import('@stellar/freighter-api')
+  const { signTransaction, getNetwork } = await import('@stellar/freighter-api')
+
+  // Pre-sign guard. Freighter surfaces an opaque error when its selected
+  // network doesn't match the transaction's passphrase, so detect the mismatch
+  // here and raise actionable guidance instead. If the network can't be read,
+  // fall through and let the sign attempt proceed.
+  try {
+    const net = await getNetwork()
+    if (!net.error && net.networkPassphrase && net.networkPassphrase !== networkPassphrase) {
+      throw new NetworkMismatchError(
+        networkNameForPassphrase(networkPassphrase),
+        networkNameForPassphrase(net.networkPassphrase)
+      )
+    }
+  } catch (err) {
+    if (err instanceof NetworkMismatchError) throw err
+    // Couldn't read Freighter's network — proceed and let signing surface any issue.
+  }
+
   const result = await signTransaction(challengeXdr, { networkPassphrase })
 
   if (result.error) {

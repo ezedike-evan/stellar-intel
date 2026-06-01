@@ -10,16 +10,6 @@ const TERMINAL_STATES: WithdrawStatusValue[] = [
   'too_large',
 ];
 
-<<<<<<< HEAD
-async function fetcher([transferServer, transactionId, jwt]: [
-  string,
-  string,
-  string,
-]): Promise<Sep24Transaction> {
-  const res = await fetch(`${transferServer}/transaction?id=${transactionId}`, {
-    headers: { Authorization: `Bearer ${jwt}` },
-  });
-=======
 async function fetcher(
   [transferServer, transactionId, jwt]: [string, string, string],
   { signal }: { signal?: AbortSignal } = {}
@@ -27,8 +17,7 @@ async function fetcher(
   const res = await fetch(`${transferServer}/transaction?id=${transactionId}`, {
     headers: { Authorization: `Bearer ${jwt}` },
     signal,
-  })
->>>>>>> origin/main
+  });
 
   if (!res.ok) {
     throw new Error(`Status poll failed: HTTP ${res.status}`);
