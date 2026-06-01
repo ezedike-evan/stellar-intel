@@ -45,6 +45,7 @@ interface RateTableProps {
   refreshInflight?: boolean;
   error: string | undefined;
   onSelectAnchor: (rate: AnchorRate) => void;
+  executeDisabled?: boolean;
   onRefresh?: () => void;
 }
 
@@ -54,6 +55,7 @@ export function RateTable({
   refreshInflight,
   error,
   onSelectAnchor,
+  executeDisabled,
   onRefresh,
 }: RateTableProps) {
   useEffect(() => {
@@ -196,7 +198,7 @@ export function RateTable({
                     <td className="px-4 py-3 text-right">
                       <button
                         onClick={() => onSelectAnchor(rate)}
-                        disabled={isUnavailable}
+                        disabled={isUnavailable || executeDisabled}
                         className="rounded-lg bg-blue-600 px-3 py-1.5 text-xs font-medium text-white transition-colors hover:bg-blue-700 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:ring-offset-1 disabled:opacity-40 disabled:cursor-not-allowed"
                       >
                         Off-ramp

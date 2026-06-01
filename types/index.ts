@@ -33,6 +33,8 @@ export interface AnchorRate {
   updatedAt: Date;
   /** Discriminates the origin of the rate data. */
   source: 'sep38' | 'sep24-fee' | 'unavailable';
+  /** Row-level quote lifecycle state. Only meaningful for source === 'sep38'. */
+  quoteStatus?: 'firm' | 'expiring' | 'refreshing';
 }
 
 /** The result of comparing all anchor rates for a single corridor. */
