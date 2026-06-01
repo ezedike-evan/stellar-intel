@@ -1,6 +1,7 @@
 import { render, screen, fireEvent, waitFor } from '@testing-library/react';
 import { describe, it, expect, vi } from 'vitest';
 import { DisputeModal } from '@/components/offramp/DisputeModal';
+import type { WithdrawStatusValue } from '@/types';
 
 describe('DisputeModal', () => {
   const defaultProps = {
@@ -18,7 +19,7 @@ describe('DisputeModal', () => {
 
   it('does not render for non-disputable status', () => {
     const { container } = render(
-      <DisputeModal {...defaultProps} status={'pending_anchor' as any} />
+      <DisputeModal {...defaultProps} status={'pending_anchor' as WithdrawStatusValue} />
     );
     expect(container.firstChild).toBeNull();
   });

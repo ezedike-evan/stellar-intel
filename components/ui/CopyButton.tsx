@@ -27,7 +27,7 @@ export function CopyButton({ text, className }: CopyButtonProps) {
         try {
           document.execCommand('copy');
         } catch (err) {
-          console.error('Fallback copy failed', err);
+          console.error('Fallback copy failed', err); // eslint-disable-line no-console
           throw err;
         }
         document.body.removeChild(textArea);
@@ -35,17 +35,12 @@ export function CopyButton({ text, className }: CopyButtonProps) {
       setCopied(true);
       setTimeout(() => setCopied(false), 2000);
     } catch (err) {
-      console.error('Copy failed', err);
+      console.error('Copy failed', err); // eslint-disable-line no-console
     }
   };
 
   return (
-    <Button
-      variant="ghost"
-      size="sm"
-      onClick={handleCopy}
-      className={className}
-    >
+    <Button variant="ghost" size="sm" onClick={handleCopy} className={className}>
       {copied ? 'Copied' : 'Copy'}
     </Button>
   );

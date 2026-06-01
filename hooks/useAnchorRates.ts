@@ -1,6 +1,6 @@
-import { useCallback, useEffect, useRef, useState, useSyncExternalStore } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState, useSyncExternalStore } from 'react';
 import useSWR from 'swr';
-import type { ApiRatesResponse, RateComparison } from '@/types';
+import type { ApiRatesResponse, AnchorRate, RateComparison } from '@/types';
 
 const RATES_REFRESH_INTERVAL_MS = 30_000;
 
@@ -133,6 +133,26 @@ export function useAnchorRates(corridorId: string, amount: string): UseAnchorRat
     return () => clearInterval(intervalId);
   }, [hasRateQuery, isDocumentVisible, mutate]);
 
+  const annotatedRates = useMemo<RateComparison | undefined>(() => {
+    if (!data) return undefined;
+    const now = Date.now();
+    return {
+      ...data,
+      rates: data.rates.map((rate) => {
+        if (rate.source !== 'sep38' || !rate.updatedAt) return rate;
+        const age = now - new Date(rate.updatedAt).getTime();
+        const remaining = QUOTE_VALIDITY_MS - age;
+        const quoteStatus: AnchorRate['quoteStatus'] =
+          refreshingRef.current ? 'refreshing'
+          : remaining < REFRESH_THRESHOLD_MS ? 'expiring'
+          : 'firm';
+        return { ...rate, quoteStatus };
+      }),
+    };
+  // refreshInflight is state (triggers re-render) and serves as proxy for refreshingRef changes
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [data, refreshInflight]);
+
   const refresh = useCallback(async () => {
     if (refreshInflight) return;
 
@@ -150,7 +170,7 @@ export function useAnchorRates(corridorId: string, amount: string): UseAnchorRat
   }, [mutate, refreshInflight]);
 
   return {
-    rates: data,
+    rates: annotatedRates,
     isLoading,
     error: error?.message,
     mutate: refresh,

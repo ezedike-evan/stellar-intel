@@ -1,10 +1,10 @@
-'use client'
+'use client';
 
-import { useEffect } from 'react'
-import type { ReactNode } from 'react'
-import { formatCurrency, formatRate } from '@/lib/utils'
-import type { RateComparison, AnchorRate } from '@/types'
-import { Skeleton } from '@/components/ui/Skeleton'
+import { useEffect } from 'react';
+import type { ReactNode } from 'react';
+import { formatCurrency, formatRate } from '@/lib/utils';
+import type { RateComparison, AnchorRate } from '@/types';
+import { Skeleton } from '@/components/ui/Skeleton';
 
 function sourceBadge(source: AnchorRate['source']): ReactNode {
   switch (source) {
@@ -13,59 +13,68 @@ function sourceBadge(source: AnchorRate['source']): ReactNode {
         <span className="rounded-full bg-green-100 px-2 py-0.5 text-xs font-medium text-green-700 dark:bg-green-900/40 dark:text-green-300">
           SEP-38
         </span>
-      )
+      );
     case 'sep24-fee':
-      return null
+      return null;
     case 'unavailable':
       return (
         <span className="rounded-full bg-red-100 px-2 py-0.5 text-xs font-medium text-red-700 dark:bg-red-900/40 dark:text-red-300">
           Unavailable
         </span>
-      )
+      );
     default: {
-      const _exhaustive: never = source
-      void _exhaustive
-      return null
+      const _exhaustive: never = source;
+      void _exhaustive;
+      return null;
     }
   }
 }
 
 function formatSettlementTime(rate: AnchorRate): string {
-  const p50 = (rate as AnchorRate & { p50SettlementMs?: number }).p50SettlementMs
+  const p50 = (rate as AnchorRate & { p50SettlementMs?: number }).p50SettlementMs;
   if (p50 != null && p50 > 0) {
-    const mins = Math.round(p50 / 60000)
-    return mins < 1 ? '< 1 min' : `~${mins} min`
+    const mins = Math.round(p50 / 60000);
+    return mins < 1 ? '< 1 min' : `~${mins} min`;
   }
-  return '—'
+  return '—';
 }
 
 interface RateTableProps {
-  rates: RateComparison | undefined
-  isLoading: boolean
-  refreshInflight?: boolean
-  error: string | undefined
-  onSelectAnchor: (rate: AnchorRate) => void
-  onRefresh?: () => void
+  rates: RateComparison | undefined;
+  isLoading: boolean;
+  refreshInflight?: boolean;
+  error: string | undefined;
+  onSelectAnchor: (rate: AnchorRate) => void;
+  executeDisabled?: boolean;
+  onRefresh?: () => void;
 }
 
-export function RateTable({ rates, isLoading, refreshInflight, error, onSelectAnchor, onRefresh }: RateTableProps) {
+export function RateTable({
+  rates,
+  isLoading,
+  refreshInflight,
+  error,
+  onSelectAnchor,
+  executeDisabled,
+  onRefresh,
+}: RateTableProps) {
   useEffect(() => {
     const handleKeyPress = (event: KeyboardEvent) => {
       if (event.shiftKey && event.key === 'R' && onRefresh && !refreshInflight) {
-        event.preventDefault()
-        onRefresh()
+        event.preventDefault();
+        onRefresh();
       }
-    }
-    window.addEventListener('keydown', handleKeyPress)
-    return () => window.removeEventListener('keydown', handleKeyPress)
-  }, [onRefresh, refreshInflight])
+    };
+    window.addEventListener('keydown', handleKeyPress);
+    return () => window.removeEventListener('keydown', handleKeyPress);
+  }, [onRefresh, refreshInflight]);
 
   if ((isLoading || refreshInflight) && (!rates || rates.rates.length === 0)) {
     return (
       <div className="overflow-hidden rounded-xl border border-gray-200 dark:border-gray-700">
         <Skeleton rows={5} />
       </div>
-    )
+    );
   }
 
   return (
@@ -143,9 +152,9 @@ export function RateTable({ rates, isLoading, refreshInflight, error, onSelectAn
             {!isLoading &&
               !error &&
               rates?.rates.map((rate) => {
-                const isBest = rate.anchorId === rates.bestRateId
-                const isUnavailable = rate.source === 'unavailable'
-                const currency = rate.corridorId.split('-')[1]?.toUpperCase() ?? ''
+                const isBest = rate.anchorId === rates.bestRateId;
+                const isUnavailable = rate.source === 'unavailable';
+                const currency = rate.corridorId.split('-')[1]?.toUpperCase() ?? '';
 
                 return (
                   <tr
@@ -189,18 +198,18 @@ export function RateTable({ rates, isLoading, refreshInflight, error, onSelectAn
                     <td className="px-4 py-3 text-right">
                       <button
                         onClick={() => onSelectAnchor(rate)}
-                        disabled={isUnavailable}
+                        disabled={isUnavailable || executeDisabled}
                         className="rounded-lg bg-blue-600 px-3 py-1.5 text-xs font-medium text-white transition-colors hover:bg-blue-700 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:ring-offset-1 disabled:opacity-40 disabled:cursor-not-allowed"
                       >
                         Off-ramp
                       </button>
                     </td>
                   </tr>
-                )
+                );
               })}
           </tbody>
         </table>
       </div>
     </div>
-  )
+  );
 }

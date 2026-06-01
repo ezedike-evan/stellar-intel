@@ -74,6 +74,7 @@ function TrustBarItem({ score, rank, onClick }: TrustBarItemProps) {
         {rank}
       </span>
       {score.logoUrl ? (
+        // eslint-disable-next-line @next/next/no-img-element
         <img
           src={score.logoUrl}
           alt={score.anchorName}
@@ -94,8 +95,8 @@ function TrustBarItem({ score, rank, onClick }: TrustBarItemProps) {
               scorePercent >= 80
                 ? 'text-green-600 dark:text-green-400'
                 : scorePercent >= 60
-                ? 'text-yellow-600 dark:text-yellow-400'
-                : 'text-red-600 dark:text-red-400'
+                  ? 'text-yellow-600 dark:text-yellow-400'
+                  : 'text-red-600 dark:text-red-400'
             }
           >
             {scorePercent}%

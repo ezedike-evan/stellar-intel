@@ -8,15 +8,12 @@ let lastRefreshAt: Date | null = null;
 
 export async function POST(): Promise<NextResponse> {
   if (!acquireLock(LOCK_KEY, LOCK_TTL_MS)) {
-    return NextResponse.json(
-      { error: 'Refresh already in progress' },
-      { status: 409 }
-    );
+    return NextResponse.json({ error: 'Refresh already in progress' }, { status: 409 });
   }
 
   try {
     lastRefreshAt = new Date();
-    console.log(`[reputation] aggregate refresh completed at ${lastRefreshAt.toISOString()}`);
+    console.info(`[reputation] aggregate refresh completed at ${lastRefreshAt.toISOString()}`); // eslint-disable-line no-console
 
     return NextResponse.json({
       ok: true,

@@ -3,13 +3,20 @@ import { useEffect, useState } from 'react';
 import { WifiOff, X } from 'lucide-react';
 
 export function OfflineBar() {
-  const [offline, setOffline] = useState(false);
+  const [offline, setOffline] = useState(() =>
+    typeof navigator !== 'undefined' ? !navigator.onLine : false
+  );
   const [dismissed, setDismissed] = useState(false);
 
   useEffect(() => {
-    setOffline(!navigator.onLine);
-    const handleOffline = () => { setOffline(true); setDismissed(false); };
-    const handleOnline = () => { setOffline(false); setDismissed(false); };
+    const handleOffline = () => {
+      setOffline(true);
+      setDismissed(false);
+    };
+    const handleOnline = () => {
+      setOffline(false);
+      setDismissed(false);
+    };
 
     window.addEventListener('offline', handleOffline);
     window.addEventListener('online', handleOnline);

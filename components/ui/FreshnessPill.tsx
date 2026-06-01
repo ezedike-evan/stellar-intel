@@ -23,7 +23,6 @@ export function FreshnessPill({ issuedAt }: FreshnessPillProps) {
   const [ageSeconds, setAgeSeconds] = useState(() => getAgeSeconds(issuedAt));
 
   useEffect(() => {
-    setAgeSeconds(getAgeSeconds(issuedAt));
     const id = setInterval(() => {
       setAgeSeconds(getAgeSeconds(issuedAt));
     }, 1000);
@@ -36,8 +35,8 @@ export function FreshnessPill({ issuedAt }: FreshnessPillProps) {
     freshness === 'fresh'
       ? `${ageSeconds}s`
       : freshness === 'stale'
-      ? `${ageSeconds}s`
-      : `${ageSeconds}s`;
+        ? `${ageSeconds}s`
+        : `${ageSeconds}s`;
 
   return (
     <span
@@ -48,8 +47,7 @@ export function FreshnessPill({ issuedAt }: FreshnessPillProps) {
             freshness === 'fresh',
           'bg-yellow-100 text-yellow-800 dark:bg-yellow-900/30 dark:text-yellow-400':
             freshness === 'stale',
-          'bg-red-100 text-red-800 dark:bg-red-900/30 dark:text-red-400':
-            freshness === 'expired',
+          'bg-red-100 text-red-800 dark:bg-red-900/30 dark:text-red-400': freshness === 'expired',
         }
       )}
     >

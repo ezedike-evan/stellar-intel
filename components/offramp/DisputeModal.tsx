@@ -19,7 +19,11 @@ interface DisputeModalProps {
   transactionId: string;
   status: WithdrawStatusValue;
   onClose: () => void;
-  onSubmit: (data: { transactionId: string; reason: DisputeReason; notes: string }) => Promise<void>;
+  onSubmit: (data: {
+    transactionId: string;
+    reason: DisputeReason;
+    notes: string;
+  }) => Promise<void>;
 }
 
 export function DisputeModal({ transactionId, status, onClose, onSubmit }: DisputeModalProps) {
@@ -95,9 +99,7 @@ export function DisputeModal({ transactionId, status, onClose, onSubmit }: Dispu
                   <path strokeLinecap="round" strokeLinejoin="round" d="M5 13l4 4L19 7" />
                 </svg>
               </div>
-              <p className="text-sm font-medium text-gray-900 dark:text-white">
-                Dispute submitted
-              </p>
+              <p className="text-sm font-medium text-gray-900 dark:text-white">Dispute submitted</p>
               <p className="mt-1 text-xs text-gray-500 dark:text-gray-400">
                 Your report has been queued for review. We&apos;ll follow up via your registered
                 contact.
