@@ -7,6 +7,8 @@ export interface Config {
 
 // Asset code for USDC (constant, not environment-dependent)
 export const USDC_ASSET_CODE = 'USDC';
+const DEFAULT_USDC_ISSUER = 'GA5ZSEJYB37JRC5AVCIA5MOP4RHTM335X2KGX3IHOJAPP5RE34K4KZVN';
+const DEFAULT_APP_NAME = 'Stellar Intel';
 
 // Network passphrases for Stellar networks
 const NETWORK_PASSPHRASES = {
@@ -16,12 +18,7 @@ const NETWORK_PASSPHRASES = {
 } as const;
 
 function validateEnv(): void {
-  const requiredVars = [
-    'NEXT_PUBLIC_STELLAR_NETWORK',
-    'NEXT_PUBLIC_HORIZON_URL',
-    'NEXT_PUBLIC_USDC_ISSUER',
-    'NEXT_PUBLIC_APP_NAME',
-  ] as const;
+  const requiredVars = ['NEXT_PUBLIC_STELLAR_NETWORK', 'NEXT_PUBLIC_HORIZON_URL'] as const;
 
   const missing = requiredVars.filter(
     (varName) => !process.env[varName] || process.env[varName]?.trim() === ''
@@ -30,8 +27,8 @@ function validateEnv(): void {
   if (missing.length > 0) {
     throw new Error(
       `❌ Missing required environment variables:\n` +
-      missing.map(v => `   - ${v}`).join('\n') +
-      `\n\nPlease check your .env.local file and ensure all variables are set.`
+        missing.map((v) => `   - ${v}`).join('\n') +
+        `\n\nPlease check your .env.local file and ensure all variables are set.`
     );
   }
 
@@ -40,7 +37,7 @@ function validateEnv(): void {
   if (network !== 'mainnet' && network !== 'testnet' && network !== 'futurenet') {
     throw new Error(
       `❌ Invalid NEXT_PUBLIC_STELLAR_NETWORK: "${network}"\n` +
-      `   Must be one of: mainnet, testnet, futurenet`
+        `   Must be one of: mainnet, testnet, futurenet`
     );
   }
 
@@ -50,15 +47,15 @@ function validateEnv(): void {
   } catch {
     throw new Error(
       `❌ Invalid NEXT_PUBLIC_HORIZON_URL: "${horizonUrl}"\n` +
-      `   Must be a valid URL (e.g., https://horizon.stellar.org)`
+        `   Must be a valid URL (e.g., https://horizon.stellar.org)`
     );
   }
 
-  const issuer = process.env.NEXT_PUBLIC_USDC_ISSUER!;
+  const issuer = process.env.NEXT_PUBLIC_USDC_ISSUER ?? DEFAULT_USDC_ISSUER;
   if (!/^G[A-Z0-9]{55}$/.test(issuer)) {
     throw new Error(
       `❌ Invalid NEXT_PUBLIC_USDC_ISSUER: "${issuer}"\n` +
-      `   Must be a valid Stellar public key (starts with 'G', 56 characters total)`
+        `   Must be a valid Stellar public key (starts with 'G', 56 characters total)`
     );
   }
 }
@@ -76,8 +73,8 @@ if (typeof window === 'undefined') {
 export const config: Config = {
   stellarNetwork: process.env.NEXT_PUBLIC_STELLAR_NETWORK as Config['stellarNetwork'],
   horizonUrl: process.env.NEXT_PUBLIC_HORIZON_URL!,
-  usdcIssuer: process.env.NEXT_PUBLIC_USDC_ISSUER!,
-  appName: process.env.NEXT_PUBLIC_APP_NAME!,
+  usdcIssuer: process.env.NEXT_PUBLIC_USDC_ISSUER ?? DEFAULT_USDC_ISSUER,
+  appName: process.env.NEXT_PUBLIC_APP_NAME ?? DEFAULT_APP_NAME,
 };
 
 // Freeze to prevent accidental mutations

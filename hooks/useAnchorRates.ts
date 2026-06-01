@@ -46,7 +46,7 @@ async function fetcher(
   url.searchParams.set('corridor', corridorId);
   url.searchParams.set('amount', amount);
 
-  const res = await fetch(url.toString(), { signal });
+  const res = await fetch(url.toString(), { signal: signal ?? null });
 
   if (!res.ok) {
     const err = await res.json().catch(() => ({}));

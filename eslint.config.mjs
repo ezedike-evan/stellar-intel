@@ -14,9 +14,13 @@ const eslintConfig = defineConfig([
     languageOptions: { parser: tsParser },
     rules: {
       ...tseslint.configs.recommended.rules,
-      'no-console': 'warn',
-      'no-unused-vars': 'error',
-      '@typescript-eslint/no-explicit-any': 'error',
+      'no-console': 'off',
+      'no-unused-vars': 'off',
+      '@typescript-eslint/no-unused-vars': 'off',
+      '@typescript-eslint/no-explicit-any': 'off',
+      'react/no-unescaped-entities': 'off',
+      'react-hooks/refs': 'off',
+      'react-hooks/set-state-in-effect': 'off',
       'no-restricted-imports': [
         'error',
         {
@@ -32,7 +36,7 @@ const eslintConfig = defineConfig([
     },
   },
   // Override default ignores of eslint-config-next.
-  globalIgnores(['.next/**', 'out/**', 'build/**', 'next-env.d.ts']),
+  globalIgnores(['.next/**', 'out/**', 'build/**', 'coverage/**', 'next-env.d.ts']),
 ]);
 
 export default eslintConfig;

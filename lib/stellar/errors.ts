@@ -3,8 +3,8 @@
  */
 export class WalletError extends Error {
   constructor(message: string) {
-    super(message)
-    this.name = 'WalletError'
+    super(message);
+    this.name = 'WalletError';
   }
 }
 
@@ -13,8 +13,8 @@ export class WalletError extends Error {
  */
 export class UserRejectedError extends WalletError {
   constructor() {
-    super('User rejected the request')
-    this.name = 'UserRejectedError'
+    super('User rejected the request');
+    this.name = 'UserRejectedError';
   }
 }
 
@@ -24,8 +24,8 @@ export class UserRejectedError extends WalletError {
  */
 export class NetworkError extends WalletError {
   constructor(message: string) {
-    super(message)
-    this.name = 'NetworkError'
+    super(message);
+    this.name = 'NetworkError';
   }
 }
 
@@ -34,8 +34,8 @@ export class NetworkError extends WalletError {
  */
 export class ConnectionError extends WalletError {
   constructor(message: string) {
-    super(message)
-    this.name = 'ConnectionError'
+    super(message);
+    this.name = 'ConnectionError';
   }
 }
 
@@ -44,8 +44,8 @@ export class ConnectionError extends WalletError {
  */
 export class UnknownWalletError extends WalletError {
   constructor(message: string) {
-    super(message)
-    this.name = 'UnknownWalletError'
+    super(message);
+    this.name = 'UnknownWalletError';
   }
 }
 
@@ -54,16 +54,16 @@ export class UnknownWalletError extends WalletError {
  * response formats into a consistent shape.
  */
 export class SepError extends Error {
-  readonly code: string
-  readonly httpStatus: number
-  readonly raw: unknown
+  readonly code: string;
+  readonly httpStatus: number;
+  readonly raw: unknown;
 
   constructor(message: string, code: string, httpStatus: number, raw: unknown) {
-    super(message)
-    this.name = 'SepError'
-    this.code = code
-    this.httpStatus = httpStatus
-    this.raw = raw
+    super(message);
+    this.name = 'SepError';
+    this.code = code;
+    this.httpStatus = httpStatus;
+    this.raw = raw;
   }
 }
 
@@ -73,36 +73,40 @@ export class SepError extends Error {
  * object, missing/empty fields, and malformed/non-object values.
  */
 export function parseSepErrorBody(body: unknown, httpStatus: number): SepError {
-  const fallback = `SEP error: HTTP ${httpStatus}`
-  let message = fallback
-  let code = `HTTP_${httpStatus}`
+  const fallback = `SEP error: HTTP ${httpStatus}`;
+  let message = fallback;
+  let code = `HTTP_${httpStatus}`;
 
   if (typeof body === 'string' && body.trim().length > 0) {
-    message = body.trim()
+    message = body.trim();
   } else if (body !== null && body !== undefined && typeof body === 'object') {
-    const obj = body as Record<string, unknown>
+    const obj = body as Record<string, unknown>;
 
     if (typeof obj['error'] === 'string' && obj['error'].trim().length > 0) {
       // JSON API: { error: "...", code?: "..." }
-      message = obj['error'].trim()
+      message = obj['error'].trim();
       if (typeof obj['code'] === 'string' && obj['code'].trim().length > 0) {
-        code = obj['code'].trim()
+        code = obj['code'].trim();
       }
-    } else if (obj['error'] !== null && obj['error'] !== undefined && typeof obj['error'] === 'object') {
+    } else if (
+      obj['error'] !== null &&
+      obj['error'] !== undefined &&
+      typeof obj['error'] === 'object'
+    ) {
       // Nested: { error: { message: "...", code?: "..." } }
-      const nested = obj['error'] as Record<string, unknown>
+      const nested = obj['error'] as Record<string, unknown>;
       if (typeof nested['message'] === 'string' && nested['message'].trim().length > 0) {
-        message = nested['message'].trim()
+        message = nested['message'].trim();
       }
       if (typeof nested['code'] === 'string' && nested['code'].trim().length > 0) {
-        code = nested['code'].trim()
+        code = nested['code'].trim();
       }
     } else if (typeof obj['detail'] === 'string' && obj['detail'].trim().length > 0) {
-      message = obj['detail'].trim()
+      message = obj['detail'].trim();
     } else if (typeof obj['message'] === 'string' && obj['message'].trim().length > 0) {
-      message = obj['message'].trim()
+      message = obj['message'].trim();
     }
   }
 
-  return new SepError(message, code, httpStatus, body)
+  return new SepError(message, code, httpStatus, body);
 }

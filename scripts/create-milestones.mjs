@@ -27,18 +27,15 @@ const MILESTONES = [
   },
   {
     title: 'v1.1 Hardening',
-    description:
-      'SEP-38 quoting, replay protection, error surfaces, telemetry. Issues #071–#110.',
+    description: 'SEP-38 quoting, replay protection, error surfaces, telemetry. Issues #071–#110.',
   },
   {
     title: 'v1.2 Router + Seeds',
-    description:
-      'Multi-anchor solver, seeded rate data, composite scoring. Issues #111–#140.',
+    description: 'Multi-anchor solver, seeded rate data, composite scoring. Issues #111–#140.',
   },
   {
     title: 'v1.3 Polish',
-    description:
-      'UI polish, accessibility, bundle budget, release gate for v1. Issues #141–#150.',
+    description: 'UI polish, accessibility, bundle budget, release gate for v1. Issues #141–#150.',
   },
   {
     title: 'v2 Observable',
@@ -52,8 +49,7 @@ const MILESTONES = [
   },
   {
     title: 'v4 Universal',
-    description:
-      'SDK + MCP GA + embeddable widget for third-party wallets and dapps.',
+    description: 'SDK + MCP GA + embeddable widget for third-party wallets and dapps.',
   },
   {
     title: 'v5 Institutional',
