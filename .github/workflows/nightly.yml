@@ -27,13 +27,13 @@ jobs:
       - name: Resolve every anchor .well-known/stellar.toml
         id: probe
         run: |
-          # Extract anchor domains from constants/index.ts so we do not drift
+          # Extract anchor domains from constants/anchors.ts so we do not drift
           # from the app's source of truth.
           mapfile -t DOMAINS < <(node -e "
             const path = require('path');
             const fs = require('fs');
-            const src = fs.readFileSync('constants/index.ts', 'utf8');
-            const re = /domain:\s*['\"]([^'\"]+)['\"]/g;
+            const src = fs.readFileSync('constants/anchors.ts', 'utf8');
+            const re = /homeDomain:\s*['\"]([^'\"]+)['\"]/g;
             const seen = new Set();
             let m;
             while ((m = re.exec(src))) seen.add(m[1]);
@@ -41,7 +41,7 @@ jobs:
           ")
 
           if [ ${#DOMAINS[@]} -eq 0 ]; then
-            echo "::warning::No anchor domains found in constants/index.ts; skipping"
+            echo "::warning::No anchor domains found in constants/anchors.ts; skipping"
             echo "summary=no-domains-detected" >> "$GITHUB_OUTPUT"
             exit 0
           fi
