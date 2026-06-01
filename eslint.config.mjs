@@ -12,10 +12,11 @@ const eslintConfig = defineConfig([
   {
     plugins: { '@typescript-eslint': tseslint },
     languageOptions: { parser: tsParser },
+    settings: { react: { version: '18' } },
     rules: {
       ...tseslint.configs.recommended.rules,
       'no-console': 'warn',
-      'no-unused-vars': 'error',
+      'no-unused-vars': 'off',
       '@typescript-eslint/no-explicit-any': 'error',
       'no-restricted-imports': [
         'error',
