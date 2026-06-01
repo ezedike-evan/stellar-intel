@@ -1,0 +1,8 @@
+{
+  "crons": [
+    {
+      "path": "/api/reputation/refresh",
+      "schedule": "*/5 * * * *"
+    }
+  ]
+}
