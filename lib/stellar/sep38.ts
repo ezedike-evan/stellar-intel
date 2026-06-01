@@ -1,3 +1,4 @@
+import { parseSepErrorBody } from './errors';
 import type {
   Sep38Asset,
   Sep38DeliveryMethod,
@@ -8,7 +9,7 @@ import type {
   Sep38QuoteParams,
 } from '@/types';
 
-// ─── Errors ─────────────────────────────────────────────────────────────────
+// ─── Errors ───────────────────────────────────────────────────────────────────
 
 /** Thrown when a SEP-38 response cannot be parsed into the expected schema. */
 export class Sep38ParseError extends Error {
@@ -30,7 +31,7 @@ interface CacheEntry {
 
 const cache = new Map<string, CacheEntry>();
 
-// ─── Internal helpers ─────────────────────────────────────────────────────────
+// ─── Shared helpers ───────────────────────────────────────────────────────────
 
 function isRecord(value: unknown): value is Record<string, unknown> {
   return typeof value === 'object' && value !== null && !Array.isArray(value);
@@ -44,6 +45,8 @@ function normalizeQuoteServer(quoteServer: string): string {
   }
   return trimmed.replace(/\/+$/, '');
 }
+
+// ─── getSep38Info helpers ─────────────────────────────────────────────────────
 
 function parseDeliveryMethods(value: unknown): Sep38DeliveryMethod[] {
   if (!Array.isArray(value)) {
@@ -92,7 +95,7 @@ function parseAssets(value: unknown): Sep38Asset[] {
   });
 }
 
-// ─── Discovery endpoint ─────────────────────────────────────────────────────────
+// ─── Discovery endpoint ───────────────────────────────────────────────────────
 
 /**
  * Fetches the SEP-38 GET /info discovery response from an anchor's quote server,
@@ -135,6 +138,13 @@ export async function getSep38Info(quoteServer: string): Promise<Sep38Info> {
   return data;
 }
 
+/** Exposed for testing only — clears the in-memory SEP-38 /info cache. */
+export function _clearSep38Cache(): void {
+  cache.clear();
+}
+
+// ─── getSep38Prices helpers ───────────────────────────────────────────────────
+
 function parsePrices(raw: Record<string, unknown>): Sep38IndicativePrice[] {
   const buyAssets = raw['buy_assets'];
   if (!Array.isArray(buyAssets)) {
@@ -156,15 +166,15 @@ function parsePrices(raw: Record<string, unknown>): Sep38IndicativePrice[] {
       throw new Sep38ParseError(`SEP-38 /prices buy_assets[${index}] is missing a string "price"`);
     }
 
-    // GET /prices returns a single indicative price per buy asset; total_price
-    // mirrors it unless the anchor provides a distinct value.
     const totalPrice = typeof entry['total_price'] === 'string' ? entry['total_price'] : price;
 
+    // buy_asset is a named alias for asset — both are required by the issue spec
+    // so callers can use the semantically clearer field name.
     return { asset, buy_asset: asset, price, total_price: totalPrice };
   });
 }
 
-// ─── Indicative prices endpoint ─────────────────────────────────────────────────
+// ─── Indicative prices endpoint ───────────────────────────────────────────────
 
 /**
  * Fetches indicative (non-firm) prices from an anchor's SEP-38 GET /prices
@@ -182,7 +192,7 @@ export async function getSep38Prices(
   const base = normalizeQuoteServer(quoteServer);
 
   if (!params.sell_asset || !params.sell_amount) {
-    throw new Error('sell_asset and sell_amount are required');
+    throw new Sep38ParseError('sell_asset and sell_amount are required');
   }
 
   const url = new URL(`${base}/prices`);
@@ -221,6 +231,156 @@ export async function getSep38Prices(
   return parsePrices(raw);
 }
 
+// ─── getSep38Price helpers ────────────────────────────────────────────────────
+
+const PRICE_PATH = '/price';
+
+export interface Sep38PriceParams {
+  quoteServer: string;
+  sell_asset: string;
+  buy_asset: string;
+  sell_amount: string;
+  buy_delivery_method?: string;
+  context: string;
+}
+
+export interface Sep38FeeDetail {
+  name: string;
+  amount: string;
+  description?: string;
+}
+
+export interface Sep38Fee {
+  total: string;
+  asset: string;
+  details?: Sep38FeeDetail[];
+}
+
+export interface Sep38PriceResponse {
+  price: string;
+  sell_amount: string;
+  buy_amount: string;
+  total_price?: string;
+  fee?: Sep38Fee;
+}
+
+function assertNonEmpty(value: string, fieldName: keyof Sep38PriceParams): void {
+  if (value.trim().length === 0) {
+    throw new Error(`SEP-38 /price requires a non-empty "${fieldName}"`);
+  }
+}
+
+function getRequiredString(data: Record<string, unknown>, fieldName: string): string {
+  const value = data[fieldName];
+  if (typeof value !== 'string' || value.trim().length === 0) {
+    throw new Error(`Invalid SEP-38 /price response: missing "${fieldName}"`);
+  }
+  return value;
+}
+
+function parseFee(raw: unknown): Sep38Fee | undefined {
+  if (raw === undefined) return undefined;
+  if (!isRecord(raw)) {
+    throw new Error('Invalid SEP-38 /price response: "fee" must be an object');
+  }
+
+  const fee: Sep38Fee = {
+    total: getRequiredString(raw, 'total'),
+    asset: getRequiredString(raw, 'asset'),
+  };
+
+  const details = raw['details'];
+  if (details !== undefined) {
+    if (!Array.isArray(details)) {
+      throw new Error('Invalid SEP-38 /price response: "fee.details" must be an array');
+    }
+
+    fee.details = details.map((detail) => {
+      if (!isRecord(detail)) {
+        throw new Error('Invalid SEP-38 /price response: each fee detail must be an object');
+      }
+
+      const parsed: Sep38FeeDetail = {
+        name: getRequiredString(detail, 'name'),
+        amount: getRequiredString(detail, 'amount'),
+      };
+
+      if (typeof detail['description'] === 'string') {
+        parsed.description = detail['description'];
+      }
+
+      return parsed;
+    });
+  }
+
+  return fee;
+}
+
+function buildPriceUrl(params: Sep38PriceParams): string {
+  assertNonEmpty(params.quoteServer, 'quoteServer');
+  assertNonEmpty(params.sell_asset, 'sell_asset');
+  assertNonEmpty(params.buy_asset, 'buy_asset');
+  assertNonEmpty(params.sell_amount, 'sell_amount');
+  assertNonEmpty(params.context, 'context');
+
+  const quoteServer = params.quoteServer.replace(/\/+$/, '');
+  const url = new URL(`${quoteServer}${PRICE_PATH}`);
+  url.searchParams.set('sell_asset', params.sell_asset);
+  url.searchParams.set('buy_asset', params.buy_asset);
+  url.searchParams.set('sell_amount', params.sell_amount);
+  url.searchParams.set('context', params.context);
+
+  if (params.buy_delivery_method && params.buy_delivery_method.trim().length > 0) {
+    url.searchParams.set('buy_delivery_method', params.buy_delivery_method);
+  }
+
+  return url.toString();
+}
+
+function parsePriceResponse(data: unknown): Sep38PriceResponse {
+  if (!isRecord(data)) {
+    throw new Error('Invalid SEP-38 /price response: expected an object');
+  }
+
+  const response: Sep38PriceResponse = {
+    price: getRequiredString(data, 'price'),
+    sell_amount: getRequiredString(data, 'sell_amount'),
+    buy_amount: getRequiredString(data, 'buy_amount'),
+  };
+
+  if (typeof data['total_price'] === 'string') {
+    response.total_price = data['total_price'];
+  }
+
+  const fee = parseFee(data['fee']);
+  if (fee) response.fee = fee;
+
+  return response;
+}
+
+/**
+ * Fetches an indicative SEP-38 price for a specific asset pair.
+ *
+ * This wraps GET /price and intentionally supports the sell_amount path needed
+ * by the off-ramp comparator. Firm quotes belong to POST /quote.
+ */
+export async function getSep38Price(params: Sep38PriceParams): Promise<Sep38PriceResponse> {
+  const url = buildPriceUrl(params);
+  const res = await fetch(url, {
+    headers: { Accept: 'application/json' },
+  });
+
+  if (!res.ok) {
+    const body: unknown =
+      typeof res.json === 'function' ? await res.json().catch(() => null) : null;
+    throw parseSepErrorBody(body, res.status);
+  }
+
+  return parsePriceResponse(await res.json());
+}
+
+// ─── getSep38Quote helpers ────────────────────────────────────────────────────
+
 function requireString(raw: Record<string, unknown>, field: string, endpoint: string): string {
   const value = raw[field];
   if (typeof value !== 'string' || value.length === 0) {
@@ -244,13 +404,7 @@ function parseQuote(raw: Record<string, unknown>): Sep38Quote {
     throw new Sep38ParseError(`SEP-38 quote "expires_at" is not in the future: "${expiresAt}"`);
   }
 
-  return {
-    id,
-    expires_at: expiresAt,
-    price,
-    sell_amount: sellAmount,
-    buy_amount: buyAmount,
-  };
+  return { id, expires_at: expiresAt, price, sell_amount: sellAmount, buy_amount: buyAmount };
 }
 
 // ─── Firm quote endpoint ──────────────────────────────────────────────────────
@@ -260,8 +414,7 @@ function parseQuote(raw: Record<string, unknown>): Sep38Quote {
  *
  * Firm quotes are single-use and time-bound, so the response is not cached. The
  * returned quote is validated to have a parsable `expires_at` in the future;
- * otherwise a {@link Sep38ParseError} is thrown. Missing required fields also
- * throw a {@link Sep38ParseError}.
+ * otherwise a {@link Sep38ParseError} is thrown.
  */
 export async function postSep38Quote(
   quoteServer: string,
@@ -270,11 +423,9 @@ export async function postSep38Quote(
 ): Promise<Sep38Quote> {
   const base = normalizeQuoteServer(quoteServer);
 
-  if (!jwt) {
-    throw new Error('A SEP-10 JWT is required to request a firm quote');
-  }
+  if (!jwt) throw new Sep38ParseError('A SEP-10 JWT is required to request a firm quote');
   if (!params.sell_asset || !params.buy_asset || !params.sell_amount) {
-    throw new Error('sell_asset, buy_asset and sell_amount are required');
+    throw new Sep38ParseError('sell_asset, buy_asset and sell_amount are required');
   }
 
   const body: Record<string, string> = {
@@ -283,18 +434,10 @@ export async function postSep38Quote(
     sell_amount: params.sell_amount,
     context: params.context,
   };
-  if (params.buy_delivery_method) {
-    body['buy_delivery_method'] = params.buy_delivery_method;
-  }
-  if (params.sell_delivery_method) {
-    body['sell_delivery_method'] = params.sell_delivery_method;
-  }
-  if (params.country_code) {
-    body['country_code'] = params.country_code;
-  }
-  if (params.expire_after) {
-    body['expire_after'] = params.expire_after;
-  }
+  if (params.buy_delivery_method) body['buy_delivery_method'] = params.buy_delivery_method;
+  if (params.sell_delivery_method) body['sell_delivery_method'] = params.sell_delivery_method;
+  if (params.country_code) body['country_code'] = params.country_code;
+  if (params.expire_after) body['expire_after'] = params.expire_after;
 
   const controller = new AbortController();
   const timeout = setTimeout(() => controller.abort(), REQUEST_TIMEOUT_MS);
@@ -303,10 +446,7 @@ export async function postSep38Quote(
   try {
     res = await fetch(`${base}/quote`, {
       method: 'POST',
-      headers: {
-        'Content-Type': 'application/json',
-        Authorization: `Bearer ${jwt}`,
-      },
+      headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${jwt}` },
       body: JSON.stringify(body),
       signal: controller.signal,
     });
@@ -323,20 +463,17 @@ export async function postSep38Quote(
     throw new Error(`HTTP ${res.status} from ${base} SEP-38 /quote endpoint`);
   }
 
-  const raw = (await res.json()) as Record<string, unknown>;
-  return parseQuote(raw);
+  return parseQuote((await res.json()) as Record<string, unknown>);
 }
 
-// ─── Quote cancellation endpoint ──────────────────────────────────────────────
+// ─── Quote cancellation endpoint ─────────────────────────────────────────────
 
 /**
  * Cancels an unused firm quote before it expires via DELETE /quote/:id,
  * authenticated with a SEP-10 JWT.
  *
- * The operation is idempotent: an anchor reports an already-cancelled (or
- * expired/gone) quote with 404/410 on a repeat call, which is treated as
- * success so a second cancellation does not throw. Other non-2xx responses
- * throw.
+ * Idempotent: 404/410 responses (already cancelled or expired) are treated as
+ * a successful no-op so a repeat cancellation does not throw.
  */
 export async function deleteSep38Quote(
   quoteServer: string,
@@ -345,12 +482,8 @@ export async function deleteSep38Quote(
 ): Promise<void> {
   const base = normalizeQuoteServer(quoteServer);
 
-  if (!id) {
-    throw new Error('A quote id is required to cancel a quote');
-  }
-  if (!jwt) {
-    throw new Error('A SEP-10 JWT is required to cancel a quote');
-  }
+  if (!id) throw new Sep38ParseError('A quote id is required to cancel a quote');
+  if (!jwt) throw new Sep38ParseError('A SEP-10 JWT is required to cancel a quote');
 
   const controller = new AbortController();
   const timeout = setTimeout(() => controller.abort(), REQUEST_TIMEOUT_MS);
@@ -371,8 +504,7 @@ export async function deleteSep38Quote(
     clearTimeout(timeout);
   }
 
-  // Idempotent: a quote that is already cancelled, expired, or otherwise gone is
-  // reported as 404/410 on a repeat call — treat that as a successful no-op.
+  // Idempotent: already-cancelled or expired quotes return 404/410 — treat as success.
   if (res.ok || res.status === 404 || res.status === 410) {
     return;
   }
@@ -380,9 +512,3 @@ export async function deleteSep38Quote(
   throw new Error(`HTTP ${res.status} from ${base} SEP-38 /quote cancellation`);
 }
 
-// ─── Test helpers ─────────────────────────────────────────────────────────────
-
-/** Exposed for testing only — clears the in-memory SEP-38 /info cache. */
-export function _clearSep38Cache(): void {
-  cache.clear();
-}
