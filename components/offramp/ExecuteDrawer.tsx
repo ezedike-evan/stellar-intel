@@ -6,6 +6,7 @@ import { getResolvedAnchorById } from '@/lib/stellar/anchors';
 import { buildWithdrawPayment, signAndSubmitPayment } from '@/lib/stellar/horizon';
 import type { AnchorRate, ExecuteDrawerStep } from '@/types';
 import { KycIframe } from './KycIframe';
+import { FLAGS } from '@/lib/flags';
 
 // ─── Step definitions ─────────────────────────────────────────────────────────
 
@@ -289,12 +290,19 @@ export function ExecuteDrawer({
           {step !== 'kyc' && (
             <div className="mt-5">
               {step === 'idle' && (
-                <button
-                  onClick={handleExecute}
-                  className="w-full rounded-xl bg-blue-600 py-3 text-sm font-semibold text-white transition-colors hover:bg-blue-700 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:ring-offset-2"
-                >
-                  Start Off-ramp
-                </button>
+                <div className="flex flex-col items-center">
+                  <button
+                    onClick={handleExecute}
+                    className="w-full rounded-xl bg-blue-600 py-3 text-sm font-semibold text-white transition-colors hover:bg-blue-700 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:ring-offset-2"
+                  >
+                    {FLAGS.INTENT_FLOW ? 'Sign intent' : 'Start Off-ramp'}
+                  </button>
+                  {FLAGS.INTENT_FLOW && (
+                    <p className="mt-2 text-center text-xs text-gray-500 dark:text-gray-400">
+                      One signature, any outcome.
+                    </p>
+                  )}
+                </div>
               )}
               {isRunning && (
                 <button
