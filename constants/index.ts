@@ -14,7 +14,6 @@ export const USDC_ASSET: StellarAsset = {
 
 export const XLM_ASSET: StellarAsset = {
   code: 'XLM',
-  issuer: undefined,
   name: 'Stellar Lumens',
 };
 
@@ -41,7 +40,6 @@ export const SUPPORTED_COUNTRIES: Country[] = [
   { code: 'BR', name: 'Brazil', currency: 'BRL', currencySymbol: 'R$', flag: '🇧🇷' },
   { code: 'DE', name: 'Germany', currency: 'EUR', currencySymbol: '€', flag: '🇩🇪' },
 ];
-
 
 export const REVALIDATION_INTERVAL = 30_000; // 30 seconds
 

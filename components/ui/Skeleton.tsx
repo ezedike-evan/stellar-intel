@@ -1,5 +1,5 @@
 interface SkeletonProps {
-  rows?: number
+  rows?: number;
 }
 
 export function Skeleton({ rows = 5 }: SkeletonProps) {
@@ -17,5 +17,5 @@ export function Skeleton({ rows = 5 }: SkeletonProps) {
         ))}
       </tbody>
     </table>
-  )
+  );
 }
