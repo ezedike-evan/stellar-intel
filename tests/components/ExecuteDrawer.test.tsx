@@ -7,6 +7,15 @@ import type { AnchorRate } from '@/types'
 
 vi.mock('@/lib/stellar/sep10', () => ({
   authenticate: vi.fn(),
+  NetworkMismatchError: class NetworkMismatchError extends Error {
+    constructor(
+      public readonly expectedNetwork: string,
+      public readonly walletNetwork: string
+    ) {
+      super(`Switch network in Freighter to ${expectedNetwork}. It is currently set to ${walletNetwork}.`)
+      this.name = 'NetworkMismatchError'
+    }
+  },
 }))
 
 vi.mock('@/lib/stellar/sep24', () => ({
@@ -154,6 +163,27 @@ describe('ExecuteDrawer', () => {
     fireEvent.click(screen.getByText('Start Off-ramp'))
 
     await waitFor(() => expect(screen.getByText('SEP-10 challenge failed')).toBeInTheDocument())
+    expect(screen.getByRole('button', { name: 'Try Again' })).toBeInTheDocument()
+  })
+
+  it('shows dedicated switch-network guidance when Freighter is on the wrong network', async () => {
+    const NetworkMismatchError = vi.mocked(sep10).NetworkMismatchError
+    mockAuthenticate.mockRejectedValue(
+      new NetworkMismatchError('Mainnet (Public)', 'Testnet')
+    )
+
+    render(
+      <ExecuteDrawer rate={RATE} amount="100" publicKey={PUBLIC_KEY} onClose={vi.fn()} onExecuteStarted={vi.fn()} />
+    )
+
+    fireEvent.click(screen.getByText('Start Off-ramp'))
+
+    await waitFor(() =>
+      expect(
+        screen.getByText(/Switch network in Freighter to Mainnet \(Public\)/)
+      ).toBeInTheDocument()
+    )
+    expect(screen.getByText(/currently set to Testnet/)).toBeInTheDocument()
     expect(screen.getByRole('button', { name: 'Try Again' })).toBeInTheDocument()
   })
 

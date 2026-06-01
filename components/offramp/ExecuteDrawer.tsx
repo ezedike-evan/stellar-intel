@@ -1,6 +1,6 @@
 'use client';
 import { useEffect, useRef, useState } from 'react';
-import { authenticate } from '@/lib/stellar/sep10';
+import { authenticate, NetworkMismatchError } from '@/lib/stellar/sep10';
 import { initiateWithdraw, getWithdrawTransactionRecord } from '@/lib/stellar/sep24';
 import { getResolvedAnchorById } from '@/lib/stellar/anchors';
 import { buildWithdrawPayment, signAndSubmitPayment } from '@/lib/stellar/horizon';
@@ -126,6 +126,14 @@ export function ExecuteDrawer({ rate, amount, publicKey, onClose, onExecuteStart
       onExecuteStarted(transactionId, transferServer, auth.jwt);
       onClose();
     } catch (err) {
+      // Freighter is on the wrong network — surface the dedicated
+      // "switch network" guidance without retrying the sign.
+      if (err instanceof NetworkMismatchError) {
+        setErrorMsg(err.message);
+        setStep('error');
+        return;
+      }
+
       const message = err instanceof Error ? err.message : 'Unknown error';
 
       // Determine if it's a "User Rejected" case to avoid noisy error UI.
