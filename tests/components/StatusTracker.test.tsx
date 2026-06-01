@@ -6,9 +6,13 @@ const BASE_PROPS = {
   transactionId: 'txn-abc-123',
   status: undefined,
   amountIn: undefined,
+  amountInAsset: undefined,
   amountOut: undefined,
+  amountOutAsset: undefined,
+  amountFee: undefined,
   currencyCode: 'NGN',
   stellarTransactionId: undefined,
+  externalTransactionId: undefined,
   isLoading: false,
   error: undefined,
 } as const;
@@ -26,7 +30,7 @@ describe('StatusTracker', () => {
 
   it('shows "Completed" label when status is completed', () => {
     render(<StatusTracker {...BASE_PROPS} status="completed" />);
-    expect(screen.getByText('Completed')).toBeInTheDocument();
+    expect(screen.getAllByText('Completed').length).toBeGreaterThanOrEqual(1);
   });
 
   it('shows "Awaiting your payment" for pending_user_transfer_start status', () => {
@@ -56,7 +60,17 @@ describe('StatusTracker', () => {
     expect(screen.getByText('Status poll failed: HTTP 401')).toBeInTheDocument();
   });
 
-  it('shows the stellar transaction ID (truncated) when provided', () => {
+  it('renders a stellar.expert link when stellarTransactionId is a valid 64-char hex', () => {
+    const txId = 'aabbccddeeff00112233445566778899aabbccddeeff00112233445566778899';
+    render(<StatusTracker {...BASE_PROPS} status="completed" stellarTransactionId={txId} />);
+    const link = screen.getByRole('link');
+    expect(link).toHaveAttribute('href', `https://api.stellar.expert/explorer/public/tx/${txId}`);
+    expect(link).toHaveAttribute('target', '_blank');
+    expect(link).toHaveAttribute('rel', 'noopener noreferrer');
+    expect(link).toHaveTextContent('aabbccddeeff0011…');
+  });
+
+  it('does not render a stellar.expert link when stellarTransactionId is not a valid 64-char hex', () => {
     render(
       <StatusTracker
         {...BASE_PROPS}
@@ -64,7 +78,7 @@ describe('StatusTracker', () => {
         stellarTransactionId="abc123def456789012345678"
       />
     );
-    expect(screen.getByText(/abc123def456789/)).toBeInTheDocument();
+    expect(screen.queryByRole('link')).not.toBeInTheDocument();
   });
 
   it('shows "Live" indicator when status is not terminal', () => {

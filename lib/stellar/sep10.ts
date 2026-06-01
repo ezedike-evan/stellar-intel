@@ -128,12 +128,17 @@ export async function fetchSep10Challenge(
 
 export async function fetchChallenge(
   webAuthEndpoint: string,
-  publicKey: string
+  publicKey: string,
+  signal?: AbortSignal
 ): Promise<{ transaction: string; network_passphrase: string }> {
   const url = new URL(webAuthEndpoint);
   url.searchParams.set('account', publicKey);
 
+<<<<<<< HEAD
   const res = await fetch(url.toString());
+=======
+  const res = await fetch(url.toString(), { signal })
+>>>>>>> origin/main
   if (!res.ok) {
     throw new Error(`Challenge fetch failed: HTTP ${res.status} from ${webAuthEndpoint}`);
   }
@@ -181,13 +186,19 @@ export async function signChallenge(
 
 export async function submitChallenge(
   webAuthEndpoint: string,
-  signedXdr: string
+  signedXdr: string,
+  signal?: AbortSignal
 ): Promise<{ token: string; expiresAt: Date }> {
   const res = await fetch(webAuthEndpoint, {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify({ transaction: signedXdr }),
+<<<<<<< HEAD
   });
+=======
+    signal,
+  })
+>>>>>>> origin/main
 
   if (!res.ok) {
     throw new Sep10AuthError(
@@ -214,17 +225,33 @@ export async function submitChallenge(
 
 // ─── Full auth orchestrator ───────────────────────────────────────────────────
 
+<<<<<<< HEAD
 export async function authenticate(anchor: ResolvedAnchor, publicKey: string): Promise<Sep10Auth> {
   const cached = getCachedJwt(anchor.homeDomain, publicKey);
   if (cached) return cached;
+=======
+export async function authenticate(
+  anchor: ResolvedAnchor,
+  publicKey: string,
+  signal?: AbortSignal
+): Promise<Sep10Auth> {
+  const cached = getCachedJwt(anchor.homeDomain, publicKey)
+  if (cached) return cached
+>>>>>>> origin/main
 
   const webAuthEndpoint = anchor.WEB_AUTH_ENDPOINT;
   if (!webAuthEndpoint || !anchor.capabilities.sep10) {
     throw new Error(`Anchor "${anchor.homeDomain}" does not support SEP-10 authentication.`);
   }
+<<<<<<< HEAD
   const { transaction, network_passphrase } = await fetchChallenge(webAuthEndpoint, publicKey);
   const signedXdr = await signChallenge(transaction, network_passphrase);
   const { token: jwt, expiresAt } = await submitChallenge(webAuthEndpoint, signedXdr);
+=======
+  const { transaction, network_passphrase } = await fetchChallenge(webAuthEndpoint, publicKey, signal)
+  const signedXdr = await signChallenge(transaction, network_passphrase)
+  const { token: jwt, expiresAt } = await submitChallenge(webAuthEndpoint, signedXdr, signal)
+>>>>>>> origin/main
 
   const auth: Sep10Auth = { jwt, anchorDomain: anchor.homeDomain, publicKey, expiresAt };
   setCachedJwt(auth);

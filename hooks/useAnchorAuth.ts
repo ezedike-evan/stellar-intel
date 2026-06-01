@@ -66,8 +66,12 @@ export function useAnchorAuth(
     setError(null);
 
     try {
+<<<<<<< HEAD
       const resolvedAnchor = await getResolvedAnchorByDomain(anchorDomain);
       const auth: Sep10Auth = await authenticate(resolvedAnchor, publicKey, signal);
+=======
+      const auth: Sep10Auth = await authenticate(anchorDomain, publicKey, signal)
+>>>>>>> origin/main
 
       // Check if request was cancelled
       if (signal.aborted) {

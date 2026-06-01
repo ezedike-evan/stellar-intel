@@ -1,7 +1,15 @@
+<<<<<<< HEAD
 'use client';
 import { formatCurrency, formatRate } from '@/lib/utils';
 import type { RateComparison, AnchorRate } from '@/types';
 import { Skeleton } from '@/components/ui/Skeleton';
+=======
+'use client'
+import { formatCurrency, formatRate } from '@/lib/utils'
+import type { RateComparison, AnchorRate } from '@/types'
+import { Skeleton } from '@/components/ui/Skeleton'
+import { useEffect } from 'react'
+>>>>>>> origin/main
 
 function sourceBadge(source: AnchorRate['source']): React.ReactNode {
   switch (source) {
@@ -28,6 +36,7 @@ function sourceBadge(source: AnchorRate['source']): React.ReactNode {
 }
 
 interface RateTableProps {
+<<<<<<< HEAD
   rates: RateComparison | undefined;
   isLoading: boolean;
   refreshInflight?: boolean;
@@ -42,6 +51,30 @@ export function RateTable({
   error,
   onSelectAnchor,
 }: RateTableProps) {
+=======
+  rates: RateComparison | undefined
+  isLoading: boolean
+  refreshInflight?: boolean
+  error: string | undefined
+  onSelectAnchor: (rate: AnchorRate) => void
+  onRefresh?: () => void
+}
+
+export function RateTable({ rates, isLoading, refreshInflight, error, onSelectAnchor, onRefresh }: RateTableProps) {
+  // Handle keyboard shortcut ⇧R (Shift+R)
+  useEffect(() => {
+    const handleKeyPress = (event: KeyboardEvent) => {
+      if (event.shiftKey && event.key === 'R' && onRefresh && !refreshInflight) {
+        event.preventDefault()
+        onRefresh()
+      }
+    }
+
+    window.addEventListener('keydown', handleKeyPress)
+    return () => window.removeEventListener('keydown', handleKeyPress)
+  }, [onRefresh, refreshInflight])
+
+>>>>>>> origin/main
   if ((isLoading || refreshInflight) && (!rates || rates.rates.length === 0)) {
     return (
       <div className="overflow-hidden rounded-xl border border-gray-200 dark:border-gray-700">
@@ -51,7 +84,27 @@ export function RateTable({
   }
 
   return (
-    <div className="overflow-hidden rounded-xl border border-gray-200 dark:border-gray-700">
+    <div className="space-y-3">
+      {onRefresh && (
+        <button
+          onClick={onRefresh}
+          disabled={refreshInflight}
+          className="flex items-center gap-2 rounded-lg px-3 py-2 text-sm font-medium text-gray-700 transition-colors hover:bg-gray-100 disabled:opacity-50 disabled:cursor-not-allowed dark:text-gray-300 dark:hover:bg-gray-800"
+          title="Refresh rates (⇧R)"
+        >
+          <svg
+            className={`h-4 w-4 ${refreshInflight ? 'animate-spin' : ''}`}
+            viewBox="0 0 24 24"
+            fill="none"
+            stroke="currentColor"
+            strokeWidth={2}
+          >
+            <path strokeLinecap="round" strokeLinejoin="round" d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15" />
+          </svg>
+          Refresh
+        </button>
+      )}
+      <div className="overflow-hidden rounded-xl border border-gray-200 dark:border-gray-700">
       <table className="w-full text-sm">
         <thead>
           <tr className="border-b border-gray-200 bg-gray-50 dark:border-gray-700 dark:bg-gray-800/50">
@@ -151,6 +204,7 @@ export function RateTable({
             })}
         </tbody>
       </table>
+      </div>
     </div>
   );
 }

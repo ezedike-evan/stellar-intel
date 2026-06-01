@@ -2,6 +2,10 @@
 import type { WithdrawStatusValue, Sep24Transaction } from '@/types';
 import { formatDeliveredAmount } from '@/lib/format';
 import { Timeline } from './Timeline';
+<<<<<<< HEAD
+=======
+import { STELLAR_EXPERT_URL } from '@/constants';
+>>>>>>> origin/main
 
 interface StatusTrackerProps {
   transactionId: string;
@@ -238,12 +242,17 @@ export function StatusTracker({
       )}
 
       {/* Stellar tx link */}
-      {stellarTransactionId && (
+      {stellarTransactionId && isValidStellarTxId(stellarTransactionId) && (
         <p className="text-xs text-gray-500">
           Stellar tx:{' '}
-          <span className="font-mono text-gray-700 dark:text-gray-300">
+          <a
+            href={`${STELLAR_EXPERT_URL}/tx/${stellarTransactionId}`}
+            target="_blank"
+            rel="noopener noreferrer"
+            className="font-mono text-blue-600 hover:underline dark:text-blue-400"
+          >
             {stellarTransactionId.slice(0, 16)}…
-          </span>
+          </a>
         </p>
       )}
 
@@ -251,6 +260,13 @@ export function StatusTracker({
       <Timeline status={status} />
     </div>
   );
+<<<<<<< HEAD
+=======
+}
+
+function isValidStellarTxId(id: string): boolean {
+  return /^[0-9a-fA-F]{64}$/.test(id);
+>>>>>>> origin/main
 }
 
 function parseAsset(assetStr: string | undefined): string | null {
