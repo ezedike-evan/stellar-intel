@@ -140,6 +140,11 @@ export function RateTable({ rates, isLoading, refreshInflight, error, onSelectAn
                       </span>
                     )}
                     {sourceBadge(rate.source)}
+                    {rate.quoteStatus === 'expiring' && (
+                      <span className="rounded-full bg-amber-100 px-2 py-0.5 text-xs font-medium text-amber-700 dark:bg-amber-900/40 dark:text-amber-300">
+                        Expiring
+                      </span>
+                    )}
                   </div>
                 </td>
                 <td className="px-4 py-3 text-right text-gray-700 dark:text-gray-300">
@@ -151,7 +156,9 @@ export function RateTable({ rates, isLoading, refreshInflight, error, onSelectAn
                     : '—'}
                 </td>
                 <td className="px-4 py-3 text-right font-medium text-gray-900 dark:text-white">
-                  {rate.totalReceived !== null ? formatCurrency(rate.totalReceived, currency) : '—'}
+                  {rate.quoteStatus === 'refreshing'
+                    ? <span className="inline-block h-4 w-20 animate-pulse rounded bg-gray-200 dark:bg-gray-700" />
+                    : rate.totalReceived !== null ? formatCurrency(rate.totalReceived, currency) : '—'}
                 </td>
                 <td className="px-4 py-3 text-right">
                   <button
