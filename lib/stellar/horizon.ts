@@ -217,15 +217,24 @@ export async function getStrictSendPaths(
     }
   }
 
-  const toAsset = toAssets[0]
+  if (toAssets.length === 0) {
+    throw new Error('getStrictSendPaths requires at least one destination asset')
+  }
+
+  const toAsset = toAssets[0]!
   return data._embedded.records.map((r, i) => {
     const toAmt = parseFloat(r.destination_amount)
     const fromAmt = parseFloat(r.source_amount)
-    const intermediates: StellarAsset[] = r.path.map((p) => ({
-      code: p.asset_code ?? 'XLM',
-      issuer: p.asset_issuer,
-      name: p.asset_code ?? 'XLM',
-    }))
+    const intermediates: StellarAsset[] = r.path.map((p) => {
+      const asset: StellarAsset = {
+        code: p.asset_code ?? 'XLM',
+        name: p.asset_code ?? 'XLM',
+      }
+      if (p.asset_issuer) {
+        asset.issuer = p.asset_issuer
+      }
+      return asset
+    })
 
     return {
       routeId: `sdex-${i}`,

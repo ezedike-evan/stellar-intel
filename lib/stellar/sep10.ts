@@ -1,6 +1,6 @@
 import { Networks, TransactionBuilder } from '@stellar/stellar-sdk'
 import type { Transaction, FeeBumpTransaction } from '@stellar/stellar-sdk'
-import { getWebAuthEndpoint } from './sep1'
+import { getWebAuthEndpoint, resolveAnchor } from './sep1'
 import { getCachedJwt, setCachedJwt, invalidateCachedJwt } from './jwt-cache'
 import type { ResolvedAnchor, Sep10Auth } from '@/types'
 import { UserRejectedError } from './errors'
@@ -129,13 +129,12 @@ export async function fetchSep10Challenge(
 
 export async function fetchChallenge(
   webAuthEndpoint: string,
-  publicKey: string,
-  signal?: AbortSignal
+  publicKey: string
 ): Promise<{ transaction: string; network_passphrase: string }> {
   const url = new URL(webAuthEndpoint)
   url.searchParams.set('account', publicKey)
 
-  const res = await fetch(url.toString(), { signal })
+  const res = await fetch(url.toString())
   if (!res.ok) {
     throw new Error(`Challenge fetch failed: HTTP ${res.status} from ${webAuthEndpoint}`)
   }
@@ -183,14 +182,12 @@ export async function signChallenge(
 
 export async function submitChallenge(
   webAuthEndpoint: string,
-  signedXdr: string,
-  signal?: AbortSignal
+  signedXdr: string
 ): Promise<{ token: string; expiresAt: Date }> {
   const res = await fetch(webAuthEndpoint, {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify({ transaction: signedXdr }),
-    signal,
   })
 
   if (!res.ok) {
@@ -219,10 +216,14 @@ export async function submitChallenge(
 // ─── Full auth orchestrator ───────────────────────────────────────────────────
 
 export async function authenticate(
-  anchor: ResolvedAnchor,
-  publicKey: string,
-  signal?: AbortSignal
+  anchorOrDomain: ResolvedAnchor | string,
+  publicKey: string
 ): Promise<Sep10Auth> {
+  const anchor =
+    typeof anchorOrDomain === 'string'
+      ? await resolveAuthenticationAnchor(anchorOrDomain)
+      : anchorOrDomain
+
   const cached = getCachedJwt(anchor.homeDomain, publicKey)
   if (cached) return cached
 
@@ -230,13 +231,30 @@ export async function authenticate(
   if (!webAuthEndpoint || !anchor.capabilities.sep10) {
     throw new Error(`Anchor "${anchor.homeDomain}" does not support SEP-10 authentication.`)
   }
-  const { transaction, network_passphrase } = await fetchChallenge(webAuthEndpoint, publicKey, signal)
+  const { transaction, network_passphrase } = await fetchChallenge(webAuthEndpoint, publicKey)
   const signedXdr = await signChallenge(transaction, network_passphrase)
-  const { token: jwt, expiresAt } = await submitChallenge(webAuthEndpoint, signedXdr, signal)
+  const { token: jwt, expiresAt } = await submitChallenge(webAuthEndpoint, signedXdr)
 
   const auth: Sep10Auth = { jwt, anchorDomain: anchor.homeDomain, publicKey, expiresAt }
   setCachedJwt(auth)
   return auth
+}
+
+async function resolveAuthenticationAnchor(domain: string): Promise<ResolvedAnchor> {
+  const sep1 = await resolveAnchor(domain)
+  if (!sep1.capabilities.sep10) {
+    throw new Error(`Anchor "${domain}" does not support SEP-10 authentication.`)
+  }
+
+  return {
+    id: domain,
+    name: domain,
+    homeDomain: domain,
+    corridors: [],
+    assetCode: '',
+    assetIssuer: '',
+    ...sep1,
+  }
 }
 
 /**

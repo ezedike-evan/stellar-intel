@@ -1,8 +1,25 @@
-import useSWR from 'swr'
-import type { Sep24Transaction, WithdrawStatusValue } from '@/types'
+import useSWR from 'swr';
+import type { Sep24Transaction, WithdrawStatusValue } from '@/types';
 
-const TERMINAL_STATES: WithdrawStatusValue[] = ['completed', 'error', 'refunded', 'no_market', 'too_small', 'too_large']
+const TERMINAL_STATES: WithdrawStatusValue[] = [
+  'completed',
+  'error',
+  'refunded',
+  'no_market',
+  'too_small',
+  'too_large',
+];
 
+<<<<<<< HEAD
+async function fetcher([transferServer, transactionId, jwt]: [
+  string,
+  string,
+  string,
+]): Promise<Sep24Transaction> {
+  const res = await fetch(`${transferServer}/transaction?id=${transactionId}`, {
+    headers: { Authorization: `Bearer ${jwt}` },
+  });
+=======
 async function fetcher(
   [transferServer, transactionId, jwt]: [string, string, string],
   { signal }: { signal?: AbortSignal } = {}
@@ -11,13 +28,14 @@ async function fetcher(
     headers: { Authorization: `Bearer ${jwt}` },
     signal,
   })
+>>>>>>> origin/main
 
   if (!res.ok) {
-    throw new Error(`Status poll failed: HTTP ${res.status}`)
+    throw new Error(`Status poll failed: HTTP ${res.status}`);
   }
 
-  const data = (await res.json()) as { transaction?: Record<string, unknown> }
-  const tx = data.transaction ?? {}
+  const data = (await res.json()) as { transaction?: Record<string, unknown> };
+  const tx = data.transaction ?? {};
 
   return {
     id: String(tx['id'] ?? transactionId),
@@ -31,22 +49,22 @@ async function fetcher(
     stellarTransactionId: tx['stellar_transaction_id'] as string | undefined,
     externalTransactionId: tx['external_transaction_id'] as string | undefined,
     refunds: tx['refunds'] as Sep24Transaction['refunds'],
-  }
+  };
 }
 
 export interface UseWithdrawStatusResult {
-  status: WithdrawStatusValue | undefined
-  amountIn: string | undefined
-  amountInAsset: string | undefined
-  amountOut: string | undefined
-  amountOutAsset: string | undefined
-  amountFee: string | undefined
-  stellarTransactionId: string | undefined
-  externalTransactionId: string | undefined
-  refunds: Sep24Transaction['refunds'] | undefined
-  updatedAt: Date | undefined
-  isLoading: boolean
-  error: string | undefined
+  status: WithdrawStatusValue | undefined;
+  amountIn: string | undefined;
+  amountInAsset: string | undefined;
+  amountOut: string | undefined;
+  amountOutAsset: string | undefined;
+  amountFee: string | undefined;
+  stellarTransactionId: string | undefined;
+  externalTransactionId: string | undefined;
+  refunds: Sep24Transaction['refunds'] | undefined;
+  updatedAt: Date | undefined;
+  isLoading: boolean;
+  error: string | undefined;
 }
 
 /**
@@ -62,15 +80,15 @@ export function useWithdrawStatus(
   const key =
     transferServer && transactionId && jwt
       ? ([transferServer, transactionId, jwt] as [string, string, string])
-      : null
+      : null;
 
   const { data, error, isLoading } = useSWR<Sep24Transaction, Error>(key, fetcher, {
     refreshInterval: (latestData: Sep24Transaction | undefined) => {
-      if (!latestData) return 5_000
-      return TERMINAL_STATES.includes(latestData.status) ? 0 : 5_000
+      if (!latestData) return 5_000;
+      return TERMINAL_STATES.includes(latestData.status) ? 0 : 5_000;
     },
     revalidateOnFocus: false,
-  })
+  });
 
   return {
     status: data?.status,
@@ -85,5 +103,5 @@ export function useWithdrawStatus(
     updatedAt: data?.updatedAt,
     isLoading,
     error: error?.message,
-  }
+  };
 }

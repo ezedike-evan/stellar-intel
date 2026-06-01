@@ -1,6 +1,237 @@
 import { parseSepErrorBody } from './errors';
-import { authenticate, invalidateSep10Token } from './sep10';
-import type { ResolvedAnchor } from '@/types';
+import type {
+  Sep38Asset,
+  Sep38DeliveryMethod,
+  Sep38IndicativePrice,
+  Sep38Info,
+  Sep38PricesParams,
+  Sep38Quote,
+  Sep38QuoteParams,
+} from '@/types';
+
+// ─── Errors ───────────────────────────────────────────────────────────────────
+
+/** Thrown when a SEP-38 response cannot be parsed into the expected schema. */
+export class Sep38ParseError extends Error {
+  constructor(message: string) {
+    super(message);
+    this.name = 'Sep38ParseError';
+  }
+}
+
+// ─── In-memory cache ──────────────────────────────────────────────────────────
+
+const TTL_MS = 10 * 60 * 1000; // 10 minutes
+const REQUEST_TIMEOUT_MS = 10_000;
+
+interface CacheEntry {
+  data: Sep38Info;
+  expiresAt: number;
+}
+
+const cache = new Map<string, CacheEntry>();
+
+// ─── Shared helpers ───────────────────────────────────────────────────────────
+
+function isRecord(value: unknown): value is Record<string, unknown> {
+  return typeof value === 'object' && value !== null && !Array.isArray(value);
+}
+
+/** Normalizes a quote server URL into a stable cache key and base for requests. */
+function normalizeQuoteServer(quoteServer: string): string {
+  const trimmed = quoteServer.trim();
+  if (!trimmed) {
+    throw new Error('Quote server URL is required');
+  }
+  return trimmed.replace(/\/+$/, '');
+}
+
+// ─── getSep38Info helpers ─────────────────────────────────────────────────────
+
+function parseDeliveryMethods(value: unknown): Sep38DeliveryMethod[] {
+  if (!Array.isArray(value)) {
+    return [];
+  }
+
+  return value.flatMap((method) => {
+    if (!isRecord(method) || typeof method['name'] !== 'string') {
+      return [];
+    }
+
+    return [
+      {
+        name: method['name'],
+        description: typeof method['description'] === 'string' ? method['description'] : '',
+      },
+    ];
+  });
+}
+
+function parseCountryCodes(value: unknown): string[] {
+  if (!Array.isArray(value)) {
+    return [];
+  }
+  return value.filter((code): code is string => typeof code === 'string');
+}
+
+function parseAssets(value: unknown): Sep38Asset[] {
+  if (!Array.isArray(value)) {
+    return [];
+  }
+
+  return value.flatMap((entry) => {
+    if (!isRecord(entry) || typeof entry['asset'] !== 'string') {
+      return [];
+    }
+
+    return [
+      {
+        asset: entry['asset'],
+        sellDeliveryMethods: parseDeliveryMethods(entry['sell_delivery_methods']),
+        buyDeliveryMethods: parseDeliveryMethods(entry['buy_delivery_methods']),
+        countryCodes: parseCountryCodes(entry['country_codes']),
+      },
+    ];
+  });
+}
+
+// ─── Discovery endpoint ───────────────────────────────────────────────────────
+
+/**
+ * Fetches the SEP-38 GET /info discovery response from an anchor's quote server,
+ * returning the typed list of supported assets and their delivery methods.
+ *
+ * Results are cached in memory for 10 minutes per quote server. Failed requests
+ * are not cached.
+ */
+export async function getSep38Info(quoteServer: string): Promise<Sep38Info> {
+  const base = normalizeQuoteServer(quoteServer);
+
+  const cached = cache.get(base);
+  if (cached && cached.expiresAt > Date.now()) {
+    return cached.data;
+  }
+
+  const controller = new AbortController();
+  const timeout = setTimeout(() => controller.abort(), REQUEST_TIMEOUT_MS);
+
+  let res: Response;
+  try {
+    res = await fetch(`${base}/info`, { signal: controller.signal });
+  } catch (err) {
+    if ((err as Error).name === 'AbortError') {
+      throw new Error(`SEP-38 /info request to ${base} timed out after 10 seconds`);
+    }
+    throw err;
+  } finally {
+    clearTimeout(timeout);
+  }
+
+  if (!res.ok) {
+    throw new Error(`HTTP ${res.status} from ${base} SEP-38 /info endpoint`);
+  }
+
+  const raw = (await res.json()) as Record<string, unknown>;
+  const data: Sep38Info = { assets: parseAssets(raw['assets']) };
+
+  cache.set(base, { data, expiresAt: Date.now() + TTL_MS });
+  return data;
+}
+
+/** Exposed for testing only — clears the in-memory SEP-38 /info cache. */
+export function _clearSep38Cache(): void {
+  cache.clear();
+}
+
+// ─── getSep38Prices helpers ───────────────────────────────────────────────────
+
+function parsePrices(raw: Record<string, unknown>): Sep38IndicativePrice[] {
+  const buyAssets = raw['buy_assets'];
+  if (!Array.isArray(buyAssets)) {
+    throw new Sep38ParseError('SEP-38 /prices response is missing a "buy_assets" array');
+  }
+
+  return buyAssets.map((entry, index) => {
+    if (!isRecord(entry)) {
+      throw new Sep38ParseError(`SEP-38 /prices buy_assets[${index}] is not an object`);
+    }
+
+    const asset = entry['asset'];
+    if (typeof asset !== 'string' || asset.length === 0) {
+      throw new Sep38ParseError(`SEP-38 /prices buy_assets[${index}] is missing a string "asset"`);
+    }
+
+    const price = entry['price'];
+    if (typeof price !== 'string' || price.length === 0) {
+      throw new Sep38ParseError(`SEP-38 /prices buy_assets[${index}] is missing a string "price"`);
+    }
+
+    const totalPrice = typeof entry['total_price'] === 'string' ? entry['total_price'] : price;
+
+    // buy_asset is a named alias for asset — both are required by the issue spec
+    // so callers can use the semantically clearer field name.
+    return { asset, buy_asset: asset, price, total_price: totalPrice };
+  });
+}
+
+// ─── Indicative prices endpoint ───────────────────────────────────────────────
+
+/**
+ * Fetches indicative (non-firm) prices from an anchor's SEP-38 GET /prices
+ * endpoint for a given sell asset and amount — used when a user browses without
+ * committing to a firm quote.
+ *
+ * Indicative prices change frequently and are intentionally NOT cached. A
+ * malformed response (missing buy_assets, or an entry lacking a string
+ * asset/price) throws a {@link Sep38ParseError}.
+ */
+export async function getSep38Prices(
+  quoteServer: string,
+  params: Sep38PricesParams
+): Promise<Sep38IndicativePrice[]> {
+  const base = normalizeQuoteServer(quoteServer);
+
+  if (!params.sell_asset || !params.sell_amount) {
+    throw new Sep38ParseError('sell_asset and sell_amount are required');
+  }
+
+  const url = new URL(`${base}/prices`);
+  url.searchParams.set('sell_asset', params.sell_asset);
+  url.searchParams.set('sell_amount', params.sell_amount);
+  if (params.sell_delivery_method) {
+    url.searchParams.set('sell_delivery_method', params.sell_delivery_method);
+  }
+  if (params.buy_delivery_method) {
+    url.searchParams.set('buy_delivery_method', params.buy_delivery_method);
+  }
+  if (params.country_code) {
+    url.searchParams.set('country_code', params.country_code);
+  }
+
+  const controller = new AbortController();
+  const timeout = setTimeout(() => controller.abort(), REQUEST_TIMEOUT_MS);
+
+  let res: Response;
+  try {
+    res = await fetch(url.toString(), { signal: controller.signal });
+  } catch (err) {
+    if ((err as Error).name === 'AbortError') {
+      throw new Error(`SEP-38 /prices request to ${base} timed out after 10 seconds`);
+    }
+    throw err;
+  } finally {
+    clearTimeout(timeout);
+  }
+
+  if (!res.ok) {
+    throw new Error(`HTTP ${res.status} from ${base} SEP-38 /prices endpoint`);
+  }
+
+  const raw = (await res.json()) as Record<string, unknown>;
+  return parsePrices(raw);
+}
+
+// ─── getSep38Price helpers ────────────────────────────────────────────────────
 
 const PRICE_PATH = '/price';
 
@@ -39,15 +270,7 @@ function assertNonEmpty(value: string, fieldName: keyof Sep38PriceParams): void 
   }
 }
 
-function isRecord(value: unknown): value is Record<string, unknown> {
-  return typeof value === 'object' && value !== null && !Array.isArray(value);
-}
-
-function getRequiredString(
-  data: Record<string, unknown>,
-  fieldName: string,
-  context = '/price'
-): string {
+function getRequiredString(data: Record<string, unknown>, fieldName: string): string {
   const value = data[fieldName];
   if (typeof value !== 'string' || value.trim().length === 0) {
     throw new Error(`Invalid SEP-38 ${context} response: missing "${fieldName}"`);
@@ -156,172 +379,136 @@ export async function getSep38Price(params: Sep38PriceParams): Promise<Sep38Pric
   return parsePriceResponse(await res.json());
 }
 
-// ─── Firm quotes (authenticated) ─────────────────────────────────────────────
+// ─── getSep38Quote helpers ────────────────────────────────────────────────────
 
-/** Parameters for a SEP-38 firm quote (POST /quote). */
-export interface Sep38FirmQuoteRequest {
-  /** Asset the user is selling, in SEP-38 form (e.g. "stellar:USDC:G..."). */
-  sellAsset: string;
-  /** Asset the user wants to buy, in SEP-38 form (e.g. "iso4217:NGN"). */
-  buyAsset: string;
-  /** Amount of sellAsset. Mutually exclusive with buyAmount. */
-  sellAmount?: string;
-  /** Amount of buyAsset. Mutually exclusive with sellAmount. */
-  buyAmount?: string;
-  /** Flow the quote will be used in. Defaults to the anchor's choice when omitted. */
-  context?: 'sep6' | 'sep24' | 'sep31';
-  sellDeliveryMethod?: string;
-  buyDeliveryMethod?: string;
-  countryCode?: string;
-  /** ISO-8601 timestamp the quote must remain valid until. */
-  expireAfter?: string;
-}
-
-/** A firm quote issued by an anchor's SEP-38 quote server (POST /quote). */
-export interface Sep38FirmQuote {
-  id: string;
-  expiresAt: Date;
-  price: string;
-  totalPrice: string;
-  sellAsset: string;
-  sellAmount: string;
-  buyAsset: string;
-  buyAmount: string;
-  fee?: Sep38Fee;
-}
-
-function getQuoteServer(anchor: ResolvedAnchor): string {
-  const server = anchor.ANCHOR_QUOTE_SERVER;
-  if (!server || !anchor.capabilities.sep38) {
-    throw new Error(`Anchor "${anchor.homeDomain}" does not support SEP-38 firm quotes.`);
+function requireString(raw: Record<string, unknown>, field: string, endpoint: string): string {
+  const value = raw[field];
+  if (typeof value !== 'string' || value.length === 0) {
+    throw new Sep38ParseError(`SEP-38 ${endpoint} response is missing a string "${field}"`);
   }
-  return server.replace(/\/+$/, '');
+  return value;
 }
 
-async function readErrorBody(res: Response): Promise<unknown> {
-  return typeof res.json === 'function' ? await res.json().catch(() => null) : null;
+function parseQuote(raw: Record<string, unknown>): Sep38Quote {
+  const id = requireString(raw, 'id', '/quote');
+  const expiresAt = requireString(raw, 'expires_at', '/quote');
+  const price = requireString(raw, 'price', '/quote');
+  const sellAmount = requireString(raw, 'sell_amount', '/quote');
+  const buyAmount = requireString(raw, 'buy_amount', '/quote');
+
+  const expiresMs = Date.parse(expiresAt);
+  if (Number.isNaN(expiresMs)) {
+    throw new Sep38ParseError(`SEP-38 quote "expires_at" is not a valid timestamp: "${expiresAt}"`);
+  }
+  if (expiresMs <= Date.now()) {
+    throw new Sep38ParseError(`SEP-38 quote "expires_at" is not in the future: "${expiresAt}"`);
+  }
+
+  return { id, expires_at: expiresAt, price, sell_amount: sellAmount, buy_amount: buyAmount };
 }
+
+// ─── Firm quote endpoint ──────────────────────────────────────────────────────
 
 /**
- * Runs an authenticated request against the anchor, transparently refreshing the
- * SEP-10 JWT on a 401.
+ * Creates a firm SEP-38 quote via POST /quote. Authenticated with a SEP-10 JWT.
  *
- * The first attempt uses whatever token `authenticate` returns (cached when
- * valid). If the anchor rejects it with 401, the cached token is dropped via
- * `invalidateSep10Token` and a single fresh sign flow is run before re-attempting
- * exactly once. A second 401 is surfaced to the caller rather than looping.
+ * Firm quotes are single-use and time-bound, so the response is not cached. The
+ * returned quote is validated to have a parsable `expires_at` in the future;
+ * otherwise a {@link Sep38ParseError} is thrown.
  */
-async function authenticatedRequest(
-  anchor: ResolvedAnchor,
-  publicKey: string,
-  url: string,
-  init: RequestInit
-): Promise<Response> {
-  const withAuth = (jwt: string): RequestInit => ({
-    ...init,
-    headers: { ...init.headers, Authorization: `Bearer ${jwt}` },
-  });
+export async function postSep38Quote(
+  quoteServer: string,
+  jwt: string,
+  params: Sep38QuoteParams
+): Promise<Sep38Quote> {
+  const base = normalizeQuoteServer(quoteServer);
 
-  const { jwt } = await authenticate(anchor, publicKey);
-  const res = await fetch(url, withAuth(jwt));
+  if (!jwt) throw new Sep38ParseError('A SEP-10 JWT is required to request a firm quote');
+  if (!params.sell_asset || !params.buy_asset || !params.sell_amount) {
+    throw new Sep38ParseError('sell_asset, buy_asset and sell_amount are required');
+  }
 
-  if (res.status !== 401) return res;
-
-  // Token was stale/revoked — drop it and re-authenticate once, then retry.
-  invalidateSep10Token(anchor.homeDomain, publicKey);
-  const { jwt: freshJwt } = await authenticate(anchor, publicKey);
-  return fetch(url, withAuth(freshJwt));
-}
-
-function toFirmQuoteBody(params: Sep38FirmQuoteRequest): Record<string, string> {
   const body: Record<string, string> = {
-    sell_asset: params.sellAsset,
-    buy_asset: params.buyAsset,
+    sell_asset: params.sell_asset,
+    buy_asset: params.buy_asset,
+    sell_amount: params.sell_amount,
+    context: params.context,
   };
-  if (params.sellAmount !== undefined) body['sell_amount'] = params.sellAmount;
-  if (params.buyAmount !== undefined) body['buy_amount'] = params.buyAmount;
-  if (params.context !== undefined) body['context'] = params.context;
-  if (params.sellDeliveryMethod !== undefined) body['sell_delivery_method'] = params.sellDeliveryMethod;
-  if (params.buyDeliveryMethod !== undefined) body['buy_delivery_method'] = params.buyDeliveryMethod;
-  if (params.countryCode !== undefined) body['country_code'] = params.countryCode;
-  if (params.expireAfter !== undefined) body['expire_after'] = params.expireAfter;
-  return body;
-}
+  if (params.buy_delivery_method) body['buy_delivery_method'] = params.buy_delivery_method;
+  if (params.sell_delivery_method) body['sell_delivery_method'] = params.sell_delivery_method;
+  if (params.country_code) body['country_code'] = params.country_code;
+  if (params.expire_after) body['expire_after'] = params.expire_after;
 
-function parseFirmQuote(data: unknown): Sep38FirmQuote {
-  if (!isRecord(data)) {
-    throw new Error('Invalid SEP-38 /quote response: expected an object');
+  const controller = new AbortController();
+  const timeout = setTimeout(() => controller.abort(), REQUEST_TIMEOUT_MS);
+
+  let res: Response;
+  try {
+    res = await fetch(`${base}/quote`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${jwt}` },
+      body: JSON.stringify(body),
+      signal: controller.signal,
+    });
+  } catch (err) {
+    if ((err as Error).name === 'AbortError') {
+      throw new Error(`SEP-38 /quote request to ${base} timed out after 10 seconds`);
+    }
+    throw err;
+  } finally {
+    clearTimeout(timeout);
   }
-
-  const expiresAtRaw = getRequiredString(data, 'expires_at', '/quote');
-  const expiresAt = new Date(expiresAtRaw);
-  if (Number.isNaN(expiresAt.getTime())) {
-    throw new Error(`Invalid SEP-38 /quote response: "expires_at" is not a valid date: "${expiresAtRaw}"`);
-  }
-
-  const quote: Sep38FirmQuote = {
-    id: getRequiredString(data, 'id', '/quote'),
-    expiresAt,
-    price: getRequiredString(data, 'price', '/quote'),
-    totalPrice: getRequiredString(data, 'total_price', '/quote'),
-    sellAsset: getRequiredString(data, 'sell_asset', '/quote'),
-    sellAmount: getRequiredString(data, 'sell_amount', '/quote'),
-    buyAsset: getRequiredString(data, 'buy_asset', '/quote'),
-    buyAmount: getRequiredString(data, 'buy_amount', '/quote'),
-  };
-
-  const fee = parseFee(data['fee']);
-  if (fee) quote.fee = fee;
-
-  return quote;
-}
-
-/**
- * Requests a firm quote from the anchor's SEP-38 quote server (POST /quote).
- *
- * Requires the anchor's SEP-10 JWT; the token is fetched from (or refreshed
- * into) the shared JWT cache via `authenticate` and automatically renewed once
- * on a 401. Throws a `SepError` on any other non-2xx response.
- */
-export async function requestFirmQuote(
-  anchor: ResolvedAnchor,
-  publicKey: string,
-  params: Sep38FirmQuoteRequest
-): Promise<Sep38FirmQuote> {
-  const quoteServer = getQuoteServer(anchor);
-  const url = `${quoteServer}/quote`;
-  const body = JSON.stringify(toFirmQuoteBody(params));
-
-  const res = await authenticatedRequest(anchor, publicKey, url, {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
-    body,
-  });
 
   if (!res.ok) {
-    throw parseSepErrorBody(await readErrorBody(res), res.status);
+    throw new Error(`HTTP ${res.status} from ${base} SEP-38 /quote endpoint`);
   }
 
-  return parseFirmQuote(await res.json());
+  return parseQuote((await res.json()) as Record<string, unknown>);
 }
 
+// ─── Quote cancellation endpoint ─────────────────────────────────────────────
+
 /**
- * Deletes a previously issued firm quote (DELETE /quote/:id).
+ * Cancels an unused firm quote before it expires via DELETE /quote/:id,
+ * authenticated with a SEP-10 JWT.
  *
- * Requires the anchor's SEP-10 JWT and, like {@link requestFirmQuote},
- * auto-refreshes the token once on a 401. Throws a `SepError` on failure.
+ * Idempotent: 404/410 responses (already cancelled or expired) are treated as
+ * a successful no-op so a repeat cancellation does not throw.
  */
-export async function deleteFirmQuote(
-  anchor: ResolvedAnchor,
-  publicKey: string,
-  quoteId: string
+export async function deleteSep38Quote(
+  quoteServer: string,
+  id: string,
+  jwt: string
 ): Promise<void> {
-  const quoteServer = getQuoteServer(anchor);
-  const url = `${quoteServer}/quote/${encodeURIComponent(quoteId)}`;
+  const base = normalizeQuoteServer(quoteServer);
 
-  const res = await authenticatedRequest(anchor, publicKey, url, { method: 'DELETE' });
+  if (!id) throw new Sep38ParseError('A quote id is required to cancel a quote');
+  if (!jwt) throw new Sep38ParseError('A SEP-10 JWT is required to cancel a quote');
 
-  if (!res.ok) {
-    throw parseSepErrorBody(await readErrorBody(res), res.status);
+  const controller = new AbortController();
+  const timeout = setTimeout(() => controller.abort(), REQUEST_TIMEOUT_MS);
+
+  let res: Response;
+  try {
+    res = await fetch(`${base}/quote/${encodeURIComponent(id)}`, {
+      method: 'DELETE',
+      headers: { Authorization: `Bearer ${jwt}` },
+      signal: controller.signal,
+    });
+  } catch (err) {
+    if ((err as Error).name === 'AbortError') {
+      throw new Error(`SEP-38 /quote cancellation to ${base} timed out after 10 seconds`);
+    }
+    throw err;
+  } finally {
+    clearTimeout(timeout);
   }
+
+  // Idempotent: already-cancelled or expired quotes return 404/410 — treat as success.
+  if (res.ok || res.status === 404 || res.status === 410) {
+    return;
+  }
+
+  throw new Error(`HTTP ${res.status} from ${base} SEP-38 /quote cancellation`);
 }
+
