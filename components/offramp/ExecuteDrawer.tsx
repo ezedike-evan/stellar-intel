@@ -1,7 +1,11 @@
 'use client';
 import { useEffect, useRef, useState } from 'react';
 import { authenticate } from '@/lib/stellar/sep10';
-import { initiateWithdraw, getWithdrawTransactionRecord } from '@/lib/stellar/sep24';
+import {
+  initiateWithdraw,
+  openWithdrawPopup,
+  getWithdrawTransactionRecord,
+} from '@/lib/stellar/sep24';
 import { getResolvedAnchorById } from '@/lib/stellar/anchors';
 import { buildWithdrawPayment, signAndSubmitPayment } from '@/lib/stellar/horizon';
 import type { AnchorRate, ExecuteDrawerStep } from '@/types';
@@ -33,7 +37,13 @@ interface ExecuteDrawerProps {
 
 // ─── Component ────────────────────────────────────────────────────────────────
 
-export function ExecuteDrawer({ rate, amount, publicKey, onClose, onExecuteStarted }: ExecuteDrawerProps) {
+export function ExecuteDrawer({
+  rate,
+  amount,
+  publicKey,
+  onClose,
+  onExecuteStarted,
+}: ExecuteDrawerProps) {
   const [step, setStep] = useState<ExecuteDrawerStep>('idle');
   const [errorMsg, setErrorMsg] = useState<string | null>(null);
   const [txHash, setTxHash] = useState<string | null>(null);
@@ -85,7 +95,7 @@ export function ExecuteDrawer({ rate, amount, publicKey, onClose, onExecuteStart
       const anchor = await getResolvedAnchorById(rate.anchorId);
 
       // Step 1 — SEP-10 auth
-      const auth = await authenticate(anchor, publicKey, signal);
+      const auth = await authenticate(anchor, publicKey);
 
       // Step 2 — Initiate SEP-24 withdraw
       setStep('initiating');
@@ -95,28 +105,21 @@ export function ExecuteDrawer({ rate, amount, publicKey, onClose, onExecuteStart
         amount,
         account: publicKey,
         jwt: auth.jwt,
-      }, signal);
+      });
 
       // Step 3 — KYC iframe
       setStep('kyc');
-      const url = new URL(withdrawResp.url);
-      setKycUrl(withdrawResp.url);
-      setKycOrigin(url.origin);
-
-      // Wait for KYC completion signalled by KycIframe callbacks.
-      const transactionId = await new Promise<string>((resolve, reject) => {
-        kycResolveRef.current = resolve;
-        kycRejectRef.current = reject;
-      });
-
-      // Clear refs once the Promise has settled.
-      kycResolveRef.current = null;
-      kycRejectRef.current = null;
+      const transactionId = await openWithdrawPopup(withdrawResp.url);
 
       // Step 4 — Fetch transaction record
       setStep('building');
       const transferServer = anchor.TRANSFER_SERVER_SEP0024!;
-      const record = await getWithdrawTransactionRecord(transferServer, transactionId, auth.jwt, signal);
+      const record = await getWithdrawTransactionRecord(
+        transferServer,
+        transactionId,
+        auth.jwt,
+        signal
+      );
 
       // Step 5 — Build payment
       const tx = await buildWithdrawPayment({
@@ -145,7 +148,7 @@ export function ExecuteDrawer({ rate, amount, publicKey, onClose, onExecuteStart
       if ((err as Error).name === 'AbortError') return;
 
       // Determine if it's a "User Rejected" case to avoid noisy error UI.
-      if (message.includes('User rejected') || message.includes('User cancelled')) {
+      if (message.includes('User rejected')) {
         setStep('idle');
         return;
       }

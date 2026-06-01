@@ -7,39 +7,39 @@
  * Issue #215: fallback re-solve when first anchor rejects quote.
  */
 
-import { fetchAllAnchorFees, computeRateComparison } from '@/lib/stellar/sep24'
-import type { AnchorRate, RateComparison } from '@/types'
+import { fetchAllAnchorFees, computeRateComparison } from '@/lib/stellar/sep24';
+import type { AnchorRate, RateComparison } from '@/types';
 
 // ─── Constants ────────────────────────────────────────────────────────────────
 
 /** Maximum number of fallback re-solve attempts after the primary anchor fails. */
-export const MAX_FALLBACK_ATTEMPTS = 2
+export const MAX_FALLBACK_ATTEMPTS = 2;
 
 // ─── Types ────────────────────────────────────────────────────────────────────
 
 /** Reason a quote was rejected or expired. */
-export type QuoteRejectionReason = 'expired' | 'rejected' | 'unavailable'
+export type QuoteRejectionReason = 'expired' | 'rejected' | 'unavailable';
 
 /** A single solve attempt recorded for reputation tracking. */
 export interface SolveAttempt {
   /** The anchor that was tried. */
-  anchorId: string
+  anchorId: string;
   /** Whether this attempt succeeded (quote accepted) or failed. */
-  succeeded: boolean
+  succeeded: boolean;
   /** Populated when the attempt failed. */
-  rejectionReason?: QuoteRejectionReason
+  rejectionReason?: QuoteRejectionReason;
   /** ISO timestamp of the attempt. */
-  attemptedAt: string
+  attemptedAt: string;
 }
 
 /** The result returned by solveWithFallback. */
 export interface SolveResult {
   /** The winning anchor rate, or null if all candidates failed. */
-  winner: AnchorRate | null
+  winner: AnchorRate | null;
   /** Full rate comparison from the final successful solve, or null. */
-  comparison: RateComparison | null
+  comparison: RateComparison | null;
   /** Ordered log of every attempt made (primary + fallbacks). */
-  attempts: SolveAttempt[]
+  attempts: SolveAttempt[];
 }
 
 // ─── Internal helpers ─────────────────────────────────────────────────────────
@@ -53,24 +53,24 @@ async function fetchBestRate(
   amount: string,
   excludeIds: Set<string>
 ): Promise<{ winner: AnchorRate; comparison: RateComparison } | null> {
-  const settled = await fetchAllAnchorFees(amount, corridorId)
+  const settled = await fetchAllAnchorFees(amount, corridorId);
 
   // Filter out previously-rejected anchors
   const filtered = settled.map((result): PromiseSettledResult<AnchorRate> => {
     if (result.status === 'fulfilled' && excludeIds.has(result.value.anchorId)) {
-      return { status: 'rejected', reason: new Error(`Anchor ${result.value.anchorId} excluded`) }
+      return { status: 'rejected', reason: new Error(`Anchor ${result.value.anchorId} excluded`) };
     }
-    return result
-  })
+    return result;
+  });
 
-  const comparison = computeRateComparison(filtered, corridorId)
+  const comparison = computeRateComparison(filtered, corridorId);
 
-  if (!comparison.bestRateId) return null
+  if (!comparison.bestRateId) return null;
 
-  const winner = comparison.rates.find((r) => r.anchorId === comparison.bestRateId)
-  if (!winner) return null
+  const winner = comparison.rates.find((r) => r.anchorId === comparison.bestRateId);
+  if (!winner) return null;
 
-  return { winner, comparison }
+  return { winner, comparison };
 }
 
 // ─── Public API ───────────────────────────────────────────────────────────────
@@ -94,39 +94,39 @@ export async function solveWithFallback(
   amount: string,
   isRejected: (rate: AnchorRate) => boolean = () => false
 ): Promise<SolveResult> {
-  const attempts: SolveAttempt[] = []
-  const excludeIds = new Set<string>()
+  const attempts: SolveAttempt[] = [];
+  const excludeIds = new Set<string>();
 
   // Primary attempt + up to MAX_FALLBACK_ATTEMPTS fallbacks
-  const maxRounds = 1 + MAX_FALLBACK_ATTEMPTS
+  const maxRounds = 1 + MAX_FALLBACK_ATTEMPTS;
 
   for (let round = 0; round < maxRounds; round++) {
-    const result = await fetchBestRate(corridorId, amount, excludeIds)
+    const result = await fetchBestRate(corridorId, amount, excludeIds);
 
     if (!result) {
       // No more candidates available
-      break
+      break;
     }
 
-    const { winner, comparison } = result
-    const rejected = isRejected(winner)
+    const { winner, comparison } = result;
+    const rejected = isRejected(winner);
 
     attempts.push({
       anchorId: winner.anchorId,
       succeeded: !rejected,
       ...(rejected && { rejectionReason: 'rejected' as QuoteRejectionReason }),
       attemptedAt: new Date().toISOString(),
-    })
+    });
 
     if (!rejected) {
       // Quote accepted — return immediately
-      return { winner, comparison, attempts }
+      return { winner, comparison, attempts };
     }
 
     // Exclude this anchor from subsequent rounds
-    excludeIds.add(winner.anchorId)
+    excludeIds.add(winner.anchorId);
   }
 
   // All attempts exhausted
-  return { winner: null, comparison: null, attempts }
+  return { winner: null, comparison: null, attempts };
 }
