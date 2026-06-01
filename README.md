@@ -144,17 +144,17 @@ NEXT_PUBLIC_HORIZON_URL=https://horizon-testnet.stellar.org
 
 The full doc surface lives under [`docs/`](docs/). Start with:
 
-| Document                                              | What it covers                                                                       |
-| ----------------------------------------------------- | ------------------------------------------------------------------------------------ |
-| [docs/PROPOSAL.md](docs/PROPOSAL.md)                  | Grant thesis: execution-layer framing, intent primitive, reputation oracle moat.     |
-| [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md)          | System diagram, intent router, Soroban oracle, MCP/agent surface, SEP-10/24/38 flow. |
-| [docs/ROADMAP.md](docs/ROADMAP.md)                    | Milestone waves v1.0 → v5, with tickable per-wave scope.                             |
-| [docs/INTENT_API.md](docs/INTENT_API.md)              | Intent schema, signing rules, replay protection, `curl` + TS snippets.               |
-| [docs/ANCHOR_REPUTATION.md](docs/ANCHOR_REPUTATION.md)| Scoring methodology, composite formula, dispute process.                             |
-| [docs/ORACLE_SPEC.md](docs/ORACLE_SPEC.md)            | Soroban contract interface, consumer examples, publisher whitelist policy.           |
-| [docs/MCP.md](docs/MCP.md)                            | Tool list, `claude mcp add` instructions, example prompts, agent-safety notes.       |
-| [docs/SECURITY.md](docs/SECURITY.md)                  | Non-custodial guarantee, key handling, disclosure email, supply-chain policy.        |
-| [docs/FAQ.md](docs/FAQ.md)                            | "Is this custodial?", "what if an anchor fails?", "how are we different?".           |
+| Document                                               | What it covers                                                                       |
+| ------------------------------------------------------ | ------------------------------------------------------------------------------------ |
+| [docs/PROPOSAL.md](docs/PROPOSAL.md)                   | Grant thesis: execution-layer framing, intent primitive, reputation oracle moat.     |
+| [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md)           | System diagram, intent router, Soroban oracle, MCP/agent surface, SEP-10/24/38 flow. |
+| [docs/ROADMAP.md](docs/ROADMAP.md)                     | Milestone waves v1.0 → v5, with tickable per-wave scope.                             |
+| [docs/INTENT_API.md](docs/INTENT_API.md)               | Intent schema, signing rules, replay protection, `curl` + TS snippets.               |
+| [docs/ANCHOR_REPUTATION.md](docs/ANCHOR_REPUTATION.md) | Scoring methodology, composite formula, dispute process.                             |
+| [docs/ORACLE_SPEC.md](docs/ORACLE_SPEC.md)             | Soroban contract interface, consumer examples, publisher whitelist policy.           |
+| [docs/MCP.md](docs/MCP.md)                             | Tool list, `claude mcp add` instructions, example prompts, agent-safety notes.       |
+| [docs/SECURITY.md](docs/SECURITY.md)                   | Non-custodial guarantee, key handling, disclosure email, supply-chain policy.        |
+| [docs/FAQ.md](docs/FAQ.md)                             | "Is this custodial?", "what if an anchor fails?", "how are we different?".           |
 
 ---
 

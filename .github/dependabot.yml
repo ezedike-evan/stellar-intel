@@ -60,15 +60,6 @@ updates:
     commit-message:
       prefix: 'ci(deps)'
 
-  # Placeholder for the Soroban contract crate set. Harmless if the directory
-  # does not yet exist; Dependabot skips missing manifests.
-  - package-ecosystem: 'cargo'
-    directory: '/contracts'
-    schedule:
-      interval: 'weekly'
-    open-pull-requests-limit: 3
-    labels:
-      - 'dependencies'
-      - 'module/oracle'
-    commit-message:
-      prefix: 'chore(deps-cargo)'
+  # NOTE: A 'cargo' ecosystem for '/contracts' (Soroban crates) was removed.
+  # Dependabot errors ("Cargo.toml not found"), not silently skips, when the
+  # manifest is absent. Re-add this block once /contracts/Cargo.toml exists.
