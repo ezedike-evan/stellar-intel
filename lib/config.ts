@@ -30,8 +30,8 @@ function validateEnv(): void {
   if (missing.length > 0) {
     throw new Error(
       `❌ Missing required environment variables:\n` +
-      missing.map(v => `   - ${v}`).join('\n') +
-      `\n\nPlease check your .env.local file and ensure all variables are set.`
+        missing.map((v) => `   - ${v}`).join('\n') +
+        `\n\nPlease check your .env.local file and ensure all variables are set.`
     );
   }
 
@@ -40,7 +40,7 @@ function validateEnv(): void {
   if (network !== 'mainnet' && network !== 'testnet' && network !== 'futurenet') {
     throw new Error(
       `❌ Invalid NEXT_PUBLIC_STELLAR_NETWORK: "${network}"\n` +
-      `   Must be one of: mainnet, testnet, futurenet`
+        `   Must be one of: mainnet, testnet, futurenet`
     );
   }
 
@@ -50,7 +50,7 @@ function validateEnv(): void {
   } catch {
     throw new Error(
       `❌ Invalid NEXT_PUBLIC_HORIZON_URL: "${horizonUrl}"\n` +
-      `   Must be a valid URL (e.g., https://horizon.stellar.org)`
+        `   Must be a valid URL (e.g., https://horizon.stellar.org)`
     );
   }
 
@@ -58,7 +58,7 @@ function validateEnv(): void {
   if (!/^G[A-Z0-9]{55}$/.test(issuer)) {
     throw new Error(
       `❌ Invalid NEXT_PUBLIC_USDC_ISSUER: "${issuer}"\n` +
-      `   Must be a valid Stellar public key (starts with 'G', 56 characters total)`
+        `   Must be a valid Stellar public key (starts with 'G', 56 characters total)`
     );
   }
 }
