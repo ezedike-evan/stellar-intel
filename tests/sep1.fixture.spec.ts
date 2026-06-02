@@ -134,6 +134,7 @@ describe('SEP-1 Resolver Fixtures', () => {
 
   fixtures.forEach(({ name, domain, toml, expected }) => {
     it(`correctly resolves capabilities and endpoints for ${name}`, async () => {
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
       vi.spyOn(StellarToml.Resolver, 'resolve').mockResolvedValue(toml as any);
 
       const result = await resolveToml(domain);

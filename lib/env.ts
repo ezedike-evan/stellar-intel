@@ -1,11 +1,8 @@
 import { z } from 'zod';
 
-const DEFAULT_USDC_ISSUER = 'GA5ZSEJYB37JRC5AVCIA5MOP4RHTM335X2KGX3IHOJAPP5RE34K4KZVN';
-const DEFAULT_APP_NAME = 'Stellar Intel';
-
 export const envSchema = z.object({
   NEXT_PUBLIC_STELLAR_NETWORK: z.enum(['mainnet', 'testnet', 'futurenet'], {
-    message: 'Must be one of: mainnet, testnet, futurenet',
+    error: () => ({ message: 'Must be one of: mainnet, testnet, futurenet' }),
   }),
   NEXT_PUBLIC_HORIZON_URL: z.string().url({
     message: 'Must be a valid URL (e.g. https://horizon.stellar.org)',
@@ -27,8 +24,8 @@ export function parseEnv(): Env {
   const result = envSchema.safeParse({
     NEXT_PUBLIC_STELLAR_NETWORK: process.env.NEXT_PUBLIC_STELLAR_NETWORK,
     NEXT_PUBLIC_HORIZON_URL: process.env.NEXT_PUBLIC_HORIZON_URL,
-    NEXT_PUBLIC_USDC_ISSUER: process.env.NEXT_PUBLIC_USDC_ISSUER ?? DEFAULT_USDC_ISSUER,
-    NEXT_PUBLIC_APP_NAME: process.env.NEXT_PUBLIC_APP_NAME ?? DEFAULT_APP_NAME,
+    NEXT_PUBLIC_USDC_ISSUER: process.env.NEXT_PUBLIC_USDC_ISSUER,
+    NEXT_PUBLIC_APP_NAME: process.env.NEXT_PUBLIC_APP_NAME,
     NEXT_PUBLIC_STELLAR_EXPERT_URL: process.env.NEXT_PUBLIC_STELLAR_EXPERT_URL,
   });
 

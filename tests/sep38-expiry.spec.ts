@@ -6,11 +6,26 @@ import {
   QuoteExpiredEvent,
   onQuoteExpired,
 } from '@/lib/stellar/sep38';
-import type { Sep38Quote } from '@/types';
+import type { QuoteExpiryQuote } from '@/lib/stellar/sep38';
 
 // ─── Test helpers ─────────────────────────────────────────────────────────────
 
-function createMockQuote(expiresInSeconds: number): Sep38Quote {
+interface MockQuote extends QuoteExpiryQuote {
+  id: string;
+  anchorDomain: string;
+  anchorId: string;
+  sellAsset: string;
+  buyAsset: string;
+  sellAmount: string;
+  buyAmount: string;
+  exchangeRate: number;
+  fee: number;
+  totalReceived: number;
+  expiresAt: Date;
+  createdAt: Date;
+}
+
+function createMockQuote(expiresInSeconds: number): MockQuote {
   const now = new Date();
   const expiresAt = new Date(now.getTime() + expiresInSeconds * 1000);
 
@@ -157,7 +172,7 @@ describe('watchQuoteExpiry', () => {
     const { target } = watchQuoteExpiry(quote);
 
     let eventFired = false;
-    let receivedQuote: Sep38Quote | null = null;
+    let receivedQuote: MockQuote | null = null;
 
     target.addEventListener('isExpired', (event: Event) => {
       if (event instanceof QuoteExpiredEvent) {

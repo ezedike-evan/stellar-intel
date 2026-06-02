@@ -1,7 +1,6 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest';
 import { Networks } from '@stellar/stellar-sdk';
 import { fetchChallenge, signChallenge, submitChallenge, authenticate } from '@/lib/stellar/sep10';
-import * as sep1 from '@/lib/stellar/sep1';
 
 const WEB_AUTH_ENDPOINT = 'https://cowrie.exchange/auth';
 const PUBLIC_KEY = 'GABCDEFGHIJKLMNOPQRSTUVWXYZ012345678901234567890123456789';
@@ -28,6 +27,12 @@ const MOCK_RESOLVED_ANCHOR = {
   TRANSFER_SERVER_SEP0024: 'https://cowrie.exchange/sep24',
   WEB_AUTH_ENDPOINT: WEB_AUTH_ENDPOINT,
   SIGNING_KEY: 'G...',
+  domain: 'cowrie.exchange',
+  ANCHOR_QUOTE_SERVER: null,
+  NETWORK_PASSPHRASE: null,
+  CURRENCIES: [
+    { code: 'USDC', issuer: 'GA5ZSEJYB37JRC5AVCIA5MOP4RHTM335X2KGX3IHOJAPP5RE34K4KZVN' },
+  ],
   capabilities: { sep10: true, sep24: true, sep38: false, sep12: false },
 };
 

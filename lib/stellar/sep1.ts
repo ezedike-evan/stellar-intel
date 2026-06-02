@@ -9,7 +9,6 @@ export type TomlResult = { ok: true; data: Sep1TomlData } | { ok: false; error: 
 // ─── In-memory cache ──────────────────────────────────────────────────────────
 
 const TTL_MS = 15 * 60 * 1000; // 15 minutes
-const RETRY_DELAYS_MS = [250, 500] as const;
 
 interface CacheEntry {
   data: Sep1TomlData;
@@ -66,7 +65,7 @@ function toSep1TomlData(domain: string, raw: Record<string, unknown>): Sep1TomlD
   const transferServer = getString(raw, 'TRANSFER_SERVER_SEP0024');
   const webAuthEndpoint = getString(raw, 'WEB_AUTH_ENDPOINT');
   const signingKey = getString(raw, 'SIGNING_KEY');
-  const quoteServer = getString(raw, 'ANCHOR_QUOTE_SERVER') ?? getString(raw, 'QUOTE_SERVER');
+  const quoteServer = getString(raw, 'ANCHOR_QUOTE_SERVER');
 
   return {
     domain,
@@ -75,10 +74,14 @@ function toSep1TomlData(domain: string, raw: Record<string, unknown>): Sep1TomlD
     WEB_AUTH_ENDPOINT: webAuthEndpoint,
     SIGNING_KEY: signingKey,
     NETWORK_PASSPHRASE: getString(raw, 'NETWORK_PASSPHRASE'),
+    ORG_URL: getString(raw, 'ORG_URL'),
+    ORG_SUPPORT_EMAIL: getString(raw, 'ORG_SUPPORT_EMAIL'),
+    ORG_SUPPORT_URL: getString(raw, 'ORG_SUPPORT_URL'),
     CURRENCIES: getCurrencies(raw),
     capabilities: {
       sep10: Boolean(webAuthEndpoint),
       sep24: Boolean(transferServer),
+      /** Derived from ANCHOR_QUOTE_SERVER presence — the authoritative source for SEP-38 capability. */
       sep38: Boolean(quoteServer),
       sep12: Boolean(signingKey),
     },
@@ -103,8 +106,27 @@ function requireTomlField(
   return value;
 }
 
-function sleep(ms: number): Promise<void> {
-  return new Promise((resolve) => setTimeout(resolve, ms));
+/**
+ * Resolves a clickable support href from SEP-1 documentation fields.
+ * Priority: ORG_SUPPORT_URL → mailto:ORG_SUPPORT_EMAIL → ORG_URL (https only).
+ */
+export function resolveAnchorSupportHref(toml: Sep1TomlData): string | null {
+  const supportUrl = toml.ORG_SUPPORT_URL
+  if (supportUrl?.startsWith('https://') || supportUrl?.startsWith('http://')) {
+    return supportUrl
+  }
+
+  const email = toml.ORG_SUPPORT_EMAIL
+  if (email) {
+    return `mailto:${email}`
+  }
+
+  const orgUrl = toml.ORG_URL
+  if (orgUrl?.startsWith('https://')) {
+    return orgUrl
+  }
+
+  return null
 }
 
 /**
@@ -143,26 +165,12 @@ export async function resolveAnchor(domain: string): Promise<Sep1TomlData> {
  * `result.ok` continue to compile and run without changes.
  */
 export async function resolveToml(domain: string): Promise<TomlResult> {
-  const startedAt = Date.now();
-  let lastError: unknown;
-
-  for (let attempt = 0; attempt < RETRY_DELAYS_MS.length + 1; attempt++) {
-    try {
-      const data = await resolveAnchor(domain);
-      return { ok: true, data };
-    } catch (err) {
-      lastError = err;
-    }
-
-    const delay = RETRY_DELAYS_MS[attempt];
-    if (delay === undefined || Date.now() - startedAt + delay > 5_000) {
-      break;
-    }
-
-    await sleep(delay);
+  try {
+    const data = await resolveAnchor(domain);
+    return { ok: true, data };
+  } catch (err) {
+    return { ok: false, error: err instanceof Error ? err.message : String(err) };
   }
-
-  return { ok: false, error: lastError instanceof Error ? lastError.message : String(lastError) };
 }
 
 /**
@@ -196,6 +204,7 @@ export async function resolveAllAnchors(): Promise<Record<string, ResolvedAnchor
     if (result.status === 'fulfilled') {
       resolved[result.value.anchor.id] = { ...result.value.anchor, ...result.value.data };
     } else {
+      // eslint-disable-next-line no-console
       console.warn('[sep1] resolveAllAnchors failure:', result.reason);
     }
   }

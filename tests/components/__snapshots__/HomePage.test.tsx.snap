@@ -1,0 +1,224 @@
+// Vitest Snapshot v1, https://vitest.dev/guide/snapshot.html
+
+exports[`HomePage > matches snapshot 1`] = `
+<div
+  class="space-y-16"
+>
+  <section
+    class="py-12 text-center"
+  >
+    <div
+      class="mb-4 inline-flex items-center gap-2 rounded-full bg-blue-50 px-4 py-1.5 text-sm font-medium text-blue-700 dark:bg-blue-950 dark:text-blue-300"
+    >
+      <svg
+        aria-hidden="true"
+        class="lucide lucide-zap h-3.5 w-3.5"
+        fill="none"
+        height="24"
+        stroke="currentColor"
+        stroke-linecap="round"
+        stroke-linejoin="round"
+        stroke-width="2"
+        viewBox="0 0 24 24"
+        width="24"
+        xmlns="http://www.w3.org/2000/svg"
+      >
+        <path
+          d="M4 14a1 1 0 0 1-.78-1.63l9.9-10.2a.5.5 0 0 1 .86.46l-1.92 6.02A1 1 0 0 0 13 10h7a1 1 0 0 1 .78 1.63l-9.9 10.2a.5.5 0 0 1-.86-.46l1.92-6.02A1 1 0 0 0 11 14z"
+        />
+      </svg>
+      Stellar Execution Layer
+    </div>
+    <h1
+      class="mb-4 text-4xl font-bold tracking-tight text-gray-900 dark:text-white md:text-5xl"
+    >
+      Where stablecoin transactions
+      <br />
+      <span
+        class="text-blue-600"
+      >
+        happen on Stellar.
+      </span>
+    </h1>
+    <p
+      class="mx-auto max-w-2xl text-lg text-gray-600 dark:text-gray-400"
+    >
+      Stellar Intel is the execution layer for cross-border stablecoin flows — execute USDC off-ramps across anchors for Nigeria, Kenya, Ghana, Mexico, and more in one click.
+    </p>
+  </section>
+  <section
+    class="rounded-xl border border-gray-200 bg-gray-50 p-4 dark:border-gray-700 dark:bg-gray-800/50"
+  >
+    <div
+      class="flex items-center gap-3"
+    >
+      <svg
+        aria-hidden="true"
+        class="lucide lucide-globe h-5 w-5 text-blue-600"
+        fill="none"
+        height="24"
+        stroke="currentColor"
+        stroke-linecap="round"
+        stroke-linejoin="round"
+        stroke-width="2"
+        viewBox="0 0 24 24"
+        width="24"
+        xmlns="http://www.w3.org/2000/svg"
+      >
+        <circle
+          cx="12"
+          cy="12"
+          r="10"
+        />
+        <path
+          d="M12 2a14.5 14.5 0 0 0 0 20 14.5 14.5 0 0 0 0-20"
+        />
+        <path
+          d="M2 12h20"
+        />
+      </svg>
+      <div>
+        <div
+          class="text-xl font-bold text-gray-900 dark:text-white"
+        >
+          3
+        </div>
+        <div
+          class="text-xs text-gray-500 dark:text-gray-400"
+        >
+          Anchors tracked
+        </div>
+      </div>
+    </div>
+  </section>
+  <section>
+    <h2
+      class="mb-6 text-xl font-semibold text-gray-900 dark:text-white"
+    >
+      Start transacting
+    </h2>
+    <div
+      class="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-4"
+    >
+      <a
+        href="/offramp"
+      >
+        <div
+          class="rounded-xl border bg-white p-4 shadow-sm transition-colors dark:bg-gray-900 border-gray-200 dark:border-gray-700 group h-full cursor-pointer transition-shadow hover:shadow-md"
+        >
+          <div
+            class="mb-4 inline-flex rounded-lg p-2.5 bg-green-50 dark:bg-green-950/30"
+          >
+            <svg
+              aria-hidden="true"
+              class="lucide lucide-arrow-down-right h-5 w-5 text-green-600"
+              fill="none"
+              height="24"
+              stroke="currentColor"
+              stroke-linecap="round"
+              stroke-linejoin="round"
+              stroke-width="2"
+              viewBox="0 0 24 24"
+              width="24"
+              xmlns="http://www.w3.org/2000/svg"
+            >
+              <path
+                d="m7 7 10 10"
+              />
+              <path
+                d="M17 7v10H7"
+              />
+            </svg>
+          </div>
+          <h3
+            class="mb-2 font-semibold text-gray-900 dark:text-white"
+          >
+            Off-ramp
+          </h3>
+          <p
+            class="text-sm text-gray-500 dark:text-gray-400"
+          >
+            Execute USDC off-ramps across Stellar anchors by country and corridor.
+          </p>
+        </div>
+      </a>
+    </div>
+  </section>
+  <section
+    class="rounded-xl border border-gray-200 p-6 dark:border-gray-700"
+  >
+    <h2
+      class="mb-4 text-lg font-semibold text-gray-900 dark:text-white"
+    >
+      How it works
+    </h2>
+    <div
+      class="grid grid-cols-1 gap-6 md:grid-cols-3"
+    >
+      <div
+        class="flex gap-4"
+      >
+        <div
+          class="flex h-8 w-8 shrink-0 items-center justify-center rounded-full bg-blue-600 text-xs font-bold text-white"
+        >
+          01
+        </div>
+        <div>
+          <div
+            class="font-medium text-gray-900 dark:text-white"
+          >
+            Pick your corridor
+          </div>
+          <div
+            class="mt-1 text-sm text-gray-500 dark:text-gray-400"
+          >
+            Select the country and amount you want to withdraw.
+          </div>
+        </div>
+      </div>
+      <div
+        class="flex gap-4"
+      >
+        <div
+          class="flex h-8 w-8 shrink-0 items-center justify-center rounded-full bg-blue-600 text-xs font-bold text-white"
+        >
+          02
+        </div>
+        <div>
+          <div
+            class="font-medium text-gray-900 dark:text-white"
+          >
+            Compare live rates
+          </div>
+          <div
+            class="mt-1 text-sm text-gray-500 dark:text-gray-400"
+          >
+            We fetch real SEP-24 rates from all supported Stellar anchors.
+          </div>
+        </div>
+      </div>
+      <div
+        class="flex gap-4"
+      >
+        <div
+          class="flex h-8 w-8 shrink-0 items-center justify-center rounded-full bg-blue-600 text-xs font-bold text-white"
+        >
+          03
+        </div>
+        <div>
+          <div
+            class="font-medium text-gray-900 dark:text-white"
+          >
+            Execute in one click
+          </div>
+          <div
+            class="mt-1 text-sm text-gray-500 dark:text-gray-400"
+          >
+            Select the best option and execute directly on Stellar via Freighter.
+          </div>
+        </div>
+      </div>
+    </div>
+  </section>
+</div>
+`;

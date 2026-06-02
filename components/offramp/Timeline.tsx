@@ -14,8 +14,6 @@ const STAGES = [
   { id: 'completed', label: 'Completed' },
 ] as const;
 
-type StageId = (typeof STAGES)[number]['id'];
-
 export function Timeline({ status }: TimelineProps) {
   const canonical = status ? mapToCanonical(status) : undefined;
 
@@ -43,7 +41,7 @@ export function Timeline({ status }: TimelineProps) {
         {STAGES.map((stage, idx) => {
           const isCompleted = idx < activeIndex || canonical === 'completed';
           const isActive = idx === activeIndex && !isTerminalError && canonical !== 'completed';
-          const isFuture = idx > activeIndex || (idx === activeIndex && isTerminalError);
+          const _isFuture = idx > activeIndex || (idx === activeIndex && isTerminalError);
 
           return (
             <div

@@ -2,6 +2,7 @@
 
 import { useState, useCallback, useEffect, useRef } from 'react';
 import { authenticate, invalidateSep10Token } from '@/lib/stellar/sep10';
+import { getResolvedAnchorByDomain } from '@/lib/stellar/anchors';
 import type { Sep10Auth } from '@/types';
 
 export interface UseAnchorAuthResult {
@@ -65,7 +66,8 @@ export function useAnchorAuth(
     setError(null);
 
     try {
-      const auth: Sep10Auth = await authenticate(anchorDomain, publicKey);
+      const resolvedAnchor = await getResolvedAnchorByDomain(anchorDomain);
+      const auth: Sep10Auth = await authenticate(resolvedAnchor, publicKey);
 
       // Check if request was cancelled
       if (signal.aborted) {

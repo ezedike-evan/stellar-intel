@@ -1,10 +1,12 @@
 'use client';
+
+import { useEffect } from 'react';
+import type { ReactNode } from 'react';
 import { formatCurrency, formatRate } from '@/lib/utils';
 import type { RateComparison, AnchorRate } from '@/types';
 import { Skeleton } from '@/components/ui/Skeleton';
-import { useEffect } from 'react';
 
-function sourceBadge(source: AnchorRate['source']): React.ReactNode {
+function sourceBadge(source: AnchorRate['source']): ReactNode {
   switch (source) {
     case 'sep38':
       return (
@@ -28,12 +30,22 @@ function sourceBadge(source: AnchorRate['source']): React.ReactNode {
   }
 }
 
+function formatSettlementTime(rate: AnchorRate): string {
+  const p50 = (rate as AnchorRate & { p50SettlementMs?: number }).p50SettlementMs;
+  if (p50 != null && p50 > 0) {
+    const mins = Math.round(p50 / 60000);
+    return mins < 1 ? '< 1 min' : `~${mins} min`;
+  }
+  return '—';
+}
+
 interface RateTableProps {
   rates: RateComparison | undefined;
   isLoading: boolean;
   refreshInflight?: boolean;
   error: string | undefined;
   onSelectAnchor: (rate: AnchorRate) => void;
+  executeDisabled?: boolean;
   onRefresh?: () => void;
 }
 
@@ -43,9 +55,9 @@ export function RateTable({
   refreshInflight,
   error,
   onSelectAnchor,
+  executeDisabled,
   onRefresh,
 }: RateTableProps) {
-  // Handle keyboard shortcut ⇧R (Shift+R)
   useEffect(() => {
     const handleKeyPress = (event: KeyboardEvent) => {
       if (event.shiftKey && event.key === 'R' && onRefresh && !refreshInflight) {
@@ -53,7 +65,6 @@ export function RateTable({
         onRefresh();
       }
     };
-
     window.addEventListener('keydown', handleKeyPress);
     return () => window.removeEventListener('keydown', handleKeyPress);
   }, [onRefresh, refreshInflight]);
@@ -61,7 +72,7 @@ export function RateTable({
   if ((isLoading || refreshInflight) && (!rates || rates.rates.length === 0)) {
     return (
       <div className="overflow-hidden rounded-xl border border-gray-200 dark:border-gray-700">
-        <Skeleton rows={3} />
+        <Skeleton rows={5} />
       </div>
     );
   }
@@ -105,6 +116,9 @@ export function RateTable({
                 Rate
               </th>
               <th className="px-4 py-3 text-right font-medium text-gray-600 dark:text-gray-400">
+                Est. Time
+              </th>
+              <th className="px-4 py-3 text-right font-medium text-gray-600 dark:text-gray-400">
                 You Receive
               </th>
               <th className="px-4 py-3 text-right font-medium text-gray-600 dark:text-gray-400">
@@ -115,7 +129,7 @@ export function RateTable({
           <tbody>
             {!isLoading && error && (
               <tr>
-                <td colSpan={5} className="px-4 py-8 text-center">
+                <td colSpan={6} className="px-4 py-8 text-center">
                   <p className="mb-3 text-sm text-red-500">{error}</p>
                   <button
                     onClick={() => window.location.reload()}
@@ -129,7 +143,7 @@ export function RateTable({
 
             {!isLoading && !error && rates && rates.rates.length === 0 && (
               <tr>
-                <td colSpan={5} className="px-4 py-8 text-center text-sm text-gray-500">
+                <td colSpan={6} className="px-4 py-8 text-center text-sm text-gray-500">
                   No rates available for this corridor.
                 </td>
               </tr>
@@ -144,6 +158,7 @@ export function RateTable({
 
                 return (
                   <tr
+                    id={`anchor-row-${rate.anchorId}`}
                     key={rate.anchorId}
                     className={
                       isBest && !isUnavailable
@@ -172,6 +187,9 @@ export function RateTable({
                         ? formatRate(rate.exchangeRate, 'USDC', currency)
                         : '—'}
                     </td>
+                    <td className="px-4 py-3 text-right text-gray-500 dark:text-gray-400 tabular-nums">
+                      {formatSettlementTime(rate)}
+                    </td>
                     <td className="px-4 py-3 text-right font-medium text-gray-900 dark:text-white">
                       {rate.totalReceived !== null
                         ? formatCurrency(rate.totalReceived, currency)
@@ -180,7 +198,7 @@ export function RateTable({
                     <td className="px-4 py-3 text-right">
                       <button
                         onClick={() => onSelectAnchor(rate)}
-                        disabled={isUnavailable}
+                        disabled={isUnavailable || executeDisabled}
                         className="rounded-lg bg-blue-600 px-3 py-1.5 text-xs font-medium text-white transition-colors hover:bg-blue-700 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:ring-offset-1 disabled:opacity-40 disabled:cursor-not-allowed"
                       >
                         Off-ramp

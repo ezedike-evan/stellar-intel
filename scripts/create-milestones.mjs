@@ -1,4 +1,5 @@
 #!/usr/bin/env node
+/* eslint-disable no-console */
 // scripts/create-milestones.mjs
 //
 // Create (or update) the canonical Stellar Intel milestone set via the GitHub

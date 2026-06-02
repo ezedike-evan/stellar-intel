@@ -2,11 +2,9 @@ import { describe, it, expect, vi, beforeEach } from 'vitest';
 import {
   resolveAssetParams,
   getSep24Fee,
-  fetchAnchorFee,
   initiateWithdraw,
   _clearInfoCache,
 } from '@/lib/stellar/sep24';
-import * as sep1 from '@/lib/stellar/sep1';
 
 const TRANSFER_SERVER = 'https://cowrie.exchange/sep24';
 
@@ -38,12 +36,14 @@ beforeEach(() => {
 describe('resolveAssetParams', () => {
   it('returns old style params if info does not use SEP-38 format', () => {
     const info = buildMockInfo(false);
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
     const params = resolveAssetParams(info as any, 'withdraw', 'USDC', 'GA5Z...');
     expect(params).toEqual({ asset_code: 'USDC', asset_issuer: 'GA5Z...' });
   });
 
   it('returns new style param if info uses SEP-38 format', () => {
     const info = buildMockInfo(true);
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
     const params = resolveAssetParams(info as any, 'withdraw', 'USDC', 'GA5Z...');
     expect(params).toEqual({ asset: 'stellar:USDC:GA5Z...' });
   });
@@ -53,6 +53,7 @@ describe('resolveAssetParams', () => {
       deposit: { 'stellar:native': { enabled: true } },
       withdraw: { 'stellar:native': { enabled: true } },
     };
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
     const params = resolveAssetParams(info as any, 'withdraw', 'XLM', undefined);
     expect(params).toEqual({ asset: 'stellar:native' });
   });
@@ -114,9 +115,9 @@ describe('initiateWithdraw asset formats', () => {
     let capturedBody = '';
     vi.stubGlobal(
       'fetch',
-      vi.fn(async (url: string, init?: any) => {
+      vi.fn(async (url: string, init?: RequestInit) => {
         if (url.endsWith('/info')) return { ok: true, json: async () => buildMockInfo(false) };
-        capturedBody = init?.body;
+        capturedBody = (init?.body ?? '') as string;
         return {
           ok: true,
           json: async () => ({ type: 'interactive_customer_info_needed', url: 'test', id: '123' }),
@@ -143,9 +144,9 @@ describe('initiateWithdraw asset formats', () => {
     let capturedBody = '';
     vi.stubGlobal(
       'fetch',
-      vi.fn(async (url: string, init?: any) => {
+      vi.fn(async (url: string, init?: RequestInit) => {
         if (url.endsWith('/info')) return { ok: true, json: async () => buildMockInfo(true) };
-        capturedBody = init?.body;
+        capturedBody = (init?.body ?? '') as string;
         return {
           ok: true,
           json: async () => ({ type: 'interactive_customer_info_needed', url: 'test', id: '123' }),

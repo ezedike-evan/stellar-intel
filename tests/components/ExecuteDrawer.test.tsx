@@ -39,7 +39,7 @@ const mockAuthenticate = vi.mocked(sep10.authenticate);
 const mockInitiateWithdraw = vi.mocked(sep24.initiateWithdraw);
 const mockOpenWithdrawPopup = vi.mocked(sep24.openWithdrawPopup);
 const mockGetWithdrawTransactionRecord = vi.mocked(sep24.getWithdrawTransactionRecord);
-const mockGetTransferServer = vi.mocked(sep1.getTransferServer);
+const _mockGetTransferServer = vi.mocked(sep1.getTransferServer);
 const mockGetAnchorById = vi.mocked(anchors.getAnchorById);
 const mockGetResolvedAnchorById = vi.mocked(anchors.getResolvedAnchorById);
 const mockBuildWithdrawPayment = vi.mocked(horizon.buildWithdrawPayment);
@@ -73,6 +73,12 @@ const RESOLVED_ANCHOR = {
   TRANSFER_SERVER_SEP0024: 'https://transfer.cowrie.exchange',
   WEB_AUTH_ENDPOINT: 'https://auth.cowrie.exchange',
   SIGNING_KEY: 'G...',
+  domain: 'cowrie.exchange',
+  ANCHOR_QUOTE_SERVER: null,
+  NETWORK_PASSPHRASE: null,
+  CURRENCIES: [
+    { code: 'USDC', issuer: 'GA5ZSEJYB37JRC5AVCIA5MOP4RHTM335X2KGX3IHOJAPP5RE34K4KZVN' },
+  ],
   capabilities: { sep10: true, sep24: true, sep38: false, sep12: false },
 };
 
@@ -180,6 +186,27 @@ describe('ExecuteDrawer', () => {
     await waitFor(() => expect(screen.getByText('SEP-10 challenge failed')).toBeInTheDocument());
     expect(screen.getByRole('button', { name: 'Try Again' })).toBeInTheDocument();
   });
+
+  it('shows dedicated switch-network guidance when Freighter is on the wrong network', async () => {
+    const NetworkMismatchError = vi.mocked(sep10).NetworkMismatchError
+    mockAuthenticate.mockRejectedValue(
+      new NetworkMismatchError('Mainnet (Public)', 'Testnet')
+    )
+
+    render(
+      <ExecuteDrawer rate={RATE} amount="100" publicKey={PUBLIC_KEY} onClose={vi.fn()} onExecuteStarted={vi.fn()} />
+    )
+
+    fireEvent.click(screen.getByText('Start Off-ramp'))
+
+    await waitFor(() =>
+      expect(
+        screen.getByText(/Switch network in Freighter to Mainnet \(Public\)/)
+      ).toBeInTheDocument()
+    )
+    expect(screen.getByText(/currently set to Testnet/)).toBeInTheDocument()
+    expect(screen.getByRole('button', { name: 'Try Again' })).toBeInTheDocument()
+  })
 
   it('shows the error when the user cancels the KYC popup', async () => {
     mockOpenWithdrawPopup.mockRejectedValue(new Error('User cancelled the transaction'));

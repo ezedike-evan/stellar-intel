@@ -71,7 +71,11 @@ export function rankByNetReceived(
   rates: AnchorRate[],
   precision: number = DEFAULT_FIAT_PRECISION
 ): AnchorRate[] {
-  return [...rates].sort((a, b) => compareRates(a, b, precision));
+  return [...rates].sort((a, b) => {
+    const aVal = resolvedNetReceived(a, precision);
+    const bVal = resolvedNetReceived(b, precision);
+    return bVal - aVal;
+  });
 }
 
 /**
@@ -86,9 +90,11 @@ export function bestRate(
 ): AnchorRate | null {
   if (rates.length === 0) return null;
 
-  return rates.reduce((best, candidate) =>
-    compareRates(candidate, best, precision) < 0 ? candidate : best
-  );
+  return rates.reduce((best, candidate) => {
+    const bestVal = resolvedNetReceived(best, precision);
+    const candVal = resolvedNetReceived(candidate, precision);
+    return candVal > bestVal ? candidate : best;
+  });
 }
 
 // ─── RateComparison builder ───────────────────────────────────────────────────
@@ -148,16 +154,4 @@ function resolvedNetReceived(rate: AnchorRate, precision: number): number {
   const raw = rate.totalReceived;
   const factor = 10 ** precision;
   return Math.round(raw * factor) / factor;
-}
-
-function compareRates(a: AnchorRate, b: AnchorRate, precision: number): number {
-  const aVal = resolvedNetReceived(a, precision);
-  const bVal = resolvedNetReceived(b, precision);
-  const valueDiff = bVal - aVal;
-
-  if (valueDiff !== 0) {
-    return valueDiff;
-  }
-
-  return a.anchorId.localeCompare(b.anchorId);
 }

@@ -36,7 +36,9 @@ export function AmountInput({ value, onChange, disabled }: AmountInputProps) {
   const debounceRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   useEffect(() => {
+    // eslint-disable-next-line react-hooks/set-state-in-effect
     setRaw(value);
+
     setError(null);
   }, [value]);
 

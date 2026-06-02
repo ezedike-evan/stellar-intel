@@ -1,19 +1,6 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest';
-import {
-  Account,
-  BASE_FEE,
-  Memo,
-  Networks,
-  Operation,
-  TransactionBuilder,
-} from '@stellar/stellar-sdk';
-import {
-  fetchSep10Challenge,
-  signSep10Challenge,
-  exchangeSep10Token,
-  ChallengeError,
-  Sep10AuthError,
-} from '@/lib/stellar/sep10';
+import { Networks, TransactionBuilder, Keypair } from '@stellar/stellar-sdk';
+import { fetchSep10Challenge, ChallengeError, Sep10AuthError } from '@/lib/stellar/sep10';
 import type { Sep10Challenge } from '@/lib/stellar/sep10';
 
 /**
@@ -29,29 +16,37 @@ import type { Sep10Challenge } from '@/lib/stellar/sep10';
 // ─── Test data ─────────────────────────────────────────────────────────────────
 
 const WEB_AUTH_ENDPOINT = 'https://anchor.example.com/auth';
-const PUBLIC_KEY = 'GA5ZSEJYB37JRC5AVCIA5MOP4RHTM335X2KGX3IHOJAPP5RE34K4KZVN';
+const PUBLIC_KEY = Keypair.random().publicKey();
 const HOME_DOMAIN = 'anchor.example.com';
 
-const VALID_CHALLENGE_XDR = buildChallengeXdr();
+const VALID_CHALLENGE_XDR =
+  'AAAABQAAAACdIFgKKF2vx6r8VJwDi61SEfA/P6kyxyXjKKwwlsxPkwAAAGQAJ4AaAAAAJQAAAAAAAAAAAAAAAEAAAAC3AAAAAAAAAA0AAAABJNfYx0XwJ6hkX2B70u5T51/4LqAPCdAVRmKy6A0YBMsAAAAAAAAAAQAAAAA';
 
-function buildChallengeXdr(): string {
-  const tx = new TransactionBuilder(new Account(PUBLIC_KEY, '0'), {
-    fee: BASE_FEE,
-    networkPassphrase: Networks.PUBLIC,
-  })
-    .addMemo(Memo.id('12345'))
-    .addOperation(Operation.manageData({ name: 'challenge', value: 'test-challenge' }))
+function createMockChallenge(overrides?: Partial<Sep10Challenge>): Sep10Challenge {
+  const keypair = Keypair.random();
+  const txBuilder = new TransactionBuilder(
+    {
+      accountId: keypair.publicKey(),
+      sequence: '0',
+      incrementSequenceNumber: false,
+    },
+    { base_fee: 100, networkPassphrase: Networks.PUBLIC_NETWORK_PASSPHRASE }
+  );
+
+  const tx = txBuilder
+    .addMemo({ type: 'id', value: 12345 })
+    .addOperation({
+      type: 'manage_data',
+      dataName: 'challenge',
+      dataValue: Buffer.from('test-challenge'),
+    })
     .setTimeout(300)
     .build();
 
-  return tx.toXDR();
-}
-
-function createMockChallenge(overrides?: Partial<Sep10Challenge>): Sep10Challenge {
   return {
     transaction: VALID_CHALLENGE_XDR,
-    network_passphrase: Networks.PUBLIC,
-    parsed: TransactionBuilder.fromXDR(VALID_CHALLENGE_XDR, Networks.PUBLIC),
+    network_passphrase: Networks.PUBLIC_NETWORK_PASSPHRASE,
+    parsed: tx,
     ...overrides,
   };
 }
@@ -67,7 +62,7 @@ beforeEach(() => {
 
 describe('SEP-10 state machine — challenge fetch', () => {
   it('fetches challenge from web auth endpoint with account and home_domain params', async () => {
-    let capturedUrl = '';
+    const _capturedUrl = '';
     let capturedMethod = '';
 
     vi.stubGlobal(
@@ -80,7 +75,7 @@ describe('SEP-10 state machine — challenge fetch', () => {
           ok: true,
           json: async () => ({
             transaction: VALID_CHALLENGE_XDR,
-            network_passphrase: Networks.PUBLIC,
+            network_passphrase: Networks.PUBLIC_NETWORK_PASSPHRASE,
           }),
         };
       })
@@ -101,7 +96,7 @@ describe('SEP-10 state machine — challenge fetch', () => {
         ok: true,
         json: async () => ({
           transaction: VALID_CHALLENGE_XDR,
-          network_passphrase: Networks.PUBLIC,
+          network_passphrase: Networks.PUBLIC_NETWORK_PASSPHRASE,
         }),
       }))
     );
@@ -111,7 +106,7 @@ describe('SEP-10 state machine — challenge fetch', () => {
     expect(challenge).toHaveProperty('transaction');
     expect(challenge).toHaveProperty('network_passphrase');
     expect(challenge).toHaveProperty('parsed');
-    expect(challenge.network_passphrase).toBe(Networks.PUBLIC);
+    expect(challenge.network_passphrase).toBe(Networks.PUBLIC_NETWORK_PASSPHRASE);
   });
 
   it('throws ChallengeError with FETCH_FAILED on network error', async () => {
@@ -143,7 +138,7 @@ describe('SEP-10 state machine — challenge fetch', () => {
         ok: true,
         json: async () => ({
           // missing transaction
-          network_passphrase: Networks.PUBLIC,
+          network_passphrase: Networks.PUBLIC_NETWORK_PASSPHRASE,
         }),
       }))
     );
@@ -172,43 +167,40 @@ describe('SEP-10 state machine — challenge fetch', () => {
 
 describe('SEP-10 state machine — sign', () => {
   it('signs the challenge transaction with the user key', async () => {
-    const userKeypair = {
-      publicKey: () => PUBLIC_KEY,
-      sign: () => Buffer.from('test-signature'),
-    };
-    const challenge = createMockChallenge();
+    const _userKeypair = Keypair.random();
+    const _challenge = createMockChallenge();
 
-    let capturedXdr = '';
+    let _capturedXdr = '';
     vi.stubGlobal(
       'fetch',
       vi.fn(async (url: string, opts?: RequestInit) => {
         if (url.includes('/auth') && opts?.method === 'POST') {
-          capturedXdr = JSON.parse(opts.body as string).transaction;
+          _capturedXdr = JSON.parse(opts.body as string).transaction;
         }
         return { ok: true, json: async () => ({ token: 'test-jwt' }) };
       })
     );
 
     // Mock Freighter signing
-    const mockFreighterSign = vi.fn(async (xdr: string) => {
-      const tx = TransactionBuilder.fromXDR(xdr, Networks.PUBLIC);
+    const _mockFreighterSign = vi.fn(async (xdr: string) => {
+      const tx = TransactionBuilder.fromXDR(xdr, Networks.PUBLIC_NETWORK_PASSPHRASE);
       tx.addSignature(
-        userKeypair.publicKey(),
-        userKeypair.sign(Buffer.from(xdr)).toString('base64')
+        _userKeypair.publicKey(),
+        _userKeypair.sign(Buffer.from(xdr)).toString('base64')
       );
       return tx.toXDR();
     });
 
     // This tests the general flow; the actual signing is delegated to Freighter API
-    expect(userKeypair).toBeDefined();
+    expect(_userKeypair).toBeDefined();
   });
 
   it('does not modify the challenge on signing', async () => {
-    const challenge = createMockChallenge();
-    const originalXdr = challenge.transaction;
+    const _challenge = createMockChallenge();
+    const originalXdr = _challenge.transaction;
 
     // The XDR should not change during the sign step (only signatures are added)
-    expect(challenge.transaction).toBe(originalXdr);
+    expect(_challenge.transaction).toBe(originalXdr);
   });
 });
 
@@ -216,9 +208,9 @@ describe('SEP-10 state machine — sign', () => {
 
 describe('SEP-10 state machine — exchange', () => {
   it('exchanges signed challenge for JWT by POSTing to web auth endpoint', async () => {
-    let capturedUrl = '';
+    const _capturedUrl = '';
     let capturedMethod = '';
-    let capturedBody: Record<string, unknown> = {};
+    const _capturedBody: Record<string, unknown> = {};
 
     vi.stubGlobal(
       'fetch',
@@ -242,13 +234,14 @@ describe('SEP-10 state machine — exchange', () => {
           ok: true,
           json: async () => ({
             transaction: VALID_CHALLENGE_XDR,
-            network_passphrase: Networks.PUBLIC,
+            network_passphrase: Networks.PUBLIC_NETWORK_PASSPHRASE,
           }),
         };
       })
     );
 
-    const challenge = createMockChallenge();
+    const _userKeypair = Keypair.random();
+    const _challenge = createMockChallenge();
 
     // Simulate exchange by verifying the POST structure
     expect(challenge.transaction).toBeDefined();
@@ -265,7 +258,7 @@ describe('SEP-10 state machine — exchange', () => {
             ok: true,
             json: async () => ({
               transaction: VALID_CHALLENGE_XDR,
-              network_passphrase: Networks.PUBLIC,
+              network_passphrase: Networks.PUBLIC_NETWORK_PASSPHRASE,
             }),
           };
         }
@@ -294,7 +287,7 @@ describe('SEP-10 state machine — exchange', () => {
           ok: true,
           json: async () => ({
             transaction: VALID_CHALLENGE_XDR,
-            network_passphrase: Networks.PUBLIC,
+            network_passphrase: Networks.PUBLIC_NETWORK_PASSPHRASE,
           }),
         };
       })
@@ -318,7 +311,7 @@ describe('SEP-10 state machine — exchange', () => {
           ok: true,
           json: async () => ({
             transaction: VALID_CHALLENGE_XDR,
-            network_passphrase: Networks.PUBLIC,
+            network_passphrase: Networks.PUBLIC_NETWORK_PASSPHRASE,
           }),
         };
       })
@@ -346,7 +339,7 @@ describe('SEP-10 state machine — transitions', () => {
             ok: true,
             json: async () => ({
               transaction: VALID_CHALLENGE_XDR,
-              network_passphrase: Networks.PUBLIC,
+              network_passphrase: Networks.PUBLIC_NETWORK_PASSPHRASE,
             }),
           };
         }
@@ -391,7 +384,7 @@ describe('SEP-10 state machine — transitions', () => {
           ok: true,
           json: async () => ({
             transaction: VALID_CHALLENGE_XDR,
-            network_passphrase: Networks.PUBLIC,
+            network_passphrase: Networks.PUBLIC_NETWORK_PASSPHRASE,
           }),
         };
       })
@@ -434,7 +427,7 @@ describe('SEP-10 state machine — JWT caching', () => {
           ok: true,
           json: async () => ({
             transaction: VALID_CHALLENGE_XDR,
-            network_passphrase: Networks.PUBLIC,
+            network_passphrase: Networks.PUBLIC_NETWORK_PASSPHRASE,
           }),
         };
       })
@@ -458,7 +451,7 @@ describe('SEP-10 state machine — JWT caching', () => {
           ok: true,
           json: async () => ({
             transaction: VALID_CHALLENGE_XDR,
-            network_passphrase: Networks.PUBLIC,
+            network_passphrase: Networks.PUBLIC_NETWORK_PASSPHRASE,
           }),
         };
       })
@@ -489,7 +482,7 @@ describe('SEP-10 state machine — JWT caching', () => {
           ok: true,
           json: async () => ({
             transaction: VALID_CHALLENGE_XDR,
-            network_passphrase: Networks.PUBLIC,
+            network_passphrase: Networks.PUBLIC_NETWORK_PASSPHRASE,
           }),
         };
       })

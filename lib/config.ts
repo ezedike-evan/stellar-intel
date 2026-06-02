@@ -7,8 +7,6 @@ export interface Config {
 
 // Asset code for USDC (constant, not environment-dependent)
 export const USDC_ASSET_CODE = 'USDC';
-const DEFAULT_USDC_ISSUER = 'GA5ZSEJYB37JRC5AVCIA5MOP4RHTM335X2KGX3IHOJAPP5RE34K4KZVN';
-const DEFAULT_APP_NAME = 'Stellar Intel';
 
 // Network passphrases for Stellar networks
 const NETWORK_PASSPHRASES = {
@@ -18,7 +16,12 @@ const NETWORK_PASSPHRASES = {
 } as const;
 
 function validateEnv(): void {
-  const requiredVars = ['NEXT_PUBLIC_STELLAR_NETWORK', 'NEXT_PUBLIC_HORIZON_URL'] as const;
+  const requiredVars = [
+    'NEXT_PUBLIC_STELLAR_NETWORK',
+    'NEXT_PUBLIC_HORIZON_URL',
+    'NEXT_PUBLIC_USDC_ISSUER',
+    'NEXT_PUBLIC_APP_NAME',
+  ] as const;
 
   const missing = requiredVars.filter(
     (varName) => !process.env[varName] || process.env[varName]?.trim() === ''
@@ -51,7 +54,7 @@ function validateEnv(): void {
     );
   }
 
-  const issuer = process.env.NEXT_PUBLIC_USDC_ISSUER ?? DEFAULT_USDC_ISSUER;
+  const issuer = process.env.NEXT_PUBLIC_USDC_ISSUER!;
   if (!/^G[A-Z0-9]{55}$/.test(issuer)) {
     throw new Error(
       `❌ Invalid NEXT_PUBLIC_USDC_ISSUER: "${issuer}"\n` +
@@ -73,8 +76,8 @@ if (typeof window === 'undefined') {
 export const config: Config = {
   stellarNetwork: process.env.NEXT_PUBLIC_STELLAR_NETWORK as Config['stellarNetwork'],
   horizonUrl: process.env.NEXT_PUBLIC_HORIZON_URL!,
-  usdcIssuer: process.env.NEXT_PUBLIC_USDC_ISSUER ?? DEFAULT_USDC_ISSUER,
-  appName: process.env.NEXT_PUBLIC_APP_NAME ?? DEFAULT_APP_NAME,
+  usdcIssuer: process.env.NEXT_PUBLIC_USDC_ISSUER!,
+  appName: process.env.NEXT_PUBLIC_APP_NAME!,
 };
 
 // Freeze to prevent accidental mutations

@@ -1,176 +1,175 @@
 'use client';
-
 import { useState, useCallback, useEffect } from 'react';
-import { CorridorSelector } from '@/components/ui/CorridorSelector';
+import { useRouter, useSearchParams } from 'next/navigation';
+import { TERMINAL_STATES } from '@/lib/stellar/sep24';
+import {
+  generateNonce,
+  saveJwtToSession,
+  loadJwtFromSession,
+  clearJwtFromSession,
+  buildTrackingSearch,
+  parseTrackingParams,
+} from '@/lib/session';
+import { WalletButton } from '@/components/ui/WalletButton';
 import { AmountInput } from '@/components/ui/AmountInput';
+import { CorridorSelector } from '@/components/ui/CorridorSelector';
 import { RateTable } from '@/components/offramp/RateTable';
 import { ExecuteDrawer } from '@/components/offramp/ExecuteDrawer';
 import { StatusTracker } from '@/components/offramp/StatusTracker';
 import { useAnchorRates } from '@/hooks/useAnchorRates';
-import { useWithdrawStatus } from '@/hooks/useWithdrawStatus';
 import { useWallet } from '@/contexts/WalletContext';
-import { CORRIDORS } from '@/constants';
-import {
-  buildTrackingSearch,
-  clearJwtFromSession,
-  generateNonce,
-  loadJwtFromSession,
-  parseTrackingParams,
-  saveJwtToSession,
-} from '@/lib/session';
+import { useWithdrawStatus } from '@/hooks/useWithdrawStatus';
 import type { AnchorRate } from '@/types';
 
-const DEFAULT_CORRIDOR_ID = CORRIDORS[0]?.id ?? 'usdc-ngn';
+export default function OfframpPage() {
+  const router = useRouter();
+  const searchParams = useSearchParams();
 
-export default function OffRampPage() {
-  const [selectedCorridorId, setSelectedCorridorId] = useState<string>(DEFAULT_CORRIDOR_ID);
-  const [amount, setAmount] = useState('');
+  const [corridorId, setCorridorId] = useState('usdc-ngn');
+  const [amount, setAmount] = useState('100');
   const [selectedRate, setSelectedRate] = useState<AnchorRate | null>(null);
-  const [activeTransaction, setActiveTransaction] = useState<{
-    transactionId: string;
-    transferServer: string;
-    jwt: string;
-    nonce: string;
-    currencyCode: string;
-  } | null>(null);
-  const { publicKey, connect, error: walletError } = useWallet();
 
-  const { rates, isLoading, error, mutate, refreshInflight } = useAnchorRates(
-    selectedCorridorId,
-    amount
+  const [trackingTransactionId, setTrackingTransactionId] = useState<string | null>(null)
+  const [trackingTransferServer, setTrackingTransferServer] = useState<string | null>(null)
+  const [trackingJwt, setTrackingJwt] = useState<string | null>(null)
+  const [trackingNonce, setTrackingNonce] = useState<string | null>(null)
+  const [trackingAnchorHomeDomain, setTrackingAnchorHomeDomain] = useState<string | null>(null)
+
+  const { isConnected, publicKey, network } = useWallet();
+  const { rates, isLoading, error, mutate, refreshInflight } = useAnchorRates(corridorId, amount);
+
+  const withdrawStatus = useWithdrawStatus(
+    trackingTransferServer,
+    trackingTransactionId,
+    trackingJwt
   );
-  const status = useWithdrawStatus(
-    activeTransaction?.transferServer ?? null,
-    activeTransaction?.transactionId ?? null,
-    activeTransaction?.jwt ?? null
-  );
-
-  // Rehydrate active transaction from URL + sessionStorage on mount
-  useEffect(() => {
-    const tracking = parseTrackingParams(window.location.search);
-    if (tracking) {
-      const jwt = loadJwtFromSession(tracking.nonce);
-      if (jwt) {
-        setActiveTransaction({
-          transactionId: tracking.transactionId,
-          transferServer: tracking.transferServer,
-          jwt,
-          nonce: tracking.nonce,
-          currencyCode: selectedCorridorId.split('-')[1]?.toUpperCase() ?? '',
-        });
-      }
-    }
-  }, [selectedCorridorId]);
-
-  const handleSelectRate = useCallback(
-    async (rate: AnchorRate) => {
-      if (!publicKey) {
-        await connect();
-        return;
-      }
-
-      setSelectedRate(rate);
-    },
-    [connect, publicKey]
-  );
-
-  const handleExecuteComplete = useCallback(
-    (transactionId: string, transferServer: string, jwt: string) => {
-      const nonce = generateNonce();
-      saveJwtToSession(nonce, jwt);
-      const search = buildTrackingSearch({ transactionId, transferServer, nonce });
-      window.history.replaceState(null, '', `${window.location.pathname}?${search}`);
-      setActiveTransaction({
-        transactionId,
-        transferServer,
-        jwt,
-        nonce,
-        currencyCode: selectedCorridorId.split('-')[1]?.toUpperCase() ?? '',
-      });
-    },
-    [selectedCorridorId]
-  );
-
-  const handleTrackingComplete = useCallback(() => {
-    if (activeTransaction) {
-      clearJwtFromSession(activeTransaction.nonce);
-    }
-
-    window.history.replaceState(null, '', window.location.pathname);
-    setActiveTransaction(null);
-  }, [activeTransaction]);
 
   useEffect(() => {
-    function handleKeyDown(event: KeyboardEvent) {
-      const target = event.target as HTMLElement | null;
-      const isTyping =
-        target?.tagName === 'INPUT' || target?.tagName === 'TEXTAREA' || target?.isContentEditable;
-      if (isTyping) return;
+    const params = parseTrackingParams(searchParams.toString())
+    if (!params) return
+    const jwt = loadJwtFromSession(params.nonce)
+    if (!jwt) return
+    setTrackingTransactionId(params.transactionId)
+    setTrackingTransferServer(params.transferServer)
+    setTrackingJwt(jwt)
+    setTrackingNonce(params.nonce)
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [])
 
-      if ((event.key === 'r' || event.key === 'R') && !event.repeat) {
-        event.preventDefault();
-        void mutate();
-      }
+  const handleSelectAnchor = useCallback((rate: AnchorRate) => {
+    setSelectedRate(rate);
+  }, []);
+
+  const handleDrawerClose = useCallback(() => {
+    setSelectedRate(null);
+  }, []);
+
+  const handleExecuteStarted = useCallback(
+    (transactionId: string, transferServer: string, jwt: string, anchorHomeDomain: string) => {
+      const nonce = generateNonce()
+      saveJwtToSession(nonce, jwt)
+      router.replace(`?${buildTrackingSearch({ transactionId, transferServer, nonce })}`)
+      setTrackingTransactionId(transactionId)
+      setTrackingTransferServer(transferServer)
+      setTrackingJwt(jwt)
+      setTrackingNonce(nonce)
+      setTrackingAnchorHomeDomain(anchorHomeDomain)
+    },
+    [router]
+  );
+
+  useEffect(() => {
+    if (withdrawStatus.status && TERMINAL_STATES.has(withdrawStatus.status) && trackingNonce) {
+      clearJwtFromSession(trackingNonce);
+      router.replace(window.location.pathname);
     }
-
-    window.addEventListener('keydown', handleKeyDown);
-    return () => window.removeEventListener('keydown', handleKeyDown);
-  }, [mutate]);
+  }, [withdrawStatus.status, trackingNonce, router]);
 
   return (
-    <main className="mx-auto max-w-3xl px-4 py-8">
-      <h1 className="mb-6 text-2xl font-semibold text-white">Off-Ramp</h1>
+    <div className="mx-auto max-w-4xl space-y-6 px-4 py-8">
+      <div className="flex items-start justify-between">
+        <div>
+          <h1 className="text-2xl font-bold text-gray-900 dark:text-white">Off-ramp Comparator</h1>
+          <p className="mt-1 text-sm text-gray-500 dark:text-gray-400">
+            Compare USDC withdrawal rates across Stellar anchors in real time
+          </p>
+        </div>
+        <WalletButton />
+      </div>
 
-      <div className="space-y-4">
-        <CorridorSelector
-          value={selectedCorridorId}
-          onChange={(corridorId) => {
-            setSelectedCorridorId(corridorId);
-            setSelectedRate(null);
-          }}
-        />
+      <div className="grid grid-cols-1 gap-4 rounded-xl border border-gray-200 bg-gray-50 p-4 dark:border-gray-700 dark:bg-gray-800/50 sm:grid-cols-2">
+        <CorridorSelector value={corridorId} onChange={setCorridorId} />
         <AmountInput value={amount} onChange={setAmount} />
       </div>
 
-      {walletError && <p className="mt-3 text-sm text-red-500">{walletError}</p>}
+      {!isConnected && (
+        <div className="rounded-xl border border-yellow-200 bg-yellow-50 px-4 py-3 text-sm text-yellow-800 dark:border-yellow-800/40 dark:bg-yellow-950/20 dark:text-yellow-300">
+          Connect your Freighter wallet to execute an off-ramp.
+        </div>
+      )}
 
-      <div className="mt-6">
+      <div>
+        <div className="mb-3 flex items-center justify-between">
+          <h2 className="text-sm font-semibold text-gray-700 dark:text-gray-300">
+            Available Rates
+          </h2>
+          <button
+            onClick={() => mutate()}
+            className="flex items-center gap-1 rounded-lg px-2 py-1 text-xs text-gray-500 hover:bg-gray-100 hover:text-gray-700 dark:hover:bg-gray-800 dark:hover:text-gray-300"
+          >
+            <svg
+              className="h-3.5 w-3.5"
+              viewBox="0 0 24 24"
+              fill="none"
+              stroke="currentColor"
+              strokeWidth={2}
+            >
+              <path
+                strokeLinecap="round"
+                strokeLinejoin="round"
+                d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15"
+              />
+            </svg>
+            Refresh
+          </button>
+        </div>
         <RateTable
           rates={rates}
           isLoading={isLoading}
-          error={error}
-          onRefresh={mutate}
           refreshInflight={refreshInflight}
-          onSelectAnchor={handleSelectRate}
+          error={error}
+          onSelectAnchor={handleSelectAnchor}
+          executeDisabled={network !== 'PUBLIC'}
+          onRefresh={() => mutate()}
         />
       </div>
+
+      {trackingTransactionId && (
+        <StatusTracker
+          transactionId={trackingTransactionId}
+          {...(trackingAnchorHomeDomain ? { anchorHomeDomain: trackingAnchorHomeDomain } : {})}
+          status={withdrawStatus.status}
+          amountIn={withdrawStatus.amountIn}
+          amountInAsset={withdrawStatus.amountInAsset}
+          amountOut={withdrawStatus.amountOut}
+          amountOutAsset={withdrawStatus.amountOutAsset}
+          amountFee={withdrawStatus.amountFee}
+          currencyCode={corridorId.split('-')[1]?.toUpperCase() ?? 'USD'}
+          stellarTransactionId={withdrawStatus.stellarTransactionId}
+          externalTransactionId={withdrawStatus.externalTransactionId}
+          refunds={withdrawStatus.refunds}
+          isLoading={withdrawStatus.isLoading}
+          error={withdrawStatus.error}
+        />
+      )}
 
       <ExecuteDrawer
         rate={selectedRate}
         amount={amount}
         publicKey={publicKey ?? ''}
-        onClose={() => setSelectedRate(null)}
-        onExecuteStarted={handleExecuteComplete}
+        onClose={handleDrawerClose}
+        onExecuteStarted={handleExecuteStarted}
       />
-
-      {activeTransaction && (
-        <StatusTracker
-          transactionId={activeTransaction.transactionId}
-          status={status.status}
-          amountIn={status.amountIn}
-          amountInAsset={status.amountInAsset}
-          amountOut={status.amountOut}
-          amountOutAsset={status.amountOutAsset}
-          amountFee={status.amountFee}
-          currencyCode={activeTransaction.currencyCode}
-          stellarTransactionId={status.stellarTransactionId}
-          externalTransactionId={status.externalTransactionId}
-          refunds={status.refunds}
-          isLoading={status.isLoading}
-          error={status.error}
-          onAdjust={handleTrackingComplete}
-        />
-      )}
-    </main>
+    </div>
   );
 }
