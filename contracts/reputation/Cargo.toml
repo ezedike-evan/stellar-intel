@@ -1,0 +1,26 @@
+[package]
+name = "reputation"
+version = "0.1.0"
+edition = "2021"
+publish = false
+
+[lib]
+# "rlib" is needed alongside "cdylib" so the integration tests in tests/ can
+# link against the crate; "cdylib" alone only emits the deployable WASM.
+crate-type = ["cdylib", "rlib"]
+doctest = false
+
+[dependencies]
+soroban-sdk = "22.0.0"
+
+[dev-dependencies]
+soroban-sdk = { version = "22.0.0", features = ["testutils"] }
+
+[profile.release]
+opt-level = "z"
+overflow-checks = true
+debug = 0
+strip = "symbols"
+codegen-units = 1
+lto = true
+panic = "abort"

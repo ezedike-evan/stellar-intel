@@ -1,0 +1,4 @@
+/target
+Cargo.lock
+# Soroban test snapshots are regenerated on every `cargo test` run.
+/test_snapshots

@@ -187,6 +187,27 @@ describe('ExecuteDrawer', () => {
     expect(screen.getByRole('button', { name: 'Try Again' })).toBeInTheDocument();
   });
 
+  it('shows dedicated switch-network guidance when Freighter is on the wrong network', async () => {
+    const NetworkMismatchError = vi.mocked(sep10).NetworkMismatchError
+    mockAuthenticate.mockRejectedValue(
+      new NetworkMismatchError('Mainnet (Public)', 'Testnet')
+    )
+
+    render(
+      <ExecuteDrawer rate={RATE} amount="100" publicKey={PUBLIC_KEY} onClose={vi.fn()} onExecuteStarted={vi.fn()} />
+    )
+
+    fireEvent.click(screen.getByText('Start Off-ramp'))
+
+    await waitFor(() =>
+      expect(
+        screen.getByText(/Switch network in Freighter to Mainnet \(Public\)/)
+      ).toBeInTheDocument()
+    )
+    expect(screen.getByText(/currently set to Testnet/)).toBeInTheDocument()
+    expect(screen.getByRole('button', { name: 'Try Again' })).toBeInTheDocument()
+  })
+
   it('shows the error when the user cancels the KYC popup', async () => {
     mockOpenWithdrawPopup.mockRejectedValue(new Error('User cancelled the transaction'));
 
