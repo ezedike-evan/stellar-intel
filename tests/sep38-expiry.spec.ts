@@ -77,6 +77,17 @@ describe('getRemainingSeconds', () => {
     expect(remaining).toBeLessThanOrEqual(0);
   });
 
+  it('handles the snake_case expires_at string shape of a real Sep38Quote', () => {
+    const now = new Date('2026-05-31T12:00:00Z');
+    vi.setSystemTime(now);
+
+    // A real firm Sep38Quote carries expires_at as an RFC 3339 string, not expiresAt.
+    const quote = { expires_at: new Date(now.getTime() + 90 * 1000).toISOString() };
+
+    expect(getRemainingSeconds(quote)).toBe(90);
+    expect(isQuoteExpired(quote)).toBe(false);
+  });
+
   it('handles Date objects for expiresAt', () => {
     const now = new Date('2026-05-31T12:00:00Z');
     vi.setSystemTime(now);
@@ -172,12 +183,12 @@ describe('watchQuoteExpiry', () => {
     const { target } = watchQuoteExpiry(quote);
 
     let eventFired = false;
-    let receivedQuote: MockQuote | null = null;
+    const received: { quote: MockQuote | null } = { quote: null };
 
     target.addEventListener('isExpired', (event: Event) => {
       if (event instanceof QuoteExpiredEvent) {
         eventFired = true;
-        receivedQuote = event.quote;
+        received.quote = event.quote as MockQuote;
       }
     });
 
@@ -186,7 +197,7 @@ describe('watchQuoteExpiry', () => {
     await vi.runAllTimersAsync();
 
     expect(eventFired).toBe(true);
-    expect(receivedQuote?.id).toBe(quote.id);
+    expect(received.quote?.id).toBe(quote.id);
   });
 
   it('emits isExpired immediately for an already-expired quote', async () => {

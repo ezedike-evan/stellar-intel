@@ -151,16 +151,6 @@ export interface Sep38QuoteParams {
   expire_after?: string;
 }
 
-/** A firm SEP-38 quote returned by POST /quote. */
-export interface Sep38Quote {
-  id: string;
-  /** RFC 3339 timestamp after which the quote is no longer honored. */
-  expires_at: string;
-  price: string;
-  sell_amount: string;
-  buy_amount: string;
-}
-
 // ─── SEP-10 ───────────────────────────────────────────────────────────────────
 
 /** A JWT issued by an anchor after successful SEP-10 authentication. */
@@ -316,10 +306,10 @@ export interface Sep38Quote {
   buy_amount: string; // exact amount in buy_asset
   fee: {
     total: string; // total fee in sell_asset
-    percent: string; // fee as percentage
+    percent?: string; // fee as percentage, when the anchor reports it
   };
   expires_at: string; // RFC3339 expiry timestamp
-  context: 'sep24'; // context used in the quote request
+  context: Sep38QuoteContext; // context used in the quote request
 }
 
 /** An evaluated SEP-38 quote with eligibility and score information. */

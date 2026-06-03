@@ -65,8 +65,11 @@ describe('postSep38Quote', () => {
       id: 'de762cda-a193-4961-861e-57b31fed6eb3',
       expires_at: expect.any(String),
       price: '5.00',
+      total_price: '5.42',
       sell_amount: '500',
       buy_amount: '92.25',
+      fee: { total: '0.00' },
+      context: 'sep31',
     });
   });
 
@@ -134,6 +137,28 @@ describe('postSep38Quote', () => {
     mockFetch(quoteResponse({ buy_amount: undefined }));
 
     await expect(postSep38Quote(QUOTE_SERVER, JWT, PARAMS)).rejects.toBeInstanceOf(Sep38ParseError);
+  });
+
+  it('throws Sep38ParseError rather than fabricating a fee when fee is missing', async () => {
+    mockFetch(quoteResponse({ fee: undefined }));
+
+    await expect(postSep38Quote(QUOTE_SERVER, JWT, PARAMS)).rejects.toThrow(/"fee" object/);
+  });
+
+  it('throws Sep38ParseError when total_price is missing', async () => {
+    mockFetch(quoteResponse({ total_price: undefined }));
+
+    await expect(postSep38Quote(QUOTE_SERVER, JWT, PARAMS)).rejects.toBeInstanceOf(Sep38ParseError);
+  });
+
+  it('reflects the requested context and the anchor fee.percent when present', async () => {
+    mockFetch(quoteResponse({ fee: { total: '1.25', percent: '0.5', asset: USDC } }));
+
+    // context is taken from the request, not hardcoded to 'sep24'
+    const quote = await postSep38Quote(QUOTE_SERVER, JWT, { ...PARAMS, context: 'sep6' });
+
+    expect(quote.context).toBe('sep6');
+    expect(quote.fee).toEqual({ total: '1.25', percent: '0.5' });
   });
 
   it('throws Sep38ParseError when expires_at is not a valid timestamp', async () => {

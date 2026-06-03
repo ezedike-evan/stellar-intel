@@ -6,6 +6,7 @@ import type {
   Sep38Info,
   Sep38PricesParams,
   Sep38Quote,
+  Sep38QuoteContext,
   Sep38QuoteParams,
 } from '@/types';
 
@@ -389,14 +390,20 @@ function requireString(raw: Record<string, unknown>, field: string, endpoint: st
   return value;
 }
 
-function parseQuote(raw: Record<string, unknown>): Sep38Quote {
+function parseQuote(raw: Record<string, unknown>, context: Sep38QuoteContext): Sep38Quote {
   const id = requireString(raw, 'id', '/quote');
   const expiresAt = requireString(raw, 'expires_at', '/quote');
   const price = requireString(raw, 'price', '/quote');
+  const totalPrice = requireString(raw, 'total_price', '/quote');
   const sellAmount = requireString(raw, 'sell_amount', '/quote');
   const buyAmount = requireString(raw, 'buy_amount', '/quote');
-  const totalPrice = typeof raw['total_price'] === 'string' ? raw['total_price'] : price;
-  const fee = isRecord(raw['fee']) ? raw['fee'] : {};
+
+  const feeRaw = raw['fee'];
+  if (!isRecord(feeRaw)) {
+    throw new Sep38ParseError('SEP-38 /quote response is missing a "fee" object');
+  }
+  const feeTotal = requireString(feeRaw, 'total', '/quote fee');
+  const feePercent = typeof feeRaw['percent'] === 'string' ? feeRaw['percent'] : undefined;
 
   const expiresMs = Date.parse(expiresAt);
   if (Number.isNaN(expiresMs)) {
@@ -413,11 +420,8 @@ function parseQuote(raw: Record<string, unknown>): Sep38Quote {
     total_price: totalPrice,
     sell_amount: sellAmount,
     buy_amount: buyAmount,
-    fee: {
-      total: typeof fee['total'] === 'string' ? fee['total'] : '0',
-      percent: typeof fee['percent'] === 'string' ? fee['percent'] : '0',
-    },
-    context: 'sep24',
+    fee: feePercent !== undefined ? { total: feeTotal, percent: feePercent } : { total: feeTotal },
+    context,
   };
 }
 
@@ -477,7 +481,7 @@ export async function postSep38Quote(
     throw new Error(`HTTP ${res.status} from ${base} SEP-38 /quote endpoint`);
   }
 
-  return parseQuote((await res.json()) as Record<string, unknown>);
+  return parseQuote((await res.json()) as Record<string, unknown>, params.context);
 }
 
 // ─── Quote cancellation endpoint ─────────────────────────────────────────────
