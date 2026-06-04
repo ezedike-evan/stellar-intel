@@ -33,6 +33,8 @@ export interface AnchorRate {
   updatedAt: Date;
   /** Discriminates the origin of the rate data. */
   source: 'sep38' | 'sep24-fee' | 'unavailable';
+  /** Row-level quote lifecycle state. Only meaningful for source === 'sep38'. */
+  quoteStatus?: 'firm' | 'expiring' | 'refreshing';
 }
 
 /** The result of comparing all anchor rates for a single corridor. */
@@ -71,6 +73,12 @@ export interface Sep1TomlData {
   WEB_AUTH_ENDPOINT: string | null;
   SIGNING_KEY: string | null;
   NETWORK_PASSPHRASE: string | null;
+  /** SEP-1 [DOCUMENTATION]: organization website (https). */
+  ORG_URL: string | null;
+  /** SEP-1 [DOCUMENTATION]: user support email. */
+  ORG_SUPPORT_EMAIL: string | null;
+  /** Optional non-standard support page URL some anchors publish. */
+  ORG_SUPPORT_URL: string | null;
   CURRENCIES: Array<{ code: string; issuer?: string }>;
   capabilities: AnchorCapabilities;
 }
@@ -141,16 +149,6 @@ export interface Sep38QuoteParams {
   country_code?: string;
   /** RFC 3339 timestamp; the quote must remain valid until at least this time. */
   expire_after?: string;
-}
-
-/** A firm SEP-38 quote returned by POST /quote. */
-export interface Sep38Quote {
-  id: string;
-  /** RFC 3339 timestamp after which the quote is no longer honored. */
-  expires_at: string;
-  price: string;
-  sell_amount: string;
-  buy_amount: string;
 }
 
 // ─── SEP-10 ───────────────────────────────────────────────────────────────────
@@ -308,10 +306,10 @@ export interface Sep38Quote {
   buy_amount: string; // exact amount in buy_asset
   fee: {
     total: string; // total fee in sell_asset
-    percent: string; // fee as percentage
+    percent?: string; // fee as percentage, when the anchor reports it
   };
   expires_at: string; // RFC3339 expiry timestamp
-  context: 'sep24'; // context used in the quote request
+  context: Sep38QuoteContext; // context used in the quote request
 }
 
 /** An evaluated SEP-38 quote with eligibility and score information. */

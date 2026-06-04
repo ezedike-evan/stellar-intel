@@ -1,6 +1,6 @@
 'use client';
-import { useEffect, useRef, useState, type TouchEvent as ReactTouchEvent } from 'react';
-import { authenticate } from '@/lib/stellar/sep10';
+import { useEffect, useRef, useState } from 'react';
+import { authenticate, NetworkMismatchError } from '@/lib/stellar/sep10';
 import { initiateWithdraw, getWithdrawTransactionRecord } from '@/lib/stellar/sep24';
 import { getResolvedAnchorById } from '@/lib/stellar/anchors';
 import { buildWithdrawPayment, signAndSubmitPayment } from '@/lib/stellar/horizon';
@@ -33,7 +33,12 @@ interface ExecuteDrawerProps {
   publicKey: string;
   onClose: () => void;
   /** Called once the Stellar payment is submitted; closes the drawer and hands tracking data to the page. */
-  onExecuteStarted: (transactionId: string, transferServer: string, jwt: string) => void;
+  onExecuteStarted: (
+    transactionId: string,
+    transferServer: string,
+    jwt: string,
+    anchorHomeDomain: string
+  ) => void;
 }
 
 // ─── Component ────────────────────────────────────────────────────────────────
@@ -169,13 +174,17 @@ function ExecuteDrawerContent({
 
       // Step 2 — Initiate SEP-24 withdraw
       setStep('initiating');
-      const withdrawResp = await initiateWithdraw(anchor, {
-        assetCode: anchor.assetCode,
-        assetIssuer: anchor.assetIssuer,
-        amount,
-        account: publicKey,
-        jwt: auth.jwt,
-      }, signal);
+      const withdrawResp = await initiateWithdraw(
+        anchor,
+        {
+          assetCode: anchor.assetCode,
+          assetIssuer: anchor.assetIssuer,
+          amount,
+          account: publicKey,
+          jwt: auth.jwt,
+        },
+        signal
+      );
 
       // Step 3 — KYC iframe
       setStep('kyc');
@@ -196,7 +205,12 @@ function ExecuteDrawerContent({
       // Step 4 — Fetch transaction record
       setStep('building');
       const transferServer = anchor.TRANSFER_SERVER_SEP0024!;
-      const record = await getWithdrawTransactionRecord(transferServer, transactionId, auth.jwt, signal);
+      const record = await getWithdrawTransactionRecord(
+        transferServer,
+        transactionId,
+        auth.jwt,
+        signal
+      );
 
       // Step 5 — Build payment
       const tx = await buildWithdrawPayment({
@@ -216,9 +230,17 @@ function ExecuteDrawerContent({
       setStep('done');
 
       // Hand tracking data to the page, then close so StatusTracker owns the viewport.
-      onExecuteStarted(transactionId, transferServer, auth.jwt);
+      onExecuteStarted(transactionId, transferServer, auth.jwt, anchor.homeDomain);
       onClose();
     } catch (err) {
+      // Freighter is on the wrong network — surface the dedicated
+      // "switch network" guidance without retrying the sign.
+      if (err instanceof NetworkMismatchError) {
+        setErrorMsg(err.message);
+        setStep('error');
+        return;
+      }
+
       const message = err instanceof Error ? err.message : 'Unknown error';
 
       // Ignore aborted requests (component unmounted mid-flow).

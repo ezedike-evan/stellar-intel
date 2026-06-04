@@ -3,6 +3,7 @@ import { z } from 'zod'
 import { Asset, Networks, TransactionBuilder, Operation, Memo, BASE_FEE, Account } from '@stellar/stellar-sdk'
 import { hashIntent } from '@/lib/intent/hash'
 import { USDC_ISSUER } from '@/lib/config'
+import { withRequestLogger } from '@/lib/logger'
 import type { Intent } from '@/lib/intent/hash'
 import type { ApiError } from '@/types'
 
@@ -95,70 +96,80 @@ function buildUnsignedOfframpTx(
 // ─── Route handler ────────────────────────────────────────────────────────────
 
 export async function POST(request: NextRequest): Promise<NextResponse> {
-  let body: unknown
-  try {
-    body = await request.json()
-  } catch {
-    return NextResponse.json<ApiError>(
-      { code: 'INVALID_JSON', message: 'Request body must be valid JSON' },
-      { status: 400 }
-    )
-  }
+  return withRequestLogger(request, 'api.intent.offramp', async (logger) => {
+    let body: unknown
+    try {
+      body = await request.json()
+    } catch {
+      logger.warn({ event: 'invalid_json', message: 'Request body must be valid JSON' })
+      return NextResponse.json<ApiError>(
+        { code: 'INVALID_JSON', message: 'Request body must be valid JSON' },
+        { status: 400 }
+      )
+    }
 
-  const parsed = IntentSchema.safeParse(body)
-  if (!parsed.success) {
-    const first = parsed.error.issues[0]
-    return NextResponse.json<ApiError>(
-      {
-        code: 'VALIDATION_ERROR',
-        message: first?.message ?? 'Invalid intent payload',
-      },
-      { status: 400 }
-    )
-  }
+    const parsed = IntentSchema.safeParse(body)
+    if (!parsed.success) {
+      const first = parsed.error.issues[0]
+      logger.warn({ event: 'validation_failed', issues: parsed.error.issues })
+      return NextResponse.json<ApiError>(
+        {
+          code: 'VALIDATION_ERROR',
+          message: first?.message ?? 'Invalid intent payload',
+        },
+        { status: 400 }
+      )
+    }
 
-  const intent = parsed.data as Intent
-  const route = resolveRoute(intent.sourceAsset, intent.destinationAsset)
+    const intent = parsed.data as Intent
+    const route = resolveRoute(intent.sourceAsset, intent.destinationAsset)
 
-  if (!route) {
-    return NextResponse.json<ApiError>(
-      {
-        code: 'NO_ROUTE',
-        message: `No route found for ${intent.sourceAsset} → ${intent.destinationAsset}`,
-      },
-      { status: 400 }
-    )
-  }
+    logger.info({ event: 'intent_parsed', sourceAsset: intent.sourceAsset, destinationAsset: intent.destinationAsset })
 
-  const quoteId = await hashIntent(intent)
-  const anchorEntry = ANCHOR_ROUTING[route.corridorId]
+    if (!route) {
+      logger.warn({ event: 'no_route', sourceAsset: intent.sourceAsset, destinationAsset: intent.destinationAsset })
+      return NextResponse.json<ApiError>(
+        {
+          code: 'NO_ROUTE',
+          message: `No route found for ${intent.sourceAsset} → ${intent.destinationAsset}`,
+        },
+        { status: 400 }
+      )
+    }
 
-  if (!anchorEntry) {
-    return NextResponse.json<ApiError>(
-      { code: 'NO_ROUTE', message: 'Anchor configuration missing' },
-      { status: 400 }
-    )
-  }
+    const quoteId = await hashIntent(intent)
+    const anchorEntry = ANCHOR_ROUTING[route.corridorId]
 
-  let unsignedTx: string
-  try {
-    unsignedTx = buildUnsignedOfframpTx(
-      intent.sender,
-      anchorEntry.anchorAccount,
-      intent.amount,
-      intent.sourceAsset,
-      USDC_ISSUER,
-      quoteId
-    )
-  } catch (err) {
-    return NextResponse.json<ApiError>(
-      {
-        code: 'TX_BUILD_FAILED',
-        message: err instanceof Error ? err.message : 'Failed to build transaction',
-      },
-      { status: 500 }
-    )
-  }
+    if (!anchorEntry) {
+      logger.error({ event: 'anchor_config_missing', corridorId: route.corridorId })
+      return NextResponse.json<ApiError>(
+        { code: 'NO_ROUTE', message: 'Anchor configuration missing' },
+        { status: 400 }
+      )
+    }
 
-  return NextResponse.json<OfframpIntentResponse>({ route, unsignedTx, quoteId })
+    let unsignedTx: string
+    try {
+      unsignedTx = buildUnsignedOfframpTx(
+        intent.sender,
+        anchorEntry.anchorAccount,
+        intent.amount,
+        intent.sourceAsset,
+        USDC_ISSUER,
+        quoteId
+      )
+    } catch (err) {
+      logger.error({ event: 'tx_build_failed', error: err instanceof Error ? err.message : 'Unknown error' })
+      return NextResponse.json<ApiError>(
+        {
+          code: 'TX_BUILD_FAILED',
+          message: err instanceof Error ? err.message : 'Failed to build transaction',
+        },
+        { status: 500 }
+      )
+    }
+
+    logger.info({ event: 'intent_response', corridorId: route.corridorId, quoteId })
+    return NextResponse.json<OfframpIntentResponse>({ route, unsignedTx, quoteId })
+  })
 }

@@ -74,10 +74,14 @@ function toSep1TomlData(domain: string, raw: Record<string, unknown>): Sep1TomlD
     WEB_AUTH_ENDPOINT: webAuthEndpoint,
     SIGNING_KEY: signingKey,
     NETWORK_PASSPHRASE: getString(raw, 'NETWORK_PASSPHRASE'),
+    ORG_URL: getString(raw, 'ORG_URL'),
+    ORG_SUPPORT_EMAIL: getString(raw, 'ORG_SUPPORT_EMAIL'),
+    ORG_SUPPORT_URL: getString(raw, 'ORG_SUPPORT_URL'),
     CURRENCIES: getCurrencies(raw),
     capabilities: {
       sep10: Boolean(webAuthEndpoint),
       sep24: Boolean(transferServer),
+      /** Derived from ANCHOR_QUOTE_SERVER presence — the authoritative source for SEP-38 capability. */
       sep38: Boolean(quoteServer),
       sep12: Boolean(signingKey),
     },
@@ -100,6 +104,29 @@ function requireTomlField(
   }
 
   return value;
+}
+
+/**
+ * Resolves a clickable support href from SEP-1 documentation fields.
+ * Priority: ORG_SUPPORT_URL → mailto:ORG_SUPPORT_EMAIL → ORG_URL (https only).
+ */
+export function resolveAnchorSupportHref(toml: Sep1TomlData): string | null {
+  const supportUrl = toml.ORG_SUPPORT_URL
+  if (supportUrl?.startsWith('https://') || supportUrl?.startsWith('http://')) {
+    return supportUrl
+  }
+
+  const email = toml.ORG_SUPPORT_EMAIL
+  if (email) {
+    return `mailto:${email}`
+  }
+
+  const orgUrl = toml.ORG_URL
+  if (orgUrl?.startsWith('https://')) {
+    return orgUrl
+  }
+
+  return null
 }
 
 /**

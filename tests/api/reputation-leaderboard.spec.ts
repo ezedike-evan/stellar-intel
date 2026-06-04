@@ -1,6 +1,12 @@
 import { describe, expect, test } from 'vitest';
 import { GET } from '@/app/api/reputation/leaderboard/route';
 
+interface LeaderboardEntry {
+  anchorId: string;
+  composite: number;
+  fillRate: number;
+}
+
 describe('GET /api/reputation/leaderboard', () => {
   test('returns all anchors ordered by composite descending by default', async () => {
     const response = await GET(new Request('http://localhost/api/reputation/leaderboard'));
@@ -16,7 +22,9 @@ describe('GET /api/reputation/leaderboard', () => {
 
   test('filters anchors by corridor and sorts by fill rate ascending', async () => {
     const response = await GET(
-      new Request('http://localhost/api/reputation/leaderboard?corridor=usdc-ngn&sort=fillRate&direction=asc')
+      new Request(
+        'http://localhost/api/reputation/leaderboard?corridor=usdc-ngn&sort=fillRate&direction=asc'
+      )
     );
     expect(response.status).toBe(200);
 
@@ -26,6 +34,10 @@ describe('GET /api/reputation/leaderboard', () => {
     expect(body.direction).toBe('asc');
     expect(body.entries.length).toBeGreaterThanOrEqual(1);
     expect(body.entries[0].fillRate).toBeLessThanOrEqual(body.entries[1]?.fillRate ?? Infinity);
-    expect(body.entries.every((entry: any) => entry.anchorId === 'moneygram' || entry.anchorId === 'cowrie')).toBe(true);
+    expect(
+      body.entries.every(
+        (entry: LeaderboardEntry) => entry.anchorId === 'moneygram' || entry.anchorId === 'cowrie'
+      )
+    ).toBe(true);
   });
 });

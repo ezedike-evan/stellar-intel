@@ -1,19 +1,8 @@
-<<<<<<< HEAD
+import { useCallback, useEffect, useMemo, useRef, useState, useSyncExternalStore } from 'react';
 import useSWR from 'swr';
-import type { ApiRatesResponse, RateComparison } from '@/types';
-import { useState, useCallback } from 'react';
-
-async function fetcher([, corridorId, amount]: [string, string, string]): Promise<RateComparison> {
-  const url = new URL('/api/rates', window.location.origin);
-  url.searchParams.set('corridor', corridorId);
-  url.searchParams.set('amount', amount);
-=======
-import { useCallback, useEffect, useRef, useState, useSyncExternalStore } from 'react';
-import useSWR from 'swr';
-import type { ApiRatesResponse, RateComparison } from '@/types';
+import type { ApiRatesResponse, AnchorRate, RateComparison } from '@/types';
 
 const RATES_REFRESH_INTERVAL_MS = 30_000;
->>>>>>> origin/main
 
 /**
  * How long a fetched quote is considered valid before a refresh is needed.
@@ -84,15 +73,6 @@ export function useAnchorRates(corridorId: string, amount: string): UseAnchorRat
   const swrKey: [string, string, string] | null =
     hasRateQuery && isDocumentVisible ? ['/api/rates', corridorId, amount] : null;
 
-<<<<<<< HEAD
-  const { data, error, isLoading, mutate } = useSWR<RateComparison, Error>(
-    corridorId && amount ? ['/api/rates', corridorId, amount] : null,
-    fetcher,
-    {
-      refreshInterval: 30_000,
-      revalidateOnFocus: true,
-      dedupingInterval: 5_000,
-=======
   const { data, error, isLoading, mutate } = useSWR<RateComparison, Error>(swrKey, fetcher, {
     refreshInterval: RATES_REFRESH_INTERVAL_MS,
     refreshWhenHidden: false,
@@ -103,7 +83,6 @@ export function useAnchorRates(corridorId: string, amount: string): UseAnchorRat
   useEffect(() => {
     if (!wasDocumentVisible.current && isDocumentVisible && hasRateQuery) {
       void mutate();
->>>>>>> origin/main
     }
 
     wasDocumentVisible.current = isDocumentVisible;
@@ -154,6 +133,26 @@ export function useAnchorRates(corridorId: string, amount: string): UseAnchorRat
     return () => clearInterval(intervalId);
   }, [hasRateQuery, isDocumentVisible, mutate]);
 
+  const annotatedRates = useMemo<RateComparison | undefined>(() => {
+    if (!data) return undefined;
+    const now = Date.now();
+    return {
+      ...data,
+      rates: data.rates.map((rate) => {
+        if (rate.source !== 'sep38' || !rate.updatedAt) return rate;
+        const age = now - new Date(rate.updatedAt).getTime();
+        const remaining = QUOTE_VALIDITY_MS - age;
+        const quoteStatus: AnchorRate['quoteStatus'] =
+          refreshingRef.current ? 'refreshing'
+          : remaining < REFRESH_THRESHOLD_MS ? 'expiring'
+          : 'firm';
+        return { ...rate, quoteStatus };
+      }),
+    };
+  // refreshInflight is state (triggers re-render) and serves as proxy for refreshingRef changes
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [data, refreshInflight]);
+
   const refresh = useCallback(async () => {
     if (refreshInflight) return;
 
@@ -171,7 +170,7 @@ export function useAnchorRates(corridorId: string, amount: string): UseAnchorRat
   }, [mutate, refreshInflight]);
 
   return {
-    rates: data,
+    rates: annotatedRates,
     isLoading,
     error: error?.message,
     mutate: refresh,

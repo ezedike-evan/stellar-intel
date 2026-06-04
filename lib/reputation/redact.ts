@@ -1,4 +1,4 @@
-import { createHash } from 'crypto'
+import { createHash } from 'crypto';
 
 // ─── Intent shape (with PII) ──────────────────────────────────────────────────
 
@@ -8,24 +8,24 @@ import { createHash } from 'crypto'
  */
 export interface RawIntent {
   /** Stellar public key of the recipient — PII */
-  recipientAccount?: string
+  recipientAccount?: string;
   /** Full name of the recipient — PII */
-  recipientName?: string
+  recipientName?: string;
   /** Email address of the recipient — PII */
-  recipientEmail?: string
+  recipientEmail?: string;
   /** Phone number of the recipient — PII */
-  recipientPhone?: string
+  recipientPhone?: string;
   /** Bank account number — PII */
-  bankAccount?: string
+  bankAccount?: string;
   /** Generic account field (e.g. from SEP-24 request) — PII */
-  account?: string
+  account?: string;
   // ── Non-PII fields ──
-  amount: string
-  assetCode: string
-  assetIssuer?: string
-  corridorId: string
-  anchorId: string
-  [key: string]: unknown
+  amount: string;
+  assetCode: string;
+  assetIssuer?: string;
+  corridorId: string;
+  anchorId: string;
+  [key: string]: unknown;
 }
 
 // ─── Redacted row (safe to write) ────────────────────────────────────────────
@@ -35,10 +35,10 @@ export interface RawIntent {
  * Contains only the intent hash and non-PII routing metadata.
  */
 export interface RedactedIntent {
-  intentHash: string
-  assetCode: string
-  corridorId: string
-  anchorId: string
+  intentHash: string;
+  assetCode: string;
+  corridorId: string;
+  anchorId: string;
 }
 
 // ─── PII field registry ───────────────────────────────────────────────────────
@@ -58,9 +58,9 @@ export const PII_FIELDS = [
   'phone',
   'name',
   'address',
-] as const
+] as const;
 
-export type PiiField = (typeof PII_FIELDS)[number]
+export type PiiField = (typeof PII_FIELDS)[number];
 
 // ─── Core functions ───────────────────────────────────────────────────────────
 
@@ -69,8 +69,8 @@ export type PiiField = (typeof PII_FIELDS)[number]
  * The hash is the only representation of the recipient that enters the log.
  */
 export function hashIntent(intent: RawIntent): string {
-  const stable = JSON.stringify(intent, Object.keys(intent).sort())
-  return createHash('sha256').update(stable).digest('hex')
+  const stable = JSON.stringify(intent, Object.keys(intent).sort());
+  return createHash('sha256').update(stable).digest('hex');
 }
 
 /**
@@ -83,5 +83,5 @@ export function redactIntent(intent: RawIntent): RedactedIntent {
     assetCode: intent.assetCode,
     corridorId: intent.corridorId,
     anchorId: intent.anchorId,
-  }
+  };
 }
