@@ -3,6 +3,10 @@
     {
       "path": "/api/reputation/refresh",
       "schedule": "*/5 * * * *"
+    },
+    {
+      "path": "/api/reputation/reconcile",
+      "schedule": "*/5 * * * *"
     }
   ]
 }

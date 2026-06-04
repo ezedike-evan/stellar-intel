@@ -2,6 +2,29 @@ import { useCallback, useEffect, useRef } from 'react'
 import useSWR from 'swr'
 import { TERMINAL_STATES } from '@/lib/stellar/sep24'
 import type { Sep24Transaction, WithdrawStatusValue } from '@/types'
+import type { OutcomeStatus } from '@/types/reputation'
+
+/** Context the page supplies so a terminal outcome can be logged (#129/#220). */
+export interface OutcomeAppendContext {
+  intentHash: string
+  anchorId: string
+  corridor: string
+  quotedRate: string
+  quotedAmount: string
+}
+
+function outcomeFromStatus(status: WithdrawStatusValue): OutcomeStatus {
+  switch (status) {
+    case 'completed':
+      return 'completed'
+    case 'refunded':
+      return 'refunded'
+    case 'expired':
+      return 'expired'
+    default:
+      return 'error'
+  }
+}
 
 export const WITHDRAW_POLL_INITIAL_MS = 2_000
 export const WITHDRAW_POLL_MAX_MS = 30_000
@@ -65,11 +88,14 @@ export interface UseWithdrawStatusResult {
 export function useWithdrawStatus(
   transferServer: string | null,
   transactionId: string | null,
-  jwt: string | null
+  jwt: string | null,
+  outcomeContext?: OutcomeAppendContext
 ): UseWithdrawStatusResult {
   const pollIntervalMsRef = useRef(WITHDRAW_POLL_INITIAL_MS)
   const lastStatusRef = useRef<WithdrawStatusValue | undefined>(undefined)
   const abortRef = useRef<AbortController | null>(null)
+  const appendedRef = useRef(false)
+  const startMsRef = useRef(Date.now())
 
   const key =
     transferServer && transactionId && jwt
@@ -80,6 +106,8 @@ export function useWithdrawStatus(
     pollIntervalMsRef.current = WITHDRAW_POLL_INITIAL_MS
     lastStatusRef.current = undefined
     abortRef.current = new AbortController()
+    appendedRef.current = false
+    startMsRef.current = Date.now()
     return () => {
       abortRef.current?.abort()
       abortRef.current = null
@@ -107,6 +135,33 @@ export function useWithdrawStatus(
     },
     revalidateOnFocus: false,
   })
+
+  // ─── Append-on-terminal (#129 / #220) ────────────────────────────────────────
+  // When the poll first reaches a terminal state, POST exactly one outcome row
+  // to the server-side write path. The ref guard ensures one row per intent even
+  // across re-renders and repeated terminal polls.
+  const status = data?.status
+  useEffect(() => {
+    if (!status || !outcomeContext || appendedRef.current) return
+    if (!TERMINAL_STATES.has(status)) return
+    appendedRef.current = true
+
+    const settleSeconds = Math.max(0, Math.round((Date.now() - startMsRef.current) / 1000))
+    void fetch('/api/reputation/append', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        ...outcomeContext,
+        outcome: outcomeFromStatus(status),
+        deliveredAmount: data?.amountOut ?? null,
+        settleSeconds,
+        stellarTransactionId: data?.stellarTransactionId ?? null,
+      }),
+      keepalive: true,
+    }).catch(() => {
+      // Best-effort: a failed append must not disrupt the user's status view.
+    })
+  }, [status, outcomeContext, data?.amountOut, data?.stellarTransactionId])
 
   return {
     status: data?.status,
