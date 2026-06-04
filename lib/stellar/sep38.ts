@@ -1,5 +1,7 @@
 import { parseSepErrorBody } from './errors';
+import { authenticate, invalidateSep10Token } from './sep10';
 import type {
+  ResolvedAnchor,
   Sep38Asset,
   Sep38DeliveryMethod,
   Sep38IndicativePrice,
@@ -270,7 +272,11 @@ function assertNonEmpty(value: string, fieldName: keyof Sep38PriceParams): void 
   }
 }
 
-function getRequiredString(data: Record<string, unknown>, fieldName: string): string {
+function getRequiredString(
+  data: Record<string, unknown>,
+  fieldName: string,
+  context = '/price'
+): string {
   const value = data[fieldName];
   if (typeof value !== 'string' || value.trim().length === 0) {
     throw new Error(`Invalid SEP-38 ${context} response: missing "${fieldName}"`);
@@ -510,5 +516,178 @@ export async function deleteSep38Quote(
   }
 
   throw new Error(`HTTP ${res.status} from ${base} SEP-38 /quote cancellation`);
+}
+
+// ─── Authenticated firm-quote client (SEP-10 JWT + auto-refresh) ───────────────
+
+/** Parameters for a SEP-38 firm quote (POST /quote). */
+export interface Sep38FirmQuoteRequest {
+  /** Asset the user is selling, in SEP-38 form (e.g. "stellar:USDC:G..."). */
+  sellAsset: string;
+  /** Asset the user wants to buy, in SEP-38 form (e.g. "iso4217:NGN"). */
+  buyAsset: string;
+  /** Amount of sellAsset. Mutually exclusive with buyAmount. */
+  sellAmount?: string;
+  /** Amount of buyAsset. Mutually exclusive with sellAmount. */
+  buyAmount?: string;
+  /** Flow the quote will be used in. Defaults to the anchor's choice when omitted. */
+  context?: 'sep6' | 'sep24' | 'sep31';
+  sellDeliveryMethod?: string;
+  buyDeliveryMethod?: string;
+  countryCode?: string;
+  /** ISO-8601 timestamp the quote must remain valid until. */
+  expireAfter?: string;
+}
+
+/** A firm quote issued by an anchor's SEP-38 quote server (POST /quote). */
+export interface Sep38FirmQuote {
+  id: string;
+  expiresAt: Date;
+  price: string;
+  totalPrice: string;
+  sellAsset: string;
+  sellAmount: string;
+  buyAsset: string;
+  buyAmount: string;
+  fee?: Sep38Fee;
+}
+
+function getQuoteServer(anchor: ResolvedAnchor): string {
+  const server = anchor.ANCHOR_QUOTE_SERVER;
+  if (!server || !anchor.capabilities.sep38) {
+    throw new Error(`Anchor "${anchor.homeDomain}" does not support SEP-38 firm quotes.`);
+  }
+  return normalizeQuoteServer(server);
+}
+
+async function readErrorBody(res: Response): Promise<unknown> {
+  return typeof res.json === 'function' ? await res.json().catch(() => null) : null;
+}
+
+/**
+ * Runs an authenticated request against the anchor, transparently refreshing the
+ * SEP-10 JWT on a 401.
+ *
+ * The first attempt uses whatever token `authenticate` returns (cached when
+ * valid). If the anchor rejects it with 401, the cached token is dropped via
+ * `invalidateSep10Token` and a single fresh sign flow is run before re-attempting
+ * exactly once. A second 401 is surfaced to the caller rather than looping.
+ */
+async function authenticatedRequest(
+  anchor: ResolvedAnchor,
+  publicKey: string,
+  url: string,
+  init: RequestInit
+): Promise<Response> {
+  const withAuth = (jwt: string): RequestInit => ({
+    ...init,
+    headers: { ...init.headers, Authorization: `Bearer ${jwt}` },
+  });
+
+  const { jwt } = await authenticate(anchor, publicKey);
+  const res = await fetch(url, withAuth(jwt));
+
+  if (res.status !== 401) return res;
+
+  // Token was stale/revoked — drop it and re-authenticate once, then retry.
+  invalidateSep10Token(anchor.homeDomain, publicKey);
+  const { jwt: freshJwt } = await authenticate(anchor, publicKey);
+  return fetch(url, withAuth(freshJwt));
+}
+
+function toFirmQuoteBody(params: Sep38FirmQuoteRequest): Record<string, string> {
+  const body: Record<string, string> = {
+    sell_asset: params.sellAsset,
+    buy_asset: params.buyAsset,
+  };
+  if (params.sellAmount !== undefined) body['sell_amount'] = params.sellAmount;
+  if (params.buyAmount !== undefined) body['buy_amount'] = params.buyAmount;
+  if (params.context !== undefined) body['context'] = params.context;
+  if (params.sellDeliveryMethod !== undefined) body['sell_delivery_method'] = params.sellDeliveryMethod;
+  if (params.buyDeliveryMethod !== undefined) body['buy_delivery_method'] = params.buyDeliveryMethod;
+  if (params.countryCode !== undefined) body['country_code'] = params.countryCode;
+  if (params.expireAfter !== undefined) body['expire_after'] = params.expireAfter;
+  return body;
+}
+
+function parseFirmQuote(data: unknown): Sep38FirmQuote {
+  if (!isRecord(data)) {
+    throw new Sep38ParseError('Invalid SEP-38 /quote response: expected an object');
+  }
+
+  const expiresAtRaw = requireString(data, 'expires_at', '/quote');
+  const expiresAt = new Date(expiresAtRaw);
+  if (Number.isNaN(expiresAt.getTime())) {
+    throw new Sep38ParseError(`SEP-38 /quote "expires_at" is not a valid timestamp: "${expiresAtRaw}"`);
+  }
+
+  const quote: Sep38FirmQuote = {
+    id: requireString(data, 'id', '/quote'),
+    expiresAt,
+    price: requireString(data, 'price', '/quote'),
+    totalPrice: requireString(data, 'total_price', '/quote'),
+    sellAsset: requireString(data, 'sell_asset', '/quote'),
+    sellAmount: requireString(data, 'sell_amount', '/quote'),
+    buyAsset: requireString(data, 'buy_asset', '/quote'),
+    buyAmount: requireString(data, 'buy_amount', '/quote'),
+  };
+
+  const fee = parseFee(data['fee']);
+  if (fee) quote.fee = fee;
+
+  return quote;
+}
+
+/**
+ * Requests a firm quote from the anchor's SEP-38 quote server (POST /quote),
+ * resolving the quote server and SEP-10 JWT from the anchor itself.
+ *
+ * This is the auth-integrated counterpart to {@link postSep38Quote}: it pulls
+ * the JWT from the shared cache via `authenticate` and, on a 401, invalidates
+ * the token and re-authenticates exactly once before retrying. Any other
+ * non-2xx response throws a `SepError` (via `parseSepErrorBody`).
+ */
+export async function requestFirmQuote(
+  anchor: ResolvedAnchor,
+  publicKey: string,
+  params: Sep38FirmQuoteRequest
+): Promise<Sep38FirmQuote> {
+  const quoteServer = getQuoteServer(anchor);
+  const url = `${quoteServer}/quote`;
+  const body = JSON.stringify(toFirmQuoteBody(params));
+
+  const res = await authenticatedRequest(anchor, publicKey, url, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body,
+  });
+
+  if (!res.ok) {
+    throw parseSepErrorBody(await readErrorBody(res), res.status);
+  }
+
+  return parseFirmQuote(await res.json());
+}
+
+/**
+ * Deletes a previously issued firm quote (DELETE /quote/:id), resolving the
+ * quote server and SEP-10 JWT from the anchor.
+ *
+ * The auth-integrated counterpart to {@link deleteSep38Quote}; auto-refreshes
+ * the token once on a 401 and throws a `SepError` on any failure.
+ */
+export async function deleteFirmQuote(
+  anchor: ResolvedAnchor,
+  publicKey: string,
+  quoteId: string
+): Promise<void> {
+  const quoteServer = getQuoteServer(anchor);
+  const url = `${quoteServer}/quote/${encodeURIComponent(quoteId)}`;
+
+  const res = await authenticatedRequest(anchor, publicKey, url, { method: 'DELETE' });
+
+  if (!res.ok) {
+    throw parseSepErrorBody(await readErrorBody(res), res.status);
+  }
 }
 
