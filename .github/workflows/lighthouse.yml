@@ -8,6 +8,15 @@ permissions:
   contents: read
   pull-requests: write
 
+# Applied to every step — `next build` and `next start` both validate these
+# via lib/env.ts, so the server must have them at runtime too, not just at build.
+env:
+  NEXT_PUBLIC_STELLAR_NETWORK: mainnet
+  NEXT_PUBLIC_HORIZON_URL: https://horizon.stellar.org
+  NEXT_PUBLIC_STELLAR_EXPERT_URL: https://api.stellar.expert/explorer/public
+  NEXT_PUBLIC_USDC_ISSUER: GA5ZSEJYB37JRC5AVCIA5MOP4RHTM335X2KGX3IHOJAPP5RE34K4KZVN
+  NEXT_PUBLIC_APP_NAME: Stellar Intel
+
 jobs:
   lighthouse:
     runs-on: ubuntu-latest
@@ -30,6 +39,8 @@ jobs:
           NEXT_PUBLIC_STELLAR_NETWORK: mainnet
           NEXT_PUBLIC_HORIZON_URL: https://horizon.stellar.org
           NEXT_PUBLIC_STELLAR_EXPERT_URL: https://api.stellar.expert/explorer/public
+          NEXT_PUBLIC_USDC_ISSUER: GA5ZSEJYB37JRC5AVCIA5MOP4RHTM335X2KGX3IHOJAPP5RE34K4KZVN
+          NEXT_PUBLIC_APP_NAME: Stellar Intel
 
       - name: Install Lighthouse CI
         run: npm install -g @lhci/cli@0.14.x
@@ -39,18 +50,19 @@ jobs:
         run: |
           npm start &
           SERVER_PID=$!
-          sleep 5
+          # Wait for the server to accept connections before collecting, so
+          # Chrome doesn't hit an interstitial on a not-yet-ready server.
+          for i in $(seq 1 30); do
+            curl -sf http://localhost:3000 >/dev/null && break
+            sleep 2
+          done
 
           lhci collect \
             --url=http://localhost:3000 \
-            --url=http://localhost:3000/yield \
-            --url=http://localhost:3000/swap \
-            --url=http://localhost:3000/onramp \
             --url=http://localhost:3000/offramp \
+            --url=http://localhost:3000/anchors \
             --numberOfRuns=1 \
-            --settings.chromeFlags="--no-sandbox --headless" \
-            --output=jsonExpanded \
-            --outputPath=./lhci-results
+            --settings.chromeFlags="--no-sandbox --headless=new --disable-gpu --disable-dev-shm-usage"
 
           kill $SERVER_PID || true
         env:
@@ -63,8 +75,11 @@ jobs:
             const fs = require('fs');
             const path = require('path');
 
-            const resultsDir = './lhci-results';
-            const files = fs.readdirSync(resultsDir).filter(f => f.endsWith('.json') && !f.includes('manifest'));
+            // lhci collect writes LHRs to .lighthouseci/lhr-*.json by default.
+            const resultsDir = '.lighthouseci';
+            const files = fs.existsSync(resultsDir)
+              ? fs.readdirSync(resultsDir).filter((f) => f.startsWith('lhr') && f.endsWith('.json'))
+              : [];
 
             if (!files.length) {
               console.log('No Lighthouse result files found.');
@@ -81,7 +96,14 @@ jobs:
             for (const file of files) {
               const report = JSON.parse(fs.readFileSync(path.join(resultsDir, file), 'utf8'));
               const cats = report.categories;
-              const url = new URL(report.finalUrl).pathname || '/';
+              const reportUrl =
+                report.finalDisplayedUrl || report.finalUrl || report.requestedUrl || '/';
+              let url = '/';
+              try {
+                url = new URL(reportUrl).pathname || '/';
+              } catch {
+                url = reportUrl;
+              }
               rows += `| \`${url}\` | ${formatScore(cats.performance?.score)} | ${formatScore(cats.accessibility?.score)} | ${formatScore(cats['best-practices']?.score)} | ${formatScore(cats.seo?.score)} |\n`;
             }
 
