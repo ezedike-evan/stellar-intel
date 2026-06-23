@@ -10,8 +10,8 @@ export const NORM_SETTLE_SECONDS = 300;
 export const MIN_SETTLE_SECONDS = 1;
 
 export interface CompositeMetrics {
-  fillRate: number;      // fraction [0, 1]
-  slippage: number;      // fractional slippage [0, 1], e.g. 0.011 for 1.1 %
+  fillRate: number; // fraction [0, 1]
+  slippage: number; // fractional slippage [0, 1], e.g. 0.011 for 1.1 %
   settleSeconds: number; // median settlement time in seconds (positive)
 }
 

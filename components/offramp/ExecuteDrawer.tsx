@@ -1,5 +1,5 @@
 'use client';
-import { useEffect, useRef, useState } from 'react';
+import { useEffect, useRef, useState, type TouchEvent as ReactTouchEvent } from 'react';
 import { authenticate, NetworkMismatchError } from '@/lib/stellar/sep10';
 import { initiateWithdraw, getWithdrawTransactionRecord } from '@/lib/stellar/sep24';
 import { getResolvedAnchorById } from '@/lib/stellar/anchors';
@@ -171,7 +171,7 @@ function ExecuteDrawerContent({
       const anchor = await getResolvedAnchorById(rate.anchorId);
 
       // Step 1 — SEP-10 auth
-      const auth = await authenticate(anchor, publicKey, signal);
+      const auth = await authenticate(anchor, publicKey);
 
       // Step 2 — Initiate SEP-24 withdraw
       setStep('initiating');
@@ -272,12 +272,16 @@ function ExecuteDrawerContent({
   // handle is hidden at ≥640px (sm:hidden), so this never fires on the desktop
   // side-panel layout.
   const handleSwipeStart = (event: ReactTouchEvent) => {
-    touchStartY.current = event.touches[0].clientY;
+    const touch = event.touches[0];
+    if (!touch) return;
+    touchStartY.current = touch.clientY;
   };
 
   const handleSwipeMove = (event: ReactTouchEvent) => {
     if (touchStartY.current === null) return;
-    const delta = event.touches[0].clientY - touchStartY.current;
+    const touch = event.touches[0];
+    if (!touch) return;
+    const delta = touch.clientY - touchStartY.current;
     setDragOffset(delta > 0 ? delta : 0); // only track downward drags
   };
 

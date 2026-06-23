@@ -16,26 +16,26 @@
 
 export interface ErrorContext {
   /** Arbitrary key/value pairs forwarded to the reporter as extra context. */
-  [key: string]: unknown
+  [key: string]: unknown;
 }
 
 export interface ErrorReporter {
-  reportError(error: Error, context?: ErrorContext): void
+  reportError(error: Error, context?: ErrorContext): void;
 }
 
 /** No-op reporter used until a real one is configured. */
 const noopReporter: ErrorReporter = {
   reportError: () => undefined,
-}
+};
 
-let activeReporter: ErrorReporter = noopReporter
+let activeReporter: ErrorReporter = noopReporter;
 
 /**
  * Replace the active reporter with a custom implementation.
  * Call this once during app initialisation (e.g. in `instrumentation.ts`).
  */
 export function configureReporter(reporter: ErrorReporter): void {
-  activeReporter = reporter
+  activeReporter = reporter;
 }
 
 /**
@@ -43,7 +43,7 @@ export function configureReporter(reporter: ErrorReporter): void {
  * Safe to call anywhere — falls back to a no-op when no reporter is set.
  */
 export function reportError(error: Error, context?: ErrorContext): void {
-  activeReporter.reportError(error, context)
+  activeReporter.reportError(error, context);
 }
 
 /**
@@ -51,5 +51,5 @@ export function reportError(error: Error, context?: ErrorContext): void {
  * between test cases.
  */
 export function resetReporter(): void {
-  activeReporter = noopReporter
+  activeReporter = noopReporter;
 }

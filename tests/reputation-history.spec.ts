@@ -6,6 +6,9 @@ import type { OutcomeRow } from '@/lib/reputation/aggregate';
 
 const NOW = Date.parse('2026-06-04T12:00:00.000Z');
 const hoursAgo = (h: number) => NOW - h * 3_600_000;
+// The GET route filters against the real wall clock, so its seed data must be
+// anchored to Date.now() rather than the fixed NOW used by the pure-unit tests.
+const recentHoursAgo = (h: number) => Date.now() - h * 3_600_000;
 
 function row(over: Partial<OutcomeRow> = {}): OutcomeRow {
   return {
@@ -58,7 +61,10 @@ describe('getHistoryBuckets', () => {
 
 describe('GET /api/reputation/[anchor]/history', () => {
   it('returns a schema-valid bucketed history for a known anchor', async () => {
-    _seedOutcomeStore([row({ recordedAt: hoursAgo(1) }), row({ recordedAt: hoursAgo(3) })]);
+    _seedOutcomeStore([
+      row({ recordedAt: recentHoursAgo(1) }),
+      row({ recordedAt: recentHoursAgo(3) }),
+    ]);
 
     const res = await GET(historyRequest('cowrie', '7d'), { params: { anchor: 'cowrie' } });
     expect(res.status).toBe(200);
@@ -66,7 +72,9 @@ describe('GET /api/reputation/[anchor]/history', () => {
     const body = await res.json();
     expect(() => HistoryResponseSchema.parse(body)).not.toThrow();
     expect(body.window).toBe('7d');
-    expect(body.buckets.reduce((n: number, b: { sampleCount: number }) => n + b.sampleCount, 0)).toBe(2);
+    expect(
+      body.buckets.reduce((n: number, b: { sampleCount: number }) => n + b.sampleCount, 0)
+    ).toBe(2);
   });
 
   it('defaults to the 30d window when none is supplied', async () => {

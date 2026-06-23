@@ -6,8 +6,15 @@
  *   - solveWithFallback: rate-based fallback re-solve across SEP-24 anchors (issue #215)
  */
 
-import { fetchAllAnchorFees, computeRateComparison } from '@/lib/stellar/sep24'
-import type { AnchorRate, EvaluatedQuote, Intent, Plan, RateComparison, SolverResult } from '@/types'
+import { fetchAllAnchorFees, computeRateComparison } from '@/lib/stellar/sep24';
+import type {
+  AnchorRate,
+  EvaluatedQuote,
+  Intent,
+  Plan,
+  RateComparison,
+  SolverResult,
+} from '@/types';
 
 // ─── solveSingleAnchor ────────────────────────────────────────────────────────
 
@@ -19,88 +26,107 @@ import type { AnchorRate, EvaluatedQuote, Intent, Plan, RateComparison, SolverRe
  * large financial amounts.
  */
 function compareDecimals(a: string, b: string): number {
-  const SCALE = 10_000_000n
+  // Convert a decimal string — including scientific notation like "1.5e3" — to a
+  // fixed-point bigint scaled to 7 decimal places, avoiding float precision loss.
   const toBigInt = (s: string): bigint => {
-    const [int = '0', frac = ''] = s.split('.')
-    const fracPadded = frac.slice(0, 7).padEnd(7, '0')
-    return BigInt(int) * SCALE + BigInt(fracPadded)
-  }
-  const bigA = toBigInt(a)
-  const bigB = toBigInt(b)
-  if (bigA < bigB) return -1
-  if (bigA > bigB) return 1
-  return 0
+    let str = s.trim();
+    let sign = 1n;
+    if (str.startsWith('-')) {
+      sign = -1n;
+      str = str.slice(1);
+    } else if (str.startsWith('+')) {
+      str = str.slice(1);
+    }
+
+    let exp = 0;
+    const eIdx = str.search(/[eE]/);
+    if (eIdx !== -1) {
+      exp = parseInt(str.slice(eIdx + 1), 10) || 0;
+      str = str.slice(0, eIdx);
+    }
+
+    const [intPart = '0', fracPart = ''] = str.split('.');
+    const digits = `${intPart}${fracPart}`.replace(/\D/g, '') || '0';
+    // Digits to the right of the decimal point after applying the exponent.
+    const pointFromRight = fracPart.length - exp;
+    const shift = 7 - pointFromRight; // scale to 7 decimal places
+    const magnitude =
+      shift >= 0 ? BigInt(digits) * 10n ** BigInt(shift) : BigInt(digits) / 10n ** BigInt(-shift);
+    return sign * magnitude;
+  };
+  const bigA = toBigInt(a);
+  const bigB = toBigInt(b);
+  if (bigA < bigB) return -1;
+  if (bigA > bigB) return 1;
+  return 0;
 }
 
 function meetsFloor(quote: EvaluatedQuote, intent: Intent): boolean {
-  return compareDecimals(quote.buy_amount, intent.minReceive) >= 0
+  return compareDecimals(quote.buy_amount, intent.minReceive) >= 0;
 }
 
 function isDeadlineExpired(deadline: string): boolean {
-  return new Date(deadline).getTime() <= Date.now()
+  return new Date(deadline).getTime() <= Date.now();
 }
 
 function isQuoteExpired(expiresAt: string): boolean {
-  return new Date(expiresAt).getTime() <= Date.now()
+  return new Date(expiresAt).getTime() <= Date.now();
 }
 
 /**
  * Selects the best single-anchor SEP-38 quote that meets the intent's floor
  * and deadline constraints. Returns a typed discriminated-union result.
  */
-export function solveSingleAnchor(
-  intent: Intent,
-  evaluatedQuotes: EvaluatedQuote[]
-): SolverResult {
+export function solveSingleAnchor(intent: Intent, evaluatedQuotes: EvaluatedQuote[]): SolverResult {
   if (isDeadlineExpired(intent.deadline)) {
     return {
       ok: false,
       error: 'all_quotes_expired',
       details: `Intent deadline ${intent.deadline} has already passed`,
-    }
+    };
   }
 
-  const validQuotes: EvaluatedQuote[] = []
-  const expiredQuotes: EvaluatedQuote[] = []
-  const floorViolations: EvaluatedQuote[] = []
+  const validQuotes: EvaluatedQuote[] = [];
+  const expiredQuotes: EvaluatedQuote[] = [];
+  const floorViolations: EvaluatedQuote[] = [];
 
   for (const quote of evaluatedQuotes) {
     if (isQuoteExpired(quote.expires_at)) {
-      expiredQuotes.push(quote)
+      expiredQuotes.push(quote);
     } else if (!meetsFloor(quote, intent)) {
-      floorViolations.push(quote)
+      floorViolations.push(quote);
     } else {
-      validQuotes.push(quote)
+      validQuotes.push(quote);
     }
   }
 
   if (validQuotes.length === 0) {
     if (evaluatedQuotes.length === 0) {
-      return { ok: false, error: 'no_eligible_route' }
+      return { ok: false, error: 'no_eligible_route' };
     }
     if (expiredQuotes.length === evaluatedQuotes.length) {
       return {
         ok: false,
         error: 'all_quotes_expired',
         details: `All ${evaluatedQuotes.length} quote(s) have expired`,
-      }
+      };
     }
     if (floorViolations.length > 0) {
       const detail = floorViolations
         .map((q) => `${q.anchorName}: ${q.buy_amount} < ${intent.minReceive}`)
-        .join('; ')
+        .join('; ');
       return {
         ok: false,
         error: 'floor_not_met',
         details: `No quotes meet minimum receive of ${intent.minReceive}. ${detail}`,
-      }
+      };
     }
-    return { ok: false, error: 'no_eligible_route' }
+    return { ok: false, error: 'no_eligible_route' };
   }
 
   const bestQuote = validQuotes.reduce((best, current) =>
     compareDecimals(current.buy_amount, best.buy_amount) > 0 ? current : best
-  )
+  );
 
   const plan: Plan = {
     type: 'single_anchor',
@@ -110,9 +136,9 @@ export function solveSingleAnchor(
     netAmount: bestQuote.buy_amount,
     fee: bestQuote.fee.total,
     price: bestQuote.price,
-  }
+  };
 
-  return { ok: true, plan }
+  return { ok: true, plan };
 }
 
 export class NoEligibleRouteError extends Error {
@@ -120,35 +146,35 @@ export class NoEligibleRouteError extends Error {
     public code: 'no_eligible_route' | 'floor_not_met' | 'all_quotes_expired',
     message: string
   ) {
-    super(message)
-    this.name = 'NoEligibleRouteError'
+    super(message);
+    this.name = 'NoEligibleRouteError';
   }
 }
 
 export function throwIfNoRoute(result: SolverResult): Plan {
-  if (result.ok) return result.plan
-  const details = 'details' in result ? ` (${result.details})` : ''
-  throw new NoEligibleRouteError(result.error, `${result.error}${details}`)
+  if (result.ok) return result.plan;
+  const details = 'details' in result ? ` (${result.details})` : '';
+  throw new NoEligibleRouteError(result.error, `${result.error}${details}`);
 }
 
 // ─── solveWithFallback ────────────────────────────────────────────────────────
 
 /** Maximum number of fallback re-solve attempts after the primary anchor fails. */
-export const MAX_FALLBACK_ATTEMPTS = 2
+export const MAX_FALLBACK_ATTEMPTS = 2;
 
-export type QuoteRejectionReason = 'expired' | 'rejected' | 'unavailable'
+export type QuoteRejectionReason = 'expired' | 'rejected' | 'unavailable';
 
 export interface SolveAttempt {
-  anchorId: string
-  succeeded: boolean
-  rejectionReason?: QuoteRejectionReason
-  attemptedAt: string
+  anchorId: string;
+  succeeded: boolean;
+  rejectionReason?: QuoteRejectionReason;
+  attemptedAt: string;
 }
 
 export interface SolveResult {
-  winner: AnchorRate | null
-  comparison: RateComparison | null
-  attempts: SolveAttempt[]
+  winner: AnchorRate | null;
+  comparison: RateComparison | null;
+  attempts: SolveAttempt[];
 }
 
 async function fetchBestRate(
@@ -156,22 +182,22 @@ async function fetchBestRate(
   amount: string,
   excludeIds: Set<string>
 ): Promise<{ winner: AnchorRate; comparison: RateComparison } | null> {
-  const settled = await fetchAllAnchorFees(amount, corridorId)
+  const settled = await fetchAllAnchorFees(amount, corridorId);
 
   const filtered = settled.map((result): PromiseSettledResult<AnchorRate> => {
     if (result.status === 'fulfilled' && excludeIds.has(result.value.anchorId)) {
-      return { status: 'rejected', reason: new Error(`Anchor ${result.value.anchorId} excluded`) }
+      return { status: 'rejected', reason: new Error(`Anchor ${result.value.anchorId} excluded`) };
     }
-    return result
-  })
+    return result;
+  });
 
-  const comparison = computeRateComparison(filtered, corridorId)
-  if (!comparison.bestRateId) return null
+  const comparison = computeRateComparison(filtered, corridorId);
+  if (!comparison.bestRateId) return null;
 
-  const winner = comparison.rates.find((r) => r.anchorId === comparison.bestRateId)
-  if (!winner) return null
+  const winner = comparison.rates.find((r) => r.anchorId === comparison.bestRateId);
+  if (!winner) return null;
 
-  return { winner, comparison }
+  return { winner, comparison };
 }
 
 /**
@@ -184,28 +210,28 @@ export async function solveWithFallback(
   amount: string,
   isRejected: (rate: AnchorRate) => boolean = () => false
 ): Promise<SolveResult> {
-  const attempts: SolveAttempt[] = []
-  const excludeIds = new Set<string>()
-  const maxRounds = 1 + MAX_FALLBACK_ATTEMPTS
+  const attempts: SolveAttempt[] = [];
+  const excludeIds = new Set<string>();
+  const maxRounds = 1 + MAX_FALLBACK_ATTEMPTS;
 
   for (let round = 0; round < maxRounds; round++) {
-    const result = await fetchBestRate(corridorId, amount, excludeIds)
-    if (!result) break
+    const result = await fetchBestRate(corridorId, amount, excludeIds);
+    if (!result) break;
 
-    const { winner, comparison } = result
-    const rejected = isRejected(winner)
+    const { winner, comparison } = result;
+    const rejected = isRejected(winner);
 
     attempts.push({
       anchorId: winner.anchorId,
       succeeded: !rejected,
       ...(rejected && { rejectionReason: 'rejected' as QuoteRejectionReason }),
       attemptedAt: new Date().toISOString(),
-    })
+    });
 
-    if (!rejected) return { winner, comparison, attempts }
+    if (!rejected) return { winner, comparison, attempts };
 
-    excludeIds.add(winner.anchorId)
+    excludeIds.add(winner.anchorId);
   }
 
-  return { winner: null, comparison: null, attempts }
+  return { winner: null, comparison: null, attempts };
 }
