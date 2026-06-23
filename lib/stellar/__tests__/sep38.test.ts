@@ -10,6 +10,9 @@ function makeToml(overrides: Partial<Sep1TomlData> = {}): Sep1TomlData {
     WEB_AUTH_ENDPOINT: null,
     SIGNING_KEY: null,
     NETWORK_PASSPHRASE: null,
+    ORG_URL: null,
+    ORG_SUPPORT_EMAIL: null,
+    ORG_SUPPORT_URL: null,
     CURRENCIES: [],
     capabilities: { sep10: false, sep24: false, sep38: false, sep12: false },
     ...overrides,
@@ -25,7 +28,9 @@ describe('assertSep38Capable', () => {
   });
 
   it('throws when ANCHOR_QUOTE_SERVER is null even if flag is true', () => {
-    const toml = makeToml({ capabilities: { sep10: false, sep24: false, sep38: true, sep12: false } });
+    const toml = makeToml({
+      capabilities: { sep10: false, sep24: false, sep38: true, sep12: false },
+    });
     expect(() => assertSep38Capable(toml)).toThrow('cannot be used for SEP-38');
   });
 

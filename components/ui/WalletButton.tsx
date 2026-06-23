@@ -1,10 +1,10 @@
-'use client'
-import { useWallet } from '@/contexts/WalletContext'
-import { truncatePublicKey } from '@/lib/utils'
-import { Button } from './Button'
+'use client';
+import { useWallet } from '@/contexts/WalletContext';
+import { truncatePublicKey } from '@/lib/utils';
+import { Button } from './Button';
 
 export function WalletButton() {
-  const { isInstalled, isConnected, publicKey, network, connect, error } = useWallet()
+  const { isInstalled, isConnected, publicKey, network, connect, error } = useWallet();
 
   // State 1: not-detected — Freighter extension is not installed
   if (!isInstalled) {
@@ -17,7 +17,7 @@ export function WalletButton() {
       >
         Install Freighter
       </a>
-    )
+    );
   }
 
   // State 2: disconnected — extension present, wallet not connected
@@ -33,7 +33,7 @@ export function WalletButton() {
           </p>
         )}
       </div>
-    )
+    );
   }
 
   // State 3: wrong-network — connected but not on Mainnet
@@ -60,7 +60,7 @@ export function WalletButton() {
           </a>
         </p>
       </div>
-    )
+    );
   }
 
   // State 4: connected — on Mainnet with a valid public key
@@ -73,5 +73,5 @@ export function WalletButton() {
         Mainnet
       </span>
     </div>
-  )
+  );
 }

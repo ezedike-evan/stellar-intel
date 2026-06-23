@@ -51,7 +51,7 @@ export function TrustBar({ scores, corridor, onAnchorClick }: TrustBarProps) {
 interface TrustBarItemProps {
   score: AnchorTrustScore;
   rank: number;
-  onClick?: (anchorId: string) => void;
+  onClick?: ((anchorId: string) => void) | undefined;
 }
 
 function TrustBarItem({ score, rank, onClick }: TrustBarItemProps) {

@@ -1,5 +1,5 @@
 'use client';
-import { useState, useCallback, useEffect } from 'react';
+import { Suspense, useState, useCallback, useEffect } from 'react';
 import { useRouter, useSearchParams } from 'next/navigation';
 import { TERMINAL_STATES } from '@/lib/stellar/sep24';
 import {
@@ -21,7 +21,7 @@ import { useWallet } from '@/contexts/WalletContext';
 import { useWithdrawStatus } from '@/hooks/useWithdrawStatus';
 import type { AnchorRate } from '@/types';
 
-export default function OfframpPage() {
+function OfframpContent() {
   const router = useRouter();
   const searchParams = useSearchParams();
 
@@ -29,11 +29,11 @@ export default function OfframpPage() {
   const [amount, setAmount] = useState('100');
   const [selectedRate, setSelectedRate] = useState<AnchorRate | null>(null);
 
-  const [trackingTransactionId, setTrackingTransactionId] = useState<string | null>(null)
-  const [trackingTransferServer, setTrackingTransferServer] = useState<string | null>(null)
-  const [trackingJwt, setTrackingJwt] = useState<string | null>(null)
-  const [trackingNonce, setTrackingNonce] = useState<string | null>(null)
-  const [trackingAnchorHomeDomain, setTrackingAnchorHomeDomain] = useState<string | null>(null)
+  const [trackingTransactionId, setTrackingTransactionId] = useState<string | null>(null);
+  const [trackingTransferServer, setTrackingTransferServer] = useState<string | null>(null);
+  const [trackingJwt, setTrackingJwt] = useState<string | null>(null);
+  const [trackingNonce, setTrackingNonce] = useState<string | null>(null);
+  const [trackingAnchorHomeDomain, setTrackingAnchorHomeDomain] = useState<string | null>(null);
 
   const { isConnected, publicKey, network } = useWallet();
   const { rates, isLoading, error, mutate, refreshInflight } = useAnchorRates(corridorId, amount);
@@ -45,16 +45,16 @@ export default function OfframpPage() {
   );
 
   useEffect(() => {
-    const params = parseTrackingParams(searchParams.toString())
-    if (!params) return
-    const jwt = loadJwtFromSession(params.nonce)
-    if (!jwt) return
-    setTrackingTransactionId(params.transactionId)
-    setTrackingTransferServer(params.transferServer)
-    setTrackingJwt(jwt)
-    setTrackingNonce(params.nonce)
+    const params = parseTrackingParams(searchParams.toString());
+    if (!params) return;
+    const jwt = loadJwtFromSession(params.nonce);
+    if (!jwt) return;
+    setTrackingTransactionId(params.transactionId);
+    setTrackingTransferServer(params.transferServer);
+    setTrackingJwt(jwt);
+    setTrackingNonce(params.nonce);
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [])
+  }, []);
 
   const handleSelectAnchor = useCallback((rate: AnchorRate) => {
     setSelectedRate(rate);
@@ -66,14 +66,14 @@ export default function OfframpPage() {
 
   const handleExecuteStarted = useCallback(
     (transactionId: string, transferServer: string, jwt: string, anchorHomeDomain: string) => {
-      const nonce = generateNonce()
-      saveJwtToSession(nonce, jwt)
-      router.replace(`?${buildTrackingSearch({ transactionId, transferServer, nonce })}`)
-      setTrackingTransactionId(transactionId)
-      setTrackingTransferServer(transferServer)
-      setTrackingJwt(jwt)
-      setTrackingNonce(nonce)
-      setTrackingAnchorHomeDomain(anchorHomeDomain)
+      const nonce = generateNonce();
+      saveJwtToSession(nonce, jwt);
+      router.replace(`?${buildTrackingSearch({ transactionId, transferServer, nonce })}`);
+      setTrackingTransactionId(transactionId);
+      setTrackingTransferServer(transferServer);
+      setTrackingJwt(jwt);
+      setTrackingNonce(nonce);
+      setTrackingAnchorHomeDomain(anchorHomeDomain);
     },
     [router]
   );
@@ -140,7 +140,6 @@ export default function OfframpPage() {
           error={error}
           onSelectAnchor={handleSelectAnchor}
           executeDisabled={network !== 'PUBLIC'}
-          onRefresh={() => mutate()}
         />
       </div>
 
@@ -171,5 +170,13 @@ export default function OfframpPage() {
         onExecuteStarted={handleExecuteStarted}
       />
     </div>
+  );
+}
+
+export default function OfframpPage() {
+  return (
+    <Suspense fallback={<div className="mx-auto max-w-4xl space-y-6 px-4 py-8" />}>
+      <OfframpContent />
+    </Suspense>
   );
 }

@@ -1,35 +1,35 @@
-'use client'
+'use client';
 
-import { useState, useEffect } from 'react'
-import type { AnchorRate } from '@/types'
+import { useState, useEffect } from 'react';
+import type { AnchorRate } from '@/types';
 
 export interface QuotePillProps {
-  source: AnchorRate['source']
-  expiresAt?: Date | undefined
-  onExpire?: () => void
+  source: AnchorRate['source'];
+  expiresAt?: Date | undefined;
+  onExpire?: () => void;
 }
 
 export function QuotePill({ source, expiresAt, onExpire }: QuotePillProps) {
   const [timeLeft, setTimeLeft] = useState<number>(() => {
-    if (!expiresAt) return 0
-    return Math.max(0, Math.floor((expiresAt.getTime() - Date.now()) / 1000))
-  })
+    if (!expiresAt) return 0;
+    return Math.max(0, Math.floor((expiresAt.getTime() - Date.now()) / 1000));
+  });
 
   useEffect(() => {
-    if (source !== 'sep38' || !expiresAt) return
+    if (source !== 'sep38' || !expiresAt) return;
 
     const interval = setInterval(() => {
-      const remaining = Math.max(0, Math.floor((expiresAt.getTime() - Date.now()) / 1000))
-      setTimeLeft(remaining)
+      const remaining = Math.max(0, Math.floor((expiresAt.getTime() - Date.now()) / 1000));
+      setTimeLeft(remaining);
 
       if (remaining === 0) {
-        clearInterval(interval)
-        onExpire?.()
+        clearInterval(interval);
+        onExpire?.();
       }
-    }, 1000)
+    }, 1000);
 
-    return () => clearInterval(interval)
-  }, [source, expiresAt, onExpire])
+    return () => clearInterval(interval);
+  }, [source, expiresAt, onExpire]);
 
   if (source === 'unavailable') {
     return (
@@ -40,7 +40,7 @@ export function QuotePill({ source, expiresAt, onExpire }: QuotePillProps) {
       >
         Unavailable
       </span>
-    )
+    );
   }
 
   if (source === 'sep38') {
@@ -53,7 +53,7 @@ export function QuotePill({ source, expiresAt, onExpire }: QuotePillProps) {
         >
           Unavailable
         </span>
-      )
+      );
     }
 
     return (
@@ -65,7 +65,7 @@ export function QuotePill({ source, expiresAt, onExpire }: QuotePillProps) {
       >
         Firm &middot; {timeLeft}s left
       </span>
-    )
+    );
   }
 
   // default to indicative
@@ -77,5 +77,5 @@ export function QuotePill({ source, expiresAt, onExpire }: QuotePillProps) {
     >
       Indicative
     </span>
-  )
+  );
 }

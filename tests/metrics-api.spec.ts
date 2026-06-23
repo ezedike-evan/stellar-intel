@@ -31,7 +31,9 @@ describe('GET /api/metrics', () => {
 describe('POST /api/metrics', () => {
   it('ingests a per-anchor client sample into the histogram', async () => {
     for (let ms = 10; ms <= 30; ms += 10) {
-      const res = await POST(postSample({ name: 'quote_fetch_latency', durationMs: ms, anchorId: 'a1' }));
+      const res = await POST(
+        postSample({ name: 'quote_fetch_latency', durationMs: ms, anchorId: 'a1' })
+      );
       expect(res.status).toBe(200);
     }
 

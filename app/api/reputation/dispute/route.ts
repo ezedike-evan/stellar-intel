@@ -78,7 +78,10 @@ export async function POST(request: NextRequest): Promise<NextResponse> {
     if (!parsed.success) {
       logger.warn({ event: 'validation_failed', issues: parsed.error.issues });
       return NextResponse.json<ApiError>(
-        { code: 'VALIDATION_ERROR', message: parsed.error.issues[0]?.message ?? 'Validation failed' },
+        {
+          code: 'VALIDATION_ERROR',
+          message: parsed.error.issues[0]?.message ?? 'Validation failed',
+        },
         { status: 422 }
       );
     }
@@ -127,5 +130,5 @@ export async function POST(request: NextRequest): Promise<NextResponse> {
 
     logger.info({ event: 'dispute_created', disputeId: record.id });
     return NextResponse.json(record, { status: 201 });
-  })
+  });
 }
