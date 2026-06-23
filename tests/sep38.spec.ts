@@ -4,9 +4,7 @@ import * as path from 'path';
 
 // Load fixtures
 const loadFixture = (name: string) => {
-  return JSON.parse(
-    fs.readFileSync(path.join(__dirname, 'fixtures/sep38', name), 'utf-8')
-  );
+  return JSON.parse(fs.readFileSync(path.join(__dirname, 'fixtures/sep38', name), 'utf-8'));
 };
 
 const infoFixture = loadFixture('info.json');

@@ -1,17 +1,16 @@
 'use client';
 
 import { useRouter, useSearchParams } from 'next/navigation';
-import { useCallback } from 'react';
+import { Suspense, useCallback } from 'react';
 import { CORRIDORS } from '@/constants';
 import { Leaderboard } from '@/components/offramp/Leaderboard';
 
-export default function AnchorsPage() {
+function AnchorsContent() {
   const router = useRouter();
   const searchParams = useSearchParams();
 
   const corridorParam = searchParams.get('corridor');
-  const activeCorridor =
-    CORRIDORS.find((c) => c.id === corridorParam) ?? CORRIDORS[0];
+  const activeCorridor = CORRIDORS.find((c) => c.id === corridorParam) ?? CORRIDORS[0];
 
   const selectCorridor = useCallback(
     (id: string) => {
@@ -21,6 +20,10 @@ export default function AnchorsPage() {
     },
     [router, searchParams]
   );
+
+  // CORRIDORS is a non-empty constant, so this never triggers — it narrows
+  // `activeCorridor` from `Corridor | undefined` to `Corridor` for the type checker.
+  if (!activeCorridor) return null;
 
   return (
     <main className="mx-auto max-w-3xl px-4 py-8">
@@ -49,5 +52,13 @@ export default function AnchorsPage() {
 
       <Leaderboard corridor={activeCorridor} />
     </main>
+  );
+}
+
+export default function AnchorsPage() {
+  return (
+    <Suspense fallback={<main className="mx-auto max-w-3xl px-4 py-8" />}>
+      <AnchorsContent />
+    </Suspense>
   );
 }

@@ -1,9 +1,3 @@
-/**
- * MCP tool: intel.offramp.quote (#135)
- *
- * Thin MCP-registration wrapper around the framework-free core in
- * lib/mcp/offramp.ts. Returns the best net-received quote for a corridor.
- */
 import type { McpServer } from '@modelcontextprotocol/sdk/server/mcp.js';
 import { z } from 'zod';
 import { getQuote, OfframpToolError } from '@/lib/mcp/offramp';
@@ -44,6 +38,6 @@ export function registerQuoteTool(server: McpServer): void {
           content: [{ type: 'text', text: message }],
         };
       }
-    },
+    }
   );
 }

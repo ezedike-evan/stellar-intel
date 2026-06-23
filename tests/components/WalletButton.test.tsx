@@ -1,11 +1,11 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest';
 import { render, screen, fireEvent } from '@testing-library/react';
 import { WalletButton } from '@/components/ui/WalletButton';
-import * as useFreighterModule from '@/hooks/useFreighter';
+import * as WalletContextModule from '@/contexts/WalletContext';
 
-vi.mock('@/hooks/useFreighter');
+vi.mock('@/contexts/WalletContext');
 
-const mockUseFreighter = vi.mocked(useFreighterModule.useFreighter);
+const mockUseWallet = vi.mocked(WalletContextModule.useWallet);
 
 const base = {
   isInstalled: false,
@@ -21,27 +21,27 @@ beforeEach(() => vi.clearAllMocks());
 
 describe('WalletButton', () => {
   it('renders "Install Freighter" when isInstalled is false', () => {
-    mockUseFreighter.mockReturnValue({ ...base, isInstalled: false });
+    mockUseWallet.mockReturnValue({ ...base, isInstalled: false });
     render(<WalletButton />);
     expect(screen.getByText('Install Freighter')).toBeInTheDocument();
   });
 
   it('renders "Connect Wallet" button when installed but not connected', () => {
-    mockUseFreighter.mockReturnValue({ ...base, isInstalled: true, isConnected: false });
+    mockUseWallet.mockReturnValue({ ...base, isInstalled: true, isConnected: false });
     render(<WalletButton />);
     expect(screen.getByText('Connect Wallet')).toBeInTheDocument();
   });
 
   it('clicking "Connect Wallet" calls the connect() function', () => {
     const connect = vi.fn();
-    mockUseFreighter.mockReturnValue({ ...base, isInstalled: true, isConnected: false, connect });
+    mockUseWallet.mockReturnValue({ ...base, isInstalled: true, isConnected: false, connect });
     render(<WalletButton />);
     fireEvent.click(screen.getByText('Connect Wallet'));
     expect(connect).toHaveBeenCalledOnce();
   });
 
   it('renders the truncated public key when connected', () => {
-    mockUseFreighter.mockReturnValue({
+    mockUseWallet.mockReturnValue({
       ...base,
       isInstalled: true,
       isConnected: true,
@@ -54,7 +54,7 @@ describe('WalletButton', () => {
   });
 
   it('renders the error message when the hook exposes an error', () => {
-    mockUseFreighter.mockReturnValue({
+    mockUseWallet.mockReturnValue({
       ...base,
       isInstalled: true,
       isConnected: false,

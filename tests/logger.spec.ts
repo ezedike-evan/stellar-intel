@@ -8,8 +8,10 @@ function makeRequest(headers: Record<string, string> = {}): NextRequest {
 
 describe('withRequestLogger', () => {
   it('echoes a provided x-correlation-id back on the response', async () => {
-    const res = await withRequestLogger(makeRequest({ 'x-correlation-id': 'abc-123' }), 'api.test', async () =>
-      NextResponse.json({ ok: true })
+    const res = await withRequestLogger(
+      makeRequest({ 'x-correlation-id': 'abc-123' }),
+      'api.test',
+      async () => NextResponse.json({ ok: true })
     );
 
     expect(res.headers.get('x-correlation-id')).toBe('abc-123');
@@ -36,9 +38,13 @@ describe('withRequestLogger', () => {
   });
 
   it('logs and returns a 500 (with correlation id) when the handler throws', async () => {
-    const res = await withRequestLogger(makeRequest({ 'x-correlation-id': 'boom-1' }), 'api.test', async () => {
-      throw new Error('handler exploded');
-    });
+    const res = await withRequestLogger(
+      makeRequest({ 'x-correlation-id': 'boom-1' }),
+      'api.test',
+      async () => {
+        throw new Error('handler exploded');
+      }
+    );
 
     expect(res.status).toBe(500);
     expect(res.headers.get('x-correlation-id')).toBe('boom-1');
