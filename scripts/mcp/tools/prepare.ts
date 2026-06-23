@@ -1,9 +1,3 @@
-/**
- * MCP tool: intel.offramp.prepare (#136)
- *
- * Returns an unsigned intent envelope + unsigned Stellar transaction for an
- * agent to sign. Thin wrapper around the core in lib/mcp/offramp.ts.
- */
 import type { McpServer } from '@modelcontextprotocol/sdk/server/mcp.js';
 import { z } from 'zod';
 import { prepareIntent, OfframpToolError } from '@/lib/mcp/offramp';
@@ -47,6 +41,6 @@ export function registerPrepareTool(server: McpServer): void {
           content: [{ type: 'text', text: message }],
         };
       }
-    },
+    }
   );
 }

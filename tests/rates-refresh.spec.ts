@@ -5,9 +5,9 @@
  * near-expiry watcher — both honour document visibility and the pause signal
  * that hiding the tab produces.
  *
- * The hook sources its data from the client-side rates engine
- * (`fetchRates`), so the engine is mocked and refresh activity is asserted by
- * counting calls to it.
+ * The hook sources its data from the server-side rates proxy via global
+ * `fetch` (`GET /api/rates/[corridor]`), so fetch is mocked (as `ratesMock`)
+ * and refresh activity is asserted by counting calls to it.
  */
 
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
@@ -21,13 +21,10 @@ import {
   EXPIRY_POLL_INTERVAL_MS,
 } from '@/hooks/useAnchorRates';
 import type { RateComparison } from '@/types';
-import { fetchRates } from '@/lib/stellar/rates-engine';
 
-vi.mock('@/lib/stellar/rates-engine', () => ({
-  fetchRates: vi.fn(),
-}));
-
-const ratesMock = vi.mocked(fetchRates);
+// Stands in for global fetch; each refresh is one call, so the visibility
+// assertions count `ratesMock` exactly as before.
+const ratesMock = vi.fn();
 
 // ─── Helpers ────────────────────────────────────────────────────────────────
 
@@ -67,9 +64,12 @@ function makeMockRates(updatedAt: Date): RateComparison {
   };
 }
 
-/** Make the engine resolve with quotes carrying the given freshness. */
+/** Make fetch resolve with quotes carrying the given freshness. */
 function resolveWith(updatedAt: Date): void {
-  ratesMock.mockResolvedValue(makeMockRates(updatedAt));
+  ratesMock.mockResolvedValue({
+    ok: true,
+    json: async () => makeMockRates(updatedAt),
+  } as unknown as Response);
 }
 
 function setDocumentHidden(hidden: boolean): void {
@@ -94,11 +94,13 @@ async function flushMicrotasks(): Promise<void> {
 beforeEach(() => {
   vi.restoreAllMocks();
   ratesMock.mockReset();
+  vi.stubGlobal('fetch', ratesMock);
   setDocumentHidden(false);
 });
 
 afterEach(() => {
   vi.useRealTimers();
+  vi.unstubAllGlobals();
   setDocumentHidden(false);
 });
 
@@ -212,9 +214,7 @@ describe('rates refresh — near-expiry watcher respects visibility', () => {
       ratesMock.mockClear();
 
       // Wait 3 poll cycles — watcher must not fire while hidden
-      await new Promise((resolve) =>
-        setTimeout(resolve, EXPIRY_POLL_INTERVAL_MS * 3 + 100)
-      );
+      await new Promise((resolve) => setTimeout(resolve, EXPIRY_POLL_INTERVAL_MS * 3 + 100));
 
       expect(ratesMock).not.toHaveBeenCalled();
     },

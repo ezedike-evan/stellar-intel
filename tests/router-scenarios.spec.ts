@@ -1,22 +1,22 @@
-import { describe, it, expect } from 'vitest'
-import { computeRateComparison } from '@/lib/stellar/sep24'
-import { computeTotalReceived } from '@/lib/utils'
-import type { AnchorRate } from '@/types'
+import { describe, it, expect } from 'vitest';
+import { computeRateComparison } from '@/lib/stellar/sep24';
+import { computeTotalReceived } from '@/lib/utils';
+import type { AnchorRate } from '@/types';
 
 type QuoteScenario = {
-  name: string
-  amount: number
+  name: string;
+  amount: number;
   quotes: Array<{
-    anchorId: string
-    fee: number
-    feePercent: number
-    exchangeRate: number
-    status?: 'fulfilled' | 'rejected'
-    reason?: Error
-  }>
-  expectedBestRateId: string
-  expectedFulfilledCount: number
-}
+    anchorId: string;
+    fee: number;
+    feePercent: number;
+    exchangeRate: number;
+    status?: 'fulfilled' | 'rejected';
+    reason?: Error;
+  }>;
+  expectedBestRateId: string;
+  expectedFulfilledCount: number;
+};
 
 function buildQuoteResult(
   amount: number,
@@ -41,13 +41,13 @@ function buildQuoteResult(
         source: 'sep24-fee',
         updatedAt: new Date(),
       },
-    }
+    };
   }
 
   return {
     status: 'rejected',
     reason,
-  }
+  };
 }
 
 const scenarios: QuoteScenario[] = [
@@ -77,7 +77,14 @@ const scenarios: QuoteScenario[] = [
     name: 'ignores a floor-miss quote and selects the next best anchor',
     amount: 10,
     quotes: [
-      { anchorId: 'a', fee: 1, feePercent: 0, exchangeRate: 1580, status: 'rejected', reason: new Error('too_small') },
+      {
+        anchorId: 'a',
+        fee: 1,
+        feePercent: 0,
+        exchangeRate: 1580,
+        status: 'rejected',
+        reason: new Error('too_small'),
+      },
       { anchorId: 'b', fee: 0.5, feePercent: 0, exchangeRate: 1580 },
       { anchorId: 'c', fee: 3, feePercent: 0, exchangeRate: 1600 },
     ],
@@ -88,7 +95,14 @@ const scenarios: QuoteScenario[] = [
     name: 'ignores a budget-miss quote and selects available anchors',
     amount: 1000,
     quotes: [
-      { anchorId: 'a', fee: 10, feePercent: 0, exchangeRate: 1500, status: 'rejected', reason: new Error('too_large') },
+      {
+        anchorId: 'a',
+        fee: 10,
+        feePercent: 0,
+        exchangeRate: 1500,
+        status: 'rejected',
+        reason: new Error('too_large'),
+      },
       { anchorId: 'b', fee: 5, feePercent: 0, exchangeRate: 1490 },
       { anchorId: 'c', fee: 7.5, feePercent: 0, exchangeRate: 1510 },
     ],
@@ -99,8 +113,22 @@ const scenarios: QuoteScenario[] = [
     name: 'returns empty bestRateId when all quotes miss floor or budget',
     amount: 50,
     quotes: [
-      { anchorId: 'a', fee: 1, feePercent: 0, exchangeRate: 1580, status: 'rejected', reason: new Error('too_small') },
-      { anchorId: 'b', fee: 2, feePercent: 0, exchangeRate: 1580, status: 'rejected', reason: new Error('too_small') },
+      {
+        anchorId: 'a',
+        fee: 1,
+        feePercent: 0,
+        exchangeRate: 1580,
+        status: 'rejected',
+        reason: new Error('too_small'),
+      },
+      {
+        anchorId: 'b',
+        fee: 2,
+        feePercent: 0,
+        exchangeRate: 1580,
+        status: 'rejected',
+        reason: new Error('too_small'),
+      },
     ],
     expectedBestRateId: '',
     expectedFulfilledCount: 0,
@@ -141,7 +169,14 @@ const scenarios: QuoteScenario[] = [
     quotes: [
       { anchorId: 'a', fee: 2.5, feePercent: 1, exchangeRate: 1570 },
       { anchorId: 'b', fee: 0.5, feePercent: 3, exchangeRate: 1590 },
-      { anchorId: 'c', fee: 6, feePercent: 0, exchangeRate: 1600, status: 'rejected', reason: new Error('quote unavailable') },
+      {
+        anchorId: 'c',
+        fee: 6,
+        feePercent: 0,
+        exchangeRate: 1600,
+        status: 'rejected',
+        reason: new Error('quote unavailable'),
+      },
     ],
     expectedBestRateId: 'b',
     expectedFulfilledCount: 2,
@@ -167,7 +202,7 @@ const scenarios: QuoteScenario[] = [
     expectedBestRateId: 'a',
     expectedFulfilledCount: 3,
   },
-]
+];
 
 describe('router solver synthetic quote scenarios', () => {
   scenarios.forEach((scenario) => {
@@ -182,17 +217,19 @@ describe('router solver synthetic quote scenarios', () => {
           quote.status ?? 'fulfilled',
           quote.reason
         )
-      )
+      );
 
-      const comparison = computeRateComparison(results, 'usdc-ngn')
+      const comparison = computeRateComparison(results, 'usdc-ngn');
 
-      expect(comparison.rates).toHaveLength(scenario.expectedFulfilledCount)
-      expect(comparison.bestRateId).toBe(scenario.expectedBestRateId)
+      expect(comparison.rates).toHaveLength(scenario.expectedFulfilledCount);
+      expect(comparison.bestRateId).toBe(scenario.expectedBestRateId);
 
       if (scenario.expectedBestRateId) {
-        const bestRate = comparison.rates.find((rate) => rate.anchorId === scenario.expectedBestRateId)
-        expect(bestRate).toBeDefined()
+        const bestRate = comparison.rates.find(
+          (rate) => rate.anchorId === scenario.expectedBestRateId
+        );
+        expect(bestRate).toBeDefined();
       }
-    })
-  })
-})
+    });
+  });
+});

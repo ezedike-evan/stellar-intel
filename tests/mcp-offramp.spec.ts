@@ -41,7 +41,7 @@ describe('intel.offramp.quote (#135)', () => {
 
   it('throws NO_ROUTE for an unknown corridor', async () => {
     await expect(getQuote({ from: 'USDC', to: 'ZZZ', amount: '10' })).rejects.toBeInstanceOf(
-      OfframpToolError,
+      OfframpToolError
     );
   });
 
@@ -107,9 +107,9 @@ describe('intel.offramp.prepare (#136)', () => {
   });
 
   it('throws NO_ROUTE for an unsupported corridor', async () => {
-    await expect(
-      prepareIntent({ ...validIntent, destinationAsset: 'ZZZ' }),
-    ).rejects.toBeInstanceOf(OfframpToolError);
+    await expect(prepareIntent({ ...validIntent, destinationAsset: 'ZZZ' })).rejects.toBeInstanceOf(
+      OfframpToolError
+    );
   });
 
   it('rejects a malformed sender public key', async () => {

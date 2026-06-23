@@ -124,6 +124,8 @@ export function buildRateComparison(
     corridorId,
     rates: ranked,
     bestRateId: best?.anchorId ?? '',
+    // All inputs are already settled, so nothing remains pending.
+    pending: [],
   };
 }
 
@@ -140,15 +142,6 @@ function resolvedNetReceived(rate: AnchorRate, precision: number): number {
 
   // Re-derive from first principles so that precision rounding is applied
   // consistently regardless of how totalReceived was originally computed.
-  const feePercent = rate.feeType === 'percent' || rate.feeType === 'combined' ? rate.fee : 0;
-  const flatFee = rate.feeType === 'flat' || rate.feeType === 'combined' ? rate.fee : 0;
-
-  // For feeType === 'combined' the fee field holds the flat portion;
-  // a proper combined-fee model would need separate fields — we handle it
-  // gracefully by treating fee as flat when feeType is not 'percent'.
-  const effectiveFlat = rate.feeType === 'percent' ? 0 : flatFee;
-  const effectivePct = rate.feeType === 'percent' ? feePercent : 0;
-
   // Use the stored totalReceived as authoritative if it is not null, but run
   // it through the precision rounding so comparisons are on equal footing.
   const raw = rate.totalReceived;

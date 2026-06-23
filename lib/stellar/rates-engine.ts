@@ -1,7 +1,7 @@
-import { AnchorRate, RateComparison } from '@/types'
-import { getAnchorsByCorridorId, getCorridorById } from './anchors'
-import { fetchAnchorFee, AnchorRateError } from './sep24'
-import { computeTotalReceived } from '@/lib/utils'
+import { AnchorRate, RateComparison } from '@/types';
+import { getAnchorsByCorridorId, getCorridorById } from './anchors';
+import { fetchAnchorFee, AnchorRateError } from './sep24';
+import { computeTotalReceived } from '@/lib/utils';
 
 export interface RatesEngineOptions {
   onQuoteArrived?: (quote: AnchorRate) => void;
@@ -13,15 +13,15 @@ export async function fetchRates(
   amount: string,
   options?: RatesEngineOptions
 ): Promise<RateComparison> {
-  const anchors = getAnchorsByCorridorId(corridorId)
-  const corridor = getCorridorById(corridorId)
+  const anchors = getAnchorsByCorridorId(corridorId);
+  const corridor = getCorridorById(corridorId);
   const timeoutMs = options?.timeoutMs ?? 1500; // 1.5s MVP timeout
 
-  const pending: { anchorId: string; anchorName: string }[] = []
-  const quotes: AnchorRate[] = []
+  const pending: { anchorId: string; anchorName: string }[] = [];
+  const quotes: AnchorRate[] = [];
 
   const promises = anchors.map(async (anchor) => {
-    pending.push({ anchorId: anchor.id, anchorName: anchor.name })
+    pending.push({ anchorId: anchor.id, anchorName: anchor.name });
 
     const fetchPromise = (async () => {
       const { fee, exchangeRate } = await fetchAnchorFee({
@@ -31,19 +31,19 @@ export async function fetchRates(
         assetIssuer: anchor.assetIssuer,
         amount,
         type: 'bank_account',
-      })
+      });
 
-      const feeNum = Number(fee)
-      const amountNum = Number(amount)
+      const feeNum = Number(fee);
+      const amountNum = Number(amount);
 
       if (exchangeRate <= 0) {
         throw new AnchorRateError(
           anchor.id,
           `${anchor.name} returned a zero or missing exchange rate for ${corridor.to} — rate cannot be derived`
-        )
+        );
       }
 
-      const totalReceived = computeTotalReceived(amountNum, feeNum, 0, exchangeRate)
+      const totalReceived = computeTotalReceived(amountNum, feeNum, 0, exchangeRate);
 
       const rate: AnchorRate = {
         anchorId: anchor.id,
@@ -55,15 +55,15 @@ export async function fetchRates(
         totalReceived: totalReceived > 0 ? totalReceived : 0,
         source: 'sep24-fee',
         updatedAt: new Date(),
-      }
+      };
 
-      return rate
+      return rate;
     })();
 
     const timeoutPromise = new Promise<null>((resolve) => {
       setTimeout(() => {
         resolve(null);
-      }, timeoutMs)
+      }, timeoutMs);
     });
 
     try {
@@ -71,20 +71,22 @@ export async function fetchRates(
 
       if (result) {
         // Arrived before timeout
-        const pIdx = pending.findIndex(p => p.anchorId === anchor.id);
+        const pIdx = pending.findIndex((p) => p.anchorId === anchor.id);
         if (pIdx > -1) pending.splice(pIdx, 1);
         quotes.push(result);
       } else {
         // Timeout reached, wait in background
-        fetchPromise.then((r) => {
-          options?.onQuoteArrived?.(r);
-        }).catch((err) => {
-          // Ignore background errors
-        });
+        fetchPromise
+          .then((r) => {
+            options?.onQuoteArrived?.(r);
+          })
+          .catch(() => {
+            // Ignore background errors
+          });
       }
-    } catch (err) {
+    } catch {
       // Error fetching before timeout
-      const pIdx = pending.findIndex(p => p.anchorId === anchor.id);
+      const pIdx = pending.findIndex((p) => p.anchorId === anchor.id);
       if (pIdx > -1) pending.splice(pIdx, 1);
     }
   });
@@ -101,8 +103,8 @@ export async function fetchRates(
     corridorId,
     rates: quotes,
     pending,
-    bestRateId
-  }
+    bestRateId,
+  };
 }
 
 /**
@@ -124,28 +126,28 @@ export async function fetchRates(
  */
 export function dedupeByQuoteId(rates: AnchorRate[]): AnchorRate[] {
   // Resolve, per quote id, which rate wins on collision.
-  const winners = new Map<string, AnchorRate>()
+  const winners = new Map<string, AnchorRate>();
   for (const rate of rates) {
-    if (rate.quoteId === undefined) continue
-    const existing = winners.get(rate.quoteId)
+    if (rate.quoteId === undefined) continue;
+    const existing = winners.get(rate.quoteId);
     if (existing === undefined || rate.updatedAt.getTime() < existing.updatedAt.getTime()) {
-      winners.set(rate.quoteId, rate)
+      winners.set(rate.quoteId, rate);
     }
   }
 
   // Re-emit in original order. quoteId-less rates pass through untouched; each
   // colliding group is emitted once, at the position of its first appearance.
-  const emitted = new Set<string>()
-  const result: AnchorRate[] = []
+  const emitted = new Set<string>();
+  const result: AnchorRate[] = [];
   for (const rate of rates) {
     if (rate.quoteId === undefined) {
-      result.push(rate)
-      continue
+      result.push(rate);
+      continue;
     }
-    if (emitted.has(rate.quoteId)) continue
-    emitted.add(rate.quoteId)
-    result.push(winners.get(rate.quoteId)!)
+    if (emitted.has(rate.quoteId)) continue;
+    emitted.add(rate.quoteId);
+    result.push(winners.get(rate.quoteId)!);
   }
 
-  return result
+  return result;
 }

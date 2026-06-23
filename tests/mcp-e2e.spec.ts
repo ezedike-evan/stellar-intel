@@ -22,7 +22,7 @@ const STARTUP_TIMEOUT = 60_000;
 const tsxBin = path.resolve(
   __dirname,
   '../node_modules/.bin',
-  process.platform === 'win32' ? 'tsx.cmd' : 'tsx',
+  process.platform === 'win32' ? 'tsx.cmd' : 'tsx'
 );
 
 describe('MCP server round-trip via subprocess (#137)', () => {

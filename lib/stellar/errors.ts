@@ -1,9 +1,41 @@
 /**
- * Base class for all Stellar-related wallet errors.
+ * Stable, exhaustive set of error codes for the StellarIntel error hierarchy.
+ * Every {@link StellarIntelError} carries exactly one of these, so consumers can
+ * branch on `err.code` with compile-time exhaustiveness.
  */
-export class WalletError extends Error {
-  constructor(message: string) {
+export enum ErrorCode {
+  NETWORK_UNREACHABLE = 'NETWORK_UNREACHABLE',
+  NETWORK_MISMATCH = 'NETWORK_MISMATCH',
+  ANCHOR_HTTP_ERROR = 'ANCHOR_HTTP_ERROR',
+  ANCHOR_INVALID_RESPONSE = 'ANCHOR_INVALID_RESPONSE',
+  ANCHOR_RATE_UNAVAILABLE = 'ANCHOR_RATE_UNAVAILABLE',
+  USER_REJECTED = 'USER_REJECTED',
+  USER_WALLET_MISSING = 'USER_WALLET_MISSING',
+  REQUEST_TIMEOUT = 'REQUEST_TIMEOUT',
+}
+
+/**
+ * Base class for every classified StellarIntel error. Carries a stable
+ * {@link ErrorCode} for programmatic branching.
+ */
+export class StellarIntelError extends Error {
+  readonly code: ErrorCode;
+
+  constructor(message: string, code: ErrorCode) {
     super(message);
+    this.name = 'StellarIntelError';
+    this.code = code;
+  }
+}
+
+/**
+ * Base class for all Stellar-related wallet errors. Part of the
+ * {@link StellarIntelError} hierarchy so wallet failures can be branched on by
+ * code alongside anchor/network/timeout errors.
+ */
+export class WalletError extends StellarIntelError {
+  constructor(message: string, code: ErrorCode = ErrorCode.USER_REJECTED) {
+    super(message, code);
     this.name = 'WalletError';
   }
 }
@@ -13,7 +45,7 @@ export class WalletError extends Error {
  */
 export class UserRejectedError extends WalletError {
   constructor() {
-    super('User rejected the request');
+    super('User rejected the request', ErrorCode.USER_REJECTED);
     this.name = 'UserRejectedError';
   }
 }
@@ -22,20 +54,19 @@ export class UserRejectedError extends WalletError {
  * Thrown when there is a user-side or client error.
  */
 export class UserError extends WalletError {
-  constructor(message: string) {
-    super(message)
-    this.name = 'UserError'
+  constructor(message: string, code: ErrorCode = ErrorCode.USER_REJECTED) {
+    super(message, code);
+    this.name = 'UserError';
   }
 }
-
 
 /**
  * Thrown when there is a network mismatch (e.g. Testnet vs Mainnet)
  * or the horizon server is unreachable.
  */
 export class NetworkError extends WalletError {
-  constructor(message: string) {
-    super(message);
+  constructor(message: string, code: ErrorCode = ErrorCode.NETWORK_UNREACHABLE) {
+    super(message, code);
     this.name = 'NetworkError';
   }
 }
@@ -45,7 +76,7 @@ export class NetworkError extends WalletError {
  */
 export class ConnectionError extends WalletError {
   constructor(message: string) {
-    super(message);
+    super(message, ErrorCode.USER_WALLET_MISSING);
     this.name = 'ConnectionError';
   }
 }
@@ -55,14 +86,68 @@ export class ConnectionError extends WalletError {
  */
 export class UnknownWalletError extends WalletError {
   constructor(message: string) {
-    super(message);
+    super(message, ErrorCode.USER_REJECTED);
     this.name = 'UnknownWalletError';
   }
 }
 
 /**
+ * Thrown when an anchor returns an HTTP error or an unusable response. Carries
+ * the originating HTTP status and the raw payload for diagnostics.
+ */
+export class AnchorError extends StellarIntelError {
+  readonly httpStatus: number;
+  readonly raw: unknown;
+
+  constructor(
+    message: string,
+    code: ErrorCode = ErrorCode.ANCHOR_HTTP_ERROR,
+    httpStatus = 0,
+    raw: unknown = null
+  ) {
+    super(message, code);
+    this.name = 'AnchorError';
+    this.httpStatus = httpStatus;
+    this.raw = raw;
+  }
+}
+
+/**
+ * Thrown when an operation exceeds its deadline.
+ */
+export class TimeoutError extends StellarIntelError {
+  constructor(message: string) {
+    super(message, ErrorCode.REQUEST_TIMEOUT);
+    this.name = 'TimeoutError';
+  }
+}
+
+// ─── Type guards ──────────────────────────────────────────────────────────────
+
+export function isStellarIntelError(value: unknown): value is StellarIntelError {
+  return value instanceof StellarIntelError;
+}
+
+export function isNetworkError(value: unknown): value is NetworkError {
+  return value instanceof NetworkError;
+}
+
+export function isAnchorError(value: unknown): value is AnchorError {
+  return value instanceof AnchorError;
+}
+
+export function isUserError(value: unknown): value is UserError {
+  return value instanceof UserError;
+}
+
+export function isTimeoutError(value: unknown): value is TimeoutError {
+  return value instanceof TimeoutError;
+}
+
+/**
  * Thrown when a SEP-24 HTTP request fails. Normalizes all anchor error
- * response formats into a consistent shape.
+ * response formats into a consistent shape. Intentionally a separate hierarchy
+ * from {@link StellarIntelError} (carries a free-form string `code`).
  */
 export class SepError extends Error {
   readonly code: string;

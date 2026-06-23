@@ -94,8 +94,10 @@ function buildLeaderboard(corridorFilter: string | undefined): LeaderboardEntry[
 
 const CACHE_MAX_AGE = 60; // seconds
 
-function etagFor(corridor: string | undefined, generatedAt: string): string {
-  const key = `${corridor ?? 'all'}:${generatedAt}`;
+function etagFor(corridor: string | undefined, leaderboard: LeaderboardEntry[]): string {
+  // Derive the ETag from the response content (not a per-request timestamp) so
+  // identical data yields a stable ETag and conditional GETs can return 304.
+  const key = `${corridor ?? 'all'}:${JSON.stringify(leaderboard)}`;
   // Simple deterministic ETag — not cryptographic, just cache-busting
   let hash = 0;
   for (let i = 0; i < key.length; i++) {
@@ -133,7 +135,7 @@ export async function GET(request: NextRequest): Promise<NextResponse> {
     const generatedAt = new Date().toISOString();
     const leaderboard = buildLeaderboard(corridor);
 
-    const etag = etagFor(corridor, generatedAt);
+    const etag = etagFor(corridor, leaderboard);
 
     // Honour conditional GET
     if (request.headers.get('if-none-match') === etag) {
@@ -154,5 +156,5 @@ export async function GET(request: NextRequest): Promise<NextResponse> {
         ETag: etag,
       },
     });
-  })
+  });
 }
