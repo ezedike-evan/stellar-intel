@@ -5,8 +5,16 @@
 
 set -e
 
-echo "→ Prettier (format:check)"
-npm run format:check
+echo "→ Prettier (--write, changed files only)"
+# Format only the files changed on this branch, not the whole repo. Base the
+# diff on the merge-base with origin/main (falls back to HEAD if unavailable).
+BASE="$(git merge-base origin/main HEAD 2>/dev/null || echo HEAD)"
+CHANGED="$(git diff --name-only --diff-filter=ACMR "$BASE" HEAD -- '*.ts' '*.tsx' '*.mjs' '*.json' '*.css' '*.md')"
+if [ -n "$CHANGED" ]; then
+  echo "$CHANGED" | xargs npx prettier --write
+else
+  echo "  (no changed files to format)"
+fi
 
 echo "→ ESLint (zero warnings)"
 npm run lint

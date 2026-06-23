@@ -344,7 +344,7 @@ export interface Plan {
 }
 
 /** Result of the solver: either a plan to execute or a typed error. */
-export type SolverResult = 
+export type SolverResult =
   | { ok: true; plan: Plan }
   | { ok: false; error: 'no_eligible_route' }
   | { ok: false; error: 'floor_not_met'; details: string }

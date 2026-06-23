@@ -1,12 +1,12 @@
-const STORAGE_PREFIX = 'si_jwt_'
+const STORAGE_PREFIX = 'si_jwt_';
 
 export function generateNonce(): string {
-  return crypto.randomUUID()
+  return crypto.randomUUID();
 }
 
 export function saveJwtToSession(nonce: string, jwt: string): void {
   try {
-    sessionStorage.setItem(`${STORAGE_PREFIX}${nonce}`, jwt)
+    sessionStorage.setItem(`${STORAGE_PREFIX}${nonce}`, jwt);
   } catch {
     // sessionStorage unavailable (e.g. private browsing quota exceeded) — fail silently
   }
@@ -14,24 +14,24 @@ export function saveJwtToSession(nonce: string, jwt: string): void {
 
 export function loadJwtFromSession(nonce: string): string | null {
   try {
-    return sessionStorage.getItem(`${STORAGE_PREFIX}${nonce}`)
+    return sessionStorage.getItem(`${STORAGE_PREFIX}${nonce}`);
   } catch {
-    return null
+    return null;
   }
 }
 
 export function clearJwtFromSession(nonce: string): void {
   try {
-    sessionStorage.removeItem(`${STORAGE_PREFIX}${nonce}`)
+    sessionStorage.removeItem(`${STORAGE_PREFIX}${nonce}`);
   } catch {
     // ignore
   }
 }
 
 export interface TrackingParams {
-  transactionId: string
-  transferServer: string
-  nonce: string
+  transactionId: string;
+  transferServer: string;
+  nonce: string;
 }
 
 export function buildTrackingSearch(params: TrackingParams): string {
@@ -39,15 +39,15 @@ export function buildTrackingSearch(params: TrackingParams): string {
     tx: params.transactionId,
     server: params.transferServer,
     nonce: params.nonce,
-  })
-  return sp.toString()
+  });
+  return sp.toString();
 }
 
 export function parseTrackingParams(search: string): TrackingParams | null {
-  const sp = new URLSearchParams(search)
-  const transactionId = sp.get('tx')
-  const transferServer = sp.get('server')
-  const nonce = sp.get('nonce')
-  if (!transactionId || !transferServer || !nonce) return null
-  return { transactionId, transferServer, nonce }
+  const sp = new URLSearchParams(search);
+  const transactionId = sp.get('tx');
+  const transferServer = sp.get('server');
+  const nonce = sp.get('nonce');
+  if (!transactionId || !transferServer || !nonce) return null;
+  return { transactionId, transferServer, nonce };
 }

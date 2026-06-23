@@ -1,10 +1,10 @@
-import type { Intent } from './hash'
-import { hashIntent } from './hash'
+import type { Intent } from './hash';
+import { hashIntent } from './hash';
 
 export interface SignedIntentEnvelope {
-  intentHash: string
-  signature: string
-  publicKey: string
+  intentHash: string;
+  signature: string;
+  publicKey: string;
 }
 
 export class IntentSignError extends Error {
@@ -12,8 +12,8 @@ export class IntentSignError extends Error {
     message: string,
     public readonly code: 'FREIGHTER_UNAVAILABLE' | 'SIGN_REJECTED' | 'SIGN_FAILED'
   ) {
-    super(message)
-    this.name = 'IntentSignError'
+    super(message);
+    this.name = 'IntentSignError';
   }
 }
 
@@ -23,42 +23,42 @@ export class IntentSignError extends Error {
  */
 export async function signIntent(intent: Intent): Promise<SignedIntentEnvelope> {
   const { signMessage, getAddress } = await import('@stellar/freighter-api').catch(() => {
-    throw new IntentSignError(
-      'Freighter extension is not available',
-      'FREIGHTER_UNAVAILABLE'
-    )
-  })
+    throw new IntentSignError('Freighter extension is not available', 'FREIGHTER_UNAVAILABLE');
+  });
 
-  const intentHash = await hashIntent(intent)
+  const intentHash = await hashIntent(intent);
 
   const signResult = await signMessage(intentHash).catch((err: unknown) => {
-    const msg = err instanceof Error ? err.message : 'Sign request failed'
-    throw new IntentSignError(msg, 'SIGN_FAILED')
-  })
+    const msg = err instanceof Error ? err.message : 'Sign request failed';
+    throw new IntentSignError(msg, 'SIGN_FAILED');
+  });
 
   if ('error' in signResult && signResult.error) {
-    const msg = String(signResult.error)
-    const code = msg.toLowerCase().includes('reject') ? 'SIGN_REJECTED' : 'SIGN_FAILED'
-    throw new IntentSignError(msg, code)
+    const msg = String(signResult.error);
+    const code = msg.toLowerCase().includes('reject') ? 'SIGN_REJECTED' : 'SIGN_FAILED';
+    throw new IntentSignError(msg, code);
   }
 
   const addrResult = await getAddress().catch(() => {
-    throw new IntentSignError('Could not retrieve public key from Freighter', 'FREIGHTER_UNAVAILABLE')
-  })
+    throw new IntentSignError(
+      'Could not retrieve public key from Freighter',
+      'FREIGHTER_UNAVAILABLE'
+    );
+  });
 
-  const addr = addrResult as { address?: string; publicKey?: string; error?: string }
-  const publicKey = addr.address ?? addr.publicKey ?? ''
+  const addr = addrResult as { address?: string; publicKey?: string; error?: string };
+  const publicKey = addr.address ?? addr.publicKey ?? '';
 
   if (!publicKey) {
-    throw new IntentSignError('Freighter returned no public key', 'FREIGHTER_UNAVAILABLE')
+    throw new IntentSignError('Freighter returned no public key', 'FREIGHTER_UNAVAILABLE');
   }
 
-  const sig = signResult as { signedMessage?: string; signature?: string }
-  const signature = sig.signedMessage ?? sig.signature ?? ''
+  const sig = signResult as { signedMessage?: string; signature?: string };
+  const signature = sig.signedMessage ?? sig.signature ?? '';
 
   if (!signature) {
-    throw new IntentSignError('Freighter returned no signature', 'SIGN_FAILED')
+    throw new IntentSignError('Freighter returned no signature', 'SIGN_FAILED');
   }
 
-  return { intentHash, signature, publicKey }
+  return { intentHash, signature, publicKey };
 }

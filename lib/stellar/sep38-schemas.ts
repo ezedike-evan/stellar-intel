@@ -19,21 +19,25 @@ const FeeSchema = z.object({
 
 // GET /info
 export const Sep38InfoSchema = z.object({
-  assets: z.array(z.object({
-    asset: z.string(),
-    sell_delivery_methods: z.array(DeliveryMethodSchema).optional(),
-    buy_delivery_methods: z.array(DeliveryMethodSchema).optional(),
-    country_codes: z.array(z.string()).optional(),
-  })),
+  assets: z.array(
+    z.object({
+      asset: z.string(),
+      sell_delivery_methods: z.array(DeliveryMethodSchema).optional(),
+      buy_delivery_methods: z.array(DeliveryMethodSchema).optional(),
+      country_codes: z.array(z.string()).optional(),
+    })
+  ),
 });
 
 // GET /prices
 export const Sep38PricesSchema = z.object({
-  buy_assets: z.array(z.object({
-    asset: z.string(),
-    price: z.string(),
-    decimals: z.number().int(),
-  })),
+  buy_assets: z.array(
+    z.object({
+      asset: z.string(),
+      price: z.string(),
+      decimals: z.number().int(),
+    })
+  ),
 });
 
 // GET /price
@@ -58,7 +62,7 @@ export const Sep38QuoteSchema = z.object({
   fee: FeeSchema.optional(),
 });
 
-export type Sep38Info   = z.infer<typeof Sep38InfoSchema>;
+export type Sep38Info = z.infer<typeof Sep38InfoSchema>;
 export type Sep38Prices = z.infer<typeof Sep38PricesSchema>;
-export type Sep38Price  = z.infer<typeof Sep38PriceSchema>;
-export type Sep38Quote  = z.infer<typeof Sep38QuoteSchema>;
+export type Sep38Price = z.infer<typeof Sep38PriceSchema>;
+export type Sep38Quote = z.infer<typeof Sep38QuoteSchema>;

@@ -1,4 +1,8 @@
-import { OpenAPIRegistry, OpenApiGeneratorV31, extendZodWithOpenApi } from '@asteasolutions/zod-to-openapi';
+import {
+  OpenAPIRegistry,
+  OpenApiGeneratorV31,
+  extendZodWithOpenApi,
+} from '@asteasolutions/zod-to-openapi';
 import { z } from 'zod';
 
 extendZodWithOpenApi(z);
@@ -14,7 +18,7 @@ const OfframpIntentSchema = registry.register(
     corridorId: z.string().min(1),
     amount: z.string().regex(/^\d+(\.\d{1,7})?$/),
     publicKey: z.string().regex(/^G[A-Z0-9]{55}$/),
-  }),
+  })
 );
 
 const SignedIntentEnvelopeSchema = registry.register(
@@ -24,7 +28,7 @@ const SignedIntentEnvelopeSchema = registry.register(
     hash: z.string().regex(/^[0-9a-f]{64}$/),
     signature: z.string().min(1),
     publicKey: z.string().regex(/^G[A-Z0-9]{55}$/),
-  }),
+  })
 );
 
 registry.register(
@@ -37,9 +41,12 @@ registry.register(
     floor: z.string().regex(/^\d+(\.\d+)?$/),
     deadline: z.string().describe('RFC 3339 datetime after which the intent must not execute'),
     recipient: z.string().min(1),
-    nonce: z.string().regex(/^[0-9a-f]{32}$/i).describe('128-bit random hex for replay protection'),
+    nonce: z
+      .string()
+      .regex(/^[0-9a-f]{32}$/i)
+      .describe('128-bit random hex for replay protection'),
     metadata: z.record(z.string(), z.unknown()).optional(),
-  }),
+  })
 );
 
 const OfframpRouteSchema = registry.register(
@@ -50,7 +57,7 @@ const OfframpRouteSchema = registry.register(
     corridorId: z.string(),
     estimatedFee: z.string(),
     estimatedReceived: z.string(),
-  }),
+  })
 );
 
 const OfframpIntentResponseSchema = registry.register(
@@ -59,7 +66,7 @@ const OfframpIntentResponseSchema = registry.register(
     route: OfframpRouteSchema,
     unsignedTx: z.string().describe('XDR-encoded unsigned Stellar transaction'),
     quoteId: z.string().describe('Hex-encoded SHA-256 quote identifier'),
-  }),
+  })
 );
 
 const ApiErrorSchema = registry.register(
@@ -67,7 +74,7 @@ const ApiErrorSchema = registry.register(
   z.object({
     code: z.string().describe('Machine-readable error code'),
     message: z.string().describe('Human-readable error description'),
-  }),
+  })
 );
 
 const IntentRequestSchema = registry.register(
@@ -79,7 +86,7 @@ const IntentRequestSchema = registry.register(
     amount: z.string().regex(/^\d+(\.\d+)?$/),
     sender: z.string().min(1).describe('Stellar public key of the sender'),
     recipient: z.string().min(1).describe('Destination address for the payout'),
-  }),
+  })
 );
 
 // Suppress unused-variable warnings — schemas are referenced only via the registry

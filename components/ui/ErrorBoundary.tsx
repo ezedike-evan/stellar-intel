@@ -28,17 +28,17 @@ function resetKeysChanged(
 }
 
 export class ErrorBoundary extends Component<ErrorBoundaryProps, ErrorBoundaryState> {
-  state: ErrorBoundaryState = { error: null };
+  override state: ErrorBoundaryState = { error: null };
 
   static getDerivedStateFromError(error: Error): ErrorBoundaryState {
     return { error };
   }
 
-  componentDidCatch(error: Error, errorInfo: ErrorInfo): void {
+  override componentDidCatch(error: Error, errorInfo: ErrorInfo): void {
     this.props.onError?.(error, errorInfo);
   }
 
-  componentDidUpdate(previousProps: ErrorBoundaryProps): void {
+  override componentDidUpdate(previousProps: ErrorBoundaryProps): void {
     if (this.state.error && resetKeysChanged(previousProps.resetKeys, this.props.resetKeys)) {
       this.resetErrorBoundary();
     }
@@ -48,7 +48,7 @@ export class ErrorBoundary extends Component<ErrorBoundaryProps, ErrorBoundarySt
     this.setState({ error: null });
   };
 
-  render(): ReactNode {
+  override render(): ReactNode {
     if (!this.state.error) return this.props.children;
 
     if (typeof this.props.fallback === 'function') {
