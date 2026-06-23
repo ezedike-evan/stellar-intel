@@ -1,34 +1,34 @@
-'use client'
-import { useEffect, useRef, useState } from 'react'
-import type { WithdrawStatusValue, Sep24Transaction } from '@/types'
-import { formatDeliveredAmount } from '@/lib/format'
-import { resolveAnchorSupportHref, resolveToml } from '@/lib/stellar/sep1'
-import { Timeline } from './Timeline'
-import { STELLAR_EXPERT_URL } from '@/constants'
-import { CopyButton } from '@/components/ui/CopyButton'
+'use client';
+import { useEffect, useRef, useState } from 'react';
+import type { WithdrawStatusValue, Sep24Transaction } from '@/types';
+import { formatDeliveredAmount } from '@/lib/format';
+import { resolveAnchorSupportHref, resolveToml } from '@/lib/stellar/sep1';
+import { Timeline } from './Timeline';
+import { STELLAR_EXPERT_URL } from '@/constants';
+import { CopyButton } from '@/components/ui/CopyButton';
 
-const PENDING_ANCHOR_STALL_MS = 10 * 60 * 1000
+const PENDING_ANCHOR_STALL_MS = 10 * 60 * 1000;
 
 interface StatusTrackerProps {
-  transactionId: string
-  status: WithdrawStatusValue | undefined
-  amountIn: string | undefined
-  amountInAsset: string | undefined
-  amountOut: string | undefined
-  amountOutAsset: string | undefined
-  amountFee: string | undefined
+  transactionId: string;
+  status: WithdrawStatusValue | undefined;
+  amountIn: string | undefined;
+  amountInAsset: string | undefined;
+  amountOut: string | undefined;
+  amountOutAsset: string | undefined;
+  amountFee: string | undefined;
   /** ISO 4217 currency code for the destination corridor (e.g. "NGN", "KES"). */
-  currencyCode: string
-  stellarTransactionId: string | undefined
-  externalTransactionId: string | undefined
-  refunds?: Sep24Transaction['refunds']
-  isLoading: boolean
-  error: string | undefined
+  currencyCode: string;
+  stellarTransactionId: string | undefined;
+  externalTransactionId: string | undefined;
+  refunds?: Sep24Transaction['refunds'];
+  isLoading: boolean;
+  error: string | undefined;
   /** Anchor home domain for SEP-1 support contact lookup. */
-  anchorHomeDomain?: string
-  onRetryAnchor?: () => void
-  onAdjust?: () => void
-  onDisputeOpen?: (transactionId: string) => void
+  anchorHomeDomain?: string;
+  onRetryAnchor?: () => void;
+  onAdjust?: () => void;
+  onDisputeOpen?: (transactionId: string) => void;
 }
 
 const STATUS_LABELS: Record<WithdrawStatusValue, string> = {
@@ -47,7 +47,7 @@ const STATUS_LABELS: Record<WithdrawStatusValue, string> = {
   too_small: 'Amount too small',
   too_large: 'Amount too large',
   expired: 'Transaction expired',
-}
+};
 
 const TERMINAL: WithdrawStatusValue[] = [
   'completed',
@@ -57,29 +57,29 @@ const TERMINAL: WithdrawStatusValue[] = [
   'too_small',
   'too_large',
   'expired',
-]
+];
 
-const DISPUTABLE: WithdrawStatusValue[] = ['completed', 'refunded', 'error']
+const DISPUTABLE: WithdrawStatusValue[] = ['completed', 'refunded', 'error'];
 
 function statusColor(status: WithdrawStatusValue | undefined): string {
-  if (!status) return 'text-gray-500'
-  if (status === 'completed') return 'text-green-600 dark:text-green-400'
+  if (!status) return 'text-gray-500';
+  if (status === 'completed') return 'text-green-600 dark:text-green-400';
   if (['error', 'no_market', 'too_small', 'too_large'].includes(status))
-    return 'text-red-600 dark:text-red-400'
-  if (status === 'refunded') return 'text-yellow-600 dark:text-yellow-400'
-  return 'text-blue-600 dark:text-blue-400'
+    return 'text-red-600 dark:text-red-400';
+  if (status === 'refunded') return 'text-yellow-600 dark:text-yellow-400';
+  return 'text-blue-600 dark:text-blue-400';
 }
 
 function statusDot(status: WithdrawStatusValue | undefined): string {
-  if (!status) return 'bg-gray-300'
-  if (status === 'completed') return 'bg-green-500'
-  if (['error', 'no_market', 'too_small', 'too_large'].includes(status)) return 'bg-red-500'
-  if (status === 'refunded') return 'bg-yellow-500'
-  return 'bg-blue-500 animate-pulse'
+  if (!status) return 'bg-gray-300';
+  if (status === 'completed') return 'bg-green-500';
+  if (['error', 'no_market', 'too_small', 'too_large'].includes(status)) return 'bg-red-500';
+  if (status === 'refunded') return 'bg-yellow-500';
+  return 'bg-blue-500 animate-pulse';
 }
 
 function isValidStellarTxId(id: string): boolean {
-  return /^[0-9a-fA-F]{64}$/.test(id)
+  return /^[0-9a-fA-F]{64}$/.test(id);
 }
 
 export function StatusTracker({
@@ -99,52 +99,56 @@ export function StatusTracker({
   anchorHomeDomain,
   onDisputeOpen,
 }: StatusTrackerProps) {
-  const isTerminal = status ? TERMINAL.includes(status) : false
-  const isCompleted = status === 'completed'
-  const canDispute = isTerminal && status != null && DISPUTABLE.includes(status)
+  const isTerminal = status ? TERMINAL.includes(status) : false;
+  const isCompleted = status === 'completed';
+  const canDispute = isTerminal && status != null && DISPUTABLE.includes(status);
 
-  const [anchorSupportUrl, setAnchorSupportUrl] = useState<string | null>(null)
-  const pendingAnchorSinceRef = useRef<number | null>(null)
-  const [showStalledSupport, setShowStalledSupport] = useState(false)
+  const [anchorSupportUrl, setAnchorSupportUrl] = useState<string | null>(null);
+  const pendingAnchorSinceRef = useRef<number | null>(null);
+  const [showStalledSupport, setShowStalledSupport] = useState(false);
 
   useEffect(() => {
     if (!anchorHomeDomain) {
-      setAnchorSupportUrl(null)
-      return
+      setAnchorSupportUrl(null);
+      return;
     }
-    let cancelled = false
+    let cancelled = false;
     void resolveToml(anchorHomeDomain).then((result) => {
       if (!cancelled && result.ok) {
-        setAnchorSupportUrl(resolveAnchorSupportHref(result.data))
+        setAnchorSupportUrl(resolveAnchorSupportHref(result.data));
       }
-    })
+    });
     return () => {
-      cancelled = true
-    }
-  }, [anchorHomeDomain])
+      cancelled = true;
+    };
+  }, [anchorHomeDomain]);
 
   useEffect(() => {
     if (status === 'pending_anchor') {
-      pendingAnchorSinceRef.current ??= Date.now()
+      pendingAnchorSinceRef.current ??= Date.now();
     } else {
-      pendingAnchorSinceRef.current = null
-      setShowStalledSupport(false)
+      pendingAnchorSinceRef.current = null;
+      setShowStalledSupport(false);
     }
-  }, [status])
+  }, [status]);
 
   useEffect(() => {
-    if (status !== 'pending_anchor' || !anchorSupportUrl || pendingAnchorSinceRef.current === null) {
-      return
+    if (
+      status !== 'pending_anchor' ||
+      !anchorSupportUrl ||
+      pendingAnchorSinceRef.current === null
+    ) {
+      return;
     }
-    const elapsed = Date.now() - pendingAnchorSinceRef.current
-    const remaining = PENDING_ANCHOR_STALL_MS - elapsed
+    const elapsed = Date.now() - pendingAnchorSinceRef.current;
+    const remaining = PENDING_ANCHOR_STALL_MS - elapsed;
     if (remaining <= 0) {
-      setShowStalledSupport(true)
-      return
+      setShowStalledSupport(true);
+      return;
     }
-    const timerId = window.setTimeout(() => setShowStalledSupport(true), remaining)
-    return () => window.clearTimeout(timerId)
-  }, [status, anchorSupportUrl])
+    const timerId = window.setTimeout(() => setShowStalledSupport(true), remaining);
+    return () => window.clearTimeout(timerId);
+  }, [status, anchorSupportUrl]);
 
   return (
     <div
@@ -336,12 +340,12 @@ export function StatusTracker({
         </div>
       )}
     </div>
-  )
+  );
 }
 
 function parseAsset(assetStr: string | undefined): string | null {
-  if (!assetStr) return null
-  if (assetStr === 'stellar:native') return 'XLM'
-  const parts = assetStr.split(':')
-  return parts[1] ?? null
+  if (!assetStr) return null;
+  if (assetStr === 'stellar:native') return 'XLM';
+  const parts = assetStr.split(':');
+  return parts[1] ?? null;
 }

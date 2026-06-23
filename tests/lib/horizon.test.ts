@@ -1,41 +1,44 @@
-import { describe, it, expect, vi, beforeEach } from 'vitest'
-import { Account } from '@stellar/stellar-sdk'
-import { fetchAccount, buildWithdrawPayment } from '@/lib/stellar/horizon'
-import { horizonServer } from '@/lib/stellar/horizon'
+import { describe, it, expect, vi, beforeEach } from 'vitest';
+import { Account } from '@stellar/stellar-sdk';
+import { fetchAccount, buildWithdrawPayment } from '@/lib/stellar/horizon';
+import { horizonServer } from '@/lib/stellar/horizon';
 
 vi.mock('@stellar/freighter-api', () => ({
   signTransaction: vi.fn(),
-}))
+  getNetwork: vi.fn(async () => ({ error: false, network: '', networkPassphrase: '' })),
+}));
 
 beforeEach(() => {
-  vi.restoreAllMocks()
-})
+  vi.restoreAllMocks();
+});
 
 // Valid Stellar public keys generated via Keypair.random()
-const SOURCE_KEY = 'GAI2X6XPCRM47DBZTMNQQHTFDR6E4LNY7XQDJ7T6GJL3DPEEQB3HSNVB'
-const ANCHOR_ACCOUNT = 'GBGNTATIEI4PBPLLX4QPIWDQZSOF6XUVJAVWEWRP7MGPOOTD53SMAWT2'
-const USDC_ISSUER = 'GA5ZSEJYB37JRC5AVCIA5MOP4RHTM335X2KGX3IHOJAPP5RE34K4KZVN'
+const SOURCE_KEY = 'GAI2X6XPCRM47DBZTMNQQHTFDR6E4LNY7XQDJ7T6GJL3DPEEQB3HSNVB';
+const ANCHOR_ACCOUNT = 'GBGNTATIEI4PBPLLX4QPIWDQZSOF6XUVJAVWEWRP7MGPOOTD53SMAWT2';
+const USDC_ISSUER = 'GA5ZSEJYB37JRC5AVCIA5MOP4RHTM335X2KGX3IHOJAPP5RE34K4KZVN';
 
 // Use a real Account instance so TransactionBuilder.build() works correctly
-const mockAccount = new Account(SOURCE_KEY, '1000') as unknown as Awaited<ReturnType<typeof horizonServer.loadAccount>>
+const mockAccount = new Account(SOURCE_KEY, '1000') as unknown as Awaited<
+  ReturnType<typeof horizonServer.loadAccount>
+>;
 
 describe('fetchAccount', () => {
   it('throws a clear error when Horizon returns 404', async () => {
     vi.spyOn(horizonServer, 'loadAccount').mockRejectedValue({
       response: { status: 404 },
-    })
+    });
 
     await expect(fetchAccount(SOURCE_KEY)).rejects.toThrow(
       'Account does not exist on the Stellar network'
-    )
-  })
-})
+    );
+  });
+});
 
 describe('buildWithdrawPayment', () => {
   beforeEach(() => {
-    vi.spyOn(horizonServer, 'loadAccount').mockResolvedValue(mockAccount)
-    vi.spyOn(horizonServer, 'fetchBaseFee').mockResolvedValue(100)
-  })
+    vi.spyOn(horizonServer, 'loadAccount').mockResolvedValue(mockAccount);
+    vi.spyOn(horizonServer, 'fetchBaseFee').mockResolvedValue(100);
+  });
 
   it('builds a transaction with exactly one payment operation', async () => {
     const tx = await buildWithdrawPayment({
@@ -46,11 +49,11 @@ describe('buildWithdrawPayment', () => {
       memoType: 'text',
       assetCode: 'USDC',
       assetIssuer: USDC_ISSUER,
-    })
+    });
 
-    expect(tx?.operations).toHaveLength(1)
-    expect(tx?.operations?.[0]?.type).toBe('payment')
-  })
+    expect(tx?.operations).toHaveLength(1);
+    expect(tx?.operations?.[0]?.type).toBe('payment');
+  });
 
   it('applies the memo field to the built transaction', async () => {
     const tx = await buildWithdrawPayment({
@@ -61,10 +64,10 @@ describe('buildWithdrawPayment', () => {
       memoType: 'text',
       assetCode: 'USDC',
       assetIssuer: USDC_ISSUER,
-    })
+    });
 
-    expect(tx.memo.value).toBe('abc123')
-  })
+    expect(tx.memo.value).toBe('abc123');
+  });
 
   it('uses the correct USDC asset code and issuer', async () => {
     const tx = await buildWithdrawPayment({
@@ -75,12 +78,12 @@ describe('buildWithdrawPayment', () => {
       memoType: 'text',
       assetCode: 'USDC',
       assetIssuer: USDC_ISSUER,
-    })
+    });
 
-    const op = tx.operations[0] as any
-    expect(op?.asset?.code).toBe('USDC')
-    expect(op?.asset?.issuer).toBe(USDC_ISSUER)
-  })
+    const op = tx.operations[0] as any;
+    expect(op?.asset?.code).toBe('USDC');
+    expect(op?.asset?.issuer).toBe(USDC_ISSUER);
+  });
 
   it('returns correctly parsed operations for native XLM', async () => {
     const tx = await buildWithdrawPayment({
@@ -91,16 +94,16 @@ describe('buildWithdrawPayment', () => {
       memoType: 'text',
       assetCode: 'XLM',
       assetIssuer: '',
-    })
+    });
 
-    const op = tx.operations[0] as any
+    const op = tx.operations[0] as any;
     // The JS SDK might set it to Asset('XLM', undefined) or Native
-    expect(op?.asset?.isNative?.() || op?.asset?.code === 'XLM').toBe(true)
-  })
+    expect(op?.asset?.isNative?.() || op?.asset?.code === 'XLM').toBe(true);
+  });
 
   it('extracts result_codes into a readable message on Horizon submit error', async () => {
-    const { signAndSubmitPayment } = await import('@/lib/stellar/horizon')
-    const freighter = await import('@stellar/freighter-api')
+    const { signAndSubmitPayment } = await import('@/lib/stellar/horizon');
+    const freighter = await import('@stellar/freighter-api');
 
     const tx = await buildWithdrawPayment({
       sourcePublicKey: SOURCE_KEY,
@@ -110,12 +113,12 @@ describe('buildWithdrawPayment', () => {
       memoType: 'text',
       assetCode: 'USDC',
       assetIssuer: USDC_ISSUER,
-    })
+    });
 
     vi.mocked(freighter.signTransaction).mockResolvedValue({
       signedTxXdr: tx.toXDR(),
       signerAddress: SOURCE_KEY,
-    })
+    });
 
     vi.spyOn(horizonServer, 'submitTransaction').mockRejectedValue({
       response: {
@@ -125,18 +128,21 @@ describe('buildWithdrawPayment', () => {
           },
         },
       },
-    })
+    });
 
-    await expect(signAndSubmitPayment(tx)).rejects.toThrow(/tx_failed|op_underfunded/)
-  })
+    await expect(signAndSubmitPayment(tx)).rejects.toThrow(/tx_failed|op_underfunded/);
+  });
 
   it('throws a formatted error on missing response', async () => {
-    vi.stubGlobal('fetch', vi.fn(async () => {
-      return { ok: false, status: 500, json: async () => ({}) }
-    }))
-    
+    vi.stubGlobal(
+      'fetch',
+      vi.fn(async () => {
+        return { ok: false, status: 500, json: async () => ({}) };
+      })
+    );
+
     // ... rest of the test
-    const { signAndSubmitPayment } = await import('@/lib/stellar/horizon')
-    await expect(signAndSubmitPayment('xdr' as any)).rejects.toThrow()
-  })
-})
+    const { signAndSubmitPayment } = await import('@/lib/stellar/horizon');
+    await expect(signAndSubmitPayment('xdr' as any)).rejects.toThrow();
+  });
+});

@@ -1,5 +1,6 @@
 import { parseSepErrorBody } from './errors';
 import type {
+  Sep1TomlData,
   Sep38Asset,
   Sep38DeliveryMethod,
   Sep38IndicativePrice,
@@ -9,6 +10,19 @@ import type {
   Sep38QuoteContext,
   Sep38QuoteParams,
 } from '@/types';
+
+/**
+ * Asserts that an anchor advertises ANCHOR_QUOTE_SERVER in its stellar.toml.
+ * Throws if the anchor is not SEP-38 capable; returns the quote server URL otherwise.
+ */
+export function assertSep38Capable(toml: Sep1TomlData): string {
+  if (!toml.capabilities.sep38 || !toml.ANCHOR_QUOTE_SERVER) {
+    throw new Error(
+      `Anchor "${toml.domain}" does not advertise ANCHOR_QUOTE_SERVER and cannot be used for SEP-38.`
+    );
+  }
+  return toml.ANCHOR_QUOTE_SERVER;
+}
 
 // ─── Errors ───────────────────────────────────────────────────────────────────
 

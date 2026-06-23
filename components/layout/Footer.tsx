@@ -1,4 +1,4 @@
-import { sha, buildTime } from 'lib/version';
+import { sha, buildTime } from '@/lib/version';
 
 export function Footer() {
   return (
@@ -21,7 +21,10 @@ export function Footer() {
               </a>
             </p>
             {sha ? (
-              <div className="text-xs text-gray-400 dark:text-gray-600">v{sha}{buildTime ? ` · ${new Date(buildTime).toLocaleString()}` : ''}</div>
+              <div className="text-xs text-gray-400 dark:text-gray-600">
+                v{sha}
+                {buildTime ? ` · ${new Date(buildTime).toLocaleString()}` : ''}
+              </div>
             ) : null}
           </div>
         </div>

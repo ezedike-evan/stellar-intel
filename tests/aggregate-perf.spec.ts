@@ -9,6 +9,7 @@ function makeEvents(count: number, anchorId = 'anchor-1', daysBack = 7): Settlem
   const now = Date.now();
   return Array.from({ length: count }, (_, i) => ({
     anchorId,
+    corridor: 'usdc-ngn',
     completedAt: new Date(now - (i % daysBack) * 86400000),
     settlementMs: 120000 + i * 1000,
     success: i % 10 !== 0,
@@ -25,12 +26,14 @@ describe('computeWindowAggregate', () => {
   it('7-day window only includes recent events', () => {
     const old: SettlementEvent = {
       anchorId: 'anchor-1',
+      corridor: 'usdc-ngn',
       completedAt: new Date(Date.now() - 10 * 86400000),
       settlementMs: 60000,
       success: true,
     };
     const recent: SettlementEvent = {
       anchorId: 'anchor-1',
+      corridor: 'usdc-ngn',
       completedAt: new Date(Date.now() - 2 * 86400000),
       settlementMs: 60000,
       success: true,
@@ -58,6 +61,7 @@ describe('computeWindowAggregate', () => {
     const base = computeWindowAggregate(events, 'anchor-1', 7);
     const updated = incrementalUpdate(base, {
       anchorId: 'anchor-1',
+      corridor: 'usdc-ngn',
       completedAt: new Date(),
       settlementMs: 90000,
       success: true,
