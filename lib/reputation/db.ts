@@ -1,7 +1,7 @@
-import Database from 'better-sqlite3'
-import type { OutcomeRow } from './aggregate'
+import Database from 'better-sqlite3';
+import type { OutcomeRow } from './aggregate';
 
-export type ReputationDb = InstanceType<typeof Database>
+export type ReputationDb = InstanceType<typeof Database>;
 
 // ─── Schema ───────────────────────────────────────────────────────────────────
 
@@ -14,7 +14,7 @@ const CREATE_TABLE_SQL = `
     slippage    REAL,
     recordedAt  INTEGER NOT NULL
   )
-`
+`;
 
 // ─── Lifecycle ────────────────────────────────────────────────────────────────
 
@@ -23,9 +23,9 @@ const CREATE_TABLE_SQL = `
  * Pass `":memory:"` for an ephemeral in-process store suitable for tests.
  */
 export function openDb(path: string = ':memory:'): ReputationDb {
-  const db = new Database(path)
-  db.exec(CREATE_TABLE_SQL)
-  return db
+  const db = new Database(path);
+  db.exec(CREATE_TABLE_SQL);
+  return db;
 }
 
 // ─── Write ────────────────────────────────────────────────────────────────────
@@ -40,11 +40,11 @@ export function appendRow(db: ReputationDb, row: OutcomeRow): void {
       (intentHash, anchorId, filled, settleMs, slippage, recordedAt)
     VALUES
       (@intentHash, @anchorId, @filled, @settleMs, @slippage, @recordedAt)
-  `)
+  `);
   stmt.run({
     ...row,
     filled: row.filled ? 1 : 0,
-  })
+  });
 }
 
 // ─── Read ─────────────────────────────────────────────────────────────────────
@@ -58,19 +58,19 @@ export function queryRows(db: ReputationDb, anchorId: string): OutcomeRow[] {
       `SELECT intentHash, anchorId, filled, settleMs, slippage, recordedAt
        FROM outcome_rows
        WHERE anchorId = ?
-       ORDER BY recordedAt ASC`,
+       ORDER BY recordedAt ASC`
     )
     .all(anchorId) as Array<{
-    intentHash: string
-    anchorId: string
-    filled: number
-    settleMs: number | null
-    slippage: number | null
-    recordedAt: number
-  }>
+    intentHash: string;
+    anchorId: string;
+    filled: number;
+    settleMs: number | null;
+    slippage: number | null;
+    recordedAt: number;
+  }>;
 
   return rows.map((r) => ({
     ...r,
     filled: r.filled === 1,
-  }))
+  }));
 }

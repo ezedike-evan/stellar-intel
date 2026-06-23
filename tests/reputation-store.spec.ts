@@ -45,7 +45,10 @@ function row(over: Partial<OutcomeLogRow> = {}): OutcomeLogRow {
 const backends: Array<[string, () => ReputationStore]> = [
   ['memory', () => createReputationStore({ backend: 'memory' })],
   ['sqlite', () => createReputationStore({ backend: 'sqlite' })],
-  ['postgres', () => createReputationStore({ backend: 'postgres', executor: new SqliteBackedPgExecutor() })],
+  [
+    'postgres',
+    () => createReputationStore({ backend: 'postgres', executor: new SqliteBackedPgExecutor() }),
+  ],
 ];
 
 describe.each(backends)('ReputationStore conformance — %s backend', (_name, make) => {
@@ -75,7 +78,9 @@ describe.each(backends)('ReputationStore conformance — %s backend', (_name, ma
 
   it('backfills delivery and drops the row from the pending-reconciliation set', async () => {
     store = make();
-    await store.append(row({ intentHash: 'r', deliveredAmount: null, stellarTransactionId: 'tx-r' }));
+    await store.append(
+      row({ intentHash: 'r', deliveredAmount: null, stellarTransactionId: 'tx-r' })
+    );
 
     expect(await store.query({ pendingReconciliationOnly: true })).toHaveLength(1);
 

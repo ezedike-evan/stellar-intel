@@ -35,7 +35,8 @@ export function computeCorridorAggregate(
 ): CorridorAggregate {
   const cutoff = new Date(now.getTime() - windowDays * 86400000);
   const relevant = events.filter(
-    (e) => e.anchorId === anchorId && e.corridor === corridor && e.completedAt >= cutoff && !e.disputed
+    (e) =>
+      e.anchorId === anchorId && e.corridor === corridor && e.completedAt >= cutoff && !e.disputed
   );
 
   const bucketStart = new Date(now);
@@ -191,26 +192,26 @@ export function incrementalUpdate(
  * completes. All PII has already been stripped (see redact.ts).
  */
 export interface OutcomeRow {
-  intentHash: string
-  anchorId: string
+  intentHash: string;
+  anchorId: string;
   /** Whether the transaction reached the "completed" state. */
-  filled: boolean
+  filled: boolean;
   /** Settlement time in milliseconds (null when not yet settled). */
-  settleMs: number | null
+  settleMs: number | null;
   /** Slippage as a decimal fraction, e.g. 0.02 = 2 % (null when unavailable). */
-  slippage: number | null
+  slippage: number | null;
   /** Unix timestamp (ms) when the row was recorded. */
-  recordedAt: number
+  recordedAt: number;
 }
 
 /** Rolling window in days — 7, 30, or 90. */
-export type Window = 7 | 30 | 90
+export type Window = 7 | 30 | 90;
 
 // ─── Scorecard ────────────────────────────────────────────────────────────────
 
 export interface Percentiles {
-  p50: number
-  p95: number
+  p50: number;
+  p95: number;
 }
 
 /**
@@ -219,25 +220,25 @@ export interface Percentiles {
  */
 export type Scorecard =
   | {
-      state: 'ok'
-      window: Window
-      sampleSize: number
-      fillRate: number
-      settleMs: Percentiles
-      slippage: Percentiles
+      state: 'ok';
+      window: Window;
+      sampleSize: number;
+      fillRate: number;
+      settleMs: Percentiles;
+      slippage: Percentiles;
     }
   | {
-      state: 'insufficient_data'
-      window: Window
-      sampleSize: number
-    }
+      state: 'insufficient_data';
+      window: Window;
+      sampleSize: number;
+    };
 
 // ─── Constants ────────────────────────────────────────────────────────────────
 
 /** Minimum rows required to compute a scorecard. */
-export const MIN_SAMPLES = 1
+export const MIN_SAMPLES = 1;
 
-const MS_PER_DAY = 86_400_000
+const MS_PER_DAY = 86_400_000;
 
 // ─── Helpers ──────────────────────────────────────────────────────────────────
 
@@ -246,14 +247,14 @@ const MS_PER_DAY = 86_400_000
  * Uses linear interpolation (same as NumPy's default).
  */
 export function percentile(sorted: number[], p: number): number {
-  if (sorted.length === 0) return 0
-  if (sorted.length === 1) return sorted[0] ?? 0
-  const idx = (p / 100) * (sorted.length - 1)
-  const lo = Math.floor(idx)
-  const hi = Math.ceil(idx)
-  const loVal = sorted[lo] ?? 0
-  const hiVal = sorted[hi] ?? 0
-  return loVal + (hiVal - loVal) * (idx - lo)
+  if (sorted.length === 0) return 0;
+  if (sorted.length === 1) return sorted[0] ?? 0;
+  const idx = (p / 100) * (sorted.length - 1);
+  const lo = Math.floor(idx);
+  const hi = Math.ceil(idx);
+  const loVal = sorted[lo] ?? 0;
+  const hiVal = sorted[hi] ?? 0;
+  return loVal + (hiVal - loVal) * (idx - lo);
 }
 
 // ─── Core aggregate function ──────────────────────────────────────────────────
@@ -265,36 +266,36 @@ export function percentile(sorted: number[], p: number): number {
 export function aggregate(
   rows: OutcomeRow[],
   windowDays: Window,
-  nowMs: number = Date.now(),
+  nowMs: number = Date.now()
 ): Scorecard {
-  const cutoff = nowMs - windowDays * MS_PER_DAY
-  const windowRows = rows.filter((r) => r.recordedAt >= cutoff)
+  const cutoff = nowMs - windowDays * MS_PER_DAY;
+  const windowRows = rows.filter((r) => r.recordedAt >= cutoff);
 
   if (windowRows.length < MIN_SAMPLES) {
-    return { state: 'insufficient_data', window: windowDays, sampleSize: windowRows.length }
+    return { state: 'insufficient_data', window: windowDays, sampleSize: windowRows.length };
   }
 
-  const fillRate = windowRows.filter((r) => r.filled).length / windowRows.length
+  const fillRate = windowRows.filter((r) => r.filled).length / windowRows.length;
 
   const settleSorted = windowRows
     .map((r) => r.settleMs)
     .filter((v): v is number => v !== null)
-    .sort((a, b) => a - b)
+    .sort((a, b) => a - b);
 
   const slippageSorted = windowRows
     .map((r) => r.slippage)
     .filter((v): v is number => v !== null)
-    .sort((a, b) => a - b)
+    .sort((a, b) => a - b);
 
   const settleMs: Percentiles =
     settleSorted.length > 0
       ? { p50: percentile(settleSorted, 50), p95: percentile(settleSorted, 95) }
-      : { p50: 0, p95: 0 }
+      : { p50: 0, p95: 0 };
 
   const slippage: Percentiles =
     slippageSorted.length > 0
       ? { p50: percentile(slippageSorted, 50), p95: percentile(slippageSorted, 95) }
-      : { p50: 0, p95: 0 }
+      : { p50: 0, p95: 0 };
 
   return {
     state: 'ok',
@@ -303,7 +304,7 @@ export function aggregate(
     fillRate,
     settleMs,
     slippage,
-  }
+  };
 }
 
 /**
@@ -311,11 +312,11 @@ export function aggregate(
  */
 export function buildScorecards(
   rows: OutcomeRow[],
-  nowMs: number = Date.now(),
+  nowMs: number = Date.now()
 ): Record<Window, Scorecard> {
   return {
     7: aggregate(rows, 7, nowMs),
     30: aggregate(rows, 30, nowMs),
     90: aggregate(rows, 90, nowMs),
-  }
+  };
 }

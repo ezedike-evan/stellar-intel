@@ -158,8 +158,20 @@ describe('POST /api/reputation/dispute', () => {
     const other = Keypair.random();
     const sig1 = signHash(keypair, intentHash);
     const sig2 = signHash(other, intentHash);
-    const base1 = { intentHash, publicKey: keypair.publicKey(), signature: sig1, anchorId: 'a', reason: 'r' };
-    const base2 = { intentHash, publicKey: other.publicKey(), signature: sig2, anchorId: 'a', reason: 'r' };
+    const base1 = {
+      intentHash,
+      publicKey: keypair.publicKey(),
+      signature: sig1,
+      anchorId: 'a',
+      reason: 'r',
+    };
+    const base2 = {
+      intentHash,
+      publicKey: other.publicKey(),
+      signature: sig2,
+      anchorId: 'a',
+      reason: 'r',
+    };
 
     for (let i = 0; i < 10; i++) await POST(makeRequest(base1));
     expect((await POST(makeRequest(base1))).status).toBe(429);

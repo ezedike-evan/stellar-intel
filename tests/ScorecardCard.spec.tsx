@@ -33,6 +33,7 @@ describe('ScorecardCard', () => {
         settle_p95: 95,
         slippage_p50: 0.4,
         slippage_p95: 0.85,
+        outcomes_count: 100,
       }),
     });
 

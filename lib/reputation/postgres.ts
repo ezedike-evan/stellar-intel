@@ -45,7 +45,8 @@ function fromDb(r: Record<string, unknown>): OutcomeLogRow {
     outcome: String(r['outcome']) as OutcomeStatus,
     createdAt: new Date(r['created_at'] as string).toISOString(),
     stellarTransactionId: asString(r['stellar_transaction_id']),
-    reconciledAt: r['reconciled_at'] == null ? null : new Date(r['reconciled_at'] as string).toISOString(),
+    reconciledAt:
+      r['reconciled_at'] == null ? null : new Date(r['reconciled_at'] as string).toISOString(),
   };
 }
 
@@ -74,9 +75,18 @@ export class PostgresReputationStore implements ReputationStore {
          created_at = EXCLUDED.created_at, stellar_transaction_id = EXCLUDED.stellar_transaction_id,
          reconciled_at = EXCLUDED.reconciled_at`,
       [
-        row.intentHash, row.anchorId, row.corridor, row.quotedRate, row.deliveredRate,
-        row.quotedAmount, row.deliveredAmount, row.settleSeconds, row.outcome, row.createdAt,
-        row.stellarTransactionId, row.reconciledAt,
+        row.intentHash,
+        row.anchorId,
+        row.corridor,
+        row.quotedRate,
+        row.deliveredRate,
+        row.quotedAmount,
+        row.deliveredAmount,
+        row.settleSeconds,
+        row.outcome,
+        row.createdAt,
+        row.stellarTransactionId,
+        row.reconciledAt,
       ]
     );
   }
@@ -94,7 +104,9 @@ export class PostgresReputationStore implements ReputationStore {
       where.push(`corridor = $${params.length}`);
     }
     if (filter.pendingReconciliationOnly) {
-      where.push('delivered_amount IS NULL AND reconciled_at IS NULL AND stellar_transaction_id IS NOT NULL');
+      where.push(
+        'delivered_amount IS NULL AND reconciled_at IS NULL AND stellar_transaction_id IS NOT NULL'
+      );
     }
     const sql = `SELECT * FROM outcome_log ${
       where.length ? `WHERE ${where.join(' AND ')}` : ''

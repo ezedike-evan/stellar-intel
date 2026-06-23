@@ -1,18 +1,3 @@
-/**
- * Stellar Intel MCP server (issues #135 / #136).
- *
- * Exposes the off-ramp tools over stdio so MCP-capable agents (and the
- * subprocess round-trip test in tests/mcp-e2e.spec.ts, #137) can invoke:
- *   - intel.offramp.quote   — best net-received quote for a corridor
- *   - intel.offramp.prepare — unsigned envelope + unsigned tx for signing
- *
- * Run with:  npx tsx scripts/mcp/server.ts
- *
- * The off-ramp core transitively imports lib/config, which validates the
- * NEXT_PUBLIC_* env vars at module load. An MCP agent invoking this server has
- * no reason to provide Next.js front-end env, so we apply safe mainnet defaults
- * for any that are unset BEFORE importing the tools (which pull in config).
- */
 import { McpServer } from '@modelcontextprotocol/sdk/server/mcp.js';
 import { StdioServerTransport } from '@modelcontextprotocol/sdk/server/stdio.js';
 
@@ -52,8 +37,7 @@ async function main(): Promise<void> {
 
 // Only auto-start when invoked directly (not when imported by tests).
 const invokedDirectly =
-  process.argv[1] !== undefined &&
-  /scripts[\\/]mcp[\\/]server\.(ts|js|mjs)$/.test(process.argv[1]);
+  process.argv[1] !== undefined && /scripts[\\/]mcp[\\/]server\.(ts|js|mjs)$/.test(process.argv[1]);
 
 if (invokedDirectly) {
   main().catch((err) => {

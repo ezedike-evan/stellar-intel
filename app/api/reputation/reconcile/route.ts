@@ -1,10 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { withRequestLogger } from '@/lib/logger';
 import { getReputationStore } from '@/lib/reputation/store';
-import {
-  reconcileReputationOutcomes,
-  type ReputationOutcomeRow,
-} from '@/lib/reputation/reconcile';
+import { reconcileReputationOutcomes, type ReputationOutcomeRow } from '@/lib/reputation/reconcile';
 
 export const runtime = 'nodejs';
 

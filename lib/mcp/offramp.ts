@@ -110,7 +110,7 @@ export type PrepareOutput = z.infer<typeof PrepareOutputSchema>;
 export class OfframpToolError extends Error {
   constructor(
     message: string,
-    public readonly code: 'NO_ROUTE' | 'TX_BUILD_FAILED',
+    public readonly code: 'NO_ROUTE' | 'TX_BUILD_FAILED'
   ) {
     super(message);
     this.name = 'OfframpToolError';
@@ -159,7 +159,7 @@ export function buildUnsignedOfframpTx(
   amount: string,
   assetCode: string,
   assetIssuer: string,
-  quoteId: string,
+  quoteId: string
 ): string {
   const asset = new Asset(assetCode, assetIssuer);
   const account = new Account(senderPublicKey, '0');
@@ -185,7 +185,7 @@ export const QUOTE_TTL_SECONDS = 300;
  */
 export async function getQuote(
   input: QuoteInput,
-  now: () => number = Date.now,
+  now: () => number = Date.now
 ): Promise<QuoteOutput> {
   const parsed = QuoteInputSchema.parse(input);
   const id = corridorId(parsed.from, parsed.to);
@@ -240,12 +240,12 @@ export async function prepareIntent(input: PrepareInput): Promise<PrepareOutput>
       intent.amount,
       intent.sourceAsset,
       USDC_ISSUER,
-      intentHash,
+      intentHash
     );
   } catch (err) {
     throw new OfframpToolError(
       err instanceof Error ? err.message : 'Failed to build transaction',
-      'TX_BUILD_FAILED',
+      'TX_BUILD_FAILED'
     );
   }
 
