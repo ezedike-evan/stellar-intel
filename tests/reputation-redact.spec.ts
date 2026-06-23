@@ -1,12 +1,12 @@
 import { describe, it, expect } from 'vitest';
 import fc from 'fast-check';
-import { redactIntent, hashIntent, PII_FIELDS, type RawIntent } from '@/lib/reputation/redact';
+import { redactIntent, hashIntent, PII_FIELDS } from '@/lib/reputation/redact';
 
 // ─── Arbitraries ─────────────────────────────────────────────────────────────
 
 const nonEmptyString = fc.string({ minLength: 1, maxLength: 64 });
 
-const rawIntentArb = fc.record<RawIntent>({
+const rawIntentArb = fc.record({
   recipientAccount: nonEmptyString,
   recipientName: nonEmptyString,
   recipientEmail: nonEmptyString,

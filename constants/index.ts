@@ -42,7 +42,6 @@ export const SUPPORTED_COUNTRIES: Country[] = [
   { code: 'DE', name: 'Germany', currency: 'EUR', currencySymbol: '€', flag: '🇩🇪' },
 ];
 
-
 export const REVALIDATION_INTERVAL = 30_000; // 30 seconds
 
 export const SWAP_SOURCES = ['SDEX', 'Soroswap', 'Phoenix', 'Aquarius'] as const;

@@ -1,8 +1,7 @@
 import { useCallback, useEffect, useMemo, useRef, useState, useSyncExternalStore } from 'react';
-import useSWR, { useSWRConfig } from 'swr';
+import useSWR from 'swr';
 import { measureClient } from '@/lib/metrics';
 import type { AnchorRate, RateComparison } from '@/types';
-import { fetchRates } from '@/lib/stellar/rates-engine';
 
 const RATES_REFRESH_INTERVAL_MS = 30_000;
 
@@ -54,51 +53,31 @@ export interface UseAnchorRatesResult {
 
 export function useAnchorRates(corridorId: string, amount: string): UseAnchorRatesResult {
   const [refreshInflight, setRefreshInflight] = useState(false);
-  const { mutate: globalMutate } = useSWRConfig();
   const isDocumentVisible = useDocumentVisible();
   const wasDocumentVisible = useRef(isDocumentVisible);
   const hasRateQuery = Boolean(corridorId && amount);
   const swrKey: RatesKey | null =
     hasRateQuery && isDocumentVisible ? ['rates', corridorId, amount] : null;
 
-  // Data source: client-side rates engine (Promise.race timeout + partial results).
-  // Anchors that beat the timeout are returned immediately; slower anchors stay in
-  // `pending` and are injected into the SWR cache via `onQuoteArrived` as they
-  // resolve in the background (Issue #173) — no polling or layout shift.
+  // Data source: server-side SEP-38 quote proxy (`GET /api/rates/[corridor]`).
+  // The route resolves each anchor's stellar.toml and live /price from Node, so
+  // the browser's CORS policy never blocks third-party anchor domains. The server
+  // returns the complete comparison in one response — no client-side streaming.
   const { data, error, isLoading, mutate } = useSWR<RateComparison, Error>(
     swrKey,
     ([, cid, amt]: RatesKey) =>
       measureClient(
         'quote_fetch_latency',
-        () =>
-          fetchRates(cid, amt, {
-            onQuoteArrived: (quote: AnchorRate) => {
-              void globalMutate(
-                ['rates', cid, amt],
-                (current: RateComparison | undefined) => {
-                  if (!current) return current;
-                  // Avoid duplicates if a refresh already landed this anchor.
-                  if (current.rates.some((r) => r.anchorId === quote.anchorId)) {
-                    return current;
-                  }
-                  const newPending = current.pending.filter(
-                    (p) => p.anchorId !== quote.anchorId
-                  );
-                  const newRates = [...current.rates, quote];
-                  const best = newRates.reduce((a, b) =>
-                    (b.totalReceived ?? 0) > (a.totalReceived ?? 0) ? b : a
-                  );
-                  return {
-                    ...current,
-                    pending: newPending,
-                    rates: newRates,
-                    bestRateId: best.anchorId,
-                  };
-                },
-                { revalidate: false }
-              );
-            },
-          }),
+        async () => {
+          const res = await fetch(
+            `/api/rates/${encodeURIComponent(cid)}?amount=${encodeURIComponent(amt)}`
+          );
+          if (!res.ok) {
+            const body: { error?: string } | null = await res.json().catch(() => null);
+            throw new Error(body?.error ?? `Failed to load rates (HTTP ${res.status})`);
+          }
+          return (await res.json()) as RateComparison;
+        },
         { anchorId: cid }
       ),
     {
@@ -130,12 +109,17 @@ export function useAnchorRates(corridorId: string, amount: string): UseAnchorRat
 
   const refreshingRef = useRef(false);
 
+  // When paused (e.g. while a drawer/modal owns the flow) the auto-refresh
+  // watcher and manual refresh are suppressed so an in-progress quote is not
+  // swapped out from under the user.
+  const refreshPausedRef = useRef(false);
+
   useEffect(() => {
     if (!hasRateQuery || !isDocumentVisible) return;
 
     const intervalId = setInterval(() => {
       const current = dataRef.current;
-      if (!current || refreshingRef.current) return;
+      if (!current || refreshingRef.current || refreshPausedRef.current) return;
 
       const now = Date.now();
       const anyNearExpiry = current.rates.some((rate) => {
@@ -171,15 +155,16 @@ export function useAnchorRates(corridorId: string, amount: string): UseAnchorRat
         if (rate.source !== 'sep38' || !rate.updatedAt) return rate;
         const age = now - new Date(rate.updatedAt).getTime();
         const remaining = QUOTE_VALIDITY_MS - age;
-        const quoteStatus: AnchorRate['quoteStatus'] =
-          refreshingRef.current ? 'refreshing'
-          : remaining < REFRESH_THRESHOLD_MS ? 'expiring'
-          : 'firm';
+        const quoteStatus: AnchorRate['quoteStatus'] = refreshingRef.current
+          ? 'refreshing'
+          : remaining < REFRESH_THRESHOLD_MS
+            ? 'expiring'
+            : 'firm';
         return { ...rate, quoteStatus };
       }),
     };
-  // refreshInflight is state (triggers re-render) and serves as proxy for refreshingRef changes
-  // eslint-disable-next-line react-hooks/exhaustive-deps
+    // refreshInflight is state (triggers re-render) and serves as proxy for refreshingRef changes
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [data, refreshInflight]);
 
   const refresh = useCallback(async () => {
@@ -197,6 +182,14 @@ export function useAnchorRates(corridorId: string, amount: string): UseAnchorRat
       setRefreshInflight(false);
     }
   }, [mutate, refreshInflight]);
+
+  const pauseRefresh = useCallback(() => {
+    refreshPausedRef.current = true;
+  }, []);
+
+  const resumeRefresh = useCallback(() => {
+    refreshPausedRef.current = false;
+  }, []);
 
   return {
     rates: annotatedRates,

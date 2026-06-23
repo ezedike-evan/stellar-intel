@@ -27,7 +27,11 @@ describe('getScore', () => {
 
   it('returns zeros when no events match the anchor', () => {
     const events = [makeEvent('other-anchor', true, 30_000)];
-    expect(getScore('my-anchor', events)).toEqual({ total: 0, success_rate: 0, last_settle_seconds: 0 });
+    expect(getScore('my-anchor', events)).toEqual({
+      total: 0,
+      success_rate: 0,
+      last_settle_seconds: 0,
+    });
   });
 
   it('counts all events for the anchor', () => {
@@ -53,26 +57,20 @@ describe('getScore', () => {
   });
 
   it('returns success_rate of 1 when all events succeed', () => {
-    const events = [
-      makeEvent('anchor', true, 5_000),
-      makeEvent('anchor', true, 7_000),
-    ];
+    const events = [makeEvent('anchor', true, 5_000), makeEvent('anchor', true, 7_000)];
     expect(getScore('anchor', events).success_rate).toBe(1);
   });
 
   it('returns success_rate of 0 when all events fail', () => {
-    const events = [
-      makeEvent('anchor', false, 5_000),
-      makeEvent('anchor', false, 7_000),
-    ];
+    const events = [makeEvent('anchor', false, 5_000), makeEvent('anchor', false, 7_000)];
     expect(getScore('anchor', events).success_rate).toBe(0);
   });
 
   it('reports last_settle_seconds from the most recent event', () => {
     const events = [
-      makeEvent('anchor', true, 30_000, 0),       // oldest,  30s settle
-      makeEvent('anchor', true, 60_000, 5_000),    // middle,  60s settle
-      makeEvent('anchor', true, 45_000, 10_000),   // newest,  45s settle
+      makeEvent('anchor', true, 30_000, 0), // oldest,  30s settle
+      makeEvent('anchor', true, 60_000, 5_000), // middle,  60s settle
+      makeEvent('anchor', true, 45_000, 10_000), // newest,  45s settle
     ];
     const result = getScore('anchor', events);
     expect(result.last_settle_seconds).toBe(45);

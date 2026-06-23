@@ -77,7 +77,9 @@ export class SqliteReputationStore implements ReputationStore {
       params['corridor'] = filter.corridor;
     }
     if (filter.pendingReconciliationOnly) {
-      where.push('deliveredAmount IS NULL AND reconciledAt IS NULL AND stellarTransactionId IS NOT NULL');
+      where.push(
+        'deliveredAmount IS NULL AND reconciledAt IS NULL AND stellarTransactionId IS NOT NULL'
+      );
     }
     const sql = `SELECT * FROM outcome_log ${
       where.length ? `WHERE ${where.join(' AND ')}` : ''

@@ -1,11 +1,11 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest';
 import { render, screen, fireEvent } from '@testing-library/react';
 import { WalletButton } from '@/components/ui/WalletButton';
-import * as useFreighterModule from '@/hooks/useFreighter';
+import * as WalletContextModule from '@/contexts/WalletContext';
 
-vi.mock('@/hooks/useFreighter');
+vi.mock('@/contexts/WalletContext');
 
-const mockUseFreighter = vi.mocked(useFreighterModule.useFreighter);
+const mockUseWallet = vi.mocked(WalletContextModule.useWallet);
 
 const base = {
   isInstalled: false,
@@ -23,20 +23,20 @@ beforeEach(() => vi.clearAllMocks());
 
 describe('WalletButton — not-detected state', () => {
   it('renders "Install Freighter" when the extension is not installed', () => {
-    mockUseFreighter.mockReturnValue({ ...base, isInstalled: false });
+    mockUseWallet.mockReturnValue({ ...base, isInstalled: false });
     render(<WalletButton />);
     expect(screen.getByText('Install Freighter')).toBeInTheDocument();
   });
 
   it('"Install Freighter" is a link to freighter.app', () => {
-    mockUseFreighter.mockReturnValue({ ...base, isInstalled: false });
+    mockUseWallet.mockReturnValue({ ...base, isInstalled: false });
     render(<WalletButton />);
     const link = screen.getByRole('link', { name: 'Install Freighter' });
     expect(link).toHaveAttribute('href', 'https://freighter.app');
   });
 
   it('does not render "Connect Wallet" in not-detected state', () => {
-    mockUseFreighter.mockReturnValue({ ...base, isInstalled: false });
+    mockUseWallet.mockReturnValue({ ...base, isInstalled: false });
     render(<WalletButton />);
     expect(screen.queryByText('Connect Wallet')).not.toBeInTheDocument();
   });
@@ -46,21 +46,21 @@ describe('WalletButton — not-detected state', () => {
 
 describe('WalletButton — disconnected state', () => {
   it('renders "Connect Wallet" when installed but not connected', () => {
-    mockUseFreighter.mockReturnValue({ ...base, isInstalled: true, isConnected: false });
+    mockUseWallet.mockReturnValue({ ...base, isInstalled: true, isConnected: false });
     render(<WalletButton />);
     expect(screen.getByText('Connect Wallet')).toBeInTheDocument();
   });
 
   it('clicking "Connect Wallet" calls connect()', () => {
     const connect = vi.fn();
-    mockUseFreighter.mockReturnValue({ ...base, isInstalled: true, isConnected: false, connect });
+    mockUseWallet.mockReturnValue({ ...base, isInstalled: true, isConnected: false, connect });
     render(<WalletButton />);
     fireEvent.click(screen.getByText('Connect Wallet'));
     expect(connect).toHaveBeenCalledOnce();
   });
 
   it('shows an error message when the hook exposes one', () => {
-    mockUseFreighter.mockReturnValue({
+    mockUseWallet.mockReturnValue({
       ...base,
       isInstalled: true,
       isConnected: false,
@@ -71,7 +71,7 @@ describe('WalletButton — disconnected state', () => {
   });
 
   it('does not render "Install Freighter" in disconnected state', () => {
-    mockUseFreighter.mockReturnValue({ ...base, isInstalled: true, isConnected: false });
+    mockUseWallet.mockReturnValue({ ...base, isInstalled: true, isConnected: false });
     render(<WalletButton />);
     expect(screen.queryByText('Install Freighter')).not.toBeInTheDocument();
   });
@@ -81,7 +81,7 @@ describe('WalletButton — disconnected state', () => {
 
 describe('WalletButton — wrong-network state', () => {
   it('renders "Wrong network" when connected on a non-PUBLIC network', () => {
-    mockUseFreighter.mockReturnValue({
+    mockUseWallet.mockReturnValue({
       ...base,
       isInstalled: true,
       isConnected: true,
@@ -93,7 +93,7 @@ describe('WalletButton — wrong-network state', () => {
   });
 
   it('shows "Mainnet required" as the target network label', () => {
-    mockUseFreighter.mockReturnValue({
+    mockUseWallet.mockReturnValue({
       ...base,
       isInstalled: true,
       isConnected: true,
@@ -104,7 +104,7 @@ describe('WalletButton — wrong-network state', () => {
   });
 
   it('renders a "How to switch" link', () => {
-    mockUseFreighter.mockReturnValue({
+    mockUseWallet.mockReturnValue({
       ...base,
       isInstalled: true,
       isConnected: true,
@@ -115,7 +115,7 @@ describe('WalletButton — wrong-network state', () => {
   });
 
   it('does not render the public key in wrong-network state', () => {
-    mockUseFreighter.mockReturnValue({
+    mockUseWallet.mockReturnValue({
       ...base,
       isInstalled: true,
       isConnected: true,
@@ -131,7 +131,7 @@ describe('WalletButton — wrong-network state', () => {
 
 describe('WalletButton — connected state', () => {
   it('renders the truncated public key when connected on Mainnet', () => {
-    mockUseFreighter.mockReturnValue({
+    mockUseWallet.mockReturnValue({
       ...base,
       isInstalled: true,
       isConnected: true,
@@ -143,7 +143,7 @@ describe('WalletButton — connected state', () => {
   });
 
   it('renders the "Mainnet" badge', () => {
-    mockUseFreighter.mockReturnValue({
+    mockUseWallet.mockReturnValue({
       ...base,
       isInstalled: true,
       isConnected: true,
@@ -155,7 +155,7 @@ describe('WalletButton — connected state', () => {
   });
 
   it('does not render "Wrong network" when correctly connected', () => {
-    mockUseFreighter.mockReturnValue({
+    mockUseWallet.mockReturnValue({
       ...base,
       isInstalled: true,
       isConnected: true,
@@ -167,7 +167,7 @@ describe('WalletButton — connected state', () => {
   });
 
   it('does not render "Connect Wallet" when connected', () => {
-    mockUseFreighter.mockReturnValue({
+    mockUseWallet.mockReturnValue({
       ...base,
       isInstalled: true,
       isConnected: true,

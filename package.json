@@ -19,7 +19,6 @@
     "test:watch": "vitest --watch",
     "test:coverage": "vitest --coverage",
     "emit-version": "node ./scripts/emit-version.js",
-    "test:release": "npm run typecheck && npm run lint && npm run format:check && node ./scripts/run-release-tests.js && npm run build",
     "test:release": "npm run typecheck && npm run lint && npm run format:check && npm run test && npm run build",
     "emit-openapi": "tsx --tsconfig tsconfig.scripts.json scripts/emit-openapi.mts",
     "prepare": "husky || true"
@@ -41,11 +40,11 @@
     "clsx": "^2.1.1",
     "lucide-react": "^1.11.0",
     "next": "16.2.6",
+    "pino": "^9.14.0",
     "react": "19.2.6",
     "react-dom": "19.2.6",
     "swr": "^2.4.1",
-    "zod": "^4.3.6",
-    "pino": "^9.14.0"
+    "zod": "^4.3.6"
   },
   "devDependencies": {
     "@commitlint/cli": "^21.0.2",
@@ -62,6 +61,7 @@
     "@typescript-eslint/eslint-plugin": "^8.57.0",
     "@typescript-eslint/parser": "^8.57.0",
     "@vitejs/plugin-react": "^6.0.1",
+    "@vitest/coverage-v8": "^4.1.9",
     "better-sqlite3": "^12.10.0",
     "eslint": "^10",
     "eslint-config-next": "16.2.6",
