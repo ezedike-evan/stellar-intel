@@ -64,7 +64,7 @@
     "@vitest/coverage-v8": "^4.1.9",
     "better-sqlite3": "^12.10.0",
     "eslint": "^10",
-    "eslint-config-next": "16.2.6",
+    "eslint-config-next": "16.2.9",
     "eslint-config-prettier": "^10.1.8",
     "fast-check": "^4.7.0",
     "happy-dom": "^20.9.0",
