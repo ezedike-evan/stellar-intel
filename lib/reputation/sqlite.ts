@@ -1,6 +1,6 @@
 import Database from 'better-sqlite3';
 import type { OutcomeLogRow, OutcomeStatus } from '@/types/reputation';
-import type { DeliveredUpdate, OutcomeQuery, ReputationStore } from './store';
+import type { DeliveredUpdate, DisputedUpdate, OutcomeQuery, ReputationStore } from './store';
 
 // ─── SQLite backend (Issue #128 / #219) — local/dev ────────────────────────────
 
@@ -19,7 +19,9 @@ const CREATE_TABLE_SQL = `
     outcome              TEXT    NOT NULL,
     createdAt            TEXT    NOT NULL,
     stellarTransactionId TEXT,
-    reconciledAt         TEXT
+    reconciledAt         TEXT,
+    disputed             INTEGER NOT NULL DEFAULT 0,
+    disputed_reason      TEXT
   );
   CREATE INDEX IF NOT EXISTS idx_outcome_log_anchor ON outcome_log (anchorId);
 `;
@@ -37,10 +39,17 @@ interface OutcomeLogRowDb {
   createdAt: string;
   stellarTransactionId: string | null;
   reconciledAt: string | null;
+  disputed: number;
+  disputed_reason: string | null;
 }
 
 function fromDb(r: OutcomeLogRowDb): OutcomeLogRow {
-  return { ...r, outcome: r.outcome as OutcomeStatus };
+  return {
+    ...r,
+    outcome: r.outcome as OutcomeStatus,
+    disputed: r.disputed !== 0,
+    disputedReason: r.disputed_reason,
+  };
 }
 
 export class SqliteReputationStore implements ReputationStore {
@@ -57,12 +66,14 @@ export class SqliteReputationStore implements ReputationStore {
       .prepare(
         `INSERT OR REPLACE INTO outcome_log
            (intentHash, anchorId, corridor, quotedRate, deliveredRate, quotedAmount,
-            deliveredAmount, settleSeconds, outcome, createdAt, stellarTransactionId, reconciledAt)
+            deliveredAmount, settleSeconds, outcome, createdAt, stellarTransactionId, reconciledAt,
+            disputed, disputed_reason)
          VALUES
            (@intentHash, @anchorId, @corridor, @quotedRate, @deliveredRate, @quotedAmount,
-            @deliveredAmount, @settleSeconds, @outcome, @createdAt, @stellarTransactionId, @reconciledAt)`
+            @deliveredAmount, @settleSeconds, @outcome, @createdAt, @stellarTransactionId, @reconciledAt,
+            @disputed, @disputedReason)`
       )
-      .run(row);
+      .run({ ...row, disputed: row.disputed ? 1 : 0 });
   }
 
   async query(filter: OutcomeQuery = {}): Promise<OutcomeLogRow[]> {
@@ -97,6 +108,17 @@ export class SqliteReputationStore implements ReputationStore {
          WHERE intentHash = @intentHash`
       )
       .run({ ...update, intentHash });
+  }
+
+  async markDisputed(intentHash: string, update: DisputedUpdate): Promise<void> {
+    this.db
+      .prepare(
+        `UPDATE outcome_log
+           SET disputed = @disputed,
+               disputed_reason = @disputedReason
+         WHERE intentHash = @intentHash`
+      )
+      .run({ disputed: update.disputed ? 1 : 0, disputedReason: update.disputedReason, intentHash });
   }
 
   async close(): Promise<void> {

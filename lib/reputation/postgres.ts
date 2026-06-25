@@ -1,5 +1,5 @@
 import type { OutcomeLogRow, OutcomeStatus } from '@/types/reputation';
-import type { DeliveredUpdate, OutcomeQuery, ReputationStore } from './store';
+import type { DeliveredUpdate, DisputedUpdate, OutcomeQuery, ReputationStore } from './store';
 
 // ─── Postgres backend (Issue #128 / #219) — production ─────────────────────────
 //
@@ -27,7 +27,9 @@ const CREATE_TABLE_SQL = `
     outcome                TEXT NOT NULL,
     created_at             TIMESTAMPTZ NOT NULL,
     stellar_transaction_id TEXT,
-    reconciled_at          TIMESTAMPTZ
+    reconciled_at          TIMESTAMPTZ,
+    disputed               BOOLEAN NOT NULL DEFAULT FALSE,
+    disputed_reason        TEXT
   );
 `;
 
@@ -47,6 +49,8 @@ function fromDb(r: Record<string, unknown>): OutcomeLogRow {
     stellarTransactionId: asString(r['stellar_transaction_id']),
     reconciledAt:
       r['reconciled_at'] == null ? null : new Date(r['reconciled_at'] as string).toISOString(),
+    disputed: Boolean(r['disputed']),
+    disputedReason: asString(r['disputed_reason']),
   };
 }
 
@@ -65,15 +69,17 @@ export class PostgresReputationStore implements ReputationStore {
     await this.sql.query(
       `INSERT INTO outcome_log
          (intent_hash, anchor_id, corridor, quoted_rate, delivered_rate, quoted_amount,
-          delivered_amount, settle_seconds, outcome, created_at, stellar_transaction_id, reconciled_at)
-       VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12)
+          delivered_amount, settle_seconds, outcome, created_at, stellar_transaction_id, reconciled_at,
+          disputed, disputed_reason)
+       VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14)
        ON CONFLICT (intent_hash) DO UPDATE SET
          anchor_id = EXCLUDED.anchor_id, corridor = EXCLUDED.corridor,
          quoted_rate = EXCLUDED.quoted_rate, delivered_rate = EXCLUDED.delivered_rate,
          quoted_amount = EXCLUDED.quoted_amount, delivered_amount = EXCLUDED.delivered_amount,
          settle_seconds = EXCLUDED.settle_seconds, outcome = EXCLUDED.outcome,
          created_at = EXCLUDED.created_at, stellar_transaction_id = EXCLUDED.stellar_transaction_id,
-         reconciled_at = EXCLUDED.reconciled_at`,
+         reconciled_at = EXCLUDED.reconciled_at,
+         disputed = EXCLUDED.disputed, disputed_reason = EXCLUDED.disputed_reason`,
       [
         row.intentHash,
         row.anchorId,
@@ -87,6 +93,8 @@ export class PostgresReputationStore implements ReputationStore {
         row.createdAt,
         row.stellarTransactionId,
         row.reconciledAt,
+        row.disputed,
+        row.disputedReason,
       ]
     );
   }
@@ -122,6 +130,16 @@ export class PostgresReputationStore implements ReputationStore {
          SET delivered_amount = $2, delivered_rate = $3, reconciled_at = $4
        WHERE intent_hash = $1`,
       [intentHash, update.deliveredAmount, update.deliveredRate, update.reconciledAt]
+    );
+  }
+
+  async markDisputed(intentHash: string, update: DisputedUpdate): Promise<void> {
+    await this.init();
+    await this.sql.query(
+      `UPDATE outcome_log
+         SET disputed = $2, disputed_reason = $3
+       WHERE intent_hash = $1`,
+      [intentHash, update.disputed, update.disputedReason]
     );
   }
 

@@ -21,12 +21,19 @@ export interface DeliveredUpdate {
   reconciledAt: string;
 }
 
+export interface DisputedUpdate {
+  disputed: boolean;
+  disputedReason: string | null;
+}
+
 export interface ReputationStore {
   /** Idempotent on intentHash — re-appending the same row replaces it. */
   append(row: OutcomeLogRow): Promise<void>;
   query(filter?: OutcomeQuery): Promise<OutcomeLogRow[]>;
   /** Backfills delivered amount/rate for a row (used by the reconciler). */
   markDelivered(intentHash: string, update: DeliveredUpdate): Promise<void>;
+  /** Sets or clears the disputed flag on a row (used by the dispute API, #164/#165). */
+  markDisputed(intentHash: string, update: DisputedUpdate): Promise<void>;
   close(): Promise<void>;
 }
 
@@ -61,6 +68,13 @@ export class InMemoryReputationStore implements ReputationStore {
     row.deliveredAmount = update.deliveredAmount;
     row.deliveredRate = update.deliveredRate;
     row.reconciledAt = update.reconciledAt;
+  }
+
+  async markDisputed(intentHash: string, update: DisputedUpdate): Promise<void> {
+    const row = this.rows.get(intentHash);
+    if (!row) return;
+    row.disputed = update.disputed;
+    row.disputedReason = update.disputedReason;
   }
 
   async close(): Promise<void> {

@@ -202,6 +202,8 @@ export interface OutcomeRow {
   slippage: number | null;
   /** Unix timestamp (ms) when the row was recorded. */
   recordedAt: number;
+  /** When true the row is excluded from all aggregate computations (#164/#168). */
+  disputed?: boolean;
 }
 
 /** Rolling window in days — 7, 30, or 90. */
@@ -269,7 +271,7 @@ export function aggregate(
   nowMs: number = Date.now()
 ): Scorecard {
   const cutoff = nowMs - windowDays * MS_PER_DAY;
-  const windowRows = rows.filter((r) => r.recordedAt >= cutoff);
+  const windowRows = rows.filter((r) => r.recordedAt >= cutoff && !r.disputed);
 
   if (windowRows.length < MIN_SAMPLES) {
     return { state: 'insufficient_data', window: windowDays, sampleSize: windowRows.length };
