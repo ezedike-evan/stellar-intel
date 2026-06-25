@@ -8,6 +8,13 @@ import {
   estimateTimeToThreshold,
   MIN_OUTCOMES_THRESHOLD,
 } from '@/lib/reputation/thresholds';
+import {
+  calculateFreshness,
+  formatDrift,
+  getFreshnessLabel,
+  getFreshnessBadgeColor,
+  type FreshnessResult,
+} from '@/lib/oracle/freshness';
 
 type ReputationWindow = '7d' | '30d' | '90d';
 
@@ -23,6 +30,8 @@ interface ReputationMetrics {
   slippageP50: number | null;
   slippageP95: number | null;
   outcomesCount: number;
+  computedAt: string | null;
+  lastPublisherTxTimestamp: string | null;
 }
 
 const emptyMetrics: ReputationMetrics = {
@@ -32,6 +41,8 @@ const emptyMetrics: ReputationMetrics = {
   slippageP50: null,
   slippageP95: null,
   outcomesCount: 0,
+  computedAt: null,
+  lastPublisherTxTimestamp: null,
 };
 
 function toNumber(value: unknown): number | null {
@@ -49,35 +60,70 @@ function toNumber(value: unknown): number | null {
 
 function parseReputationResponse(body: unknown): ReputationMetrics {
   const payload = (body ?? {}) as Record<string, unknown>;
+  
+  // Extract scorecard data from the scorecards object
+  // The response has a structure like: { anchorId, scorecards: { 7d, 30d, 90d } }
+  const scorecards = payload.scorecards as Record<string, Record<string, unknown>> | undefined;
+  let scorecard: Record<string, unknown> | null = null;
+
+  // For now, we'll use the 30d window as the primary scorecard (most commonly used)
+  if (scorecards) {
+    scorecard = (scorecards['30'] ?? scorecards['30d']) as Record<string, unknown> | undefined;
+  }
 
   return {
     fillRate:
       toNumber(payload.fill_rate ?? payload.fillRate) ??
       toNumber(payload.fill_rate_percent ?? payload.fillRatePercent) ??
+      toNumber(scorecard?.fill_rate ?? scorecard?.fillRate) ??
       null,
     settleP50:
       toNumber(
         payload.settle_p50 ?? payload.settleP50 ?? payload.settlement_p50 ?? payload.settlementP50
-      ) ?? null,
+      ) ??
+      toNumber(
+        scorecard?.settle_p50 ?? scorecard?.settleP50 ?? scorecard?.settlement_p50 ?? scorecard?.settlementP50
+      ) ??
+      null,
     settleP95:
       toNumber(
         payload.settle_p95 ?? payload.settleP95 ?? payload.settlement_p95 ?? payload.settlementP95
-      ) ?? null,
+      ) ??
+      toNumber(
+        scorecard?.settle_p95 ?? scorecard?.settleP95 ?? scorecard?.settlement_p95 ?? scorecard?.settlementP95
+      ) ??
+      null,
     slippageP50:
       toNumber(
         payload.slippage_p50 ??
           payload.slippageP50 ??
           payload.slippage_p50_percent ??
           payload.slippageP50Percent
-      ) ?? null,
+      ) ??
+      toNumber(
+        scorecard?.slippage_p50 ??
+          scorecard?.slippageP50 ??
+          scorecard?.slippage_p50_percent ??
+          scorecard?.slippageP50Percent
+      ) ??
+      null,
     slippageP95:
       toNumber(
         payload.slippage_p95 ??
           payload.slippageP95 ??
           payload.slippage_p95_percent ??
           payload.slippageP95Percent
-      ) ?? null,
+      ) ??
+      toNumber(
+        scorecard?.slippage_p95 ??
+          scorecard?.slippageP95 ??
+          scorecard?.slippage_p95_percent ??
+          scorecard?.slippageP95Percent
+      ) ??
+      null,
     outcomesCount: toNumber(payload.outcomes_count ?? payload.outcomesCount) ?? 0,
+    computedAt: (scorecard?.computedAt ?? payload.computedAt) as string | null ?? null,
+    lastPublisherTxTimestamp: (scorecard?.lastPublisherTxTimestamp ?? payload.lastPublisherTxTimestamp) as string | null ?? null,
   };
 }
 
@@ -125,8 +171,63 @@ function hasReputationMetrics(metrics: ReputationMetrics): boolean {
   );
 }
 
+function FreshnessBadge({ freshness }: { freshness: FreshnessResult | null }) {
+  if (!freshness) {
+    return null;
+  }
+
+  const colors = getFreshnessBadgeColor(freshness.status);
+  const label = getFreshnessLabel(freshness.status);
+  const drift = freshness.driftMs ? formatDrift(freshness.driftMs) : null;
+
+  return (
+    <div className={`rounded-lg border border-gray-200 ${colors.bg} p-3 dark:border-gray-700`}>
+      <div className="flex items-center gap-2">
+        <div className={`${colors.icon}`}>
+          {freshness.status === 'fresh' && (
+            <svg className="w-4 h-4" fill="currentColor" viewBox="0 0 20 20">
+              <path
+                fillRule="evenodd"
+                d="M10 18a8 8 0 100-16 8 8 0 000 16zm3.707-9.293a1 1 0 00-1.414-1.414L9 10.586 7.707 9.293a1 1 0 00-1.414 1.414l2 2a1 1 0 001.414 0l4-4z"
+                clipRule="evenodd"
+              />
+            </svg>
+          )}
+          {freshness.status === 'stale' && (
+            <svg className="w-4 h-4" fill="currentColor" viewBox="0 0 20 20">
+              <path
+                fillRule="evenodd"
+                d="M8.257 3.099c.765-1.36 2.722-1.36 3.486 0l5.58 9.92c.75 1.334-.213 2.98-1.742 2.98H4.42c-1.53 0-2.493-1.646-1.743-2.98l5.58-9.92zM11 13a1 1 0 11-2 0 1 1 0 012 0zm-1-8a1 1 0 00-1 1v3a1 1 0 002 0V6a1 1 0 00-1-1z"
+                clipRule="evenodd"
+              />
+            </svg>
+          )}
+          {freshness.status === 'unknown' && (
+            <svg className="w-4 h-4" fill="currentColor" viewBox="0 0 20 20">
+              <path
+                fillRule="evenodd"
+                d="M18 10a8 8 0 11-16 0 8 8 0 0116 0zm-7-4a1 1 0 11-2 0 1 1 0 012 0zM9 9a1 1 0 000 2v3a1 1 0 001 1h1a1 1 0 100-2v-3a1 1 0 00-1-1H9z"
+                clipRule="evenodd"
+              />
+            </svg>
+          )}
+        </div>
+        <div className="flex-1">
+          <p className={`text-sm font-medium ${colors.text}`}>{label}</p>
+          {drift && (
+            <p className={`text-xs ${colors.text} opacity-80`}>
+              Drift: {drift}
+            </p>
+          )}
+        </div>
+      </div>
+    </div>
+  );
+}
+
 export function ScorecardCard({ anchorId, window: timeframe }: ScorecardCardProps) {
   const [metrics, setMetrics] = useState<ReputationMetrics>(emptyMetrics);
+  const [freshness, setFreshness] = useState<FreshnessResult | null>(null);
   const [isLoading, setIsLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
 
@@ -136,6 +237,7 @@ export function ScorecardCard({ anchorId, window: timeframe }: ScorecardCardProp
     setIsLoading(true);
     setError(null);
     setMetrics(emptyMetrics);
+    setFreshness(null);
 
     fetch(`/api/reputation/${encodeURIComponent(anchorId)}?window=${encodeURIComponent(timeframe)}`)
       .then((response) => {
@@ -147,7 +249,17 @@ export function ScorecardCard({ anchorId, window: timeframe }: ScorecardCardProp
       })
       .then((body) => {
         if (!isActive) return;
-        setMetrics(parseReputationResponse(body));
+        const parsedMetrics = parseReputationResponse(body);
+        setMetrics(parsedMetrics);
+        
+        // Calculate freshness if we have timestamps
+        if (parsedMetrics.computedAt) {
+          const freshnessResult = calculateFreshness(
+            parsedMetrics.computedAt,
+            parsedMetrics.lastPublisherTxTimestamp
+          );
+          setFreshness(freshnessResult);
+        }
       })
       .catch((fetchError) => {
         if (!isActive) return;
@@ -213,46 +325,49 @@ export function ScorecardCard({ anchorId, window: timeframe }: ScorecardCardProp
           </div>
         </div>
       ) : (
-        <div className="grid gap-3 sm:grid-cols-3">
-          <div className="rounded-2xl border border-gray-200 bg-gray-50 p-4 dark:border-gray-700 dark:bg-gray-900/60">
-            <dt className="text-xs uppercase tracking-wide text-gray-500 dark:text-gray-400">
-              Fill rate
-            </dt>
-            <dd className="mt-3 text-2xl font-semibold text-gray-900 dark:text-white">
-              {formatFillRate(metrics.fillRate)}
-            </dd>
-          </div>
+        <div className="space-y-4">
+          <FreshnessBadge freshness={freshness} />
+          <div className="grid gap-3 sm:grid-cols-3">
+            <div className="rounded-2xl border border-gray-200 bg-gray-50 p-4 dark:border-gray-700 dark:bg-gray-900/60">
+              <dt className="text-xs uppercase tracking-wide text-gray-500 dark:text-gray-400">
+                Fill rate
+              </dt>
+              <dd className="mt-3 text-2xl font-semibold text-gray-900 dark:text-white">
+                {formatFillRate(metrics.fillRate)}
+              </dd>
+            </div>
 
-          <div className="rounded-2xl border border-gray-200 bg-gray-50 p-4 dark:border-gray-700 dark:bg-gray-900/60">
-            <dt className="text-xs uppercase tracking-wide text-gray-500 dark:text-gray-400">
-              Settle
-            </dt>
-            <dd className="mt-3 space-y-2 text-sm text-gray-900 dark:text-gray-100">
-              <div className="flex items-center justify-between">
-                <span className="text-gray-500 dark:text-gray-400">p50</span>
-                <span>{formatSeconds(metrics.settleP50)}</span>
-              </div>
-              <div className="flex items-center justify-between">
-                <span className="text-gray-500 dark:text-gray-400">p95</span>
-                <span>{formatSeconds(metrics.settleP95)}</span>
-              </div>
-            </dd>
-          </div>
+            <div className="rounded-2xl border border-gray-200 bg-gray-50 p-4 dark:border-gray-700 dark:bg-gray-900/60">
+              <dt className="text-xs uppercase tracking-wide text-gray-500 dark:text-gray-400">
+                Settle
+              </dt>
+              <dd className="mt-3 space-y-2 text-sm text-gray-900 dark:text-gray-100">
+                <div className="flex items-center justify-between">
+                  <span className="text-gray-500 dark:text-gray-400">p50</span>
+                  <span>{formatSeconds(metrics.settleP50)}</span>
+                </div>
+                <div className="flex items-center justify-between">
+                  <span className="text-gray-500 dark:text-gray-400">p95</span>
+                  <span>{formatSeconds(metrics.settleP95)}</span>
+                </div>
+              </dd>
+            </div>
 
-          <div className="rounded-2xl border border-gray-200 bg-gray-50 p-4 dark:border-gray-700 dark:bg-gray-900/60">
-            <dt className="text-xs uppercase tracking-wide text-gray-500 dark:text-gray-400">
-              Slippage
-            </dt>
-            <dd className="mt-3 space-y-2 text-sm text-gray-900 dark:text-gray-100">
-              <div className="flex items-center justify-between">
-                <span className="text-gray-500 dark:text-gray-400">p50</span>
-                <span>{formatPercent(metrics.slippageP50)}</span>
-              </div>
-              <div className="flex items-center justify-between">
-                <span className="text-gray-500 dark:text-gray-400">p95</span>
-                <span>{formatPercent(metrics.slippageP95)}</span>
-              </div>
-            </dd>
+            <div className="rounded-2xl border border-gray-200 bg-gray-50 p-4 dark:border-gray-700 dark:bg-gray-900/60">
+              <dt className="text-xs uppercase tracking-wide text-gray-500 dark:text-gray-400">
+                Slippage
+              </dt>
+              <dd className="mt-3 space-y-2 text-sm text-gray-900 dark:text-gray-100">
+                <div className="flex items-center justify-between">
+                  <span className="text-gray-500 dark:text-gray-400">p50</span>
+                  <span>{formatPercent(metrics.slippageP50)}</span>
+                </div>
+                <div className="flex items-center justify-between">
+                  <span className="text-gray-500 dark:text-gray-400">p95</span>
+                  <span>{formatPercent(metrics.slippageP95)}</span>
+                </div>
+              </dd>
+            </div>
           </div>
         </div>
       )}
