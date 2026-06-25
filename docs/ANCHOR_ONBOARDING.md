@@ -25,7 +25,9 @@ From your `stellar.toml` at `https://{domain}/.well-known/stellar.toml`:
   v1.1. Without it you get an indicative rate (live FX × your published fee).
 
 Resolution is implemented in [`lib/stellar/sep1.ts`](../lib/stellar/sep1.ts) and
-classified by [`scripts/anchor-survey.mjs`](../scripts/anchor-survey.mjs).
+classified by [`scripts/anchor-survey.mjs`](../scripts/anchor-survey.mjs). Domains
+the survey could not resolve are tracked, with a monthly recheck and promotion
+criteria, in [`docs/ANCHOR_FLEET_RECHECK.md`](ANCHOR_FLEET_RECHECK.md).
 
 ## Home domain vs service domain
 
