@@ -12,12 +12,17 @@ export const ThemeContext = createContext<ThemeContextType>({
 });
 
 export function ThemeProvider({ children }: { children: React.ReactNode }) {
-  const [dark, setDark] = useState<boolean>(() => {
-    if (typeof window === 'undefined') return false;
-    const stored = localStorage.getItem('theme');
-    const prefersDark = window.matchMedia('(prefers-color-scheme: dark)').matches;
-    return stored === 'dark' || (!stored && prefersDark);
-  });
+  const [dark, setDark] = useState<boolean>(false);
+
+  useEffect(() => {
+    try {
+      const stored = localStorage.getItem('theme');
+      const prefersDark = window.matchMedia('(prefers-color-scheme: dark)').matches;
+      setDark(stored === 'dark' || (!stored && prefersDark));
+    } catch {
+      setDark(false);
+    }
+  }, []);
 
   useEffect(() => {
     document.documentElement.classList.toggle('dark', dark);
