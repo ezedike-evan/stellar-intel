@@ -9,6 +9,7 @@ const COUNTRY_FLAGS: Record<string, string> = {
   BR: '🇧🇷',
   AR: '🇦🇷',
   PE: '🇵🇪',
+  DE: '🇩🇪',
 };
 
 interface CorridorSelectorProps {

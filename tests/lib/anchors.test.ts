@@ -40,8 +40,8 @@ describe('ANCHORS', () => {
 });
 
 describe('CORRIDORS', () => {
-  it('contains 7 corridors', () => {
-    expect(CORRIDORS).toHaveLength(7);
+  it('contains 8 corridors', () => {
+    expect(CORRIDORS).toHaveLength(8);
   });
 
   it('contains the expected corridor IDs', () => {
@@ -55,6 +55,7 @@ describe('CORRIDORS', () => {
         'usdc-brl',
         'usdc-ars',
         'usdc-pen',
+        'usdc-eur',
       ])
     );
   });
