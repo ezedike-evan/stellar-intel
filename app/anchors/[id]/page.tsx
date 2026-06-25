@@ -38,7 +38,9 @@ function anchorComposite(anchorId: string): number {
   return computeComposite(metrics.fillRate, metrics.settleP50, metrics.slippageP50);
 }
 
-function mapOutcomeRows(rows: Awaited<ReturnType<ReturnType<typeof getReputationStore>['query']>>): OutcomeRow[] {
+function mapOutcomeRows(
+  rows: Awaited<ReturnType<ReturnType<typeof getReputationStore>['query']>>
+): OutcomeRow[] {
   return rows.map((row) => ({
     intentHash: row.intentHash,
     anchorId: row.anchorId,
@@ -77,11 +79,16 @@ export default async function AnchorDetailPage({
 
   const oracleTxFromRows = [...rows]
     .reverse()
-    .find((row) => typeof row.stellarTransactionId === 'string' && /^[0-9a-fA-F]{64}$/.test(row.stellarTransactionId))
-    ?.stellarTransactionId;
+    .find(
+      (row) =>
+        typeof row.stellarTransactionId === 'string' &&
+        /^[0-9a-fA-F]{64}$/.test(row.stellarTransactionId)
+    )?.stellarTransactionId;
 
   const disputes: AnchorProfileData['disputes'] = rows
-    .filter((row) => row.outcome === 'refunded' || row.outcome === 'error' || row.outcome === 'partial')
+    .filter(
+      (row) => row.outcome === 'refunded' || row.outcome === 'error' || row.outcome === 'partial'
+    )
     .slice(-10)
     .reverse()
     .map((row) => ({

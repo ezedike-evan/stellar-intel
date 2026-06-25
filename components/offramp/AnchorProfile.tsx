@@ -77,7 +77,9 @@ export function AnchorProfile({ data }: { data: AnchorProfileData }) {
         </article>
 
         <article className="rounded-2xl border border-gray-200 bg-white p-6 shadow-sm dark:border-gray-700 dark:bg-gray-900">
-          <h2 className="text-sm font-semibold uppercase tracking-[0.16em] text-gray-500">Oracle Tx</h2>
+          <h2 className="text-sm font-semibold uppercase tracking-[0.16em] text-gray-500">
+            Oracle Tx
+          </h2>
           {data.oracleTxId ? (
             <a
               data-testid="anchor-oracle-link"
@@ -89,7 +91,9 @@ export function AnchorProfile({ data }: { data: AnchorProfileData }) {
               {data.oracleTxId.slice(0, 16)}...
             </a>
           ) : (
-            <p className="mt-3 text-sm text-gray-500 dark:text-gray-400">No oracle transaction yet.</p>
+            <p className="mt-3 text-sm text-gray-500 dark:text-gray-400">
+              No oracle transaction yet.
+            </p>
           )}
         </article>
       </div>
@@ -115,14 +119,12 @@ export function AnchorProfile({ data }: { data: AnchorProfileData }) {
             </defs>
             <rect x="0" y="0" width="560" height="220" rx="12" fill="rgba(148,163,184,0.08)" />
             <polyline fill="none" stroke="rgb(59,130,246)" strokeWidth="3" points={points} />
-            <polygon
-              fill="url(#history-fill)"
-              points={`0,200 ${points} 560,200`}
-              opacity="0.7"
-            />
+            <polygon fill="url(#history-fill)" points={`0,200 ${points} 560,200`} opacity="0.7" />
           </svg>
         ) : (
-          <p className="text-sm text-gray-500 dark:text-gray-400">No history yet for this anchor.</p>
+          <p className="text-sm text-gray-500 dark:text-gray-400">
+            No history yet for this anchor.
+          </p>
         )}
       </article>
 
@@ -130,7 +132,10 @@ export function AnchorProfile({ data }: { data: AnchorProfileData }) {
         <h2 className="text-lg font-semibold text-gray-900 dark:text-white">Corridors</h2>
         <ul data-testid="anchor-corridors" className="mt-4 grid gap-3 sm:grid-cols-2">
           {data.corridors.map((corridor) => (
-            <li key={corridor.id} className="rounded-lg border border-gray-200 p-3 dark:border-gray-700">
+            <li
+              key={corridor.id}
+              className="rounded-lg border border-gray-200 p-3 dark:border-gray-700"
+            >
               <p className="text-sm font-medium text-gray-900 dark:text-white">
                 {corridor.from}/{corridor.to}
               </p>
@@ -158,7 +163,9 @@ export function AnchorProfile({ data }: { data: AnchorProfileData }) {
                 className="rounded-lg border border-gray-200 p-3 text-sm dark:border-gray-700"
               >
                 <div className="flex items-center justify-between">
-                  <span className="font-medium text-gray-900 dark:text-white">{dispute.reason}</span>
+                  <span className="font-medium text-gray-900 dark:text-white">
+                    {dispute.reason}
+                  </span>
                   <span
                     className={
                       dispute.status === 'open'
