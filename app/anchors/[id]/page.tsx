@@ -54,6 +54,21 @@ function mapOutcomeRows(
   }));
 }
 
+async function loadAnchorRows(anchorId: string) {
+  try {
+    return await getReputationStore().query({ anchorId });
+  } catch (error) {
+    if (
+      error instanceof Error &&
+      error.message.includes('The postgres backend requires a SqlExecutor')
+    ) {
+      return [];
+    }
+
+    throw error;
+  }
+}
+
 export const revalidate = 300;
 
 export function generateStaticParams(): Array<{ id: string }> {
@@ -72,7 +87,7 @@ export default async function AnchorDetailPage({
   const anchor = ANCHORS.find((item) => item.id === id);
   if (!anchor) notFound();
 
-  const rows = await getReputationStore().query({ anchorId: anchor.id });
+  const rows = await loadAnchorRows(anchor.id);
   const outcomeRows = mapOutcomeRows(rows);
   const history = getHistoryBuckets(anchor.id, '30d', outcomeRows);
   const scorecards = buildScorecards(outcomeRows);
