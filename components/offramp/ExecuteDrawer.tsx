@@ -17,6 +17,7 @@ const STEP_LABELS: Record<ExecuteDrawerStep, string> = {
   authenticating: 'Proving wallet ownership to anchor…',
   initiating: 'Initiating withdrawal…',
   kyc: 'Complete KYC in popup…',
+  form: 'Complete KYC form…',
   building: 'Building payment transaction…',
   signing: 'Sign transaction in Freighter…',
   done: 'Transaction submitted',
@@ -173,6 +174,13 @@ function ExecuteDrawerContent({
       // Step 1 — SEP-10 auth
       const auth = await authenticate(anchor, publicKey);
 
+      // Branch on anchor capabilities: SEP-24 → hosted iframe; SEP-6 → programmatic form
+      if (!anchor.capabilities.sep24 && anchor.capabilities.sep12) {
+        // SEP-6 path — show programmatic form placeholder (full form flow is a future PR)
+        setStep('form');
+        return;
+      }
+
       // Step 2 — Initiate SEP-24 withdraw
       setStep('initiating');
       const withdrawResp = await initiateWithdraw(
@@ -264,7 +272,7 @@ function ExecuteDrawerContent({
     }
   }
 
-  const isRunning = !['idle', 'done', 'error'].includes(step);
+  const isRunning = !['idle', 'done', 'error', 'form'].includes(step);
 
   // ─── Bottom-sheet swipe-to-dismiss (mobile only) ────────────────────────────
   // CSS-first: these handlers only feed a translateY offset; app/globals.css
@@ -417,8 +425,17 @@ function ExecuteDrawerContent({
             </div>
           )}
 
-          {/* Step indicator — hidden during KYC iframe */}
-          {step !== 'kyc' && <StepIndicator step={step} />}
+          {/* SEP-6 form placeholder — shown when anchor uses programmatic KYC */}
+          {step === 'form' && (
+            <div className="mb-5 rounded-xl border border-gray-200 p-4 text-center dark:border-gray-700">
+              <p className="text-sm text-gray-600 dark:text-gray-400">
+                SEP-6 form flow — coming soon
+              </p>
+            </div>
+          )}
+
+          {/* Step indicator — hidden during KYC iframe and SEP-6 form */}
+          {step !== 'kyc' && step !== 'form' && <StepIndicator step={step} />}
 
           {/* Error message */}
           {step === 'error' && errorMsg && (
@@ -437,6 +454,14 @@ function ExecuteDrawerContent({
           {/* CTA — hidden during KYC iframe */}
           {step !== 'kyc' && (
             <div className="mt-5">
+              {step === 'form' && (
+                <button
+                  onClick={onClose}
+                  className="w-full rounded-xl bg-gray-100 py-3 text-sm font-semibold text-gray-900 transition-colors hover:bg-gray-200 dark:bg-gray-700 dark:text-white dark:hover:bg-gray-600"
+                >
+                  Continue
+                </button>
+              )}
               {step === 'idle' && (
                 <div className="flex flex-col items-center">
                   <button
@@ -572,6 +597,7 @@ const ORDERED_STEPS: ExecuteDrawerStep[] = [
   'authenticating',
   'initiating',
   'kyc',
+  'form',
   'building',
   'signing',
   'done',

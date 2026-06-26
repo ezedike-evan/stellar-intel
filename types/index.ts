@@ -394,6 +394,7 @@ export type ExecuteDrawerStep =
   | 'authenticating'
   | 'initiating'
   | 'kyc'
+  | 'form'
   | 'building'
   | 'signing'
   | 'done'
