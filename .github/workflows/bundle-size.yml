@@ -72,6 +72,8 @@ jobs:
         working-directory: base-branch
 
       - name: Build base branch
+        id: build-base
+        continue-on-error: true
         run: npm run build
         working-directory: base-branch
         env:
@@ -109,6 +111,7 @@ jobs:
 
       - name: Comment bundle size diff
         uses: actions/github-script@v9
+        continue-on-error: true
         with:
           script: |
             const fs = require('fs');
@@ -121,6 +124,7 @@ jobs:
             const baseTotal = (base.total ?? 0) / 1024;
             const diffKB    = prTotal - baseTotal;
             const diffPct   = baseTotal > 0 ? ((diffKB / baseTotal) * 100).toFixed(1) : 'N/A';
+            const baseBuildFailed = '${{ steps.build-base.outcome }}' !== 'success';
 
             const sign    = diffKB > 0 ? '+' : '';
             const status  = diffKB > THRESHOLD_KB
@@ -146,6 +150,9 @@ jobs:
             const body = [
               '## Bundle Size Report',
               '',
+              ...(baseBuildFailed
+                ? ['> Base branch build failed, so this report could not compute a reliable base comparison.', '']
+                : []),
               status,
               '',
               '| Page | Base | PR | Diff |',

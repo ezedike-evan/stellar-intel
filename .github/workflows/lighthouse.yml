@@ -70,6 +70,7 @@ jobs:
 
       - name: Parse and post Lighthouse scores
         uses: actions/github-script@v9
+        continue-on-error: true
         with:
           script: |
             const fs = require('fs');
