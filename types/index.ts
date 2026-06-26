@@ -14,6 +14,8 @@ export interface Anchor {
    * Example: home domain "mgusd.moneygram.com" (issuer-only) vs service domain "stellar.moneygram.com" (SEP endpoints).
    */
   serviceDomain?: string;
+  /** Known SEP protocol support flags for this anchor. */
+  seps?: { sep6: boolean; sep24: boolean; sep38: boolean; sep31: boolean };
 }
 
 /** A payment corridor from one asset to a fiat currency in a given country. */
@@ -77,12 +79,16 @@ export interface AnchorCapabilities {
   sep24: boolean;
   sep38: boolean;
   sep12: boolean;
+  sep6: boolean;
+  sep31: boolean;
 }
 
 /** Relevant fields from a stellar.toml file resolved via SEP-1. */
 export interface Sep1TomlData {
   domain: string;
   TRANSFER_SERVER_SEP0024: string | null;
+  TRANSFER_SERVER?: string | null;
+  DIRECT_PAYMENT_SERVER?: string | null;
   ANCHOR_QUOTE_SERVER: string | null;
   WEB_AUTH_ENDPOINT: string | null;
   SIGNING_KEY: string | null;
@@ -95,6 +101,8 @@ export interface Sep1TomlData {
   ORG_SUPPORT_URL: string | null;
   CURRENCIES: Array<{ code: string; issuer?: string }>;
   capabilities: AnchorCapabilities;
+  /** Normalized SEP capability flags for easy consumption by callers. */
+  seps: { sep6: boolean; sep24: boolean; sep38: boolean; sep31: boolean };
 }
 
 /** A normalized stellar.toml response for an anchor resolved via SEP-1. */
@@ -394,6 +402,7 @@ export type ExecuteDrawerStep =
   | 'authenticating'
   | 'initiating'
   | 'kyc'
+  | 'form'
   | 'building'
   | 'signing'
   | 'done'

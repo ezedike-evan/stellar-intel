@@ -36,6 +36,7 @@ export const ANCHORS: Anchor[] = [
     corridors: ['usdc-ars', 'usdc-pen'],
     assetCode: 'USDC',
     assetIssuer: USDC_ISSUER,
+    seps: { sep6: true, sep24: true, sep38: false, sep31: false },
   },
 ];
 
