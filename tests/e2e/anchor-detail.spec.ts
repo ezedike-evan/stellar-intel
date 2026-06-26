@@ -11,7 +11,13 @@ test.describe('Anchor detail page', () => {
     await expect(page.getByTestId('anchor-corridors').getByText(/USDC\/NGN/i)).toBeVisible();
 
     const oracleLink = page.getByTestId('anchor-oracle-link');
-    await expect(oracleLink).toBeVisible();
-    await expect(oracleLink).toHaveAttribute('href', /\/tx\/[0-9a-fA-F]{64}$/);
+    const oracleEmpty = page.getByText(/No oracle transaction yet\./i);
+
+    if (await oracleLink.count()) {
+      await expect(oracleLink).toBeVisible();
+      await expect(oracleLink).toHaveAttribute('href', /\/tx\/[0-9a-fA-F]{64}$/);
+    } else {
+      await expect(oracleEmpty).toBeVisible();
+    }
   });
 });

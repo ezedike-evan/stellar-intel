@@ -20,7 +20,7 @@ export interface AnchorProfileData {
   id: string;
   name: string;
   homeDomain: string;
-  score: number;
+  score: number | null;
   sampleSize: number;
   corridors: CorridorItem[];
   history: Bucket[];
@@ -28,7 +28,8 @@ export interface AnchorProfileData {
   oracleTxId: string | null;
 }
 
-function scoreToPercent(score: number): number {
+function scoreToPercent(score: number | null): number | null {
+  if (score === null) return null;
   return Math.round(Math.min(1, Math.max(0, score)) * 100);
 }
 
@@ -69,10 +70,12 @@ export function AnchorProfile({ data }: { data: AnchorProfileData }) {
             data-testid="anchor-score"
             aria-label="Anchor score"
           >
-            {percentage}
+            {percentage === null ? 'N/A' : percentage}
           </p>
           <p className="mt-2 text-sm text-gray-500 dark:text-gray-400">
-            Based on the latest reliability window ({data.sampleSize} outcomes).
+            {percentage === null
+              ? 'No completed outcomes are available yet for this anchor.'
+              : `Based on the latest reliability window (${data.sampleSize} outcomes).`}
           </p>
         </article>
 
