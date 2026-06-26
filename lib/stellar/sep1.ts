@@ -74,10 +74,14 @@ function toSep1TomlData(domain: string, raw: Record<string, unknown>): Sep1TomlD
   const webAuthEndpoint = getString(raw, 'WEB_AUTH_ENDPOINT');
   const signingKey = getString(raw, 'SIGNING_KEY');
   const quoteServer = getString(raw, 'ANCHOR_QUOTE_SERVER');
+  const sep6TransferServer = getString(raw, 'TRANSFER_SERVER');
+  const directPaymentServer = getString(raw, 'DIRECT_PAYMENT_SERVER');
 
   return {
     domain,
     TRANSFER_SERVER_SEP0024: transferServer,
+    TRANSFER_SERVER: sep6TransferServer,
+    DIRECT_PAYMENT_SERVER: directPaymentServer,
     ANCHOR_QUOTE_SERVER: quoteServer,
     WEB_AUTH_ENDPOINT: webAuthEndpoint,
     SIGNING_KEY: signingKey,
@@ -92,6 +96,14 @@ function toSep1TomlData(domain: string, raw: Record<string, unknown>): Sep1TomlD
       /** Derived from ANCHOR_QUOTE_SERVER presence — the authoritative source for SEP-38 capability. */
       sep38: Boolean(quoteServer),
       sep12: Boolean(signingKey),
+      sep6: Boolean(sep6TransferServer),
+      sep31: Boolean(directPaymentServer),
+    },
+    seps: {
+      sep6: Boolean(sep6TransferServer),
+      sep24: Boolean(transferServer),
+      sep38: Boolean(quoteServer),
+      sep31: Boolean(directPaymentServer),
     },
   };
 }
