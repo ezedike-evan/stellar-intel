@@ -1,4 +1,5 @@
 import { SepError, TimeoutError, parseSepErrorBody } from './errors';
+import type { Sep6WithdrawParams, Sep6WithdrawResponse } from '@/types';
 
 // ─── Types ────────────────────────────────────────────────────────────────────
 
@@ -50,17 +51,8 @@ export class Sep6AssetDisabledError extends Error {
 
 // ─── Timeout helper ───────────────────────────────────────────────────────────
 
-/**
- * Upper bound for a SEP-6 /info round-trip. Anchors must respond within this
- * window or be treated as unreachable.
- */
 const SEP6_INFO_TIMEOUT_MS = 8_000;
 
-/**
- * Races a promise against a timeout. Rejects with a generic Error (not
- * TimeoutError) when the deadline is exceeded — callers can wrap or
- * reclassify as needed.
- */
 function withTimeout<T>(promise: Promise<T>, ms: number, label: string): Promise<T> {
   return Promise.race([
     promise,
@@ -70,21 +62,8 @@ function withTimeout<T>(promise: Promise<T>, ms: number, label: string): Promise
   ]);
 }
 
-// ─── Main fetcher ─────────────────────────────────────────────────────────────
+// ─── getSep6Info ──────────────────────────────────────────────────────────────
 
-/**
- * Fetches and validates the SEP-6 /info withdraw configuration for a given asset.
- *
- * Wraps the HTTP request with an 8 s deadline (reusing the withTimeout pattern
- * from server-rates.ts). Throws a typed {@link Sep6AssetDisabledError} when the
- * asset is missing from the withdraw object or its `enabled` flag is `false`.
- * HTTP errors are surfaced as {@link SepError} (consistent with the rest of the
- * stellar package).
- *
- * @param transferServer - Base URL of the anchor's SEP-6 transfer server.
- * @param assetCode       - Asset code to look up in the `withdraw` object.
- * @returns               Normalized withdraw config with defaults for absent fields.
- */
 export async function getSep6Info(
   transferServer: string,
   assetCode: string
@@ -104,7 +83,6 @@ export async function getSep6Info(
     SEP6_INFO_TIMEOUT_MS,
     `SEP-6 /info ${transferServer}`
   ).catch((err) => {
-    // Reclassify timeout errors so consumers can branch on TimeoutError
     if (err instanceof Error && !(err instanceof SepError) && err.message.includes('timed out')) {
       throw new TimeoutError(err.message);
     }
@@ -133,3 +111,25 @@ export async function getSep6Info(
     fields: asset.fields ?? {},
   };
 }
+
+// ─── buildSep6WithdrawRequest ─────────────────────────────────────────────────
+
+export function buildSep6WithdrawRequest(
+  transferServer: string,
+  params: Sep6WithdrawParams
+): string {
+  if (!params.asset_code) throw new Error('asset_code is required');
+  if (!params.type) throw new Error('type is required');
+  if (!params.dest) throw new Error('dest is required');
+
+  const url = new URL(`${transferServer}/withdraw`);
+  url.searchParams.set('asset_code', params.asset_code);
+  url.searchParams.set('type', params.type);
+  url.searchParams.set('dest', params.dest);
+  if (params.amount) url.searchParams.set('amount', params.amount);
+  if (params.account) url.searchParams.set('account', params.account);
+
+  return url.toString();
+}
+
+export type { Sep6WithdrawParams, Sep6WithdrawResponse };

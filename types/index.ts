@@ -439,3 +439,46 @@ export interface KycIframeConfig {
   url: string;
   origin: string;
 }
+
+// ─── SEP-6 ────────────────────────────────────────────────────────────────────
+
+/** Parameters for the SEP-6 GET /withdraw request. */
+export interface Sep6WithdrawParams {
+  asset_code: string;
+  type: string;
+  dest: string;
+  amount?: string;
+  account?: string;
+}
+
+/** SEP-6 /withdraw interactive response. */
+export interface Sep6WithdrawInteractive {
+  type: 'interactive_customer_info_needed';
+  url: string;
+  id: string;
+}
+
+/** SEP-6 /withdraw non-interactive response. */
+export interface Sep6WithdrawNonInteractive {
+  type: 'non_interactive';
+  id: string;
+  eta?: number;
+  min_amount?: number;
+  max_amount?: number;
+  amount_in?: string;
+  amount_out?: string;
+  amount_fee?: string;
+  extra_info?: { message?: string };
+}
+
+/** SEP-6 /withdraw needs_info response. */
+export interface Sep6WithdrawNeedsInfo {
+  type: 'customer_info_status';
+  fields: Record<string, { description: string; choices?: string[]; optional?: boolean }>;
+}
+
+/** Union of all three SEP-6 /withdraw response shapes. */
+export type Sep6WithdrawResponse =
+  | Sep6WithdrawInteractive
+  | Sep6WithdrawNonInteractive
+  | Sep6WithdrawNeedsInfo;
