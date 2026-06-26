@@ -1,8 +1,16 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest';
-import { getSep6Info, Sep6AssetDisabledError } from '@/lib/stellar/sep6';
+import {
+  getSep6Info,
+  Sep6AssetDisabledError,
+  getSep6Transaction,
+  TERMINAL_STATES,
+} from '@/lib/stellar/sep6';
 import { TimeoutError } from '@/lib/stellar/errors';
 
 const TRANSFER_SERVER = 'https://sep6.example.com';
+const SEP6_TX_SERVER = 'https://cowrie.exchange/sep6';
+const TRANSACTION_ID = 'txn-sep6-abc123';
+const JWT = 'test-jwt-sep6';
 
 /** Canonical SEP-6 /info fixture matching the SEP-6 spec shape. */
 const FIXTURE = {
@@ -149,7 +157,6 @@ describe('getSep6Info', () => {
   it('throws TimeoutError after 8 seconds', async () => {
     vi.useFakeTimers();
 
-    // Promise that never resolves
     vi.stubGlobal(
       'fetch',
       vi.fn(() => new Promise(() => {}))
@@ -189,5 +196,158 @@ describe('getSep6Info', () => {
       expect(typed.assetCode).toBe('EUR');
       expect(typed.transferServer).toBe(TRANSFER_SERVER);
     }
+  });
+});
+
+// ─── getSep6Transaction ───────────────────────────────────────────────────────
+
+describe('getSep6Transaction', () => {
+  it('fetches the correct URL with Authorization header', async () => {
+    let capturedUrl = '';
+    let capturedHeaders: Record<string, string> = {};
+
+    vi.stubGlobal(
+      'fetch',
+      vi.fn(async (url: string, opts: RequestInit) => {
+        capturedUrl = url;
+        capturedHeaders = opts.headers as Record<string, string>;
+        return {
+          ok: true,
+          json: async () => ({
+            transaction: { id: TRANSACTION_ID, status: 'pending_external' },
+          }),
+        };
+      })
+    );
+
+    await getSep6Transaction(SEP6_TX_SERVER, TRANSACTION_ID, JWT);
+
+    expect(capturedUrl).toBe(`${SEP6_TX_SERVER}/transaction?id=${TRANSACTION_ID}`);
+    expect(capturedHeaders['Authorization']).toBe(`Bearer ${JWT}`);
+  });
+
+  it('returns all mapped fields on a well-formed response', async () => {
+    vi.stubGlobal(
+      'fetch',
+      vi.fn(async () => ({
+        ok: true,
+        json: async () => ({
+          transaction: {
+            id: TRANSACTION_ID,
+            status: 'completed',
+            amount_in: '100.00',
+            amount_out: '155000.00',
+            amount_fee: '2.00',
+            stellar_transaction_id: 'stellar-hash-sep6-xyz',
+          },
+        }),
+      }))
+    );
+
+    const result = await getSep6Transaction(SEP6_TX_SERVER, TRANSACTION_ID, JWT);
+
+    expect(result.id).toBe(TRANSACTION_ID);
+    expect(result.status).toBe('completed');
+    expect(result.amountIn).toBe('100.00');
+    expect(result.amountOut).toBe('155000.00');
+    expect(result.amountFee).toBe('2.00');
+    expect(result.stellarTransactionId).toBe('stellar-hash-sep6-xyz');
+    expect(result.updatedAt).toBeInstanceOf(Date);
+  });
+
+  it('maps a known status correctly (pending_anchor stays pending_anchor, normalizedStatus is pending_anchor)', async () => {
+    vi.stubGlobal(
+      'fetch',
+      vi.fn(async () => ({
+        ok: true,
+        json: async () => ({ transaction: { id: TRANSACTION_ID, status: 'pending_anchor' } }),
+      }))
+    );
+
+    const result = await getSep6Transaction(SEP6_TX_SERVER, TRANSACTION_ID, JWT);
+    expect(result.status).toBe('pending_anchor');
+    expect(result.normalizedStatus).toBe('pending_anchor');
+  });
+
+  it('defaults an unknown anchor status to "pending_external" without throwing', async () => {
+    vi.stubGlobal(
+      'fetch',
+      vi.fn(async () => ({
+        ok: true,
+        json: async () => ({
+          transaction: { id: TRANSACTION_ID, status: 'some_custom_anchor_state' },
+        }),
+      }))
+    );
+
+    const result = await getSep6Transaction(SEP6_TX_SERVER, TRANSACTION_ID, JWT);
+    expect(result.status).toBe('pending_external');
+  });
+
+  it('defaults a missing status to "pending_external"', async () => {
+    vi.stubGlobal(
+      'fetch',
+      vi.fn(async () => ({
+        ok: true,
+        json: async () => ({ transaction: { id: TRANSACTION_ID } }),
+      }))
+    );
+
+    const result = await getSep6Transaction(SEP6_TX_SERVER, TRANSACTION_ID, JWT);
+    expect(result.status).toBe('pending_external');
+  });
+
+  it('uses transactionId as fallback when id is absent from the response', async () => {
+    vi.stubGlobal(
+      'fetch',
+      vi.fn(async () => ({
+        ok: true,
+        json: async () => ({ transaction: { status: 'pending_external' } }),
+      }))
+    );
+
+    const result = await getSep6Transaction(SEP6_TX_SERVER, TRANSACTION_ID, JWT);
+    expect(result.id).toBe(TRANSACTION_ID);
+  });
+
+  it('throws on a 404 non-ok response', async () => {
+    vi.stubGlobal(
+      'fetch',
+      vi.fn(async () => ({ ok: false, status: 404 }))
+    );
+
+    await expect(getSep6Transaction(SEP6_TX_SERVER, TRANSACTION_ID, JWT)).rejects.toThrow(
+      /HTTP 404/
+    );
+  });
+
+  it('unknown status normalizedStatus maps to "pending_external"', async () => {
+    vi.stubGlobal(
+      'fetch',
+      vi.fn(async () => ({
+        ok: true,
+        json: async () => ({
+          transaction: { id: TRANSACTION_ID, status: 'unknown_custom_status' },
+        }),
+      }))
+    );
+
+    const result = await getSep6Transaction(SEP6_TX_SERVER, TRANSACTION_ID, JWT);
+    expect(result.normalizedStatus).toBe('pending_external');
+  });
+});
+
+// ─── TERMINAL_STATES ──────────────────────────────────────────────────────────
+
+describe('TERMINAL_STATES', () => {
+  it('includes completed, error, and refunded', () => {
+    expect(TERMINAL_STATES.has('completed')).toBe(true);
+    expect(TERMINAL_STATES.has('error')).toBe(true);
+    expect(TERMINAL_STATES.has('refunded')).toBe(true);
+  });
+
+  it('does not include pending_external or pending_anchor', () => {
+    expect(TERMINAL_STATES.has('pending_external')).toBe(false);
+    expect(TERMINAL_STATES.has('pending_anchor')).toBe(false);
   });
 });
