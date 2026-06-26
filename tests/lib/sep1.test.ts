@@ -152,7 +152,7 @@ describe('resolveAnchor', () => {
     expect(spy).toHaveBeenCalledTimes(1);
   });
 
-  it('refreshes the cached TOML after the 15-minute TTL expires', async () => {
+  it('refreshes the cached TOML after the ~10-minute TTL expires', async () => {
     vi.useFakeTimers();
     vi.setSystemTime(new Date('2026-01-01T00:00:00.000Z'));
 
@@ -165,11 +165,27 @@ describe('resolveAnchor', () => {
       } as never);
 
     await resolveAnchor('cowrie.exchange');
-    vi.setSystemTime(new Date('2026-01-01T00:15:00.001Z'));
+    vi.setSystemTime(new Date('2026-01-01T00:10:00.001Z'));
 
     const refreshed = await resolveAnchor('cowrie.exchange');
 
     expect(refreshed.WEB_AUTH_ENDPOINT).toBe('https://cowrie.exchange/new-auth');
+    expect(spy).toHaveBeenCalledTimes(2);
+  });
+
+  it('bypasses the cache when bypassCache is set (nightly validator)', async () => {
+    const spy = vi
+      .spyOn(StellarToml.Resolver, 'resolve')
+      .mockResolvedValue(VALID_TOML as never);
+
+    // First resolve populates the cache.
+    await resolveAnchor('cowrie.exchange');
+    // A normal repeat hits the cache (no extra fetch).
+    await resolveAnchor('cowrie.exchange');
+    expect(spy).toHaveBeenCalledTimes(1);
+
+    // bypassCache forces a fresh resolution within the TTL.
+    await resolveAnchor('cowrie.exchange', { bypassCache: true });
     expect(spy).toHaveBeenCalledTimes(2);
   });
 });
