@@ -99,4 +99,11 @@ export const CORRIDORS: Corridor[] = [
     countryCode: 'PE',
     countryName: 'Peru',
   },
+  {
+    id: 'usdc-eur',
+    from: 'USDC',
+    to: 'EUR',
+    countryCode: 'DE',
+    countryName: 'Germany',
+  },
 ];
