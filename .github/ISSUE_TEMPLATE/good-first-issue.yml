@@ -1,6 +1,6 @@
 name: 🌱 Good first issue (maintainer-authored)
 description: Use this to publish a well-scoped task newcomers can pick up. Restricted to maintainers — contributors should use bug / feature / docs instead.
-title: "[GOOD-FIRST-ISSUE] [SCOPE] <short task>"
+title: '[GOOD-FIRST-ISSUE] [SCOPE] <short task>'
 labels:
   - good-first-issue
   - help-wanted
@@ -83,11 +83,11 @@ body:
       label: Estimated time
       description: A realistic range for someone who has opened the repo for the first time today.
       options:
-        - "< 1 hour"
-        - "1–3 hours"
-        - "3–6 hours"
-        - "half day"
-        - "one full day"
+        - '< 1 hour'
+        - '1–3 hours'
+        - '3–6 hours'
+        - 'half day'
+        - 'one full day'
     validations:
       required: true
 
@@ -160,7 +160,7 @@ body:
     attributes:
       label: Mentor (who to ping if stuck)
       description: A maintainer GitHub handle. This is the person who commits to answering questions in a business day.
-      placeholder: "@Ezedike-Evan"
+      placeholder: '@Ezedike-Evan'
     validations:
       required: true
 

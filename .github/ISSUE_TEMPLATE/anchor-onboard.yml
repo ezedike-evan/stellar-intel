@@ -1,6 +1,6 @@
 name: 🔌 Anchor onboarding
 description: Apply to list a Stellar anchor on Stellar Intel. Anchor operators and community integrators both use this.
-title: "[ANCHOR] Onboard <anchor name>"
+title: '[ANCHOR] Onboard <anchor name>'
 labels:
   - anchor
   - onboarding
@@ -26,7 +26,7 @@ body:
     attributes:
       label: Anchor display name
       description: The name users will see in the rate table. Keep it short and recognisable.
-      placeholder: "MoneyGram"
+      placeholder: 'MoneyGram'
     validations:
       required: true
 
@@ -35,7 +35,7 @@ body:
     attributes:
       label: Home domain
       description: The domain that hosts your `stellar.toml` at `/.well-known/stellar.toml`.
-      placeholder: "stellar.moneygram.com"
+      placeholder: 'stellar.moneygram.com'
     validations:
       required: true
 
@@ -44,7 +44,7 @@ body:
     attributes:
       label: Full stellar.toml URL (for our parser to hit)
       description: We validate SEP-1 parse, `TRANSFER_SERVER_SEP0024`, `WEB_AUTH_ENDPOINT`, and signing key presence.
-      placeholder: "https://stellar.moneygram.com/.well-known/stellar.toml"
+      placeholder: 'https://stellar.moneygram.com/.well-known/stellar.toml'
     validations:
       required: true
 
@@ -52,8 +52,8 @@ body:
     id: asset-code
     attributes:
       label: Primary asset code
-      description: "The Stellar asset users withdraw in. Today: `USDC`; `USDT` supported in v1.1+."
-      placeholder: "USDC"
+      description: 'The Stellar asset users withdraw in. Today: `USDC`; `USDT` supported in v1.1+.'
+      placeholder: 'USDC'
     validations:
       required: true
 
@@ -62,7 +62,7 @@ body:
     attributes:
       label: Asset issuer public key
       description: The `G…` account that issues the asset. For USDC, Circle's canonical issuer.
-      placeholder: "GA5ZSEJYB37JRC5AVCIA5MOP4RHTM335X2KGX3IHOJAPP5RE34K4KZVN"
+      placeholder: 'GA5ZSEJYB37JRC5AVCIA5MOP4RHTM335X2KGX3IHOJAPP5RE34K4KZVN'
     validations:
       required: true
 
@@ -142,7 +142,7 @@ body:
     attributes:
       label: Typical settlement latency to beneficiary
       description: From `pending_external` to fiat landing. We'll verify against real intents during reputation bootstrap.
-      placeholder: "p50: 4 minutes; p95: 18 minutes; p99: 90 minutes"
+      placeholder: 'p50: 4 minutes; p95: 18 minutes; p99: 90 minutes'
     validations:
       required: true
 
