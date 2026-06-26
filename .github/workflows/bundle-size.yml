@@ -155,12 +155,17 @@ jobs:
               `> Threshold: ${THRESHOLD_KB} kB increase triggers a warning.`,
             ].join('\n');
 
-            await github.rest.issues.createComment({
-              issue_number: context.issue.number,
-              owner: context.repo.owner,
-              repo: context.repo.repo,
-              body,
-            });
+            try {
+              await github.rest.issues.createComment({
+                issue_number: context.issue.number,
+                owner: context.repo.owner,
+                repo: context.repo.repo,
+                body,
+              });
+            } catch (error) {
+              core.warning(`Unable to post bundle size report: ${error.message}`);
+              await core.summary.addRaw(body).write();
+            }
 
             if (diffKB > THRESHOLD_KB) {
               core.warning(`Bundle size increased by ${diffKB.toFixed(1)} kB, exceeding the ${THRESHOLD_KB} kB threshold.`);
