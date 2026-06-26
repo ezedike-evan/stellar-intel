@@ -74,7 +74,7 @@ const sleep = (ms: number) => new Promise<void>((r) => setTimeout(r, ms));
 async function seedPostgresOutcome(
   cfg: Config,
   anchorId: string,
-  intentHash: string,
+  intentHash: string
 ): Promise<ReputationStore> {
   // Non-literal specifier: the driver stays an optional, runtime-only dependency
   // that only the provisioned e2e environment needs.
@@ -125,11 +125,9 @@ async function countOnChain(
   contract: any,
   cfg: Config,
   anchorId: string,
-  intentHash: string,
+  intentHash: string
 ): Promise<number> {
-  const account = await server.getAccount(
-    sdk.Keypair.fromSecret(cfg.secretKey).publicKey(),
-  );
+  const account = await server.getAccount(sdk.Keypair.fromSecret(cfg.secretKey).publicKey());
   const tx = new sdk.TransactionBuilder(account, {
     fee: sdk.BASE_FEE,
     networkPassphrase: cfg.networkPassphrase,
@@ -138,8 +136,8 @@ async function countOnChain(
       contract.call(
         'recent_outcomes',
         sdk.nativeToScVal(anchorId, { type: 'string' }),
-        sdk.nativeToScVal(cfg.readLimit, { type: 'u32' }),
-      ),
+        sdk.nativeToScVal(cfg.readLimit, { type: 'u32' })
+      )
     )
     .setTimeout(30)
     .build();
@@ -153,50 +151,46 @@ async function countOnChain(
 }
 
 describe.skipIf(!READY)('publisher e2e (testnet)', () => {
-  it(
-    'round-trips a Postgres outcome to chain and back, idempotently',
-    async () => {
-      const sdk: any = await import('@stellar/stellar-sdk');
-      const cfg = readConfig();
+  it('round-trips a Postgres outcome to chain and back, idempotently', async () => {
+    const sdk: any = await import('@stellar/stellar-sdk');
+    const cfg = readConfig();
 
-      const server = new sdk.rpc.Server(cfg.rpcUrl, {
-        allowHttp: cfg.rpcUrl.startsWith('http://'),
-      });
-      const contract = new sdk.Contract(cfg.contractId);
+    const server = new sdk.rpc.Server(cfg.rpcUrl, {
+      allowHttp: cfg.rpcUrl.startsWith('http://'),
+    });
+    const contract = new sdk.Contract(cfg.contractId);
 
-      // Unique ids isolate this run from any pre-existing on-chain state.
-      const runId = crypto.randomUUID();
-      const anchorId = `e2e-anchor-${runId}`;
-      const intentHash = `e2e-intent-${runId}`;
+    // Unique ids isolate this run from any pre-existing on-chain state.
+    const runId = crypto.randomUUID();
+    const anchorId = `e2e-anchor-${runId}`;
+    const intentHash = `e2e-intent-${runId}`;
 
-      const store = await seedPostgresOutcome(cfg, anchorId, intentHash);
-      try {
-        const startedAt = Date.now();
-        await triggerPublisher(cfg);
+    const store = await seedPostgresOutcome(cfg, anchorId, intentHash);
+    try {
+      const startedAt = Date.now();
+      await triggerPublisher(cfg);
 
-        // Poll the chain until the outcome lands or the round-trip budget elapses.
-        const deadline = startedAt + cfg.maxRoundTripMs;
-        let onChain = 0;
-        while (Date.now() < deadline) {
-          onChain = await countOnChain(sdk, server, contract, cfg, anchorId, intentHash);
-          if (onChain > 0) break;
-          await sleep(cfg.pollIntervalMs);
-        }
-        const elapsedMs = Date.now() - startedAt;
-
-        expect(onChain, 'outcome never appeared on-chain within budget').toBeGreaterThan(0);
-        expect(elapsedMs).toBeLessThan(cfg.maxRoundTripMs);
-
-        // Idempotency: a second tick must not duplicate the on-chain entry.
-        const before = onChain;
-        await triggerPublisher(cfg);
-        await sleep(cfg.pollIntervalMs * 2);
-        const after = await countOnChain(sdk, server, contract, cfg, anchorId, intentHash);
-        expect(after).toBe(before);
-      } finally {
-        await store.close();
+      // Poll the chain until the outcome lands or the round-trip budget elapses.
+      const deadline = startedAt + cfg.maxRoundTripMs;
+      let onChain = 0;
+      while (Date.now() < deadline) {
+        onChain = await countOnChain(sdk, server, contract, cfg, anchorId, intentHash);
+        if (onChain > 0) break;
+        await sleep(cfg.pollIntervalMs);
       }
-    },
-    60_000,
-  );
+      const elapsedMs = Date.now() - startedAt;
+
+      expect(onChain, 'outcome never appeared on-chain within budget').toBeGreaterThan(0);
+      expect(elapsedMs).toBeLessThan(cfg.maxRoundTripMs);
+
+      // Idempotency: a second tick must not duplicate the on-chain entry.
+      const before = onChain;
+      await triggerPublisher(cfg);
+      await sleep(cfg.pollIntervalMs * 2);
+      const after = await countOnChain(sdk, server, contract, cfg, anchorId, intentHash);
+      expect(after).toBe(before);
+    } finally {
+      await store.close();
+    }
+  }, 60_000);
 });

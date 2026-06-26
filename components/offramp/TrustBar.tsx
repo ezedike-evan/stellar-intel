@@ -1,6 +1,5 @@
 ﻿'use client';
 import Image from 'next/image';
-import Image from 'next/image';
 
 import { useMemo } from 'react';
 import { ScoreBadge } from '@/components/ui/ScoreBadge';
@@ -78,7 +77,13 @@ function TrustBarItem({ score, rank, onClick }: TrustBarItemProps) {
       </span>
       {score.logoUrl ? (
         // eslint-disable-next-line @next/next/no-img-element
-        <Image src={score.logoUrl} alt={score.anchorName} width={28} height={28} className="shrink-0 rounded-full object-contain" />
+        <Image
+          src={score.logoUrl}
+          alt={score.anchorName}
+          width={28}
+          height={28}
+          className="shrink-0 rounded-full object-contain"
+        />
       ) : (
         <span className="flex h-7 w-7 shrink-0 items-center justify-center rounded-full bg-gray-200 text-xs font-semibold text-gray-600 dark:bg-gray-700 dark:text-gray-300">
           {score.anchorName.charAt(0).toUpperCase()}
@@ -96,5 +101,3 @@ function TrustBarItem({ score, rank, onClick }: TrustBarItemProps) {
     </button>
   );
 }
-
-

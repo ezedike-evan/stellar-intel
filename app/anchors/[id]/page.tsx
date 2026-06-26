@@ -39,9 +39,7 @@ async function loadAnchorRows(anchorId: string) {
 export const revalidate = 300;
 
 export function generateStaticParams(): Array<{ id: string }> {
-  return [...ANCHORS]
-    .slice(0, 20)
-    .map((anchor) => ({ id: anchor.id }));
+  return [...ANCHORS].slice(0, 20).map((anchor) => ({ id: anchor.id }));
 }
 
 export default async function AnchorDetailPage({
