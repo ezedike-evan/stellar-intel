@@ -15,9 +15,7 @@ describe('ntokens.com triage (B030)', () => {
 
   it('anchors BRL with the correct issuer', () => {
     expect(ntokens?.assetCode).toBe('BRL');
-    expect(ntokens?.assetIssuer).toBe(
-      'GDVKY2GU2DRXWTBEYJJWSFXIGBZV6AZNBVVSUHEPZI54LIS6BA7DVVSP',
-    );
+    expect(ntokens?.assetIssuer).toBe('GDVKY2GU2DRXWTBEYJJWSFXIGBZV6AZNBVVSUHEPZI54LIS6BA7DVVSP');
   });
 
   it('serves the brl-brl corridor', () => {
