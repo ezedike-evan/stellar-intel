@@ -28,6 +28,7 @@ export const ANCHORS: Anchor[] = [
     corridors: ['usdc-ngn'],
     assetCode: 'USDC',
     assetIssuer: USDC_ISSUER,
+    seps: ['sep6'],
   },
   {
     id: 'anclap',
@@ -36,7 +37,7 @@ export const ANCHORS: Anchor[] = [
     corridors: ['usdc-ars', 'usdc-pen'],
     assetCode: 'USDC',
     assetIssuer: USDC_ISSUER,
-    seps: { sep6: true, sep24: true, sep38: false, sep31: false },
+    seps: ['sep6', 'sep24'],
   },
   // ntokens.com: BRL fiat corridor — SEP-24 withdraw enabled, SEP-6 + SEP-31 also present.
   // Verified 2026-06-26. TOML: TRANSFER_SERVER_SEP0024 = https://ntokens-box.bpventures.us/sep24

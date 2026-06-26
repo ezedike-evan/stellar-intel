@@ -15,7 +15,7 @@ export interface Anchor {
    */
   serviceDomain?: string;
   /** Known SEP protocol support flags for this anchor. */
-  seps?: { sep6: boolean; sep24: boolean; sep38: boolean; sep31: boolean };
+  seps?: Array<'sep6' | 'sep10' | 'sep24' | 'sep31' | 'sep38'>;
 }
 
 /** A payment corridor from one asset to a fiat currency in a given country. */
