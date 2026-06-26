@@ -351,6 +351,7 @@ describe('TERMINAL_STATES', () => {
     expect(TERMINAL_STATES.has('pending_anchor')).toBe(false);
   });
 });
+
 // ─── Fee model table tests ────────────────────────────────────────────────────
 
 describe('getSep6Info — fee model parsing', () => {
