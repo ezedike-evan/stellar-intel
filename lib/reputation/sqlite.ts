@@ -118,7 +118,11 @@ export class SqliteReputationStore implements ReputationStore {
                disputed_reason = @disputedReason
          WHERE intentHash = @intentHash`
       )
-      .run({ disputed: update.disputed ? 1 : 0, disputedReason: update.disputedReason, intentHash });
+      .run({
+        disputed: update.disputed ? 1 : 0,
+        disputedReason: update.disputedReason,
+        intentHash,
+      });
   }
 
   async close(): Promise<void> {

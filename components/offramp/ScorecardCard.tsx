@@ -319,7 +319,10 @@ export function ScorecardCard({
                 <span>{formatSeconds(metrics.settleP95)}</span>
               </div>
               {historyData.length > 0 && (
-                <div className="pt-2 flex justify-center border-t border-gray-200 dark:border-gray-800" data-testid="scorecard-sparkline">
+                <div
+                  className="pt-2 flex justify-center border-t border-gray-200 dark:border-gray-800"
+                  data-testid="scorecard-sparkline"
+                >
                   <Sparkline data={historyData} />
                 </div>
               )}

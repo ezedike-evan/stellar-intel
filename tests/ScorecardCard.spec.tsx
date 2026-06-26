@@ -114,8 +114,20 @@ describe('ScorecardCard', () => {
             anchorId: 'example.anchor',
             window: '30d',
             buckets: [
-              { timestamp: '2026-06-01T00:00:00Z', fillRate: 1, avgScore: 1, settlementLatencyMs: 15000, sampleCount: 1 },
-              { timestamp: '2026-06-02T00:00:00Z', fillRate: 1, avgScore: 1, settlementLatencyMs: 25000, sampleCount: 1 },
+              {
+                timestamp: '2026-06-01T00:00:00Z',
+                fillRate: 1,
+                avgScore: 1,
+                settlementLatencyMs: 15000,
+                sampleCount: 1,
+              },
+              {
+                timestamp: '2026-06-02T00:00:00Z',
+                fillRate: 1,
+                avgScore: 1,
+                settlementLatencyMs: 25000,
+                sampleCount: 1,
+              },
             ],
           }),
         });
