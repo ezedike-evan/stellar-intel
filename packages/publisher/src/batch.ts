@@ -58,8 +58,7 @@ export async function fetchPendingOutcomes(
     anchorId: r['anchor_id'] as string,
     corridor: r['corridor'] as string,
     outcome: r['outcome'] as string,
-    settleSeconds:
-      r['settle_seconds'] != null ? Number(r['settle_seconds'] as string) : null,
+    settleSeconds: r['settle_seconds'] != null ? Number(r['settle_seconds'] as string) : null,
     quotedRate: r['quoted_rate'] as string,
     deliveredRate: (r['delivered_rate'] as string | null) ?? null,
   }));

@@ -15,5 +15,7 @@
     "typescript": "^6",
     "vitest": "^4"
   },
-  "files": ["dist"]
+  "files": [
+    "dist"
+  ]
 }

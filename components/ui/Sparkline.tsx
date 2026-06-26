@@ -49,9 +49,7 @@ export function Sparkline({
     // Add 2px padding at the top and bottom to avoid clipping the stroke
     const padding = 2;
     const y =
-      range === 0
-        ? height / 2
-        : height - padding - ((val - min) / range) * (height - 2 * padding);
+      range === 0 ? height / 2 : height - padding - ((val - min) / range) * (height - 2 * padding);
     return { x, y };
   });
 
@@ -81,10 +79,7 @@ export function Sparkline({
           <stop offset="100%" stopColor="currentColor" stopOpacity={0} />
         </linearGradient>
       </defs>
-      <path
-        d={areaD}
-        fill={`url(#${gradientId})`}
-      />
+      <path d={areaD} fill={`url(#${gradientId})`} />
       <path
         d={pathD}
         fill="none"
