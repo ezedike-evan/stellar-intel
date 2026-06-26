@@ -1,6 +1,6 @@
 import type { Metadata } from 'next';
-import { Inter } from 'next/font/google';
 import './globals.css';
+import { inter } from './fonts';
 import { Navbar } from '@/components/layout/Navbar';
 import { Footer } from '@/components/layout/Footer';
 import { ThemeProvider } from '@/contexts/theme';
@@ -9,8 +9,6 @@ import { OfflineBar } from '@/components/layout/OfflineBar';
 import { WalletProvider } from '@/contexts/WalletContext';
 import { ToastProvider } from '@/contexts/ToastContext';
 import { ToastPortal } from '@/components/ui/Toast';
-
-const inter = Inter({ subsets: ['latin'] });
 
 export const metadata: Metadata = {
   title: 'Stellar Intel — Real-time rate comparison on Stellar',
@@ -46,7 +44,7 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
           }}
         />
       </head>
-      <body className={`${inter.className} min-h-screen bg-background`}>
+      <body className={`${inter.variable} ${inter.className} min-h-screen bg-background`}>
         <ThemeProvider>
           <WalletProvider>
             <ToastProvider>
