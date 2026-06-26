@@ -9,6 +9,7 @@ import {
   estimateTimeToThreshold,
   MIN_OUTCOMES_THRESHOLD,
 } from '@/lib/reputation/thresholds';
+import { Sparkline } from '@/components/ui/Sparkline';
 
 type ReputationWindow = '7d' | '30d' | '90d';
 
@@ -135,6 +136,7 @@ export function ScorecardCard({
   latestOracleTxHash,
 }: ScorecardCardProps) {
   const [metrics, setMetrics] = useState<ReputationMetrics>(emptyMetrics);
+  const [historyData, setHistoryData] = useState<number[]>([]);
   const [isLoading, setIsLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
 
@@ -144,6 +146,7 @@ export function ScorecardCard({
     setIsLoading(true);
     setError(null);
     setMetrics(emptyMetrics);
+    setHistoryData([]);
 
     fetch(`/api/reputation/${encodeURIComponent(anchorId)}?window=${encodeURIComponent(timeframe)}`)
       .then((response) => {
@@ -167,6 +170,29 @@ export function ScorecardCard({
         if (isActive) {
           setIsLoading(false);
         }
+      });
+
+    fetch(`/api/reputation/${encodeURIComponent(anchorId)}/history?window=30d`)
+      .then((response) => {
+        if (!response.ok) {
+          throw new Error(`Failed to load history data (${response.status})`);
+        }
+        return response.json();
+      })
+      .then((body) => {
+        if (!isActive || !body) return;
+        const buckets = (body.buckets || []) as Array<{ settlementLatencyMs: number | null }>;
+        let lastVal = 0;
+        const dataPoints = buckets.map((b) => {
+          if (b.settlementLatencyMs !== null) {
+            lastVal = b.settlementLatencyMs / 1000;
+          }
+          return lastVal;
+        });
+        setHistoryData(dataPoints);
+      })
+      .catch(() => {
+        // Silently catch history errors to keep scorecard functional
       });
 
     return () => {
@@ -257,6 +283,11 @@ export function ScorecardCard({
                 <span className="text-gray-500 dark:text-gray-400">p95</span>
                 <span>{formatSeconds(metrics.settleP95)}</span>
               </div>
+              {historyData.length > 0 && (
+                <div className="pt-2 flex justify-center border-t border-gray-200 dark:border-gray-800" data-testid="scorecard-sparkline">
+                  <Sparkline data={historyData} />
+                </div>
+              )}
             </dd>
           </div>
 

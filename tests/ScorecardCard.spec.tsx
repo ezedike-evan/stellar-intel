@@ -1,5 +1,5 @@
 import { describe, expect, it, vi, afterEach, beforeEach } from 'vitest';
-import { render, screen, waitFor } from '@testing-library/react';
+import { render, screen } from '@testing-library/react';
 import { ScorecardCard } from '@/components/offramp/ScorecardCard';
 
 describe('ScorecardCard', () => {
@@ -8,6 +8,23 @@ describe('ScorecardCard', () => {
   beforeEach(() => {
     vi.stubGlobal('fetch', fetchMock);
     fetchMock.mockReset();
+    // Default mock implementation to handle history calls gracefully
+    fetchMock.mockImplementation((url: string) => {
+      if (url.includes('/history')) {
+        return Promise.resolve({
+          ok: true,
+          json: async () => ({
+            anchorId: 'example.anchor',
+            window: '30d',
+            buckets: [],
+          }),
+        });
+      }
+      return Promise.resolve({
+        ok: true,
+        json: async () => ({}),
+      });
+    });
   });
 
   afterEach(() => {
@@ -58,5 +75,46 @@ describe('ScorecardCard', () => {
     expect(
       await screen.findByText('No reputation metrics available for this anchor.')
     ).toBeInTheDocument();
+  });
+
+  it('renders sparkline when history data is available', async () => {
+    fetchMock.mockImplementation((url: string) => {
+      if (url.includes('/history')) {
+        return Promise.resolve({
+          ok: true,
+          json: async () => ({
+            anchorId: 'example.anchor',
+            window: '30d',
+            buckets: [
+              { timestamp: '2026-06-01T00:00:00Z', fillRate: 1, avgScore: 1, settlementLatencyMs: 15000, sampleCount: 1 },
+              { timestamp: '2026-06-02T00:00:00Z', fillRate: 1, avgScore: 1, settlementLatencyMs: 25000, sampleCount: 1 },
+            ],
+          }),
+        });
+      }
+      return Promise.resolve({
+        ok: true,
+        json: async () => ({
+          fill_rate: 98.7,
+          settle_p50: 21,
+          settle_p95: 95,
+          slippage_p50: 0.4,
+          slippage_p95: 0.85,
+          outcomes_count: 100,
+        }),
+      });
+    });
+
+    render(<ScorecardCard anchorId="example.anchor" window="30d" />);
+
+    expect(await screen.findByText('Fill rate')).toBeInTheDocument();
+
+    // Settle sparkline should be rendered
+    const sparkline = await screen.findByTestId('scorecard-sparkline');
+    expect(sparkline).toBeInTheDocument();
+
+    // Verify SVG within sparkline exists
+    const svg = screen.getByTestId('sparkline-svg');
+    expect(svg).toBeInTheDocument();
   });
 });
