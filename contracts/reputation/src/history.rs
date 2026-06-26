@@ -6,19 +6,16 @@ pub fn recent_outcomes(env: &Env, anchor_id: String, n: u32) -> Vec<(String, u64
     if n > 100 {
         panic!("n exceeds maximum of 100");
     }
-    // Clone env for ownership where needed.
-    let env = env.clone();
     let outcomes: Vec<(String, u64, bool)> = env
         .storage()
         .persistent()
         .get(&anchor_id)
-        .unwrap_or(Ok(Vec::new(env.clone())))
-        .unwrap();
+        .unwrap_or_else(|| Vec::new(env));
     let len = outcomes.len();
     if len == 0 || n == 0 {
         return Vec::new(env);
     }
-    let take = core::cmp::min(n as usize, len);
+    let take = core::cmp::min(n, len);
     let start = len - take;
     let mut recent = Vec::new(env);
     // Iterate backwards to get most recent first.
