@@ -1,6 +1,7 @@
 import { describe, it, expect, vi } from 'vitest';
 import { render, screen, fireEvent } from '@testing-library/react';
 import { AmountInput } from '@/components/ui/AmountInput';
+import { CORRIDORS } from '@/constants/anchors';
 
 describe('AmountInput', () => {
   it('calls onChange with the typed value', async () => {
@@ -33,11 +34,11 @@ describe('AmountInput', () => {
 });
 
 describe('CorridorSelector', () => {
-  it('renders all seven corridors as option elements', async () => {
+  it('renders all corridors as option elements', async () => {
     const { CorridorSelector } = await import('@/components/ui/CorridorSelector');
     render(<CorridorSelector value="usdc-ngn" onChange={vi.fn()} />);
     const options = screen.getAllByRole('option');
-    expect(options).toHaveLength(7);
+    expect(options).toHaveLength(CORRIDORS.length);
   });
 
   it('fires onChange with "usdc-ghs" when Ghana is selected', async () => {
