@@ -1,4 +1,5 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest';
+import * as fc from 'fast-check';
 import { getSep6Info, Sep6AssetDisabledError } from '@/lib/stellar/sep6';
 import { TimeoutError } from '@/lib/stellar/errors';
 
@@ -189,5 +190,106 @@ describe('getSep6Info', () => {
       expect(typed.assetCode).toBe('EUR');
       expect(typed.transferServer).toBe(TRANSFER_SERVER);
     }
+  });
+});
+
+// ─── Fee model table tests ────────────────────────────────────────────────────
+
+describe('getSep6Info — fee model parsing', () => {
+  const feeModelCases = [
+    {
+      label: 'flat-fee only',
+      feeFixed: 3,
+      feePercent: 0,
+      expected: { feeFixed: 3, feePercent: 0 },
+    },
+    {
+      label: 'percent-fee only',
+      feeFixed: 0,
+      feePercent: 1.5,
+      expected: { feeFixed: 0, feePercent: 1.5 },
+    },
+    {
+      label: 'combined flat + percent fee',
+      feeFixed: 2,
+      feePercent: 0.5,
+      expected: { feeFixed: 2, feePercent: 0.5 },
+    },
+  ] as const;
+
+  it.each(feeModelCases)('parses $label correctly', async ({ feeFixed, feePercent, expected }) => {
+    vi.stubGlobal(
+      'fetch',
+      vi.fn(async () => ({
+        ok: true,
+        json: async () => ({
+          withdraw: {
+            USDC: {
+              enabled: true,
+              fee_fixed: feeFixed,
+              fee_percent: feePercent,
+              min_amount: 10,
+              max_amount: 10000,
+              fields: {},
+            },
+          },
+        }),
+      }))
+    );
+
+    const result = await getSep6Info(TRANSFER_SERVER, 'USDC');
+
+    expect(result.feeFixed).toBe(expected.feeFixed);
+    expect(result.feePercent).toBe(expected.feePercent);
+  });
+});
+
+// ─── Property test: fee monotonicity ─────────────────────────────────────────
+
+describe('fee→rate derivation — property tests', () => {
+  it('higher fee_percent never increases totalReceived', async () => {
+    await fc.assert(
+      fc.asyncProperty(
+        fc.float({ min: 10, max: 10000, noNaN: true }),
+        fc.float({ min: 0, max: 50, noNaN: true }),
+        fc.float({ min: 0, max: 50, noNaN: true }),
+        async (amount, feePercentA, feePercentB) => {
+          const makeFixture = (pct: number) => ({
+            withdraw: {
+              USDC: {
+                enabled: true,
+                fee_fixed: 0,
+                fee_percent: pct,
+                min_amount: 0,
+                max_amount: 100000,
+                fields: {},
+              },
+            },
+          });
+
+          vi.stubGlobal(
+            'fetch',
+            vi.fn(async () => ({ ok: true, json: async () => makeFixture(feePercentA) }))
+          );
+          const resultA = await getSep6Info(TRANSFER_SERVER, 'USDC');
+
+          vi.stubGlobal(
+            'fetch',
+            vi.fn(async () => ({ ok: true, json: async () => makeFixture(feePercentB) }))
+          );
+          const resultB = await getSep6Info(TRANSFER_SERVER, 'USDC');
+
+          const totalReceivedA = amount * (1 - resultA.feePercent / 100);
+          const totalReceivedB = amount * (1 - resultB.feePercent / 100);
+
+          if (feePercentA <= feePercentB) {
+            expect(totalReceivedA).toBeGreaterThanOrEqual(totalReceivedB);
+          } else {
+            expect(totalReceivedA).toBeLessThan(totalReceivedB);
+          }
+        }
+      ),
+      { numRuns: 100 }
+    );
   });
 });
