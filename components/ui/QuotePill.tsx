@@ -68,14 +68,30 @@ export function QuotePill({ source, expiresAt, onExpire }: QuotePillProps) {
     );
   }
 
-  // default to indicative
-  return (
-    <span
-      className="rounded-full bg-gray-100 px-2 py-0.5 text-xs font-medium text-gray-700 dark:bg-gray-800 dark:text-gray-300"
-      role="status"
-      aria-label="Indicative quote"
-    >
-      Indicative
-    </span>
-  );
+  if (source === 'sep24-fee') {
+    return (
+      <span
+        className="rounded-full bg-gray-100 px-2 py-0.5 text-xs font-medium text-gray-700 dark:bg-gray-800 dark:text-gray-300"
+        role="status"
+        aria-label="Indicative quote"
+      >
+        Indicative
+      </span>
+    );
+  }
+
+  if (source === 'sep6-info') {
+    return (
+      <span
+        className="rounded-full bg-purple-100 px-2 py-0.5 text-xs font-medium text-purple-700 dark:bg-purple-900/40 dark:text-purple-300"
+        role="status"
+        aria-label="SEP-6 info rate"
+      >
+        SEP-6
+      </span>
+    );
+  }
+
+  const _exhaustive: never = source;
+  return null;
 }
