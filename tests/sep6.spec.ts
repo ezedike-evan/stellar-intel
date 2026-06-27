@@ -3,10 +3,12 @@ import * as fc from 'fast-check';
 import {
   getSep6Info,
   getSep6Transaction,
+  hasSep6,
+  getSep6TransferServer,
   Sep6AssetDisabledError,
   TERMINAL_STATES,
 } from '@/lib/stellar/sep6';
-import { TimeoutError } from '@/lib/stellar/errors';
+import { TimeoutError, Sep6NotSupportedError } from '@/lib/stellar/errors';
 
 const TRANSFER_SERVER = 'https://sep6.example.com';
 const TRANSACTION_ID = 'txn-sep6-abc123';
@@ -448,6 +450,37 @@ describe('fee→rate derivation — property tests', () => {
         }
       ),
       { numRuns: 100 }
+    );
+  });
+});
+
+// ─── Capability detection (network-free TOML inspection) ──────────────────────
+
+describe('hasSep6', () => {
+  it('returns true for a toml that advertises TRANSFER_SERVER', () => {
+    expect(hasSep6({ TRANSFER_SERVER: 'https://anchor.example.com/sep6' })).toBe(true);
+  });
+
+  it('returns false when TRANSFER_SERVER is absent', () => {
+    expect(hasSep6({})).toBe(false);
+  });
+
+  it('returns false for a blank or whitespace-only TRANSFER_SERVER', () => {
+    expect(hasSep6({ TRANSFER_SERVER: '   ' })).toBe(false);
+    expect(hasSep6({ TRANSFER_SERVER: null })).toBe(false);
+  });
+});
+
+describe('getSep6TransferServer', () => {
+  it('returns the trimmed transfer server URL when present', () => {
+    expect(getSep6TransferServer({ TRANSFER_SERVER: '  https://anchor.example.com/sep6  ' })).toBe(
+      'https://anchor.example.com/sep6'
+    );
+  });
+
+  it('throws a typed Sep6NotSupportedError when absent', () => {
+    expect(() => getSep6TransferServer({ domain: 'anchor.example.com' })).toThrow(
+      Sep6NotSupportedError
     );
   });
 });
