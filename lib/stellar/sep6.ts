@@ -1,5 +1,14 @@
 import { SepError, TimeoutError, parseSepErrorBody } from './errors';
-import type { Sep6WithdrawParams, Sep6WithdrawResponse } from '@/types';
+import { TERMINAL_STATES } from './sep24';
+import { mapToCanonical } from './sep24-status-map';
+import type {
+  WithdrawStatusValue,
+  WithdrawStatus,
+  Sep6WithdrawParams,
+  Sep6WithdrawResponse,
+} from '@/types';
+
+export { TERMINAL_STATES };
 
 // ─── Types ────────────────────────────────────────────────────────────────────
 
@@ -34,6 +43,18 @@ export interface Sep6WithdrawConfig {
   fields: Sep6AssetFields;
 }
 
+export interface Sep6Transaction {
+  id: string;
+  status: WithdrawStatusValue;
+  normalizedStatus: WithdrawStatus;
+  updatedAt: Date;
+  amountIn?: string;
+  amountOut?: string;
+  amountFee?: string;
+  stellarTransactionId?: string;
+  externalTransactionId?: string;
+}
+
 // ─── Typed error ──────────────────────────────────────────────────────────────
 
 /** Thrown when the requested asset is not present or is disabled in the anchor's SEP-6 /info. */
@@ -62,7 +83,34 @@ function withTimeout<T>(promise: Promise<T>, ms: number, label: string): Promise
   ]);
 }
 
-// ─── getSep6Info ──────────────────────────────────────────────────────────────
+// ─── Status helpers ───────────────────────────────────────────────────────────
+
+const KNOWN_STATUSES = new Set<WithdrawStatusValue>([
+  'incomplete',
+  'pending_user_transfer_start',
+  'pending_user_transfer_complete',
+  'pending_external',
+  'pending_anchor',
+  'pending_stellar',
+  'pending_trust',
+  'pending_user',
+  'completed',
+  'refunded',
+  'error',
+  'no_market',
+  'too_small',
+  'too_large',
+  'expired',
+]);
+
+function normalizeStatus(raw: unknown): WithdrawStatusValue {
+  if (typeof raw === 'string' && KNOWN_STATUSES.has(raw as WithdrawStatusValue)) {
+    return raw as WithdrawStatusValue;
+  }
+  return 'pending_external';
+}
+
+// ─── Fetchers ─────────────────────────────────────────────────────────────────
 
 export async function getSep6Info(
   transferServer: string,
@@ -109,6 +157,44 @@ export async function getSep6Info(
     min: asset.min_amount ?? 0,
     max: asset.max_amount ?? 0,
     fields: asset.fields ?? {},
+  };
+}
+
+export async function getSep6Transaction(
+  transferServer: string,
+  transactionId: string,
+  jwt: string,
+  signal?: AbortSignal
+): Promise<Sep6Transaction> {
+  const res = await fetch(`${transferServer}/transaction?id=${transactionId}`, {
+    headers: { Authorization: `Bearer ${jwt}` },
+    ...(signal ? { signal } : {}),
+  });
+
+  if (!res.ok) {
+    const body: unknown =
+      typeof res.json === 'function' ? await res.json().catch(() => null) : null;
+    throw parseSepErrorBody(body, res.status);
+  }
+
+  const data = (await res.json()) as { transaction?: Record<string, unknown> };
+  const tx = data.transaction ?? {};
+  const status = normalizeStatus(tx['status']);
+
+  return {
+    id: String(tx['id'] ?? transactionId),
+    status,
+    normalizedStatus: mapToCanonical(status),
+    updatedAt: new Date(),
+    ...(tx['amount_in'] !== undefined && { amountIn: tx['amount_in'] as string }),
+    ...(tx['amount_out'] !== undefined && { amountOut: tx['amount_out'] as string }),
+    ...(tx['amount_fee'] !== undefined && { amountFee: tx['amount_fee'] as string }),
+    ...(tx['stellar_transaction_id'] !== undefined && {
+      stellarTransactionId: tx['stellar_transaction_id'] as string,
+    }),
+    ...(tx['external_transaction_id'] !== undefined && {
+      externalTransactionId: tx['external_transaction_id'] as string,
+    }),
   };
 }
 

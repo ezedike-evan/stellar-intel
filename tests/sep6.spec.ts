@@ -1,8 +1,16 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest';
-import { getSep6Info, Sep6AssetDisabledError } from '@/lib/stellar/sep6';
+import * as fc from 'fast-check';
+import {
+  getSep6Info,
+  getSep6Transaction,
+  Sep6AssetDisabledError,
+  TERMINAL_STATES,
+} from '@/lib/stellar/sep6';
 import { TimeoutError } from '@/lib/stellar/errors';
 
 const TRANSFER_SERVER = 'https://sep6.example.com';
+const TRANSACTION_ID = 'txn-sep6-abc123';
+const JWT = 'test-jwt-sep6';
 
 /** Canonical SEP-6 /info fixture matching the SEP-6 spec shape. */
 const FIXTURE = {
@@ -149,7 +157,6 @@ describe('getSep6Info', () => {
   it('throws TimeoutError after 8 seconds', async () => {
     vi.useFakeTimers();
 
-    // Promise that never resolves
     vi.stubGlobal(
       'fetch',
       vi.fn(() => new Promise(() => {}))
@@ -189,5 +196,258 @@ describe('getSep6Info', () => {
       expect(typed.assetCode).toBe('EUR');
       expect(typed.transferServer).toBe(TRANSFER_SERVER);
     }
+  });
+});
+
+// ─── getSep6Transaction ───────────────────────────────────────────────────────
+
+describe('getSep6Transaction', () => {
+  it('fetches the correct URL with Authorization header', async () => {
+    let capturedUrl = '';
+    let capturedHeaders: Record<string, string> = {};
+
+    vi.stubGlobal(
+      'fetch',
+      vi.fn(async (url: string, opts: RequestInit) => {
+        capturedUrl = url;
+        capturedHeaders = opts.headers as Record<string, string>;
+        return {
+          ok: true,
+          json: async () => ({
+            transaction: { id: TRANSACTION_ID, status: 'pending_external' },
+          }),
+        };
+      })
+    );
+
+    await getSep6Transaction(TRANSFER_SERVER, TRANSACTION_ID, JWT);
+
+    expect(capturedUrl).toBe(`${TRANSFER_SERVER}/transaction?id=${TRANSACTION_ID}`);
+    expect(capturedHeaders['Authorization']).toBe(`Bearer ${JWT}`);
+  });
+
+  it('returns all mapped fields on a well-formed response', async () => {
+    vi.stubGlobal(
+      'fetch',
+      vi.fn(async () => ({
+        ok: true,
+        json: async () => ({
+          transaction: {
+            id: TRANSACTION_ID,
+            status: 'completed',
+            amount_in: '100.00',
+            amount_out: '155000.00',
+            amount_fee: '2.00',
+            stellar_transaction_id: 'stellar-hash-sep6-xyz',
+          },
+        }),
+      }))
+    );
+
+    const result = await getSep6Transaction(TRANSFER_SERVER, TRANSACTION_ID, JWT);
+
+    expect(result.id).toBe(TRANSACTION_ID);
+    expect(result.status).toBe('completed');
+    expect(result.amountIn).toBe('100.00');
+    expect(result.amountOut).toBe('155000.00');
+    expect(result.amountFee).toBe('2.00');
+    expect(result.stellarTransactionId).toBe('stellar-hash-sep6-xyz');
+    expect(result.updatedAt).toBeInstanceOf(Date);
+  });
+
+  it('maps a known status correctly (pending_anchor stays pending_anchor, normalizedStatus is pending_anchor)', async () => {
+    vi.stubGlobal(
+      'fetch',
+      vi.fn(async () => ({
+        ok: true,
+        json: async () => ({ transaction: { id: TRANSACTION_ID, status: 'pending_anchor' } }),
+      }))
+    );
+
+    const result = await getSep6Transaction(TRANSFER_SERVER, TRANSACTION_ID, JWT);
+    expect(result.status).toBe('pending_anchor');
+    expect(result.normalizedStatus).toBe('pending_anchor');
+  });
+
+  it('defaults an unknown anchor status to "pending_external" without throwing', async () => {
+    vi.stubGlobal(
+      'fetch',
+      vi.fn(async () => ({
+        ok: true,
+        json: async () => ({
+          transaction: { id: TRANSACTION_ID, status: 'some_custom_anchor_state' },
+        }),
+      }))
+    );
+
+    const result = await getSep6Transaction(TRANSFER_SERVER, TRANSACTION_ID, JWT);
+    expect(result.status).toBe('pending_external');
+  });
+
+  it('defaults a missing status to "pending_external"', async () => {
+    vi.stubGlobal(
+      'fetch',
+      vi.fn(async () => ({
+        ok: true,
+        json: async () => ({ transaction: { id: TRANSACTION_ID } }),
+      }))
+    );
+
+    const result = await getSep6Transaction(TRANSFER_SERVER, TRANSACTION_ID, JWT);
+    expect(result.status).toBe('pending_external');
+  });
+
+  it('uses transactionId as fallback when id is absent from the response', async () => {
+    vi.stubGlobal(
+      'fetch',
+      vi.fn(async () => ({
+        ok: true,
+        json: async () => ({ transaction: { status: 'pending_external' } }),
+      }))
+    );
+
+    const result = await getSep6Transaction(TRANSFER_SERVER, TRANSACTION_ID, JWT);
+    expect(result.id).toBe(TRANSACTION_ID);
+  });
+
+  it('throws on a 404 non-ok response', async () => {
+    vi.stubGlobal(
+      'fetch',
+      vi.fn(async () => ({ ok: false, status: 404 }))
+    );
+
+    await expect(getSep6Transaction(TRANSFER_SERVER, TRANSACTION_ID, JWT)).rejects.toThrow(
+      /HTTP 404/
+    );
+  });
+
+  it('unknown status normalizedStatus maps to "pending_external"', async () => {
+    vi.stubGlobal(
+      'fetch',
+      vi.fn(async () => ({
+        ok: true,
+        json: async () => ({
+          transaction: { id: TRANSACTION_ID, status: 'unknown_custom_status' },
+        }),
+      }))
+    );
+
+    const result = await getSep6Transaction(TRANSFER_SERVER, TRANSACTION_ID, JWT);
+    expect(result.normalizedStatus).toBe('pending_external');
+  });
+});
+
+// ─── TERMINAL_STATES ──────────────────────────────────────────────────────────
+
+describe('TERMINAL_STATES', () => {
+  it('includes completed, error, and refunded', () => {
+    expect(TERMINAL_STATES.has('completed')).toBe(true);
+    expect(TERMINAL_STATES.has('error')).toBe(true);
+    expect(TERMINAL_STATES.has('refunded')).toBe(true);
+  });
+
+  it('does not include pending_external or pending_anchor', () => {
+    expect(TERMINAL_STATES.has('pending_external')).toBe(false);
+    expect(TERMINAL_STATES.has('pending_anchor')).toBe(false);
+  });
+});
+// ─── Fee model table tests ────────────────────────────────────────────────────
+
+describe('getSep6Info — fee model parsing', () => {
+  const feeModelCases = [
+    {
+      label: 'flat-fee only',
+      feeFixed: 3,
+      feePercent: 0,
+      expected: { feeFixed: 3, feePercent: 0 },
+    },
+    {
+      label: 'percent-fee only',
+      feeFixed: 0,
+      feePercent: 1.5,
+      expected: { feeFixed: 0, feePercent: 1.5 },
+    },
+    {
+      label: 'combined flat + percent fee',
+      feeFixed: 2,
+      feePercent: 0.5,
+      expected: { feeFixed: 2, feePercent: 0.5 },
+    },
+  ] as const;
+
+  it.each(feeModelCases)('parses $label correctly', async ({ feeFixed, feePercent, expected }) => {
+    vi.stubGlobal(
+      'fetch',
+      vi.fn(async () => ({
+        ok: true,
+        json: async () => ({
+          withdraw: {
+            USDC: {
+              enabled: true,
+              fee_fixed: feeFixed,
+              fee_percent: feePercent,
+              min_amount: 10,
+              max_amount: 10000,
+              fields: {},
+            },
+          },
+        }),
+      }))
+    );
+
+    const result = await getSep6Info(TRANSFER_SERVER, 'USDC');
+
+    expect(result.feeFixed).toBe(expected.feeFixed);
+    expect(result.feePercent).toBe(expected.feePercent);
+  });
+});
+
+// ─── Property test: fee monotonicity ─────────────────────────────────────────
+
+describe('fee→rate derivation — property tests', () => {
+  it('higher fee_percent never increases totalReceived', async () => {
+    await fc.assert(
+      fc.asyncProperty(
+        fc.float({ min: 10, max: 10000, noNaN: true }),
+        fc.float({ min: 0, max: 50, noNaN: true }),
+        fc.float({ min: 0, max: 50, noNaN: true }),
+        async (amount, feePercentA, feePercentB) => {
+          const makeFixture = (pct: number) => ({
+            withdraw: {
+              USDC: {
+                enabled: true,
+                fee_fixed: 0,
+                fee_percent: pct,
+                min_amount: 0,
+                max_amount: 100000,
+                fields: {},
+              },
+            },
+          });
+
+          vi.stubGlobal(
+            'fetch',
+            vi.fn(async () => ({ ok: true, json: async () => makeFixture(feePercentA) }))
+          );
+          const resultA = await getSep6Info(TRANSFER_SERVER, 'USDC');
+
+          vi.stubGlobal(
+            'fetch',
+            vi.fn(async () => ({ ok: true, json: async () => makeFixture(feePercentB) }))
+          );
+          const resultB = await getSep6Info(TRANSFER_SERVER, 'USDC');
+
+          const totalReceivedA = amount * (1 - resultA.feePercent / 100);
+          const totalReceivedB = amount * (1 - resultB.feePercent / 100);
+
+          if (feePercentA <= feePercentB) {
+            expect(totalReceivedA).toBeGreaterThanOrEqual(totalReceivedB);
+          } else {
+            expect(totalReceivedA).toBeLessThanOrEqual(totalReceivedB);
+          }
+        }
+      ),
+      { numRuns: 100 }
+    );
   });
 });
