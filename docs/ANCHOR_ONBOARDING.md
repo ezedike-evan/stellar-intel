@@ -52,6 +52,11 @@ public reputation oracle with your anchor id attached
 bootstrap confidence band and accrue a live score from real outcomes. You agree to
 respond to disputes within five business days.
 
+> **Reputation accrual:** Newly onboarded anchors begin in a bootstrap
+> phase with seeded confidence scores. See
+> [Anchor Reputation: Bootstrap to Live](./ANCHOR_REPUTATION.md#new-anchor-reputation-bootstrap-to-live)
+> for how reputation accrues and when live status is reached.
+
 ## Non-custody
 
 Stellar Intel never holds user funds, keys, or fiat

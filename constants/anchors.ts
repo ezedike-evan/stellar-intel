@@ -28,6 +28,7 @@ export const ANCHORS: Anchor[] = [
     corridors: ['usdc-ngn'],
     assetCode: 'USDC',
     assetIssuer: USDC_ISSUER,
+    seps: ['sep6'],
   },
   {
     id: 'anclap',
@@ -36,16 +37,27 @@ export const ANCHORS: Anchor[] = [
     corridors: ['usdc-ars', 'usdc-pen'],
     assetCode: 'USDC',
     assetIssuer: USDC_ISSUER,
+    seps: ['sep6', 'sep24'],
+  },
+  // ntokens.com: BRL fiat corridor — SEP-24 withdraw enabled, SEP-6 + SEP-31 also present.
+  // Verified 2026-06-26. TOML: TRANSFER_SERVER_SEP0024 = https://ntokens-box.bpventures.us/sep24
+  // /info: withdraw.BRL.enabled = true. Issues BRL token anchored 1:1 to Brazilian Real.
+  {
+    id: 'ntokens',
+    name: 'nTokens',
+    homeDomain: 'ntokens.com',
+    serviceDomain: 'ntokens-box.bpventures.us',
+    corridors: ['brl-brl'],
+    assetCode: 'BRL',
+    assetIssuer: 'GDVKY2GU2DRXWTBEYJJWSFXIGBZV6AZNBVVSUHEPZI54LIS6BA7DVVSP',
   },
 ];
 
 export const KNOWN_ANCHORS = ANCHORS;
 
-export const ANCHOR_HOME_DOMAINS: Record<string, string> = {
-  moneygram: 'stellar.moneygram.com',
-  cowrie: 'cowrie.exchange',
-  anclap: 'anclap.com',
-} as const;
+export const ANCHOR_HOME_DOMAINS: Record<string, string> = Object.fromEntries(
+  ANCHORS.map((anchor) => [anchor.id, anchor.homeDomain])
+);
 
 // ─── Corridors ────────────────────────────────────────────────────────────────
 
@@ -105,5 +117,12 @@ export const CORRIDORS: Corridor[] = [
     to: 'EUR',
     countryCode: 'DE',
     countryName: 'Germany',
+  },
+  {
+    id: 'brl-brl',
+    from: 'BRL',
+    to: 'BRL',
+    countryCode: 'BR',
+    countryName: 'Brazil',
   },
 ];

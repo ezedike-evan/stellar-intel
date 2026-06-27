@@ -28,4 +28,8 @@ export interface OutcomeLogRow {
   stellarTransactionId: string | null;
   /** RFC 3339 timestamp when the reconciler backfilled delivery; null until then. */
   reconciledAt: string | null;
+  /** Set to true when an admin marks this outcome as disputed (#164). */
+  disputed: boolean;
+  /** Human-readable reason supplied by the admin when disputing; null when not disputed. */
+  disputedReason: string | null;
 }

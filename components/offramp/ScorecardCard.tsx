@@ -9,13 +9,14 @@ import {
   estimateTimeToThreshold,
   MIN_OUTCOMES_THRESHOLD,
 } from '@/lib/reputation/thresholds';
+import { Sparkline } from '@/components/ui/Sparkline';
 
 type ReputationWindow = '7d' | '30d' | '90d';
 
 interface ScorecardCardProps {
   anchorId: string;
   window: ReputationWindow;
-  latestOracleTxHash?: string;
+  latestOracleTxHash?: string | undefined;
 }
 
 interface ReputationMetrics {
@@ -49,8 +50,43 @@ function toNumber(value: unknown): number | null {
   return null;
 }
 
-function parseReputationResponse(body: unknown): ReputationMetrics {
-  const payload = (body ?? {}) as Record<string, unknown>;
+function toObject(value: unknown): Record<string, unknown> | null {
+  return typeof value === 'object' && value !== null ? (value as Record<string, unknown>) : null;
+}
+
+function scorecardKey(timeframe: ReputationWindow): string {
+  return timeframe.replace('d', '');
+}
+
+function parseNestedScorecard(
+  payload: Record<string, unknown>,
+  timeframe: ReputationWindow
+): ReputationMetrics | null {
+  const scorecards = toObject(payload.scorecards);
+  const scorecard = toObject(scorecards?.[scorecardKey(timeframe)]);
+  if (!scorecard) return null;
+
+  const settleMs = toObject(scorecard.settleMs);
+  const settleP50Ms = toNumber(settleMs?.p50);
+  const settleP95Ms = toNumber(settleMs?.p95);
+  const slippage = toObject(scorecard.slippage);
+  const slippageP50 = toNumber(slippage?.p50);
+  const slippageP95 = toNumber(slippage?.p95);
+
+  return {
+    fillRate: toNumber(scorecard.fillRate),
+    settleP50: settleP50Ms !== null ? Math.round(settleP50Ms / 1000) : null,
+    settleP95: settleP95Ms !== null ? Math.round(settleP95Ms / 1000) : null,
+    slippageP50: slippageP50 !== null ? slippageP50 * 100 : null,
+    slippageP95: slippageP95 !== null ? slippageP95 * 100 : null,
+    outcomesCount: toNumber(scorecard.sampleSize) ?? 0,
+  };
+}
+
+function parseReputationResponse(body: unknown, timeframe: ReputationWindow): ReputationMetrics {
+  const payload = toObject(body) ?? {};
+  const nestedMetrics = parseNestedScorecard(payload, timeframe);
+  if (nestedMetrics) return nestedMetrics;
 
   return {
     fillRate:
@@ -135,6 +171,7 @@ export function ScorecardCard({
   latestOracleTxHash,
 }: ScorecardCardProps) {
   const [metrics, setMetrics] = useState<ReputationMetrics>(emptyMetrics);
+  const [historyData, setHistoryData] = useState<number[]>([]);
   const [isLoading, setIsLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
 
@@ -144,6 +181,7 @@ export function ScorecardCard({
     setIsLoading(true);
     setError(null);
     setMetrics(emptyMetrics);
+    setHistoryData([]);
 
     fetch(`/api/reputation/${encodeURIComponent(anchorId)}?window=${encodeURIComponent(timeframe)}`)
       .then((response) => {
@@ -155,7 +193,7 @@ export function ScorecardCard({
       })
       .then((body) => {
         if (!isActive) return;
-        setMetrics(parseReputationResponse(body));
+        setMetrics(parseReputationResponse(body, timeframe));
       })
       .catch((fetchError) => {
         if (!isActive) return;
@@ -167,6 +205,29 @@ export function ScorecardCard({
         if (isActive) {
           setIsLoading(false);
         }
+      });
+
+    fetch(`/api/reputation/${encodeURIComponent(anchorId)}/history?window=30d`)
+      .then((response) => {
+        if (!response.ok) {
+          throw new Error(`Failed to load history data (${response.status})`);
+        }
+        return response.json();
+      })
+      .then((body) => {
+        if (!isActive || !body) return;
+        const buckets = (body.buckets || []) as Array<{ settlementLatencyMs: number | null }>;
+        let lastVal = 0;
+        const dataPoints = buckets.map((b) => {
+          if (b.settlementLatencyMs !== null) {
+            lastVal = b.settlementLatencyMs / 1000;
+          }
+          return lastVal;
+        });
+        setHistoryData(dataPoints);
+      })
+      .catch(() => {
+        // Silently catch history errors to keep scorecard functional
       });
 
     return () => {
@@ -257,6 +318,14 @@ export function ScorecardCard({
                 <span className="text-gray-500 dark:text-gray-400">p95</span>
                 <span>{formatSeconds(metrics.settleP95)}</span>
               </div>
+              {historyData.length > 0 && (
+                <div
+                  className="pt-2 flex justify-center border-t border-gray-200 dark:border-gray-800"
+                  data-testid="scorecard-sparkline"
+                >
+                  <Sparkline data={historyData} />
+                </div>
+              )}
             </dd>
           </div>
 

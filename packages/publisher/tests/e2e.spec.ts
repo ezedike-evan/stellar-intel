@@ -101,6 +101,8 @@ async function seedPostgresOutcome(
     createdAt: new Date().toISOString(),
     stellarTransactionId: null,
     reconciledAt: null,
+    disputed: false,
+    disputedReason: null,
   };
   await store.append(row);
   return store;
