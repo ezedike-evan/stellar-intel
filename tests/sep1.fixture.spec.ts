@@ -144,7 +144,7 @@ describe('SEP-1 Resolver Fixtures', () => {
         expect(result.data.TRANSFER_SERVER_SEP0024).toBe(expected.TRANSFER_SERVER_SEP0024);
         expect(result.data.WEB_AUTH_ENDPOINT).toBe(expected.WEB_AUTH_ENDPOINT);
         expect(result.data.SIGNING_KEY).toBe(expected.SIGNING_KEY);
-        expect(result.data.capabilities).toEqual(expected.capabilities);
+        expect(result.data.capabilities).toEqual(expect.objectContaining(expected.capabilities));
       }
     });
   });

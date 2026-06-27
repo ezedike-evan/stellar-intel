@@ -16,12 +16,12 @@ describe('Anclap anchor', () => {
     expect(anclap?.corridors).toContain('usdc-pen');
   });
 
-  it('has seps.sep6 === true', () => {
-    expect(anclap?.seps?.sep6).toBe(true);
+  it('declares sep6 capability', () => {
+    expect(anclap?.seps).toContain('sep6');
   });
 
-  it('has seps.sep24 === true', () => {
-    expect(anclap?.seps?.sep24).toBe(true);
+  it('declares sep24 capability', () => {
+    expect(anclap?.seps).toContain('sep24');
   });
 
   it('usdc-ars corridor exists in CORRIDORS list', () => {

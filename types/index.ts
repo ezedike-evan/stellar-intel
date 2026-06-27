@@ -15,7 +15,7 @@ export interface Anchor {
    */
   serviceDomain?: string;
   /** Known SEP protocol support flags for this anchor. */
-  seps?: { sep6: boolean; sep24: boolean; sep38: boolean; sep31: boolean };
+  seps?: Array<'sep6' | 'sep10' | 'sep24' | 'sep31' | 'sep38'>;
 }
 
 /** A payment corridor from one asset to a fiat currency in a given country. */
@@ -79,12 +79,16 @@ export interface AnchorCapabilities {
   sep24: boolean;
   sep38: boolean;
   sep12: boolean;
+  sep6?: boolean;
+  sep31?: boolean;
 }
 
 /** Relevant fields from a stellar.toml file resolved via SEP-1. */
 export interface Sep1TomlData {
   domain: string;
   TRANSFER_SERVER_SEP0024: string | null;
+  TRANSFER_SERVER?: string | null;
+  DIRECT_PAYMENT_SERVER?: string | null;
   ANCHOR_QUOTE_SERVER: string | null;
   WEB_AUTH_ENDPOINT: string | null;
   SIGNING_KEY: string | null;
@@ -97,6 +101,8 @@ export interface Sep1TomlData {
   ORG_SUPPORT_URL: string | null;
   CURRENCIES: Array<{ code: string; issuer?: string }>;
   capabilities: AnchorCapabilities;
+  /** Normalized SEP capability flags for easy consumption by callers. */
+  seps?: Array<'sep6' | 'sep10' | 'sep24' | 'sep31' | 'sep38'>;
 }
 
 /** A normalized stellar.toml response for an anchor resolved via SEP-1. */
@@ -439,3 +445,46 @@ export interface KycIframeConfig {
   url: string;
   origin: string;
 }
+
+// ─── SEP-6 ────────────────────────────────────────────────────────────────────
+
+/** Parameters for the SEP-6 GET /withdraw request. */
+export interface Sep6WithdrawParams {
+  asset_code: string;
+  type: string;
+  dest: string;
+  amount?: string;
+  account?: string;
+}
+
+/** SEP-6 /withdraw interactive response. */
+export interface Sep6WithdrawInteractive {
+  type: 'interactive_customer_info_needed';
+  url: string;
+  id: string;
+}
+
+/** SEP-6 /withdraw non-interactive response. */
+export interface Sep6WithdrawNonInteractive {
+  type: 'non_interactive';
+  id: string;
+  eta?: number;
+  min_amount?: number;
+  max_amount?: number;
+  amount_in?: string;
+  amount_out?: string;
+  amount_fee?: string;
+  extra_info?: { message?: string };
+}
+
+/** SEP-6 /withdraw needs_info response. */
+export interface Sep6WithdrawNeedsInfo {
+  type: 'customer_info_status';
+  fields: Record<string, { description: string; choices?: string[]; optional?: boolean }>;
+}
+
+/** Union of all three SEP-6 /withdraw response shapes. */
+export type Sep6WithdrawResponse =
+  | Sep6WithdrawInteractive
+  | Sep6WithdrawNonInteractive
+  | Sep6WithdrawNeedsInfo;
