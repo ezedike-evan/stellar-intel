@@ -2,21 +2,78 @@
 import Link from 'next/link';
 import { usePathname } from 'next/navigation';
 import { clsx } from 'clsx';
-import { Sun, Moon } from 'lucide-react';
+import { Sun, Moon, AlertTriangle } from 'lucide-react';
+import { useEffect, useState } from 'react';
 import { Button } from '@/components/ui/Button';
 import { useTheme } from '@/hooks/useTheme';
+import { detectMcp } from '@/lib/mcp/detect';
 
-const NAV_LINKS = [{ href: '/offramp', label: 'Off-ramp' }];
+interface PublisherHealth {
+  lastRun: string | null;
+  lastBatchSize: number | null;
+  lastError: string | null;
+  staleSinceMs: number | null;
+}
+
+const STALE_THRESHOLD_MS = 15 * 60 * 1000; // 15 minutes
+
+const NAV_LINKS = [
+  { href: '/offramp', label: 'Off-ramp' },
+  { href: '/anchors', label: 'Anchors' },
+];
 
 export function Navbar() {
   const pathname = usePathname();
   const { dark, toggle } = useTheme();
+  const [mcpPresent, setMcpPresent] = useState(false);
+  const [publisherStale, setPublisherStale] = useState(false);
+
+  useEffect(() => {
+    detectMcp().then(setMcpPresent);
+  }, []);
+
+  useEffect(() => {
+    const checkPublisherHealth = async () => {
+      try {
+        const res = await fetch('/api/publisher/health');
+        if (res.ok) {
+          const health: PublisherHealth = await res.json();
+          const isStale = health.staleSinceMs !== null && health.staleSinceMs > STALE_THRESHOLD_MS;
+          setPublisherStale(isStale);
+        }
+      } catch {
+        // Silently fail - publisher health is optional
+      }
+    };
+
+    // Check immediately
+    void checkPublisherHealth();
+
+    // Poll every 30 seconds
+    const interval = setInterval(checkPublisherHealth, 30_000);
+    return () => clearInterval(interval);
+  }, []);
+
   return (
     <header className="sticky top-0 z-40 border-b border-border bg-background backdrop-blur-sm">
       <div className="mx-auto flex max-w-7xl items-center justify-between px-4 py-3">
-        <Link href="/" className="font-bold text-primary-text">
-          Stellar Intel
-        </Link>
+        <div className="flex items-center gap-2">
+          <Link href="/" className="font-bold text-primary-text">
+            Stellar Intel
+          </Link>
+          {mcpPresent && (
+            <span className="inline-flex items-center gap-1 rounded-full bg-green-100 px-2 py-0.5 text-xs font-medium text-green-800 dark:bg-green-900/30 dark:text-green-400">
+              <span className="h-1.5 w-1.5 rounded-full bg-green-500" />
+              Open in MCP
+            </span>
+          )}
+          {publisherStale && (
+            <span className="inline-flex items-center gap-1 rounded-full bg-yellow-100 px-2 py-0.5 text-xs font-medium text-yellow-800 dark:bg-yellow-900/30 dark:text-yellow-400">
+              <AlertTriangle className="h-3 w-3" />
+              Publisher Stale
+            </span>
+          )}
+        </div>
         <nav className="hidden items-center gap-1 md:flex">
           {NAV_LINKS.map(({ href, label }) => (
             <Link

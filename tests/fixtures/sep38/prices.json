@@ -1,0 +1,14 @@
+{
+  "buy_assets": [
+    {
+      "asset": "iso4217:NGN",
+      "price": "1620.50",
+      "decimals": 2
+    },
+    {
+      "asset": "iso4217:KES",
+      "price": "1580.00",
+      "decimals": 2
+    }
+  ]
+}

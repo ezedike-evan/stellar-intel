@@ -1,0 +1,17 @@
+{
+  "total_price": "1620.50",
+  "price": "1600.00",
+  "sell_amount": "100.00",
+  "buy_amount": "162050.00",
+  "fee": {
+    "total": "2.50",
+    "asset": "stellar:USDC:GA5ZSEJYB37JRC5AVCIA5MOP4RHTM335X2KGX3IHOJAPP5RE34K4KZVN",
+    "details": [
+      {
+        "name": "Service Fee",
+        "description": "Flat service fee",
+        "amount": "2.50"
+      }
+    ]
+  }
+}

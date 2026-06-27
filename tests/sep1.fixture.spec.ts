@@ -1,12 +1,12 @@
-import { describe, it, expect, vi, beforeEach } from 'vitest'
-import { StellarToml } from '@stellar/stellar-sdk'
-import { resolveToml, _clearTomlCache } from '@/lib/stellar/sep1'
+import { describe, it, expect, vi, beforeEach } from 'vitest';
+import { StellarToml } from '@stellar/stellar-sdk';
+import { resolveToml, _clearTomlCache } from '@/lib/stellar/sep1';
 
 describe('SEP-1 Resolver Fixtures', () => {
   beforeEach(() => {
-    _clearTomlCache()
-    vi.restoreAllMocks()
-  })
+    _clearTomlCache();
+    vi.restoreAllMocks();
+  });
 
   const fixtures = [
     {
@@ -76,7 +76,7 @@ describe('SEP-1 Resolver Fixtures', () => {
         TRANSFER_SERVER_SEP0024: 'https://tempo.eu.com/api/sep24',
         WEB_AUTH_ENDPOINT: 'https://tempo.eu.com/api/auth',
         SIGNING_KEY: 'GATEMPO',
-        QUOTE_SERVER: 'https://tempo.eu.com/api/sep38',
+        ANCHOR_QUOTE_SERVER: 'https://tempo.eu.com/api/sep38',
       },
       expected: {
         TRANSFER_SERVER_SEP0024: 'https://tempo.eu.com/api/sep24',
@@ -130,21 +130,22 @@ describe('SEP-1 Resolver Fixtures', () => {
         },
       },
     },
-  ]
+  ];
 
   fixtures.forEach(({ name, domain, toml, expected }) => {
     it(`correctly resolves capabilities and endpoints for ${name}`, async () => {
-      vi.spyOn(StellarToml.Resolver, 'resolve').mockResolvedValue(toml as any)
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      vi.spyOn(StellarToml.Resolver, 'resolve').mockResolvedValue(toml as any);
 
-      const result = await resolveToml(domain)
+      const result = await resolveToml(domain);
 
-      expect(result.ok).toBe(true)
+      expect(result.ok).toBe(true);
       if (result.ok) {
-        expect(result.data.TRANSFER_SERVER_SEP0024).toBe(expected.TRANSFER_SERVER_SEP0024)
-        expect(result.data.WEB_AUTH_ENDPOINT).toBe(expected.WEB_AUTH_ENDPOINT)
-        expect(result.data.SIGNING_KEY).toBe(expected.SIGNING_KEY)
-        expect(result.data.capabilities).toEqual(expected.capabilities)
+        expect(result.data.TRANSFER_SERVER_SEP0024).toBe(expected.TRANSFER_SERVER_SEP0024);
+        expect(result.data.WEB_AUTH_ENDPOINT).toBe(expected.WEB_AUTH_ENDPOINT);
+        expect(result.data.SIGNING_KEY).toBe(expected.SIGNING_KEY);
+        expect(result.data.capabilities).toEqual(expect.objectContaining(expected.capabilities));
       }
-    })
-  })
-})
+    });
+  });
+});

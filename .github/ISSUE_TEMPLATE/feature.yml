@@ -1,6 +1,6 @@
 name: ✨ Feature request
 description: Propose something new — a capability, a refactor, a test you wish we had. For line-level scope that's already on the roadmap, link it instead.
-title: "[FEAT] [SCOPE] <short description>"
+title: '[FEAT] [SCOPE] <short description>'
 labels:
   - feature
   - triage
@@ -12,7 +12,7 @@ body:
         1. Check [`docs/ROADMAP.md`](../blob/main/docs/ROADMAP.md) — if it's
            already planned in a wave, link that wave and open a sub-issue
            instead of a fresh feature request.
-        2. Check [`issue.md`](../blob/main/issue.md) — the 250 engineering
+        2. Check the [GitHub issue tracker](../issues) — the engineering
            tickets covering v1 and v2. If your idea is already a ticket,
            just link it.
         3. For significant changes, open a Discussion first. Feature requests
@@ -136,13 +136,13 @@ body:
       label: Is this a breaking change?
       description: Breaking = changes a shipped API, env var, URL, MCP tool signature, or Soroban contract interface. See `docs/ARCHITECTURE.md § 9` invariants.
       options:
-        - "No"
-        - "Yes — API / schema change"
-        - "Yes — env or config change"
-        - "Yes — UI URL or route change"
-        - "Yes — MCP tool signature change"
-        - "Yes — Soroban contract interface change"
-        - "Unsure — needs review"
+        - 'No'
+        - 'Yes — API / schema change'
+        - 'Yes — env or config change'
+        - 'Yes — UI URL or route change'
+        - 'Yes — MCP tool signature change'
+        - 'Yes — Soroban contract interface change'
+        - 'Unsure — needs review'
     validations:
       required: true
 
@@ -186,7 +186,7 @@ body:
     attributes:
       label: Pre-flight
       options:
-        - label: I searched open and closed issues and `issue.md`; this is not a duplicate
+        - label: I searched open and closed issues; this is not a duplicate
           required: true
         - label: This is not already on [`docs/ROADMAP.md`](../blob/main/docs/ROADMAP.md) (or if it is, I've linked the wave above)
           required: true

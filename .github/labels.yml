@@ -137,7 +137,7 @@
   description: lib/reputation/* — scoring, aggregation, dispute handling.
 - name: module/oracle
   color: 'c5def5'
-  description: contracts/oracle and lib/oracle/* — Soroban oracle.
+  description: contracts/reputation — Soroban reputation oracle.
 - name: module/mcp
   color: 'c5def5'
   description: packages/mcp/* — MCP server + tool definitions.
@@ -150,6 +150,9 @@
 - name: module/sep1
   color: 'c5def5'
   description: lib/sep1/* — stellar.toml resolution.
+- name: module/sep6
+  color: 'c5def5'
+  description: lib/stellar/sep6.* — programmatic deposit/withdraw + SEP-12 KYC.
 - name: module/sep10
   color: 'c5def5'
   description: lib/sep10/* — anchor authentication.
@@ -162,6 +165,15 @@
 - name: module/freighter
   color: 'c5def5'
   description: lib/freighter/* — wallet adapter surface.
+- name: module/anchors
+  color: 'c5def5'
+  description: constants/anchors.ts + lib/stellar/anchors.ts — anchor registry & fleet.
+- name: module/types
+  color: 'c5def5'
+  description: types/* — shared TypeScript types and schemas.
+- name: module/e2e
+  color: 'c5def5'
+  description: e2e/* — Playwright end-to-end tests.
 - name: module/ops
   color: 'c5def5'
   description: Infrastructure, CI, deploys, monitoring.

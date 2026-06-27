@@ -97,7 +97,7 @@ const MOCK_AUTH = {
   anchorDomain: RESOLVED_ANCHOR.homeDomain,
   publicKey: USER_PUBLIC_KEY,
   expiresAt: new Date(Date.now() + 86400_000),
-}
+};
 
 const MOCK_WITHDRAW_RESPONSE = {
   type: 'interactive_customer_info_needed' as const,

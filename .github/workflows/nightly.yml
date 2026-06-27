@@ -17,7 +17,7 @@ jobs:
     outputs:
       summary: ${{ steps.probe.outputs.summary }}
     steps:
-      - uses: actions/checkout@v6
+      - uses: actions/checkout@v7
       - uses: actions/setup-node@v6
         with:
           node-version: '20'
@@ -27,13 +27,13 @@ jobs:
       - name: Resolve every anchor .well-known/stellar.toml
         id: probe
         run: |
-          # Extract anchor domains from constants/index.ts so we do not drift
+          # Extract anchor domains from constants/anchors.ts so we do not drift
           # from the app's source of truth.
           mapfile -t DOMAINS < <(node -e "
             const path = require('path');
             const fs = require('fs');
-            const src = fs.readFileSync('constants/index.ts', 'utf8');
-            const re = /domain:\s*['\"]([^'\"]+)['\"]/g;
+            const src = fs.readFileSync('constants/anchors.ts', 'utf8');
+            const re = /homeDomain:\s*['\"]([^'\"]+)['\"]/g;
             const seen = new Set();
             let m;
             while ((m = re.exec(src))) seen.add(m[1]);
@@ -41,7 +41,7 @@ jobs:
           ")
 
           if [ ${#DOMAINS[@]} -eq 0 ]; then
-            echo "::warning::No anchor domains found in constants/index.ts; skipping"
+            echo "::warning::No anchor domains found in constants/anchors.ts; skipping"
             echo "summary=no-domains-detected" >> "$GITHUB_OUTPUT"
             exit 0
           fi
@@ -74,7 +74,7 @@ jobs:
     name: Reputation aggregate integrity
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v6
+      - uses: actions/checkout@v7
       - uses: actions/setup-node@v6
         with:
           node-version: '20'
@@ -87,7 +87,7 @@ jobs:
             node scripts/reputation-integrity.mjs
           else
             echo "No reputation integrity script yet — placeholder for v2."
-            echo "Tracked in issue.md §168 (composite score test vectors)."
+            echo "Tracked in the GitHub issue tracker (composite score test vectors)."
           fi
 
   open-issue-on-failure:
@@ -96,7 +96,7 @@ jobs:
     needs: [anchor-domains, reputation-integrity]
     if: failure()
     steps:
-      - uses: actions/github-script@v7
+      - uses: actions/github-script@v9
         with:
           script: |
             const title = `[nightly] integrity failure — ${new Date().toISOString().slice(0,10)}`;

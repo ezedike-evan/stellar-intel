@@ -2,6 +2,7 @@
 
 # dependencies
 /node_modules
+packages/*/node_modules
 /.pnp
 .pnp.*
 .yarn/*
@@ -44,7 +45,10 @@ next-env.d.ts
 # claude
 .claude
 
+# IDE settings
+.vscode/
+
 # local planning artifacts (not shipped)
-/issue.md
+/issues-batch-2.md
 /maintainer.md
-/scripts/file-issues.mjs
+/scripts/create-batch-2-issues.mjs

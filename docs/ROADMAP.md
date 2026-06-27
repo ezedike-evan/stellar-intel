@@ -1,13 +1,21 @@
 # Stellar Intel — Roadmap
 
-> Five milestone versions, tickable. Mirror of the wave structure in
-> [`issue.md`](../issue.md) (250 engineering tickets) — this document is the
-> product-level view a grant reviewer, contributor, or anchor partner reads
-> to know **what ships next** and **in what order**.
+> Five milestone versions, tickable. The wave structure mirrors the numbered
+> tickets in the [GitHub issue tracker](https://github.com/Ezedike-Evan/stellar-intel/issues)
+> — this document is the product-level view a grant reviewer, contributor, or
+> anchor partner reads to know **what ships next** and **in what order**.
 
 **Legend.** `[x]` shipped on `main` today · `[-]` in flight · `[ ]` planned.
-Ticket ranges point back to numbered issues in
-[`issue.md`](../issue.md) where the line-level scope lives.
+Ticket ranges point back to numbered issues in the
+[GitHub issue tracker](https://github.com/Ezedike-Evan/stellar-intel/issues) where the line-level scope lives.
+
+> **Reconciliation note.** Several v1.1–v2.0 foundations have already landed on
+> `main` ahead of a full per-checkbox sweep: `lib/stellar/sep38.ts` (+ schemas),
+> `lib/intent/*` (canonicalize/hash/sign/replay), `lib/router/*`,
+> `lib/reputation/*` (SQLite/Postgres store, composite score, bands, disputes),
+> `packages/mcp` (basic MCP server), `contracts/reputation/*` (Soroban contract,
+> testnet), and the `/api/reputation/*`, `/api/intent/offramp`, and `/api/metrics`
+> routes. Treat the **code as authoritative** where a box below still reads `[ ]`.
 
 **Ship discipline.** Each wave has a **release gate** — a single named
 command plus a named condition — that must be green before the next wave
@@ -37,13 +45,13 @@ opens. A wave does not open early. A wave does not ship partial.
 
 ## At a glance
 
-| Version | Theme | Scope | Target gate | Status |
-| --- | --- | --- | --- | --- |
-| **v1 Executable** | A correct, demonstrable off-ramp | `#001–#150` · 150 tickets · 4 waves | `npm run test:release` green; feature flags default-on | 🟢 Wave 1.0 substantially shipped |
-| **v2 Observable** | Reputation as product surface, Soroban on mainnet | `#151–#250` · 100 tickets · 4 waves | Soroban contract deployed, ≥3 publishers, ≥1000 outcomes | ⚪ Not started |
-| **v3 Guaranteed** | Intent-level SLAs, slippage bounds, recurring intents | Planned · scope decomposed post-v2 | Slippage-bound compliance ≥ 99.5% over 10k intents | ⚪ Not started |
-| **v4 Universal** | SDK + MCP GA + embeddable widget | Planned · scope decomposed post-v3 | `@stellarintel/sdk` + `@stellarintel/mcp` on npm; 3 reference integrations | ⚪ Not started |
-| **v5 Institutional** | Compliance-grade primitives, audit-ready | Planned · scope decomposed post-v4 | Third-party audit report published; SBOM on every release | ⚪ Not started |
+| Version              | Theme                                                 | Scope                               | Target gate                                                                | Status                                                                                    |
+| -------------------- | ----------------------------------------------------- | ----------------------------------- | -------------------------------------------------------------------------- | ----------------------------------------------------------------------------------------- |
+| **v1 Executable**    | A correct, demonstrable off-ramp                      | `#001–#150` · 150 tickets · 4 waves | `npm run test:release` green; feature flags default-on                     | 🟢 Wave 1.0 substantially shipped                                                         |
+| **v2 Observable**    | Reputation as product surface, Soroban on mainnet     | `#151–#250` · 100 tickets · 4 waves | Soroban contract deployed, ≥3 publishers, ≥1000 outcomes                   | 🟡 Foundations landed (store + API, oracle on testnet, MCP); mainnet + public API pending |
+| **v3 Guaranteed**    | Intent-level SLAs, slippage bounds, recurring intents | Planned · scope decomposed post-v2  | Slippage-bound compliance ≥ 99.5% over 10k intents                         | ⚪ Not started                                                                            |
+| **v4 Universal**     | SDK + MCP GA + embeddable widget                      | Planned · scope decomposed post-v3  | `@stellarintel/sdk` + `@stellarintel/mcp` on npm; 3 reference integrations | ⚪ Not started                                                                            |
+| **v5 Institutional** | Compliance-grade primitives, audit-ready              | Planned · scope decomposed post-v4  | Third-party audit report published; SBOM on every release                  | ⚪ Not started                                                                            |
 
 ---
 
@@ -228,7 +236,7 @@ instrumented.
 
 **R. Soroban reputation contract skeleton** (`#139–#140`)
 
-- [ ] `contracts/oracle/src/lib.rs` scaffold with `publish_outcome` stub
+- [x] `contracts/reputation/src/lib.rs` `ReputationContract` with `submit_outcome` (testnet)
 - [ ] `#140` `get_score` read entrypoint returning dummy data
 - [ ] Soroban test harness green on testnet
 
@@ -412,8 +420,8 @@ compounds.
 
 ## v3 Guaranteed
 
-**Thesis.** Up to this point, an intent is a *preference*. In v3 it
-becomes a *guarantee*: deadline enforcement, slippage-bound compliance,
+**Thesis.** Up to this point, an intent is a _preference_. In v3 it
+becomes a _guarantee_: deadline enforcement, slippage-bound compliance,
 recurring intents that auto-execute under a standing signed authorization.
 
 Scope is decomposed post-v2; the shape is already committed.
@@ -540,5 +548,5 @@ _Scope is promissory; dates are not. We ship on gates, not dates. If a
 wave slips, the release gate slips with it — never the quality bar._
 
 _See also: [`docs/PROPOSAL.md`](PROPOSAL.md) for the strategic thesis,
-[`docs/ARCHITECTURE.md`](ARCHITECTURE.md) for the system design, and
-[`issue.md`](../issue.md) for the 250-ticket line-level scope._
+[`docs/ARCHITECTURE.md`](ARCHITECTURE.md) for the system design, and the
+[GitHub issue tracker](https://github.com/Ezedike-Evan/stellar-intel/issues) for the line-level scope._

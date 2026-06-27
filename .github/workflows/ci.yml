@@ -17,6 +17,8 @@ env:
   NEXT_PUBLIC_STELLAR_NETWORK: mainnet
   NEXT_PUBLIC_HORIZON_URL: https://horizon.stellar.org
   NEXT_PUBLIC_STELLAR_EXPERT_URL: https://api.stellar.expert/explorer/public
+  NEXT_PUBLIC_USDC_ISSUER: GA5ZSEJYB37JRC5AVCIA5MOP4RHTM335X2KGX3IHOJAPP5RE34K4KZVN
+  NEXT_PUBLIC_APP_NAME: Stellar Intel
 
 jobs:
   # Fast jobs — fan out per Node version.
@@ -28,7 +30,7 @@ jobs:
       matrix:
         node: ['20', '22']
     steps:
-      - uses: actions/checkout@v6
+      - uses: actions/checkout@v7
 
       - uses: actions/setup-node@v6
         with:
@@ -51,19 +53,32 @@ jobs:
 
       - name: Upload coverage to Codecov
         if: matrix.node == '20'
-        uses: codecov/codecov-action@v5
+        uses: codecov/codecov-action@v7
         with:
           token: ${{ secrets.CODECOV_TOKEN }}
           fail_ci_if_error: false
           flags: unit
           name: unit-node20
 
+  # Registry guard — fail if a registered anchor is not transfer-capable per the
+  # survey snapshot (and not allowlisted). Dependency-free, so no `npm ci` needed.
+  registry:
+    name: registry guard
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+      - uses: actions/setup-node@v6
+        with:
+          node-version: '20'
+      - name: Anchor registry ⊆ transfer-capable set
+        run: npm run check:registry
+
   build:
     name: build (node 20)
     needs: check
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v6
+      - uses: actions/checkout@v7
       - uses: actions/setup-node@v6
         with:
           node-version: '20'

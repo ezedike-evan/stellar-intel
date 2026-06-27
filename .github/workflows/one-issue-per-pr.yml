@@ -1,0 +1,40 @@
+name: one-issue-per-pr
+
+# Enforces "one PR per issue": a pull request may carry at most one closing
+# keyword (Closes / Fixes / Resolves #N). Closing keywords auto-close the
+# referenced issue on merge, so several of them in one PR silently closes
+# issues the PR never actually implemented.
+
+on:
+  pull_request:
+    types: [opened, edited, synchronize, reopened]
+
+permissions:
+  pull-requests: read
+
+jobs:
+  closing-keywords:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Enforce a single closing keyword
+        env:
+          BODY: ${{ github.event.pull_request.body }}
+        run: |
+          set -euo pipefail
+          mapfile -t issues < <(
+            printf '%s' "$BODY" \
+              | grep -ioE '(close[sd]?|fix(e[sd])?|resolve[sd]?)[[:space:]]+#[0-9]+' \
+              | grep -oE '#[0-9]+' \
+              | sort -u
+          )
+          count=${#issues[@]}
+          echo "Closing-keyword issues: ${issues[*]:-none} (count=$count)"
+
+          if [ "$count" -gt 1 ]; then
+            echo "::error::This PR closes $count issues (${issues[*]}). Open one PR per issue and keep a single Closes/Fixes/Resolves #N keyword; reference the others without a closing keyword if needed."
+            exit 1
+          fi
+
+          if [ "$count" -eq 0 ]; then
+            echo "::warning::No closing keyword found. Link the issue this PR resolves with 'Closes #N' (or state in the body why none applies)."
+          fi

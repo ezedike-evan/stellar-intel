@@ -1,0 +1,21 @@
+{
+  "id": "1a2b3c4d-5e6f-7a8b-9c0d-1e2f3a4b5c6d",
+  "expires_at": "2026-05-29T10:35:00Z",
+  "total_price": "1620.50",
+  "price": "1600.00",
+  "sell_asset": "stellar:USDC:GA5ZSEJYB37JRC5AVCIA5MOP4RHTM335X2KGX3IHOJAPP5RE34K4KZVN",
+  "sell_amount": "100.00",
+  "buy_asset": "iso4217:NGN",
+  "buy_amount": "162050.00",
+  "fee": {
+    "total": "2.50",
+    "asset": "stellar:USDC:GA5ZSEJYB37JRC5AVCIA5MOP4RHTM335X2KGX3IHOJAPP5RE34K4KZVN",
+    "details": [
+      {
+        "name": "Service Fee",
+        "description": "Flat service fee",
+        "amount": "2.50"
+      }
+    ]
+  }
+}

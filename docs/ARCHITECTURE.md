@@ -85,27 +85,28 @@ writes to Soroban — never to move user funds.
 
 ## 2. Component inventory & repo layout
 
-| Module | Role | Path | Status |
-| --- | --- | --- | --- |
-| **Offramp page** | The end-user surface. Corridor select → rate table → execute drawer → status tracker. | `app/offramp/page.tsx` | ✅ |
-| **RateTable** | Sortable list of live anchor quotes for the selected corridor. | `components/offramp/RateTable.tsx` | ✅ |
-| **ExecuteDrawer** | 6-step SEP-10/24 off-ramp: `authenticating → initiating → kyc → building → signing → done`. | `components/offramp/ExecuteDrawer.tsx` | ✅ |
-| **StatusTracker** | Polls `/transaction?id=...` and renders the SEP-24 state machine. | `components/offramp/StatusTracker.tsx` | ✅ |
-| **Anchor registry** | Typed list of anchors + corridors + assets. Single source of truth. | `lib/stellar/anchors.ts` | ✅ |
-| **SEP-1 resolver** | `stellar.toml` discovery, TRANSFER_SERVER_SEP0024 + WEB_AUTH_ENDPOINT extraction. | `lib/stellar/sep1.ts` | ✅ |
-| **SEP-10 client** | Challenge fetch, Freighter sign, JWT exchange. Network asserted as mainnet. | `lib/stellar/sep10.ts` | ✅ |
-| **SEP-24 client** | `/fee`, `/transactions/withdraw/interactive`, `/transaction` wrappers. 10s timeout. | `lib/stellar/sep24.ts` | ✅ |
-| **Horizon helper** | Build + sign + submit the user's withdrawal payment on the Stellar ledger. | `lib/stellar/horizon.ts` | ✅ |
-| **Freighter hook** | Wallet connection state + account + network. | `hooks/useFreighter.ts` | ✅ |
-| **Rates hook** | SWR-powered parallel rate aggregation across all anchors on a corridor. | `hooks/useAnchorRates.ts` | ✅ |
-| **Status hook** | SWR polling loop keyed by `[transferServer, transactionId, jwt]`. | `hooks/useWithdrawStatus.ts` | ✅ |
-| **SEP-38 client** | Firm-quote RFQ against anchors; supersedes the `/fee` + stored-rate approach. | `lib/stellar/sep38.ts` | 🛠️ v1.1 |
-| **Intent canonicalizer** | Deterministic JSON → hash → sign. | `lib/intent/canonical.ts` | 🛠️ v1.2 |
-| **Intent router (solver)** | Scores candidate anchors by net landed value; returns a single-anchor or split plan. | `lib/router/` | 🛠️ v1.2 |
-| **Publisher worker** | Signs outcome tuples and invokes the Soroban contract. | `lib/publisher/` | 🛠️ v2 |
-| **Soroban oracle contract** | On-chain reputation storage + read helpers. | `contracts/oracle/` | 🛠️ v2 |
-| **MCP server** | Exposes router + oracle as MCP tools. | `packages/mcp/` | 🛠️ v4 |
-| **SDK** | Typed client for the API + MCP. | `packages/sdk/` | 🛠️ v4 |
+| Module                      | Role                                                                                        | Path                                   | Status                  |
+| --------------------------- | ------------------------------------------------------------------------------------------- | -------------------------------------- | ----------------------- |
+| **Offramp page**            | The end-user surface. Corridor select → rate table → execute drawer → status tracker.       | `app/offramp/page.tsx`                 | ✅                      |
+| **RateTable**               | Sortable list of live anchor quotes for the selected corridor.                              | `components/offramp/RateTable.tsx`     | ✅                      |
+| **ExecuteDrawer**           | 6-step SEP-10/24 off-ramp: `authenticating → initiating → kyc → building → signing → done`. | `components/offramp/ExecuteDrawer.tsx` | ✅                      |
+| **StatusTracker**           | Polls `/transaction?id=...` and renders the SEP-24 state machine.                           | `components/offramp/StatusTracker.tsx` | ✅                      |
+| **Anchor registry**         | Typed list of anchors + corridors + assets. Single source of truth.                         | `lib/stellar/anchors.ts`               | ✅                      |
+| **SEP-1 resolver**          | `stellar.toml` discovery, TRANSFER_SERVER_SEP0024 + WEB_AUTH_ENDPOINT extraction.           | `lib/stellar/sep1.ts`                  | ✅                      |
+| **SEP-10 client**           | Challenge fetch, Freighter sign, JWT exchange. Network asserted as mainnet.                 | `lib/stellar/sep10.ts`                 | ✅                      |
+| **SEP-24 client**           | `/fee`, `/transactions/withdraw/interactive`, `/transaction` wrappers. 10s timeout.         | `lib/stellar/sep24.ts`                 | ✅                      |
+| **Horizon helper**          | Build + sign + submit the user's withdrawal payment on the Stellar ledger.                  | `lib/stellar/horizon.ts`               | ✅                      |
+| **Freighter hook**          | Wallet connection state + account + network.                                                | `hooks/useFreighter.ts`                | ✅                      |
+| **Rates hook**              | SWR-powered parallel rate aggregation across all anchors on a corridor.                     | `hooks/useAnchorRates.ts`              | ✅                      |
+| **Status hook**             | SWR polling loop keyed by `[transferServer, transactionId, jwt]`.                           | `hooks/useWithdrawStatus.ts`           | ✅                      |
+| **SEP-38 client**           | Firm-quote RFQ against anchors; supersedes the `/fee` + stored-rate approach.               | `lib/stellar/sep38.ts`                 | ✅                      |
+| **Intent canonicalizer**    | Deterministic JSON → hash → sign.                                                           | `lib/intent/`                          | ✅                      |
+| **Intent router (solver)**  | Scores candidate anchors by net landed value; returns a single-anchor or split plan.        | `lib/router/`                          | ✅                      |
+| **Reputation store**        | Outcome storage + composite scoring (SQLite dev / Postgres prod).                           | `lib/reputation/`                      | ✅                      |
+| **Publisher worker**        | Signs outcome tuples and invokes the Soroban contract.                                      | `lib/publisher/`                       | 🛠️ v2                   |
+| **Soroban oracle contract** | On-chain reputation storage + read helpers.                                                 | `contracts/reputation/`                | ✅ testnet · 🛠️ mainnet |
+| **MCP server**              | Exposes router + oracle as MCP tools.                                                       | `packages/mcp/`                        | ✅ basic                |
+| **SDK**                     | Typed client for the API + MCP.                                                             | `packages/sdk/`                        | 🛠️ v4                   |
 
 > All module paths are namespaced — no runtime concern spans two modules in
 > opposite directions. `lib/stellar/*` has no dependencies on `lib/router/*`
@@ -121,26 +122,26 @@ the atomic unit every other component is built around.
 ```ts
 // types/intent.ts — planned shape
 interface Intent {
-  version: 1
-  nonce: string                 // 128-bit random, replay protection
-  account: string               // user's Stellar public key
-  corridor: `${string}-${string}` // e.g. 'usdc-ngn'
-  sellAsset: { code: string; issuer: string }
-  sellAmount: string            // decimal string
-  buyAsset: { code: string }    // fiat, e.g. 'NGN'
-  minReceive: string            // floor on delivered amount
-  deliveryHint: DeliveryHint    // bank / mobile-money / cash pickup
-  deadline: string              // RFC3339
+  version: 1;
+  nonce: string; // 128-bit random, replay protection
+  account: string; // user's Stellar public key
+  corridor: `${string}-${string}`; // e.g. 'usdc-ngn'
+  sellAsset: { code: string; issuer: string };
+  sellAmount: string; // decimal string
+  buyAsset: { code: string }; // fiat, e.g. 'NGN'
+  minReceive: string; // floor on delivered amount
+  deliveryHint: DeliveryHint; // bank / mobile-money / cash pickup
+  deadline: string; // RFC3339
   preferences?: {
-    allowSplit: boolean         // default: true
-    maxAnchors: number          // default: 2
-    preferAnchorIds?: string[]  // user whitelist
-  }
+    allowSplit: boolean; // default: true
+    maxAnchors: number; // default: 2
+    preferAnchorIds?: string[]; // user whitelist
+  };
 }
 interface SignedIntent {
-  intent: Intent
-  intentHash: string            // sha-256 over canonical JSON
-  signature: string             // ed25519 over intentHash, by account
+  intent: Intent;
+  intentHash: string; // sha-256 over canonical JSON
+  signature: string; // ed25519 over intentHash, by account
 }
 ```
 
@@ -230,14 +231,14 @@ Implemented in `lib/stellar/sep10.ts`. Key invariants:
 
 `ExecuteDrawer` walks six steps, each with an error state and a cancel path:
 
-| Step | Substrate | What happens | Failure recovery |
-| --- | --- | --- | --- |
-| `authenticating` | SEP-10 | Fetch challenge, sign, exchange for JWT. | Retry in-place; on rejection, return to idle. |
-| `initiating` | SEP-24 | `POST /transactions/withdraw/interactive` with JWT. | Surface anchor error; retry with fresh JWT. |
-| `kyc` | Anchor-hosted iframe | Open the returned URL in a popup. Anchor owns the KYC surface. | On popup close without success, poll `/transaction` for `pending_user`. |
-| `building` | Horizon | `buildWithdrawPayment` — construct the USDC payment to the anchor's receiving address at the quoted amount. | Fee estimation retries; network reselect. |
-| `signing` | Freighter | User signs the payment XDR. | User-reject returns to idle; signature-required errors surface. |
-| `done` | — | Drawer closes; `onSuccess` hoists `{ transactionId, transferServer, jwt }` to the page; `StatusTracker` mounts. | Terminal. |
+| Step             | Substrate            | What happens                                                                                                    | Failure recovery                                                        |
+| ---------------- | -------------------- | --------------------------------------------------------------------------------------------------------------- | ----------------------------------------------------------------------- |
+| `authenticating` | SEP-10               | Fetch challenge, sign, exchange for JWT.                                                                        | Retry in-place; on rejection, return to idle.                           |
+| `initiating`     | SEP-24               | `POST /transactions/withdraw/interactive` with JWT.                                                             | Surface anchor error; retry with fresh JWT.                             |
+| `kyc`            | Anchor-hosted iframe | Open the returned URL in a popup. Anchor owns the KYC surface.                                                  | On popup close without success, poll `/transaction` for `pending_user`. |
+| `building`       | Horizon              | `buildWithdrawPayment` — construct the USDC payment to the anchor's receiving address at the quoted amount.     | Fee estimation retries; network reselect.                               |
+| `signing`        | Freighter            | User signs the payment XDR.                                                                                     | User-reject returns to idle; signature-required errors surface.         |
+| `done`           | —                    | Drawer closes; `onSuccess` hoists `{ transactionId, transferServer, jwt }` to the page; `StatusTracker` mounts. | Terminal.                                                               |
 
 **The `done` hoist is the fix for credibility bug #2** (see `PROPOSAL.md § 5`).
 Before `commit 45a82eb` the drawer completed the withdrawal but never told the
@@ -367,7 +368,7 @@ sequenceDiagram
 ### Properties
 
 - **User-witnessed, not anchor-claimed.** The outcome's `delivered_amount`
-  comes from the SEP-24 `/transaction` response *and* (where possible) a
+  comes from the SEP-24 `/transaction` response _and_ (where possible) a
   ledger lookup of the `stellar_transaction_id`. The user's wallet signs the
   trigger. An anchor cannot inflate its own delivery numbers.
 - **Publisher cannot invent.** The publisher key signs transport, not
@@ -382,10 +383,14 @@ sequenceDiagram
 
 ---
 
-## 7. Soroban oracle 🛠️ v2
+## 7. Soroban reputation oracle ✅ testnet · 🛠️ mainnet
 
-The oracle is a single Soroban contract (`contracts/oracle/`) with a small,
-upgrade-gated surface.
+The oracle is a single Soroban contract (`contracts/reputation/`) with a small,
+admin-gated surface. It is **implemented and unit-tested on testnet**
+(`contracts/reputation/tests/basic.rs`); mainnet deployment and 2-of-3 multisig
+admin are v2 gates. The authoritative interface is
+[`docs/ORACLE_SPEC.md`](ORACLE_SPEC.md); the storage/interface below are the
+target design.
 
 ### Storage
 
@@ -425,15 +430,17 @@ erDiagram
 ### Interface
 
 ```rust
-// contracts/oracle/src/lib.rs — planned surface
-pub trait Oracle {
-    fn publish_outcome(env: Env, tuple: Outcome, sig: BytesN<64>) -> Result<(), Error>;
-    fn read_outcome(env: Env, intent_hash: BytesN<32>) -> Option<Outcome>;
-    fn read_aggregate(env: Env, anchor_id: Symbol, corridor: Symbol) -> Aggregate;
-    fn dispute(env: Env, intent_hash: BytesN<32>, reason: Symbol) -> Result<(), Error>;
-    fn add_publisher(env: Env, new_key: Address) -> Result<(), Error>;       // admin
-    fn remove_publisher(env: Env, old_key: Address) -> Result<(), Error>;    // admin
+// contracts/reputation/src/lib.rs — implemented surface (see docs/ORACLE_SPEC.md)
+impl ReputationContract {
+    pub fn submit_outcome(/* … outcome fields … */) -> Result<(), Error>; // publisher-gated
 }
+// src/anchors.rs
+pub fn list(env: &Env) -> Vec<String>;
+pub fn register(env: &Env, anchor_id: String) -> Result<(), Error>;       // admin
+// src/admin.rs
+pub fn set_admin(env: &Env, admin: &Address) -> Result<(), Error>;
+pub fn get_admin(env: &Env) -> Option<Address>;
+// Planned (v2): read_aggregate, dispute, 2-of-3 multisig add/remove_publisher.
 ```
 
 ### Upgrade policy
@@ -452,8 +459,8 @@ pub trait Oracle {
 
 Two client libraries ship alongside the contract:
 
-- `contracts/oracle/sdk-rs/` — Rust consumer for other Soroban contracts
-  (`read_aggregate` helper, typed structs).
+- `contracts/reputation/sdk-rs/` — Rust consumer for other Soroban contracts
+  (`read_aggregate` helper, typed structs). _(planned)_
 - `packages/sdk/oracle.ts` — TypeScript consumer for off-chain readers
   (wallets, rival aggregators, dashboards).
 
@@ -467,26 +474,26 @@ and read reputation — with zero held keys.
 
 ### Tools
 
-| Tool | Input | Output | Authority |
-| --- | --- | --- | --- |
-| `list_corridors` | — | `Corridor[]` | Read-only. |
-| `list_anchors_for_corridor` | `{ corridorId }` | `Anchor[]` | Read-only. |
-| `quote_corridor` | `{ corridorId, sellAmount, deliveryHint? }` | `Plan` | Read-only; RFQs live anchors. |
-| `build_intent` | `{ plan, deadlineSeconds, preferences? }` | `Intent` (unsigned) | Read-only. |
-| `submit_signed_intent` | `{ intent, signature }` | `{ transactionIds[] }` | Executes — requires user signature from the calling wallet. |
-| `read_reputation` | `{ anchorId, corridorId }` | `Aggregate` | Read-only. |
-| `read_outcome` | `{ intentHash }` | `Outcome \| null` | Read-only. |
-| `watch_transaction` | `{ transactionId, transferServer, jwt }` | Event stream | Read-only. |
+| Tool                        | Input                                       | Output                 | Authority                                                   |
+| --------------------------- | ------------------------------------------- | ---------------------- | ----------------------------------------------------------- |
+| `list_corridors`            | —                                           | `Corridor[]`           | Read-only.                                                  |
+| `list_anchors_for_corridor` | `{ corridorId }`                            | `Anchor[]`             | Read-only.                                                  |
+| `quote_corridor`            | `{ corridorId, sellAmount, deliveryHint? }` | `Plan`                 | Read-only; RFQs live anchors.                               |
+| `build_intent`              | `{ plan, deadlineSeconds, preferences? }`   | `Intent` (unsigned)    | Read-only.                                                  |
+| `submit_signed_intent`      | `{ intent, signature }`                     | `{ transactionIds[] }` | Executes — requires user signature from the calling wallet. |
+| `read_reputation`           | `{ anchorId, corridorId }`                  | `Aggregate`            | Read-only.                                                  |
+| `read_outcome`              | `{ intentHash }`                            | `Outcome \| null`      | Read-only.                                                  |
+| `watch_transaction`         | `{ transactionId, transferServer, jwt }`    | Event stream           | Read-only.                                                  |
 
 ### Agent-safety invariants
 
-1. **No signing in the MCP.** `submit_signed_intent` *requires* a signature
+1. **No signing in the MCP.** `submit_signed_intent` _requires_ a signature
    produced by the end-user's wallet. The server never holds a key capable of
    moving funds.
 2. **Scoped JWTs.** The MCP never caches an anchor JWT longer than a single
    intent's lifetime.
 3. **Auditable.** Every `submit_signed_intent` call logs `intent_hash +
-   signature + caller` to an append-only local log for the user to review.
+signature + caller` to an append-only local log for the user to review.
 4. **Rate-limited.** Per-caller and per-account quote caps prevent an agent
    from hammering anchors during a runaway loop.
 
@@ -550,14 +557,16 @@ stellar-intel/
 │       ├── sep1.ts                # ✅ stellar.toml resolver
 │       ├── sep10.ts               # ✅ challenge → sign → JWT
 │       ├── sep24.ts               # ✅ /fee, /interactive, /transaction
-│       ├── sep38.ts               # 🛠️ v1.1 firm-quote RFQ
+│       ├── sep38.ts               # ✅ firm-quote RFQ (SEP-38)
+│       ├── sep6.ts                # 🛠️ programmatic withdraw (SEP-6) — in progress
 │       └── horizon.ts             # ✅ build + submit payment
-├── lib/intent/                    # 🛠️ v1.2 canonicalizer, hash, sign
-├── lib/router/                    # 🛠️ v1.2 solver
+├── lib/intent/                    # ✅ canonicalize, hash, sign, replay, envelope
+├── lib/router/                    # ✅ solver (solve.ts)
+├── lib/reputation/                # ✅ store (SQLite/Postgres), composite, bands, disputes
 ├── lib/publisher/                 # 🛠️ v2 outcome publisher
-├── contracts/oracle/              # 🛠️ v2 Soroban oracle
+├── contracts/reputation/          # ✅ testnet · 🛠️ mainnet — Soroban reputation oracle
 ├── packages/
-│   ├── mcp/                       # 🛠️ v4 MCP server
+│   ├── mcp/                       # ✅ basic MCP server (@stellarintel/mcp)
 │   └── sdk/                       # 🛠️ v4 typed client
 ├── types/index.ts                 # ✅ Anchor, Corridor, AnchorRate, WithdrawStatus, …
 ├── tests/                         # ✅ vitest — anchors, SEP-1, SEP-10, status

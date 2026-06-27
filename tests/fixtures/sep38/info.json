@@ -1,0 +1,34 @@
+{
+  "assets": [
+    {
+      "asset": "stellar:USDC:GA5ZSEJYB37JRC5AVCIA5MOP4RHTM335X2KGX3IHOJAPP5RE34K4KZVN",
+      "sell_delivery_methods": [
+        {
+          "name": "bank_account",
+          "description": "Bank Account Transfer"
+        }
+      ],
+      "buy_delivery_methods": [
+        {
+          "name": "bank_account",
+          "description": "Bank Account Transfer"
+        }
+      ]
+    },
+    {
+      "asset": "iso4217:NGN",
+      "sell_delivery_methods": [
+        {
+          "name": "bank_account",
+          "description": "Bank Account Transfer"
+        }
+      ],
+      "buy_delivery_methods": [
+        {
+          "name": "bank_account",
+          "description": "Bank Account Transfer"
+        }
+      ]
+    }
+  ]
+}
