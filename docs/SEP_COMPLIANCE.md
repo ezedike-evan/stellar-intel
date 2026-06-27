@@ -35,12 +35,12 @@ Tracking: batch-2 issues `#B001–#B025` (see [`issues-batch-2.md`](../issues-ba
 
 Registered anchors ([`constants/anchors.ts`](../constants/anchors.ts)). Capability is read from each anchor's `stellar.toml`; refresh with `node scripts/anchor-survey.mjs`.
 
-| Anchor                              | SEP-1 | SEP-6 | SEP-10 | SEP-12 | SEP-24 | SEP-31 | SEP-38 | Corridors                |
-| ----------------------------------- | :---: | :---: | :----: | :----: | :----: | :----: | :----: | ------------------------ |
+| Anchor                              | SEP-1 | SEP-6 | SEP-10 | SEP-12 | SEP-24 | SEP-31 | SEP-38 | Corridors               |
+| ----------------------------------- | :---: | :---: | :----: | :----: | :----: | :----: | :----: | ----------------------- |
 | MoneyGram (`stellar.moneygram.com`) |  ✅   |  ❌   |   ✅   |   ❌   |   ✅   |   ❌   |   ❌   | NGN, KES, GHS, MXN, BRL |
-| Cowrie Exchange (`cowrie.exchange`) |  ✅   |  ✅   |   ✅   |   ❌   |   ❌   |   ❌   |   ❌   | NGN                      |
-| Anclap (`anclap.com`)               |  ✅   |  ✅   |   ✅   |   ❌   |   ✅   |   ❌   |   ❌   | ARS, PEN                 |
-| nTokens (`ntokens.com`)             |  ✅   |  ✅   |   ✅   |   ❌   |   ✅   |   ✅   |   ❌   | BRL                      |
+| Cowrie Exchange (`cowrie.exchange`) |  ✅   |  ✅   |   ✅   |   ❌   |   ❌   |   ❌   |   ❌   | NGN                     |
+| Anclap (`anclap.com`)               |  ✅   |  ✅   |   ✅   |   ❌   |   ✅   |   ❌   |   ❌   | ARS, PEN                |
+| nTokens (`ntokens.com`)             |  ✅   |  ✅   |   ✅   |   ❌   |   ✅   |   ✅   |   ❌   | BRL                     |
 
 > Snapshot — keep current via `node scripts/anchor-survey.mjs`. Capability legend: ✅ advertised · ❌ not advertised. SEP-38 column reflects `ANCHOR_QUOTE_SERVER` presence in the anchor's `stellar.toml`.
 
