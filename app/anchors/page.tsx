@@ -1,9 +1,9 @@
 'use client';
 
-import Link from 'next/link';
 import { useRouter, useSearchParams } from 'next/navigation';
 import { Suspense, useCallback } from 'react';
 import { ANCHORS, CORRIDORS } from '@/constants';
+import { AnchorCard } from '@/components/anchors/AnchorCard';
 import { Leaderboard } from '@/components/offramp/Leaderboard';
 
 function AnchorsContent() {
@@ -27,25 +27,40 @@ function AnchorsContent() {
   if (!activeCorridor) return null;
 
   return (
-    <main className="mx-auto max-w-3xl px-4 py-8">
-      <h1 className="mb-6 text-2xl font-semibold text-white">Anchor Leaderboard</h1>
+    <main className="mx-auto max-w-5xl px-4 py-8">
+      <header className="mb-8">
+        <div className="flex flex-wrap items-center gap-3">
+          <h1 className="text-3xl font-semibold text-gray-900 dark:text-white">Anchors</h1>
+          <span
+            aria-label={`${ANCHORS.length} live ${ANCHORS.length === 1 ? 'anchor' : 'anchors'}`}
+            className="inline-flex items-center gap-2 rounded-full bg-emerald-100 px-3 py-1 text-sm font-medium text-emerald-800 dark:bg-emerald-900/30 dark:text-emerald-300"
+          >
+            <span className="h-2 w-2 rounded-full bg-emerald-500" aria-hidden="true" />
+            {ANCHORS.length} live {ANCHORS.length === 1 ? 'anchor' : 'anchors'}
+          </span>
+        </div>
+        <p className="mt-2 max-w-2xl text-sm text-gray-500 dark:text-gray-400">
+          Explore registered Stellar anchors, their supported protocols, and corridor coverage.
+        </p>
+      </header>
 
-      <section className="mb-6">
-        <h2 className="mb-3 text-sm font-semibold uppercase tracking-wide text-gray-500 dark:text-gray-400">
-          Scorecards
+      <section className="mb-10" aria-labelledby="anchor-scorecards-heading">
+        <h2
+          id="anchor-scorecards-heading"
+          className="mb-4 text-lg font-semibold text-gray-900 dark:text-white"
+        >
+          Anchor scorecards
         </h2>
-        <div className="flex flex-wrap gap-2">
+        <div className="grid gap-4 sm:grid-cols-2">
           {ANCHORS.map((anchor) => (
-            <Link
-              key={anchor.id}
-              href={`/anchors/${anchor.id}`}
-              className="rounded-full border border-gray-300 px-4 py-1.5 text-sm font-medium text-gray-700 transition-colors hover:bg-gray-100 dark:border-gray-600 dark:text-gray-300 dark:hover:bg-gray-800"
-            >
-              {anchor.name}
-            </Link>
+            <AnchorCard key={anchor.id} anchor={anchor} />
           ))}
         </div>
       </section>
+
+      <h2 className="mb-4 text-lg font-semibold text-gray-900 dark:text-white">
+        Corridor leaderboard
+      </h2>
 
       {/* Corridor filter tabs */}
       <div className="mb-6 flex flex-wrap gap-2">
@@ -75,7 +90,7 @@ function AnchorsContent() {
 
 export default function AnchorsPage() {
   return (
-    <Suspense fallback={<main className="mx-auto max-w-3xl px-4 py-8" />}>
+    <Suspense fallback={<main className="mx-auto max-w-5xl px-4 py-8" />}>
       <AnchorsContent />
     </Suspense>
   );
