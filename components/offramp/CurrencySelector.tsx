@@ -12,7 +12,7 @@ export function CurrencyDisplay({ currency, currencySymbol }: CurrencySelectorPr
         Currency
       </label>
       <div className="flex items-center rounded-lg border border-gray-300 bg-gray-50 px-3 py-2.5 text-sm text-gray-700 dark:border-gray-600 dark:bg-gray-800 dark:text-gray-300">
-        {currencySymbol} {currency}
+        {currencySymbol ? `${currencySymbol} ${currency}` : currency}
       </div>
     </div>
   );

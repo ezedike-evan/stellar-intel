@@ -7,10 +7,10 @@ export const runtime = 'nodejs';
 
 // ─── GET /api/reputation/reconcile (Issue #130 / #221) ─────────────────────────
 //
-// Cron-triggered (see vercel.json). Pulls every settled-but-unreconciled outcome
-// row from the store, looks up the on-chain payment via Horizon, and backfills
-// the actual delivered amount + rate. No request body needed — the work list
-// comes from the store, so a bare cron ping does the right thing.
+// Triggered by GitHub Actions (.github/workflows/reputation-cron.yml). Pulls every
+// settled-but-unreconciled outcome row from the store, looks up the on-chain
+// payment via Horizon, and backfills the actual delivered amount + rate. No request
+// body needed — the work list comes from the store, so a bare ping does the right thing.
 
 async function runReconciler(): Promise<{ updated: number; scanned: number; results: unknown[] }> {
   const store = getReputationStore();
@@ -42,6 +42,11 @@ async function runReconciler(): Promise<{ updated: number; scanned: number; resu
 }
 
 export async function GET(request: NextRequest): Promise<NextResponse> {
+  const auth = request.headers.get('authorization');
+  if (auth !== `Bearer ${process.env.CRON_SECRET}`) {
+    return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
+  }
+
   return withRequestLogger(request, 'api.reputation.reconcile', async (logger) => {
     const summary = await runReconciler();
     logger.info({ event: 'reconcile_run', scanned: summary.scanned, updated: summary.updated });

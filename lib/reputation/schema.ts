@@ -22,6 +22,8 @@ export const OutcomeLogRowSchema = z.object({
   createdAt: z.string().datetime({ offset: true }),
   stellarTransactionId: z.string().min(1).nullable(),
   reconciledAt: z.string().datetime({ offset: true }).nullable(),
+  disputed: z.boolean(),
+  disputedReason: z.string().min(1).nullable(),
 }) satisfies z.ZodType<OutcomeLogRow>;
 
 /**
@@ -59,6 +61,8 @@ export function toOutcomeLogRow(input: AppendOutcomeInput, now = new Date()): Ou
     createdAt: input.createdAt ?? now.toISOString(),
     stellarTransactionId: input.stellarTransactionId ?? null,
     reconciledAt: null,
+    disputed: false,
+    disputedReason: null,
   };
 }
 

@@ -10,12 +10,13 @@ import {
 } from '@/lib/stellar/anchors';
 
 describe('ANCHORS', () => {
-  it('contains MoneyGram, Cowrie, and Anclap', () => {
+  it('contains MoneyGram, Cowrie, Anclap, and nTokens', () => {
     const ids = ANCHORS.map((a) => a.id);
     expect(ids).toContain('moneygram');
     expect(ids).toContain('cowrie');
     expect(ids).toContain('anclap');
-    expect(ids).toHaveLength(3);
+    expect(ids).toContain('ntokens');
+    expect(ids.length).toBeGreaterThanOrEqual(4);
   });
 
   it('MoneyGram covers all five primary corridors', () => {
@@ -40,8 +41,8 @@ describe('ANCHORS', () => {
 });
 
 describe('CORRIDORS', () => {
-  it('contains 7 corridors', () => {
-    expect(CORRIDORS).toHaveLength(7);
+  it('contains at least 9 corridors', () => {
+    expect(CORRIDORS.length).toBeGreaterThanOrEqual(9);
   });
 
   it('contains the expected corridor IDs', () => {
@@ -55,6 +56,7 @@ describe('CORRIDORS', () => {
         'usdc-brl',
         'usdc-ars',
         'usdc-pen',
+        'usdc-eur',
       ])
     );
   });

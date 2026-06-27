@@ -4,6 +4,7 @@ import { formatCurrency, formatRate } from '@/lib/utils';
 import type { RateComparison, AnchorRate } from '@/types';
 import { Skeleton } from '@/components/ui/Skeleton';
 import { QuotePill } from '@/components/ui/QuotePill';
+import { AnchorLogo } from '@/components/ui/AnchorLogo';
 
 interface RateTableProps {
   rates: RateComparison | undefined;
@@ -112,6 +113,7 @@ export function RateTable({
                 >
                   <td className="px-4 py-3">
                     <div className="flex items-center gap-2">
+                      <AnchorLogo anchorId={rate.anchorId} anchorName={rate.anchorName} />
                       <span className="font-medium text-gray-900 dark:text-white">
                         {rate.anchorName}
                       </span>
@@ -162,6 +164,10 @@ export function RateTable({
               >
                 <td className="px-4 py-3">
                   <div className="flex items-center gap-2">
+                    <AnchorLogo
+                      anchorId={pendingAnchor.anchorId}
+                      anchorName={pendingAnchor.anchorName}
+                    />
                     <span className="font-medium text-gray-900 dark:text-white">
                       {pendingAnchor.anchorName}
                     </span>

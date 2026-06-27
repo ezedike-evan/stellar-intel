@@ -25,7 +25,9 @@ From your `stellar.toml` at `https://{domain}/.well-known/stellar.toml`:
   v1.1. Without it you get an indicative rate (live FX × your published fee).
 
 Resolution is implemented in [`lib/stellar/sep1.ts`](../lib/stellar/sep1.ts) and
-classified by [`scripts/anchor-survey.mjs`](../scripts/anchor-survey.mjs).
+classified by [`scripts/anchor-survey.mjs`](../scripts/anchor-survey.mjs). Domains
+the survey could not resolve are tracked, with a monthly recheck and promotion
+criteria, in [`docs/ANCHOR_FLEET_RECHECK.md`](ANCHOR_FLEET_RECHECK.md).
 
 ## Home domain vs service domain
 
@@ -49,6 +51,11 @@ public reputation oracle with your anchor id attached
 ([`docs/ANCHOR_REPUTATION.md`](ANCHOR_REPUTATION.md)). New anchors start with a
 bootstrap confidence band and accrue a live score from real outcomes. You agree to
 respond to disputes within five business days.
+
+> **Reputation accrual:** Newly onboarded anchors begin in a bootstrap
+> phase with seeded confidence scores. See
+> [Anchor Reputation: Bootstrap to Live](./ANCHOR_REPUTATION.md#new-anchor-reputation-bootstrap-to-live)
+> for how reputation accrues and when live status is reached.
 
 ## Non-custody
 

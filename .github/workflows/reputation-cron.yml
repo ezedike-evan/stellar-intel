@@ -1,0 +1,23 @@
+name: Reputation Cron
+
+on:
+  schedule:
+    - cron: '*/5 * * * *'
+  workflow_dispatch: {}
+
+jobs:
+  run:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Refresh
+        run: |
+          curl -fsS -X POST "${{ secrets.APP_URL }}/api/reputation/refresh" \
+            -H "Authorization: Bearer ${{ secrets.CRON_SECRET }}"
+      - name: Reconcile
+        run: |
+          curl -fsS -X GET "${{ secrets.APP_URL }}/api/reputation/reconcile" \
+            -H "Authorization: Bearer ${{ secrets.CRON_SECRET }}"
+      - name: Publisher tick
+        run: |
+          curl -fsS -X GET "${{ secrets.APP_URL }}/api/publisher/tick" \
+            -H "Authorization: Bearer ${{ secrets.CRON_SECRET }}"
