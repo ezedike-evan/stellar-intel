@@ -1,0 +1,38 @@
+{
+  "flat_fee": {
+    "withdraw": {
+      "USDC": {
+        "enabled": true,
+        "fee_fixed": 3,
+        "fee_percent": 0,
+        "min_amount": 10,
+        "max_amount": 10000,
+        "fields": {}
+      }
+    }
+  },
+  "percent_fee": {
+    "withdraw": {
+      "USDC": {
+        "enabled": true,
+        "fee_fixed": 0,
+        "fee_percent": 1.5,
+        "min_amount": 10,
+        "max_amount": 10000,
+        "fields": {}
+      }
+    }
+  },
+  "combined_fee": {
+    "withdraw": {
+      "USDC": {
+        "enabled": true,
+        "fee_fixed": 2,
+        "fee_percent": 0.5,
+        "min_amount": 10,
+        "max_amount": 10000,
+        "fields": {}
+      }
+    }
+  }
+}

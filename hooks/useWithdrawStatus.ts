@@ -90,7 +90,7 @@ export function useWithdrawStatus(
   transactionId: string | null,
   jwt: string | null,
   outcomeContext?: OutcomeAppendContext,
-  protocol: 'sep24' | 'sep6' = 'sep24'
+  _protocol: 'sep24' | 'sep6' = 'sep24'
 ): UseWithdrawStatusResult {
   const pollIntervalMsRef = useRef(WITHDRAW_POLL_INITIAL_MS);
   const lastStatusRef = useRef<WithdrawStatusValue | undefined>(undefined);

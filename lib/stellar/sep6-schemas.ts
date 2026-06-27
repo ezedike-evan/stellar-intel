@@ -26,7 +26,7 @@ export const Sep6WithdrawFieldSchema = z.object({
 
 export const Sep6WithdrawNeedsInfoSchema = z.object({
   type: z.literal('customer_info_status'),
-  fields: z.record(Sep6WithdrawFieldSchema),
+  fields: z.record(z.string(), Sep6WithdrawFieldSchema),
 });
 
 export const Sep6WithdrawResponseSchema = z.discriminatedUnion('type', [

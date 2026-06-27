@@ -1,6 +1,8 @@
-// Anchor and corridor data lives in constants/anchors.ts — the single source of truth.
-// This module re-exports that data and adds SEP-1 resolution helpers that belong
-// in lib/stellar (network calls, dynamic imports) rather than in constants.
+// constants/anchors.ts is the single source of truth for anchor and corridor data.
+// This module re-exports that registry verbatim and adds SEP-1 resolution helpers
+// that belong in lib/stellar (network calls, dynamic imports) rather than in
+// constants. It must never declare its own anchor list — read through the
+// canonical export below so the two can never drift.
 export * from '@/constants/anchors';
 
 import { ANCHORS, CORRIDORS } from '@/constants/anchors';
@@ -57,10 +59,6 @@ export function getDegradedAnchorIds(): string[] {
 
 // ─── Lookup helpers ───────────────────────────────────────────────────────────
 
-/**
- * Returns the anchor with the given ID.
- * Throws a descriptive error if the ID is not found.
- */
 /**
  * Returns the anchor with the given ID.
  * Throws a descriptive error if the ID is not found.
