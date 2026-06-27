@@ -8,7 +8,7 @@ import { generateRequestId, logStructured } from '@/lib/api/logging'
  * Used for tracking all resolution attempts for reputation and debugging.
  */
 export interface SolveAttempt {
-  attemptNumber: number
+  attemptNumber: 1 | 2 | 3
   selectedAnchorId: string
   selectedAnchorName: string
   quote: AnchorRate | null
@@ -309,7 +309,8 @@ export async function handleQuoteRejection(
   // Determine the solve request ID from previous attempts or generate new one
   const solveRequestId = generateRequestId()
 
-  // Log the rejection event
+  // Log the rejection event (instant operation, but track timing)
+  const rejectionAttemptStart = Date.now()
   const rejectionAttempt: SolveAttempt = {
     attemptNumber: previousAttempts.length + 1,
     selectedAnchorId: rejectedAnchorId,
@@ -317,6 +318,7 @@ export async function handleQuoteRejection(
     quote: null,
     error: 'Quote rejected by anchor',
     timestamp: new Date().toISOString(),
+    durationMs: Date.now() - rejectionAttemptStart,
   }
 
   // Get all anchors and filter out the rejected one and any previously failed ones
@@ -344,10 +346,9 @@ export async function handleQuoteRejection(
     }
   }
 
-  // Enforce max 3 total attempts (1 initial + 2 fallbacks)
-  // If we've already had 2+ successful attempts, we can't try again
-  const successfulAttempts = previousAttempts.filter((a) => a.error === null).length
-  if (successfulAttempts >= 2) {
+  // Enforce max 3 total attempts: rejection would be attempt N+1, fallback would be N+2
+  // If N+2 > 3, reject. This means if previousAttempts.length > 1, we can't proceed
+  if (previousAttempts.length + 2 > 3) {
     return {
       success: false,
       selectedAnchor: null,
