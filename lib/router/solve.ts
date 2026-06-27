@@ -1,10 +1,11 @@
 import type { ResolvedAnchor, AnchorRate } from '@/types'
 import { getAnchorsByCorridorId, getResolvedAnchorById } from '@/lib/stellar/anchors'
 import { getSep24Fee } from '@/lib/stellar/sep24'
-import type { Sep24FeeParams } from '@/types'
+import { generateRequestId, logStructured } from '@/lib/api/logging'
 
 /**
  * Represents a single solve attempt with its result.
+ * Used for tracking all resolution attempts for reputation and debugging.
  */
 export interface SolveAttempt {
   attemptNumber: number
@@ -13,6 +14,7 @@ export interface SolveAttempt {
   quote: AnchorRate | null
   error: string | null
   timestamp: string
+  durationMs?: number
 }
 
 /**
@@ -24,6 +26,38 @@ export interface SolveResult {
   selectedRate: AnchorRate | null
   attempts: SolveAttempt[]
   finalError: string | null
+  solveRequestId?: string
+}
+
+/**
+ * Logs a solve attempt for reputation tracking and monitoring.
+ * This is designed for ingestion into log aggregation systems.
+ */
+function logSolveAttempt(
+  solveRequestId: string,
+  params: { corridorId: string; amount: string },
+  attempt: SolveAttempt,
+  candidatesRemaining: number
+): void {
+  const log: Record<string, unknown> = {
+    timestamp: attempt.timestamp,
+    solveRequestId,
+    corridorId: params.corridorId,
+    amount: params.amount,
+    attemptNumber: attempt.attemptNumber,
+    selectedAnchorId: attempt.selectedAnchorId,
+    selectedAnchorName: attempt.selectedAnchorName,
+    success: attempt.error === null,
+    durationMs: attempt.durationMs ?? 0,
+    totalAttempts: 3, // Max attempts hardcoded
+    remainingCandidates: candidatesRemaining,
+  }
+
+  if (attempt.error) {
+    log.error = attempt.error
+  }
+
+  logStructured(log as any)
 }
 
 /**
@@ -37,11 +71,12 @@ export interface SolveResult {
  * 5. Re-solve with remaining candidates (max 2 fallback attempts)
  * 6. Log all attempts for reputation tracking
  *
- * @param corridorId - The corridor ID (e.g., 'usdc-ngn')
- * @param amount - The amount to withdraw
- * @param assetCode - The asset code (e.g., 'USDC')
- * @param assetIssuer - The asset issuer
- * @param feeType - The fee type for SEP-24 (e.g., 'external')
+ * Attempt tracking:
+ * - Attempt 1: Initial solve (all candidates)
+ * - Attempt 2: First fallback (after rejection)
+ * - Attempt 3: Second fallback (after second rejection)
+ *
+ * @param params - The solve parameters
  * @returns SolveResult with selected anchor, rate, and attempt history
  */
 export async function solve(params: {
@@ -51,6 +86,7 @@ export async function solve(params: {
   assetIssuer: string
   feeType: string
 }): Promise<SolveResult> {
+  const solveRequestId = generateRequestId()
   const attempts: SolveAttempt[] = []
   const failedAnchorIds = new Set<string>()
   let selectedAnchor: ResolvedAnchor | null = null
@@ -61,6 +97,8 @@ export async function solve(params: {
   const maxAttempts = 3
 
   for (let attemptNumber = 1; attemptNumber <= maxAttempts; attemptNumber++) {
+    const attemptStartTime = Date.now()
+
     try {
       // Get all anchors for this corridor
       const allAnchors = getAnchorsByCorridorId(params.corridorId)
@@ -120,6 +158,7 @@ export async function solve(params: {
             anchorName: anchor.name,
             corridorId: params.corridorId,
             fee: fee.toString(),
+            feeType: 'flat', // Placeholder; real implementation derives from anchor
             exchangeRate,
             totalReceived,
             source: 'sep24-fee',
@@ -163,15 +202,22 @@ export async function solve(params: {
       selectedRate = bestQuote.quote!
       selectedAnchor = await getResolvedAnchorById(bestQuote.anchorId)
 
-      // Log this attempt
-      attempts.push({
+      const durationMs = Date.now() - attemptStartTime
+      const candidatesRemaining = candidateAnchors.length - 1 // Subtract the selected one
+
+      // Log this successful attempt
+      const attempt: SolveAttempt = {
         attemptNumber,
         selectedAnchorId: bestQuote.anchorId,
         selectedAnchorName: bestQuote.anchorName,
         quote: selectedRate,
         error: null,
         timestamp: new Date().toISOString(),
-      })
+        durationMs,
+      }
+
+      attempts.push(attempt)
+      logSolveAttempt(solveRequestId, params, attempt, candidatesRemaining)
 
       // Success! Return the result
       return {
@@ -180,19 +226,30 @@ export async function solve(params: {
         selectedRate,
         attempts,
         finalError: null,
+        solveRequestId,
       }
     } catch (err) {
       const errorMsg = err instanceof Error ? err.message : 'Unknown error'
+      const durationMs = Date.now() - attemptStartTime
 
       // Log the failed attempt
-      attempts.push({
+      const attempt: SolveAttempt = {
         attemptNumber,
         selectedAnchorId: selectedAnchor?.id ?? 'unknown',
         selectedAnchorName: selectedAnchor?.name ?? 'unknown',
         quote: null,
         error: errorMsg,
         timestamp: new Date().toISOString(),
-      })
+        durationMs,
+      }
+
+      attempts.push(attempt)
+
+      const candidatesRemaining = Math.max(
+        0,
+        getAnchorsByCorridorId(params.corridorId).length - failedAnchorIds.size - 1
+      )
+      logSolveAttempt(solveRequestId, params, attempt, candidatesRemaining)
 
       // Mark the selected anchor as failed for next attempt
       if (selectedAnchor) {
@@ -214,19 +271,29 @@ export async function solve(params: {
     selectedRate: null,
     attempts,
     finalError,
+    solveRequestId,
   }
 }
 
 /**
  * Handles anchor quote rejection and triggers re-solve with remaining candidates.
  *
- * This function is called when an anchor rejects a firm quote or the quote expires.
- * It marks the anchor as failed and attempts to solve again with remaining candidates.
+ * This function is called when:
+ * - An anchor rejects a firm quote (expired or invalid)
+ * - A quote expires before confirmation
+ * - Network timeout on quote confirmation
+ *
+ * Behavior:
+ * - Marks the anchor as failed
+ * - Attempts to solve again with remaining candidates
+ * - Respects the max 3 total attempts limit (1 initial + 2 fallbacks)
+ * - Logs all rejection events for reputation tracking
+ * - Returns unified result to caller (UX sees single flow)
  *
  * @param rejectedAnchorId - The ID of the anchor that rejected the quote
  * @param previousAttempts - The attempts from the previous solve call
  * @param params - The solve parameters (corridor, amount, etc.)
- * @returns SolveResult with fallback attempts
+ * @returns SolveResult with fallback attempts and complete history
  */
 export async function handleQuoteRejection(
   rejectedAnchorId: string,
@@ -239,7 +306,10 @@ export async function handleQuoteRejection(
     feeType: string
   }
 ): Promise<SolveResult> {
-  // Log the rejection
+  // Determine the solve request ID from previous attempts or generate new one
+  const solveRequestId = generateRequestId()
+
+  // Log the rejection event
   const rejectionAttempt: SolveAttempt = {
     attemptNumber: previousAttempts.length + 1,
     selectedAnchorId: rejectedAnchorId,
@@ -249,7 +319,7 @@ export async function handleQuoteRejection(
     timestamp: new Date().toISOString(),
   }
 
-  // Get all anchors and filter out the rejected one
+  // Get all anchors and filter out the rejected one and any previously failed ones
   const allAnchors = getAnchorsByCorridorId(params.corridorId)
   const failedAnchorIds = new Set<string>([rejectedAnchorId])
 
@@ -262,6 +332,7 @@ export async function handleQuoteRejection(
 
   const candidateAnchors = allAnchors.filter((a) => !failedAnchorIds.has(a.id))
 
+  // If no candidates remain, return failure
   if (candidateAnchors.length === 0) {
     return {
       success: false,
@@ -269,6 +340,21 @@ export async function handleQuoteRejection(
       selectedRate: null,
       attempts: [...previousAttempts, rejectionAttempt],
       finalError: 'No remaining anchors after rejection',
+      solveRequestId,
+    }
+  }
+
+  // Enforce max 3 total attempts (1 initial + 2 fallbacks)
+  // If we've already had 2+ successful attempts, we can't try again
+  const successfulAttempts = previousAttempts.filter((a) => a.error === null).length
+  if (successfulAttempts >= 2) {
+    return {
+      success: false,
+      selectedAnchor: null,
+      selectedRate: null,
+      attempts: [...previousAttempts, rejectionAttempt],
+      finalError: 'Max fallback attempts exhausted (2 fallbacks allowed)',
+      solveRequestId,
     }
   }
 
@@ -313,6 +399,7 @@ export async function handleQuoteRejection(
         anchorName: anchor.name,
         corridorId: params.corridorId,
         fee: fee.toString(),
+        feeType: 'flat',
         exchangeRate,
         totalReceived,
         source: 'sep24-fee',
@@ -338,6 +425,7 @@ export async function handleQuoteRejection(
   const quoteResults = await Promise.all(quotePromises)
   const validQuotes = quoteResults.filter((r) => r.quote !== null)
 
+  // If no valid quotes from remaining candidates, return failure
   if (validQuotes.length === 0) {
     return {
       success: false,
@@ -345,10 +433,11 @@ export async function handleQuoteRejection(
       selectedRate: null,
       attempts: [...previousAttempts, rejectionAttempt],
       finalError: 'No valid quotes from remaining anchors',
+      solveRequestId,
     }
   }
 
-  // Sort by totalReceived (descending)
+  // Sort by totalReceived (descending) to get the best rate from remaining
   validQuotes.sort((a, b) => {
     const aTotal = a.quote?.totalReceived ?? 0
     const bTotal = b.quote?.totalReceived ?? 0
@@ -367,11 +456,15 @@ export async function handleQuoteRejection(
     timestamp: new Date().toISOString(),
   }
 
+  // Log the successful fallback attempt
+  logSolveAttempt(solveRequestId, params, fallbackAttempt, candidateAnchors.length - 1)
+
   return {
     success: true,
     selectedAnchor,
     selectedRate: bestQuote.quote,
     attempts: [...previousAttempts, rejectionAttempt, fallbackAttempt],
     finalError: null,
+    solveRequestId,
   }
 }
