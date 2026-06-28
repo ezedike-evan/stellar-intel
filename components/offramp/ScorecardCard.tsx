@@ -9,6 +9,7 @@ import {
   estimateTimeToThreshold,
   MIN_OUTCOMES_THRESHOLD,
 } from '@/lib/reputation/thresholds';
+import { Sparkline } from '@/components/ui/Sparkline';
 import {
   calculateFreshness,
   formatDrift,
@@ -16,7 +17,6 @@ import {
   getFreshnessBadgeColor,
   type FreshnessResult,
 } from '@/lib/oracle/freshness';
-import { STELLAR_EXPERT_URL } from '@/constants';
 
 type ReputationWindow = '7d' | '30d' | '90d';
 
@@ -61,81 +61,76 @@ function toNumber(value: unknown): number | null {
   return null;
 }
 
-function parseReputationResponse(body: unknown): ReputationMetrics {
-  const payload = (body ?? {}) as Record<string, unknown>;
+function toObject(value: unknown): Record<string, unknown> | null {
+  return typeof value === 'object' && value !== null ? (value as Record<string, unknown>) : null;
+}
 
-  // Extract scorecard data from the scorecards object
-  // The response has a structure like: { anchorId, scorecards: { 7d, 30d, 90d } }
-  const scorecards = payload.scorecards as Record<string, Record<string, unknown>> | undefined;
-  let scorecard: Record<string, unknown> | null = null;
+function scorecardKey(timeframe: ReputationWindow): string {
+  return timeframe.replace('d', '');
+}
 
-  // For now, we'll use the 30d window as the primary scorecard (most commonly used)
-  if (scorecards) {
-    scorecard = (scorecards['30'] ?? scorecards['30d'] ?? null) as Record<string, unknown> | null;
-  }
+function parseNestedScorecard(
+  payload: Record<string, unknown>,
+  timeframe: ReputationWindow
+): ReputationMetrics | null {
+  const scorecards = toObject(payload.scorecards);
+  const scorecard = toObject(scorecards?.[scorecardKey(timeframe)]);
+  if (!scorecard) return null;
+
+  const settleMs = toObject(scorecard.settleMs);
+  const settleP50Ms = toNumber(settleMs?.p50);
+  const settleP95Ms = toNumber(settleMs?.p95);
+  const slippage = toObject(scorecard.slippage);
+  const slippageP50 = toNumber(slippage?.p50);
+  const slippageP95 = toNumber(slippage?.p95);
+
+  return {
+    fillRate: toNumber(scorecard.fillRate),
+    settleP50: settleP50Ms !== null ? Math.round(settleP50Ms / 1000) : null,
+    settleP95: settleP95Ms !== null ? Math.round(settleP95Ms / 1000) : null,
+    slippageP50: slippageP50 !== null ? slippageP50 * 100 : null,
+    slippageP95: slippageP95 !== null ? slippageP95 * 100 : null,
+    outcomesCount: toNumber(scorecard.sampleSize) ?? 0,
+    computedAt: (scorecard.computedAt as string | null) ?? null,
+    lastPublisherTxTimestamp: (scorecard.lastPublisherTxTimestamp as string | null) ?? null,
+  };
+}
+
+function parseReputationResponse(body: unknown, timeframe: ReputationWindow): ReputationMetrics {
+  const payload = toObject(body) ?? {};
+  const nestedMetrics = parseNestedScorecard(payload, timeframe);
+  if (nestedMetrics) return nestedMetrics;
 
   return {
     fillRate:
       toNumber(payload.fill_rate ?? payload.fillRate) ??
       toNumber(payload.fill_rate_percent ?? payload.fillRatePercent) ??
-      toNumber(scorecard?.fill_rate ?? scorecard?.fillRate) ??
       null,
     settleP50:
       toNumber(
         payload.settle_p50 ?? payload.settleP50 ?? payload.settlement_p50 ?? payload.settlementP50
-      ) ??
-      toNumber(
-        scorecard?.settle_p50 ??
-          scorecard?.settleP50 ??
-          scorecard?.settlement_p50 ??
-          scorecard?.settlementP50
-      ) ??
-      null,
+      ) ?? null,
     settleP95:
       toNumber(
         payload.settle_p95 ?? payload.settleP95 ?? payload.settlement_p95 ?? payload.settlementP95
-      ) ??
-      toNumber(
-        scorecard?.settle_p95 ??
-          scorecard?.settleP95 ??
-          scorecard?.settlement_p95 ??
-          scorecard?.settlementP95
-      ) ??
-      null,
+      ) ?? null,
     slippageP50:
       toNumber(
         payload.slippage_p50 ??
           payload.slippageP50 ??
           payload.slippage_p50_percent ??
           payload.slippageP50Percent
-      ) ??
-      toNumber(
-        scorecard?.slippage_p50 ??
-          scorecard?.slippageP50 ??
-          scorecard?.slippage_p50_percent ??
-          scorecard?.slippageP50Percent
-      ) ??
-      null,
+      ) ?? null,
     slippageP95:
       toNumber(
         payload.slippage_p95 ??
           payload.slippageP95 ??
           payload.slippage_p95_percent ??
           payload.slippageP95Percent
-      ) ??
-      toNumber(
-        scorecard?.slippage_p95 ??
-          scorecard?.slippageP95 ??
-          scorecard?.slippage_p95_percent ??
-          scorecard?.slippageP95Percent
-      ) ??
-      null,
+      ) ?? null,
     outcomesCount: toNumber(payload.outcomes_count ?? payload.outcomesCount) ?? 0,
-    computedAt: ((scorecard?.computedAt ?? payload.computedAt) as string | null) ?? null,
-    lastPublisherTxTimestamp:
-      ((scorecard?.lastPublisherTxTimestamp ?? payload.lastPublisherTxTimestamp) as
-        | string
-        | null) ?? null,
+    computedAt: (payload.computedAt as string | null) ?? null,
+    lastPublisherTxTimestamp: (payload.lastPublisherTxTimestamp as string | null) ?? null,
   };
 }
 
@@ -184,9 +179,7 @@ function hasReputationMetrics(metrics: ReputationMetrics): boolean {
 }
 
 function FreshnessBadge({ freshness }: { freshness: FreshnessResult | null }) {
-  if (!freshness) {
-    return null;
-  }
+  if (!freshness) return null;
 
   const colors = getFreshnessBadgeColor(freshness.status);
   const label = getFreshnessLabel(freshness.status);
@@ -195,7 +188,7 @@ function FreshnessBadge({ freshness }: { freshness: FreshnessResult | null }) {
   return (
     <div className={`rounded-lg border border-gray-200 ${colors.bg} p-3 dark:border-gray-700`}>
       <div className="flex items-center gap-2">
-        <div className={`${colors.icon}`}>
+        <div className={colors.icon}>
           {freshness.status === 'fresh' && (
             <svg className="w-4 h-4" fill="currentColor" viewBox="0 0 20 20">
               <path
@@ -233,16 +226,18 @@ function FreshnessBadge({ freshness }: { freshness: FreshnessResult | null }) {
   );
 }
 
+const STELLAR_EXPERT_TX_BASE = 'https://stellar.expert/explorer/public/tx';
+
 export function ScorecardCard({
   anchorId,
   window: timeframe,
   latestOracleTxHash,
 }: ScorecardCardProps) {
   const [metrics, setMetrics] = useState<ReputationMetrics>(emptyMetrics);
+  const [historyData, setHistoryData] = useState<number[]>([]);
   const [freshness, setFreshness] = useState<FreshnessResult | null>(null);
   const [isLoading, setIsLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
-  const [_historyData, setHistoryData] = useState<number[]>([]);
 
   useEffect(() => {
     let isActive = true;
@@ -250,6 +245,7 @@ export function ScorecardCard({
     setIsLoading(true);
     setError(null);
     setMetrics(emptyMetrics);
+    setHistoryData([]);
     setFreshness(null);
 
     fetch(`/api/reputation/${encodeURIComponent(anchorId)}?window=${encodeURIComponent(timeframe)}`)
@@ -262,16 +258,12 @@ export function ScorecardCard({
       })
       .then((body) => {
         if (!isActive) return;
-        const parsedMetrics = parseReputationResponse(body);
+        const parsedMetrics = parseReputationResponse(body, timeframe);
         setMetrics(parsedMetrics);
-
-        // Calculate freshness if we have timestamps
         if (parsedMetrics.computedAt) {
-          const freshnessResult = calculateFreshness(
-            parsedMetrics.computedAt,
-            parsedMetrics.lastPublisherTxTimestamp
+          setFreshness(
+            calculateFreshness(parsedMetrics.computedAt, parsedMetrics.lastPublisherTxTimestamp)
           );
-          setFreshness(freshnessResult);
         }
       })
       .catch((fetchError) => {
@@ -324,7 +316,7 @@ export function ScorecardCard({
           <p className="text-sm font-medium text-gray-700 dark:text-gray-300">Anchor reputation</p>
           {latestOracleTxHash && (
             <a
-              href={`${STELLAR_EXPERT_URL}/tx/${latestOracleTxHash}`}
+              href={`${STELLAR_EXPERT_TX_BASE}/${latestOracleTxHash}`}
               target="_blank"
               rel="noopener noreferrer"
               aria-label="View latest oracle transaction on stellar.expert"
@@ -399,6 +391,14 @@ export function ScorecardCard({
                   <span className="text-gray-500 dark:text-gray-400">p95</span>
                   <span>{formatSeconds(metrics.settleP95)}</span>
                 </div>
+                {historyData.length > 0 && (
+                  <div
+                    className="pt-2 flex justify-center border-t border-gray-200 dark:border-gray-800"
+                    data-testid="scorecard-sparkline"
+                  >
+                    <Sparkline data={historyData} />
+                  </div>
+                )}
               </dd>
             </div>
 
