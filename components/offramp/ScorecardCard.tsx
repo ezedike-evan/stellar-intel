@@ -62,7 +62,7 @@ function toNumber(value: unknown): number | null {
 
 function parseReputationResponse(body: unknown): ReputationMetrics {
   const payload = (body ?? {}) as Record<string, unknown>;
-  
+
   // Extract scorecard data from the scorecards object
   // The response has a structure like: { anchorId, scorecards: { 7d, 30d, 90d } }
   const scorecards = payload.scorecards as Record<string, Record<string, unknown>> | undefined;
@@ -84,7 +84,10 @@ function parseReputationResponse(body: unknown): ReputationMetrics {
         payload.settle_p50 ?? payload.settleP50 ?? payload.settlement_p50 ?? payload.settlementP50
       ) ??
       toNumber(
-        scorecard?.settle_p50 ?? scorecard?.settleP50 ?? scorecard?.settlement_p50 ?? scorecard?.settlementP50
+        scorecard?.settle_p50 ??
+          scorecard?.settleP50 ??
+          scorecard?.settlement_p50 ??
+          scorecard?.settlementP50
       ) ??
       null,
     settleP95:
@@ -92,7 +95,10 @@ function parseReputationResponse(body: unknown): ReputationMetrics {
         payload.settle_p95 ?? payload.settleP95 ?? payload.settlement_p95 ?? payload.settlementP95
       ) ??
       toNumber(
-        scorecard?.settle_p95 ?? scorecard?.settleP95 ?? scorecard?.settlement_p95 ?? scorecard?.settlementP95
+        scorecard?.settle_p95 ??
+          scorecard?.settleP95 ??
+          scorecard?.settlement_p95 ??
+          scorecard?.settlementP95
       ) ??
       null,
     slippageP50:
@@ -124,8 +130,11 @@ function parseReputationResponse(body: unknown): ReputationMetrics {
       ) ??
       null,
     outcomesCount: toNumber(payload.outcomes_count ?? payload.outcomesCount) ?? 0,
-    computedAt: (scorecard?.computedAt ?? payload.computedAt) as string | null ?? null,
-    lastPublisherTxTimestamp: (scorecard?.lastPublisherTxTimestamp ?? payload.lastPublisherTxTimestamp) as string | null ?? null,
+    computedAt: ((scorecard?.computedAt ?? payload.computedAt) as string | null) ?? null,
+    lastPublisherTxTimestamp:
+      ((scorecard?.lastPublisherTxTimestamp ?? payload.lastPublisherTxTimestamp) as
+        | string
+        | null) ?? null,
   };
 }
 
@@ -216,11 +225,7 @@ function FreshnessBadge({ freshness }: { freshness: FreshnessResult | null }) {
         </div>
         <div className="flex-1">
           <p className={`text-sm font-medium ${colors.text}`}>{label}</p>
-          {drift && (
-            <p className={`text-xs ${colors.text} opacity-80`}>
-              Drift: {drift}
-            </p>
-          )}
+          {drift && <p className={`text-xs ${colors.text} opacity-80`}>Drift: {drift}</p>}
         </div>
       </div>
     </div>
@@ -253,7 +258,7 @@ export function ScorecardCard({ anchorId, window: timeframe }: ScorecardCardProp
         if (!isActive) return;
         const parsedMetrics = parseReputationResponse(body);
         setMetrics(parsedMetrics);
-        
+
         // Calculate freshness if we have timestamps
         if (parsedMetrics.computedAt) {
           const freshnessResult = calculateFreshness(
