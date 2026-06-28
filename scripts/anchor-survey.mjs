@@ -29,6 +29,8 @@
 //   - "Transfer-capable" != "fiat off-ramp we care about": some hits are crypto
 //     anchors or DEX gateways with no fiat corridor.
 
+import { fetchDirectoryCandidates } from './lib/directory.mjs';
+
 const DIRECTORY_URL = 'https://api.stellar.expert/explorer/public/directory?tag[]=anchor&limit=200';
 const PER_ANCHOR_TIMEOUT_MS = 12_000;
 const CONCURRENCY = 24;
@@ -101,16 +103,8 @@ function renderRecheck(dead, date) {
 
 /** Pull the anchor-tagged directory and return the distinct domains. */
 async function fetchAnchorDomains() {
-  const res = await fetch(DIRECTORY_URL, {
-    headers: { 'User-Agent': 'stellar-intel-anchor-survey/1.0' },
-  });
-  if (!res.ok) throw new Error(`directory fetch failed: HTTP ${res.status}`);
-  const body = await res.json();
-  const records = body?._embedded?.records ?? [];
-  const domains = new Set();
-  for (const r of records) {
-    if (r?.domain) domains.add(r.domain);
-  }
+  const candidates = await fetchDirectoryCandidates();
+  const domains = new Set(candidates.map((candidate) => candidate.domain));
   return [...domains].sort();
 }
 
