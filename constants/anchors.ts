@@ -1,4 +1,4 @@
-import type { Anchor, Corridor, StellarAsset } from '@/types';
+import type { Anchor, Corridor, FeatureGatedAnchorAssetCode, StellarAsset } from '@/types';
 import { USDC_ISSUER } from '@/lib/config';
 
 // ─── USDC asset ───────────────────────────────────────────────────────────────
@@ -8,6 +8,20 @@ export const USDC_ASSET: StellarAsset = {
   issuer: USDC_ISSUER,
   name: 'USD Coin',
 };
+
+// USDC remains the default registry asset. USDT entries can be onboarded now,
+// but the rate path will ignore them unless this deployment flag is explicitly on.
+const enabledFlagValues = new Set(['1', 'on', 'true']);
+
+export const ANCHOR_ASSET_FLAGS: Record<FeatureGatedAnchorAssetCode, boolean> = {
+  USDT: enabledFlagValues.has((process.env.NEXT_PUBLIC_USDT_ENABLED ?? '').toLowerCase()),
+};
+
+/** Returns whether an anchor asset is available to the live rate path. */
+export function isAnchorAssetEnabled(assetCode: string): boolean {
+  if (assetCode === 'USDT') return ANCHOR_ASSET_FLAGS.USDT;
+  return true;
+}
 
 // ─── Anchors ──────────────────────────────────────────────────────────────────
 

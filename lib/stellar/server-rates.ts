@@ -1,5 +1,5 @@
 import type { Anchor, AnchorRate, Corridor, RateComparison, Sep1TomlData } from '@/types';
-import { USDC_ASSET } from '@/constants/anchors';
+import { isAnchorAssetEnabled } from '@/constants/anchors';
 import { getAnchorsByCorridorId, getCorridorById } from './anchors';
 import { resolveAnchor } from './sep1';
 import { assertSep38Capable, getSep38Price } from './sep38';
@@ -85,12 +85,13 @@ async function fetchPriceAcrossContexts(
 
 /**
  * Builds an *indicative* off-ramp estimate for an anchor that does not offer a
- * SEP-38 quote server: live USD→fiat reference rate applied to the net USDC after
- * the anchor's own published SEP-24 withdraw fee. This is an estimate — the firm
- * rate is set by the anchor inside the SEP-24 interactive flow at execution.
+ * SEP-38 quote server: live USD→fiat reference rate applied to the net sold asset
+ * after the anchor's own published SEP-24 withdraw fee. This is an estimate for
+ * USD-pegged assets — the firm rate is set by the anchor inside the SEP-24
+ * interactive flow at execution.
  */
 async function indicativeRate(
-  anchor: { id: string; name: string },
+  anchor: Anchor,
   toml: Sep1TomlData,
   fiatCode: string,
   corridorId: string,
@@ -107,15 +108,15 @@ async function indicativeRate(
     getUsdFxRate(fiatCode),
   ]);
 
-  const assetInfo = info.withdraw[USDC_ASSET.code];
+  const assetInfo = info.withdraw[anchor.assetCode];
   if (!assetInfo || assetInfo.enabled === false) {
-    throw new Error(`anchor does not enable ${USDC_ASSET.code} withdrawals`);
+    throw new Error(`anchor does not enable ${anchor.assetCode} withdrawals`);
   }
 
   const feeFixed = assetInfo.fee_fixed ?? 0;
   const feePercent = assetInfo.fee_percent ?? 0;
-  const netUsdc = Math.max(0, sellAmount - feeFixed) * (1 - feePercent / 100);
-  const totalReceived = netUsdc * fxRate; // USDC treated 1:1 with USD
+  const netSellAmount = Math.max(0, sellAmount - feeFixed) * (1 - feePercent / 100);
+  const totalReceived = netSellAmount * fxRate; // USD-pegged assets treated 1:1 with USD
   const effectiveRate = sellAmount > 0 ? totalReceived / sellAmount : 0;
 
   if (!Number.isFinite(totalReceived) || totalReceived <= 0 || effectiveRate <= 0) {
@@ -145,8 +146,8 @@ async function indicativeRate(
  * and anchors that omit `Access-Control-Allow-Origin` are still reachable. Each
  * anchor is resolved independently; a failure (no quote server, timeout, HTTP
  * error) is recorded in `errors` rather than dropped, and the surviving rates are
- * returned. Asset identifiers follow SEP-38: `stellar:CODE:ISSUER` for the sold
- * USDC and `iso4217:CCY` for the delivered fiat.
+ * returned. Asset identifiers follow SEP-38: `stellar:CODE:ISSUER` for each
+ * anchor's registered sold asset and `iso4217:CCY` for the delivered fiat.
  */
 export async function fetchCorridorRates(
   corridorId: string,
@@ -155,7 +156,6 @@ export async function fetchCorridorRates(
   const corridor = getCorridorById(corridorId); // throws on unknown corridor
   const anchors = getAnchorsByCorridorId(corridorId);
 
-  const sellAsset = `stellar:${USDC_ASSET.code}:${USDC_ASSET.issuer}`;
   const buyAsset = `iso4217:${corridor.to}`;
   const sellAmount = Number(amount);
 
@@ -173,6 +173,11 @@ export async function fetchCorridorRates(
       const anchorName = safeAnchorField(() => anchor.name, anchorId);
 
       try {
+        if (!isAnchorAssetEnabled(anchor.assetCode)) {
+          throw new Error(`${anchor.assetCode} rates are disabled by feature flag`);
+        }
+
+        const sellAsset = `stellar:${anchor.assetCode}:${anchor.assetIssuer}`;
         await quoteAnchorOnCorridor(
           anchor,
           { corridorId, corridor, sellAsset, buyAsset, amount, sellAmount },
@@ -261,15 +266,16 @@ async function quoteAnchorOnCorridor(
       throw new Error(`returned an unusable quote for ${corridor.to}`);
     }
 
-    // Only surface a fee figure when charged in the sold asset (USDC); a
+    // Only surface a fee figure when charged in the sold asset; a
     // fiat-denominated fee is already baked into buy_amount.
-    const feeInUsdc = price.fee && price.fee.asset === sellAsset ? Number(price.fee.total) : null;
+    const feeInSellAsset =
+      price.fee && price.fee.asset === sellAsset ? Number(price.fee.total) : null;
 
     rates.push({
       anchorId: anchor.id,
       anchorName: anchor.name,
       corridorId,
-      fee: feeInUsdc !== null && Number.isFinite(feeInUsdc) ? feeInUsdc : null,
+      fee: feeInSellAsset !== null && Number.isFinite(feeInSellAsset) ? feeInSellAsset : null,
       feeType: 'flat',
       exchangeRate: effectiveRate,
       totalReceived: buyAmount,

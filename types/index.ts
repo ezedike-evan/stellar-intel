@@ -1,12 +1,17 @@
 // ─── Anchors ─────────────────────────────────────────────────────────────────
 
+/** Asset codes whose rate path is guarded by an opt-in deployment flag. */
+export type FeatureGatedAnchorAssetCode = 'USDT';
+
 /** A Stellar anchor that supports SEP-24 withdrawals and/or deposits. */
 export interface Anchor {
   id: string;
   name: string;
   homeDomain: string;
   corridors: string[]; // corridor IDs this anchor serves
+  /** Primary Stellar asset sold through this anchor's registered corridors. */
   assetCode: string;
+  /** Issuer account for `assetCode`; used to build SEP-38 asset identifiers. */
   assetIssuer: string;
   /**
    * Optional service domain distinct from home domain.
@@ -34,9 +39,9 @@ export interface AnchorRate {
   anchorId: string;
   anchorName: string;
   corridorId: string;
-  fee: number | null; // flat fee in USDC; null when anchor is unreachable
+  fee: number | null; // flat fee in the anchor's sold asset; null when unreachable
   feeType: 'flat' | 'percent' | 'combined';
-  exchangeRate: number | null; // local currency units per 1 USDC; null when anchor is unreachable
+  exchangeRate: number | null; // local currency units per sold asset; null when unreachable
   totalReceived: number | null; // computed: (amount - fee) * exchangeRate; null when anchor is unreachable
   updatedAt: Date;
   /** Discriminates the origin of the rate data. */
