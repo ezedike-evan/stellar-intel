@@ -28,9 +28,7 @@ function buildFieldValidator(field: RawField): z.ZodTypeAny {
   return required ? stringSchema : z.string().optional();
 }
 
-export function buildSep6FormSchema(
-  fields: Record<string, RawField>
-): Sep6FormSchema {
+export function buildSep6FormSchema(fields: Record<string, RawField>): Sep6FormSchema {
   const formFields: Sep6FormField[] = [];
   const shape: Record<string, z.ZodTypeAny> = {};
 
