@@ -1,4 +1,4 @@
-import { NextResponse } from 'next/server';
+import { NextRequest, NextResponse } from 'next/server';
 import { withLoggerContext } from '@/lib/logger';
 import { acquireLock, releaseLock } from '@/lib/reputation/lock';
 
@@ -18,7 +18,12 @@ async function tick(): Promise<{ submitted: number; skipped: number; txHash: str
   return { submitted: 0, skipped: 0, txHash: null };
 }
 
-export async function GET(): Promise<NextResponse> {
+export async function GET(request: NextRequest): Promise<NextResponse> {
+  const auth = request.headers.get('authorization');
+  if (auth !== `Bearer ${process.env.CRON_SECRET}`) {
+    return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
+  }
+
   return withLoggerContext('api.publisher.tick', async (logger) => {
     if (!acquireLock(LOCK_KEY, LOCK_TTL_MS)) {
       logger.warn({ event: 'publisher_tick_conflict' });

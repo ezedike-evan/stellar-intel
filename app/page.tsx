@@ -1,40 +1,18 @@
 import Link from 'next/link';
-import { ArrowDownRight, Globe, Zap } from 'lucide-react';
+import { ArrowDownRight, Globe } from 'lucide-react';
 import { Card } from '@/components/ui/Card';
+import { Hero } from '@/components/landing/Hero';
+import { StatBar } from '@/components/landing/StatBar';
 import { KNOWN_ANCHORS } from '@/constants';
 
 export default function HomePage() {
   return (
     <div className="space-y-16">
       {/* Hero */}
-      <section className="py-12 text-center">
-        <div className="mb-4 inline-flex items-center gap-2 rounded-full bg-blue-50 px-4 py-1.5 text-sm font-medium text-blue-700 dark:bg-blue-950 dark:text-blue-300">
-          <Zap className="h-3.5 w-3.5" />
-          Stellar Execution Layer
-        </div>
-        <h1 className="mb-4 text-4xl font-bold tracking-tight text-gray-900 dark:text-white md:text-5xl">
-          Where stablecoin transactions
-          <br />
-          <span className="text-blue-600">happen on Stellar.</span>
-        </h1>
-        <p className="mx-auto max-w-2xl text-lg text-gray-600 dark:text-gray-400">
-          Stellar Intel is the execution layer for cross-border stablecoin flows — execute USDC
-          off-ramps across anchors for Nigeria, Kenya, Ghana, Mexico, and more in one click.
-        </p>
-      </section>
+      <Hero />
 
       {/* Stat bar */}
-      <section className="rounded-xl border border-gray-200 bg-gray-50 p-4 dark:border-gray-700 dark:bg-gray-800/50">
-        <div className="flex items-center gap-3">
-          <Globe className="h-5 w-5 text-blue-600" />
-          <div>
-            <div className="text-xl font-bold text-gray-900 dark:text-white">
-              {KNOWN_ANCHORS.length}
-            </div>
-            <div className="text-xs text-gray-500 dark:text-gray-400">Anchors tracked</div>
-          </div>
-        </div>
-      </section>
+      <StatBar stats={[{ icon: Globe, value: KNOWN_ANCHORS.length, label: 'Anchors tracked' }]} />
 
       {/* Module card */}
       <section>

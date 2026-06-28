@@ -1,6 +1,7 @@
 'use client';
 
 import { useEffect, useState } from 'react';
+import { ExternalLink } from 'lucide-react';
 import { Card } from '@/components/ui/Card';
 import { Skeleton } from '@/components/ui/Skeleton';
 import {
@@ -21,6 +22,7 @@ type ReputationWindow = '7d' | '30d' | '90d';
 interface ScorecardCardProps {
   anchorId: string;
   window: ReputationWindow;
+  latestOracleTxHash?: string | undefined;
 }
 
 interface ReputationMetrics {
@@ -273,6 +275,29 @@ export function ScorecardCard({ anchorId, window: timeframe }: ScorecardCardProp
         }
       });
 
+    fetch(`/api/reputation/${encodeURIComponent(anchorId)}/history?window=30d`)
+      .then((response) => {
+        if (!response.ok) {
+          throw new Error(`Failed to load history data (${response.status})`);
+        }
+        return response.json();
+      })
+      .then((body) => {
+        if (!isActive || !body) return;
+        const buckets = (body.buckets || []) as Array<{ settlementLatencyMs: number | null }>;
+        let lastVal = 0;
+        const dataPoints = buckets.map((b) => {
+          if (b.settlementLatencyMs !== null) {
+            lastVal = b.settlementLatencyMs / 1000;
+          }
+          return lastVal;
+        });
+        setHistoryData(dataPoints);
+      })
+      .catch(() => {
+        // Silently catch history errors to keep scorecard functional
+      });
+
     return () => {
       isActive = false;
     };
@@ -284,7 +309,20 @@ export function ScorecardCard({ anchorId, window: timeframe }: ScorecardCardProp
   return (
     <Card className="space-y-4">
       <div className="flex flex-col gap-1">
-        <p className="text-sm font-medium text-gray-700 dark:text-gray-300">Anchor reputation</p>
+        <div className="flex items-center gap-1.5">
+          <p className="text-sm font-medium text-gray-700 dark:text-gray-300">Anchor reputation</p>
+          {latestOracleTxHash && (
+            <a
+              href={`${STELLAR_EXPERT_TX_BASE}/${latestOracleTxHash}`}
+              target="_blank"
+              rel="noopener noreferrer"
+              aria-label="View latest oracle transaction on stellar.expert"
+              className="text-gray-400 hover:text-blue-500 dark:text-gray-500 dark:hover:text-blue-400 transition-colors"
+            >
+              <ExternalLink className="h-3.5 w-3.5" />
+            </a>
+          )}
+        </div>
         <p className="text-xs text-gray-500 dark:text-gray-400">Window: {timeframe}</p>
       </div>
 
