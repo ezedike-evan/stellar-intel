@@ -45,7 +45,7 @@ export interface AnchorRate {
   totalReceived: number | null; // computed: (amount - fee) * exchangeRate; null when anchor is unreachable
   updatedAt: Date;
   /** Discriminates the origin of the rate data. */
-  source: 'sep38' | 'sep24-fee' | 'unavailable';
+  source: 'sep38' | 'sep24-fee' | 'sep6-info' | 'unavailable';
   expiresAt?: Date | undefined;
   /**
    * SEP-38 firm quote id, when this rate originated from a quote server.
