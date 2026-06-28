@@ -25,6 +25,9 @@ export function isAnchorAssetEnabled(assetCode: string): boolean {
 
 // ─── Anchors ──────────────────────────────────────────────────────────────────
 
+// Bucketed Anchors (not integrated):
+// - fchain.io: SEP-6 /info only lists crypto assets (BCH, ETH, USDT, WICC, XRP, STM). No fiat settlement available. (Verified 2026-06-28)
+
 export const ANCHORS: Anchor[] = [
   {
     id: 'moneygram',
