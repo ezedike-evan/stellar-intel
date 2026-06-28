@@ -1,5 +1,12 @@
 import { describe, it, expect, vi } from 'vitest';
-import { nextHealth, applyProbes, parseAnchors } from '../scripts/validate-anchors.mjs';
+import {
+  nextHealth,
+  applyProbes,
+  parseAnchors,
+  parseCurrencies,
+  resolveExpectedIssuer,
+  validateIssuer,
+} from '../scripts/validate-anchors.mjs';
 
 const OK = { ok: true, error: null };
 const FAIL = { ok: false, error: 'HTTP 521' };
@@ -95,6 +102,98 @@ describe('validate-anchors: parseAnchors', () => {
       { id: 'moneygram', domain: 'stellar.moneygram.com' },
       { id: 'cowrie', domain: 'cowrie.exchange' },
     ]);
+  });
+
+  it('captures assetCode and a literal vs referenced assetIssuer', () => {
+    const source = `
+      export const ANCHORS: Anchor[] = [
+        {
+          id: 'cowrie',
+          homeDomain: 'cowrie.exchange',
+          assetCode: 'USDC',
+          assetIssuer: USDC_ISSUER,
+        },
+        {
+          id: 'ntokens',
+          homeDomain: 'ntokens.com',
+          assetCode: 'BRL',
+          assetIssuer: 'GDVKY2GU2DRXWTBEYJJWSFXIGBZV6AZNBVVSUHEPZI54LIS6BA7DVVSP',
+        },
+      ];
+    `;
+    expect(parseAnchors(source)).toEqual([
+      { id: 'cowrie', domain: 'cowrie.exchange', assetCode: 'USDC', assetIssuerRef: 'USDC_ISSUER' },
+      {
+        id: 'ntokens',
+        domain: 'ntokens.com',
+        assetCode: 'BRL',
+        assetIssuer: 'GDVKY2GU2DRXWTBEYJJWSFXIGBZV6AZNBVVSUHEPZI54LIS6BA7DVVSP',
+      },
+    ]);
+  });
+});
+
+describe('validate-anchors: asset-issuer validation (#489)', () => {
+  const CANONICAL = 'GA5ZSEJYB37JRC5AVCIA5MOP4RHTM335X2KGX3IHOJAPP5RE34K4KZVN';
+  const LOOKALIKE = 'GBBD47IF6LWK7P7MDEVSCWR7DPUWV3NY3DTQEVFL4NAT4AQH3ZLLFLA5';
+
+  it('parses [[CURRENCIES]] code and issuer, defaulting a missing issuer to null', () => {
+    const toml = `
+      ANCHOR_QUOTE_SERVER = "https://example.com/q"
+
+      [[CURRENCIES]]
+      code = "USDC"
+      issuer = "${CANONICAL}"
+
+      [[CURRENCIES]]
+      code = "EURC"
+
+      [DOCUMENTATION]
+      ORG_NAME = "Example"
+    `;
+    expect(parseCurrencies(toml)).toEqual([
+      { code: 'USDC', issuer: CANONICAL },
+      { code: 'EURC', issuer: null },
+    ]);
+  });
+
+  it('resolveExpectedIssuer prefers a literal, else resolves USDC_ISSUER from env', () => {
+    expect(resolveExpectedIssuer({ assetIssuer: LOOKALIKE })).toBe(LOOKALIKE);
+    expect(
+      resolveExpectedIssuer(
+        { assetIssuerRef: 'USDC_ISSUER' },
+        { NEXT_PUBLIC_USDC_ISSUER: CANONICAL }
+      )
+    ).toBe(CANONICAL);
+    expect(resolveExpectedIssuer({ assetIssuerRef: 'USDC_ISSUER' }, {})).toBeNull();
+    expect(resolveExpectedIssuer({}, {})).toBeNull();
+  });
+
+  it('flags a look-alike issuer as a mismatch', () => {
+    const result = validateIssuer({ assetCode: 'USDC', expectedIssuer: CANONICAL }, [
+      { code: 'USDC', issuer: LOOKALIKE },
+    ]);
+    expect(result).toEqual({ status: 'mismatch', advertisedIssuer: LOOKALIKE });
+  });
+
+  it('passes the canonical issuer and reports missing / unverifiable cases', () => {
+    expect(
+      validateIssuer({ assetCode: 'USDC', expectedIssuer: CANONICAL }, [
+        { code: 'USDC', issuer: CANONICAL },
+      ])
+    ).toEqual({ status: 'match', advertisedIssuer: CANONICAL });
+
+    expect(
+      validateIssuer({ assetCode: 'USDC', expectedIssuer: CANONICAL }, [
+        { code: 'USDC', issuer: null },
+      ])
+    ).toEqual({ status: 'missing', advertisedIssuer: null });
+
+    expect(
+      validateIssuer({ assetCode: 'USDC', expectedIssuer: null }, [
+        { code: 'USDC', issuer: CANONICAL },
+      ])
+    ).toEqual({ status: 'unverifiable', advertisedIssuer: CANONICAL });
   });
 });
 

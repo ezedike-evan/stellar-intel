@@ -8,6 +8,11 @@
 // being deleted from the registry — the flag clears automatically on the first
 // successful resolution.
 //
+// It also validates asset-issuer integrity (#489): each anchor must advertise its
+// registered asset (e.g. USDC) under the canonical issuer in its stellar.toml
+// [[CURRENCIES]], not a look-alike issuer reusing a trusted code. Mismatches are
+// flagged with a ::warning:: but are kept out of the degraded ledger.
+//
 // Designed to run from the nightly workflow (one run == one "night").
 //
 // Usage:
@@ -37,10 +42,25 @@ const LEDGER_PATH = new URL('constants/anchor-health.json', ROOT);
  * @typedef {Object} AnchorRef
  * @property {string} id
  * @property {string} domain
+ * @property {string} [assetCode] Registered asset code (e.g. "USDC").
+ * @property {string} [assetIssuer] Canonical issuer literal, when written inline.
+ * @property {string} [assetIssuerRef] Identifier the source assigns to assetIssuer
+ *   (e.g. "USDC_ISSUER") when it is a reference rather than a literal.
+ *
+ * @typedef {Object} Currency
+ * @property {string} code
+ * @property {string | null} issuer
  *
  * @typedef {Object} ProbeResult
  * @property {boolean} ok
  * @property {string | null} error
+ * @property {Currency[]} [currencies] Parsed [[CURRENCIES]] from a resolved toml.
+ *
+ * @typedef {'match' | 'mismatch' | 'missing' | 'unverifiable'} IssuerStatus
+ *
+ * @typedef {Object} IssuerResult
+ * @property {IssuerStatus} status
+ * @property {string | null} advertisedIssuer
  *
  * @typedef {Object} AnchorHealth
  * @property {number} consecutiveFailures
@@ -97,9 +117,91 @@ export function parseAnchors(source) {
     const home = block.match(/homeDomain:\s*['"]([^'"]+)['"]/)?.[1];
     const service = block.match(/serviceDomain:\s*['"]([^'"]+)['"]/)?.[1];
     const domain = service || home;
-    if (domain) anchors.push({ id, domain });
+    if (!domain) continue;
+
+    /** @type {AnchorRef} */
+    const ref = { id, domain };
+    const assetCode = block.match(/assetCode:\s*['"]([^'"]+)['"]/)?.[1];
+    if (assetCode) ref.assetCode = assetCode;
+
+    // assetIssuer may be a quoted literal (e.g. nTokens) or a bare identifier
+    // reference (e.g. `assetIssuer: USDC_ISSUER`); capture whichever form appears.
+    const assetIssuerLiteral = block.match(/assetIssuer:\s*['"]([^'"]+)['"]/)?.[1];
+    if (assetIssuerLiteral) {
+      ref.assetIssuer = assetIssuerLiteral;
+    } else {
+      const assetIssuerRef = block.match(/assetIssuer:\s*([A-Za-z_$][\w$]*)/)?.[1];
+      if (assetIssuerRef) ref.assetIssuerRef = assetIssuerRef;
+    }
+
+    anchors.push(ref);
   }
   return anchors;
+}
+
+/**
+ * Parse the `[[CURRENCIES]]` tables out of a raw stellar.toml. Returns each
+ * currency's `code` and `issuer` (null when the entry omits an issuer). A
+ * line-anchored, table-scoped scan keeps it dependency-free while ignoring
+ * `issuer`/`code` keys that belong to other tables.
+ *
+ * @param {string} toml
+ * @returns {Currency[]}
+ */
+export function parseCurrencies(toml) {
+  // Split on each [[CURRENCIES]] header; slice(1) drops the preamble before the
+  // first one. Each piece holds one currency table until the next table header.
+  const sections = toml.split(/^[ \t]*\[\[[ \t]*CURRENCIES[ \t]*\]\][ \t]*$/im).slice(1);
+  /** @type {Currency[]} */
+  const currencies = [];
+  for (const section of sections) {
+    // Limit to this table: stop at the next `[` table header at line start.
+    const body = section.split(/^[ \t]*\[/m)[0];
+    const code = body.match(/^[ \t]*code[ \t]*=[ \t]*["']([^"']+)["']/im)?.[1];
+    if (!code) continue;
+    const issuer = body.match(/^[ \t]*issuer[ \t]*=[ \t]*["']([^"']+)["']/im)?.[1] ?? null;
+    currencies.push({ code, issuer });
+  }
+  return currencies;
+}
+
+/**
+ * Resolve the canonical issuer an anchor is expected to settle. Inline literals
+ * are returned as-is; a `USDC_ISSUER` reference is resolved from the environment
+ * (the same NEXT_PUBLIC_USDC_ISSUER the app reads). Returns null when the issuer
+ * cannot be determined, in which case validation is reported `unverifiable`.
+ *
+ * @param {AnchorRef} anchor
+ * @param {NodeJS.ProcessEnv} [env]
+ * @returns {string | null}
+ */
+export function resolveExpectedIssuer(anchor, env = process.env) {
+  if (anchor.assetIssuer) return anchor.assetIssuer;
+  if (anchor.assetIssuerRef === 'USDC_ISSUER') {
+    const value = env.NEXT_PUBLIC_USDC_ISSUER?.trim();
+    return value ? value : null;
+  }
+  return null;
+}
+
+/**
+ * Compare an anchor's expected issuer against the issuer advertised for the same
+ * asset code in its toml CURRENCIES. `mismatch` is the look-alike case (#489):
+ * the anchor publishes a trusted code under a different issuer.
+ *
+ * @param {{ assetCode?: string, expectedIssuer: string | null }} anchor
+ * @param {Currency[]} currencies
+ * @returns {IssuerResult}
+ */
+export function validateIssuer(anchor, currencies) {
+  const advertisedIssuer =
+    currencies.find((c) => c.code === anchor.assetCode && c.issuer)?.issuer ?? null;
+
+  if (!anchor.expectedIssuer) return { status: 'unverifiable', advertisedIssuer };
+  if (advertisedIssuer === null) return { status: 'missing', advertisedIssuer };
+  return advertisedIssuer === anchor.expectedIssuer
+    ? { status: 'match', advertisedIssuer }
+    : { status: 'mismatch', advertisedIssuer };
 }
 
 /**
@@ -157,7 +259,7 @@ async function probeDomain(domain) {
   // Validate the host before it reaches fetch: this rejects a malformed registry
   // entry and constrains the file-derived value to a known-safe URL shape.
   if (!HOSTNAME_RE.test(domain)) {
-    return { ok: false, error: `invalid anchor domain: ${domain}` };
+    return { ok: false, error: `invalid anchor domain: ${domain}`, currencies: [] };
   }
   const url = new URL(`https://${domain}/.well-known/stellar.toml`);
   const controller = new AbortController();
@@ -168,15 +270,16 @@ async function probeDomain(domain) {
       signal: controller.signal,
       headers: { 'User-Agent': USER_AGENT },
     });
-    if (!res.ok) return { ok: false, error: `HTTP ${res.status}` };
+    if (!res.ok) return { ok: false, error: `HTTP ${res.status}`, currencies: [] };
     const toml = await res.text();
+    const currencies = parseCurrencies(toml);
     if (!/^\s*TRANSFER_SERVER_SEP0024\s*=/im.test(toml)) {
-      return { ok: false, error: 'missing TRANSFER_SERVER_SEP0024 (SEP-24)' };
+      return { ok: false, error: 'missing TRANSFER_SERVER_SEP0024 (SEP-24)', currencies };
     }
-    return { ok: true, error: null };
+    return { ok: true, error: null, currencies };
   } catch (err) {
     const code = err?.cause?.code ? `:${err.cause.code}` : '';
-    return { ok: false, error: `${err?.name ?? 'Error'}${code}` };
+    return { ok: false, error: `${err?.name ?? 'Error'}${code}`, currencies: [] };
   } finally {
     clearTimeout(timer);
   }
@@ -226,6 +329,31 @@ async function main() {
   const degraded = Object.keys(ledger.anchors).filter((id) => ledger.anchors[id].degraded);
   if (degraded.length > 0) {
     console.warn(`::warning::${degraded.length} anchor(s) degraded: ${degraded.join(', ')}`);
+  }
+
+  // Asset-issuer validation (#489): confirm each reachable anchor settles its
+  // canonical issuer and is not a look-alike. Reported only for probes that
+  // returned a toml; it never touches the degraded ledger above.
+  console.log('Asset-issuer validation (canonical issuer match):');
+  /** @type {{ id: string, advertisedIssuer: string | null, expectedIssuer: string | null }[]} */
+  const mismatches = [];
+  for (const anchor of anchors) {
+    if (!anchor.assetCode) continue;
+    const expectedIssuer = resolveExpectedIssuer(anchor);
+    const currencies = probesById[anchor.id]?.currencies ?? [];
+    const { status, advertisedIssuer } = validateIssuer({ ...anchor, expectedIssuer }, currencies);
+    const detail = advertisedIssuer ? ` advertised ${advertisedIssuer}` : '';
+    console.log(
+      `  ${anchor.id.padEnd(12)} ${anchor.assetCode.padEnd(6)} ${status.toUpperCase()}${detail}`
+    );
+    if (status === 'mismatch') mismatches.push({ id: anchor.id, advertisedIssuer, expectedIssuer });
+  }
+  if (mismatches.length > 0) {
+    console.warn(
+      `::warning::${mismatches.length} anchor(s) advertise a look-alike issuer: ${mismatches
+        .map((m) => `${m.id} (${m.advertisedIssuer} != ${m.expectedIssuer})`)
+        .join(', ')}`
+    );
   }
 
   if (dryRun) {
