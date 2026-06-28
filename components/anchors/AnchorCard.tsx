@@ -10,7 +10,7 @@ const SEP_LABELS: Record<(typeof DISPLAYED_SEPS)[number], string> = {
   sep6: 'SEP-6',
   sep24: 'SEP-24',
   sep31: 'SEP-31',
-  sep38: 'SEP-38',
+  sep38: 'Firm quotes',
 };
 
 function corridorLabel(corridorId: string): string {
