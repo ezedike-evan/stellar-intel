@@ -16,6 +16,7 @@ import {
   getFreshnessBadgeColor,
   type FreshnessResult,
 } from '@/lib/oracle/freshness';
+import { STELLAR_EXPERT_URL } from '@/constants';
 
 type ReputationWindow = '7d' | '30d' | '90d';
 
@@ -70,7 +71,7 @@ function parseReputationResponse(body: unknown): ReputationMetrics {
 
   // For now, we'll use the 30d window as the primary scorecard (most commonly used)
   if (scorecards) {
-    scorecard = (scorecards['30'] ?? scorecards['30d']) as Record<string, unknown> | undefined;
+    scorecard = (scorecards['30'] ?? scorecards['30d'] ?? null) as Record<string, unknown> | null;
   }
 
   return {
@@ -232,11 +233,16 @@ function FreshnessBadge({ freshness }: { freshness: FreshnessResult | null }) {
   );
 }
 
-export function ScorecardCard({ anchorId, window: timeframe }: ScorecardCardProps) {
+export function ScorecardCard({
+  anchorId,
+  window: timeframe,
+  latestOracleTxHash,
+}: ScorecardCardProps) {
   const [metrics, setMetrics] = useState<ReputationMetrics>(emptyMetrics);
   const [freshness, setFreshness] = useState<FreshnessResult | null>(null);
   const [isLoading, setIsLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
+  const [_historyData, setHistoryData] = useState<number[]>([]);
 
   useEffect(() => {
     let isActive = true;
@@ -318,7 +324,7 @@ export function ScorecardCard({ anchorId, window: timeframe }: ScorecardCardProp
           <p className="text-sm font-medium text-gray-700 dark:text-gray-300">Anchor reputation</p>
           {latestOracleTxHash && (
             <a
-              href={`${STELLAR_EXPERT_TX_BASE}/${latestOracleTxHash}`}
+              href={`${STELLAR_EXPERT_URL}/tx/${latestOracleTxHash}`}
               target="_blank"
               rel="noopener noreferrer"
               aria-label="View latest oracle transaction on stellar.expert"
