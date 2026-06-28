@@ -1,0 +1,27 @@
+{
+  "thresholdNights": 3,
+  "updatedAt": null,
+  "anchors": {
+    "moneygram": {
+      "consecutiveFailures": 0,
+      "degraded": false,
+      "lastCheckedAt": null,
+      "lastStatus": "unknown",
+      "lastError": null
+    },
+    "cowrie": {
+      "consecutiveFailures": 0,
+      "degraded": false,
+      "lastCheckedAt": null,
+      "lastStatus": "unknown",
+      "lastError": null
+    },
+    "anclap": {
+      "consecutiveFailures": 0,
+      "degraded": false,
+      "lastCheckedAt": null,
+      "lastStatus": "unknown",
+      "lastError": null
+    }
+  }
+}

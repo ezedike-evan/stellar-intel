@@ -200,3 +200,47 @@ export function ingestClientSample(sample: ClientMetricSample): void {
     recordAnchorLatency(sample.anchorId, sample.durationMs);
   }
 }
+
+// ─── Publisher health tracking ────────────────────────────────────────────────
+
+interface PublisherHealth {
+  lastRun: number | null;
+  lastBatchSize: number | null;
+  lastError: string | null;
+}
+
+const publisherHealth: PublisherHealth = {
+  lastRun: null,
+  lastBatchSize: null,
+  lastError: null,
+};
+
+export interface PublisherHealthSnapshot {
+  lastRun: string | null;
+  lastBatchSize: number | null;
+  lastError: string | null;
+  staleSinceMs: number | null;
+}
+
+/** Records a successful publisher run with batch size. */
+export function recordPublisherRun(batchSize: number, now = Date.now()): void {
+  publisherHealth.lastRun = now;
+  publisherHealth.lastBatchSize = batchSize;
+  publisherHealth.lastError = null;
+}
+
+/** Records a publisher error. */
+export function recordPublisherError(error: string, now = Date.now()): void {
+  publisherHealth.lastRun = now;
+  publisherHealth.lastError = error;
+}
+
+/** Returns the current publisher health snapshot. */
+export function getPublisherHealth(now = Date.now()): PublisherHealthSnapshot {
+  return {
+    lastRun: publisherHealth.lastRun ? new Date(publisherHealth.lastRun).toISOString() : null,
+    lastBatchSize: publisherHealth.lastBatchSize,
+    lastError: publisherHealth.lastError,
+    staleSinceMs: publisherHealth.lastRun ? now - publisherHealth.lastRun : null,
+  };
+}

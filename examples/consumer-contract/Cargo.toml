@@ -1,0 +1,16 @@
+[package]
+name = "consumer-contract"
+version = "0.1.0"
+edition = "2021"
+publish = false
+
+[lib]
+name = "consumer_contract"
+path = "src/lib.rs"
+crate-type = ["cdylib", "rlib"]
+doctest = false
+
+[dependencies]
+soroban-sdk = "22.0.0"
+stellar-intel-reputation = { path = "../../crates/stellar-intel-reputation" }
+

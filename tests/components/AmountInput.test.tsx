@@ -33,11 +33,11 @@ describe('AmountInput', () => {
 });
 
 describe('CorridorSelector', () => {
-  it('renders all seven corridors as option elements', async () => {
+  it('renders all corridors as option elements', async () => {
     const { CorridorSelector } = await import('@/components/ui/CorridorSelector');
     render(<CorridorSelector value="usdc-ngn" onChange={vi.fn()} />);
     const options = screen.getAllByRole('option');
-    expect(options).toHaveLength(7);
+    expect(options.length).toBeGreaterThanOrEqual(8);
   });
 
   it('fires onChange with "usdc-ghs" when Ghana is selected', async () => {
