@@ -1,26 +1,19 @@
 use soroban_sdk::{Address, Env, String, Vec};
 
-use crate::{admin, publishers};
+use crate::{Error, publishers};
 
 pub fn submit_outcome(
     env: &Env,
-    publisher: Address,
+    publisher: &Address,
     anchor_id: String,
     outcome_hash: String,
     settle_seconds: u64,
     success: bool,
-) {
+) -> Result<(), Error> {
     publisher.require_auth();
 
-    // Must be either the admin or a whitelisted publisher
-    let is_admin = if let Some(admin_addr) = admin::get_admin(env) {
-        admin_addr == publisher
-    } else {
-        false
-    };
-
-    if !is_admin && !publishers::is_authorized(env, &publisher) {
-        panic!("Unauthorized: caller is not a whitelisted publisher");
+    if !publishers::is_authorized(env, publisher) {
+        return Err(Error::PublisherUnauthorized);
     }
 
     let mut outcomes: Vec<(String, u64, bool)> = env
@@ -31,4 +24,5 @@ pub fn submit_outcome(
 
     outcomes.push_back((outcome_hash, settle_seconds, success));
     env.storage().persistent().set(&anchor_id, &outcomes);
+    Ok(())
 }
