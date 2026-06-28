@@ -21,12 +21,12 @@ export default function HomePage() {
         </h2>
         <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-4">
           <Link href="/offramp">
-            <Card className="group h-full cursor-pointer transition-shadow hover:shadow-md">
-              <div className="mb-4 inline-flex rounded-lg p-2.5 bg-green-50 dark:bg-green-950/30">
-                <ArrowDownRight className="h-5 w-5 text-green-600" />
+            <Card className="group h-full cursor-pointer transition-shadow hover:shadow-md dark:hover:shadow-gray-900/50">
+              <div className="mb-4 inline-flex rounded-lg p-2.5 bg-green-50 dark:bg-green-900/40">
+                <ArrowDownRight className="h-5 w-5 text-green-600 dark:text-green-400" />
               </div>
               <h3 className="mb-2 font-semibold text-gray-900 dark:text-white">Off-ramp</h3>
-              <p className="text-sm text-gray-500 dark:text-gray-400">
+              <p className="text-sm text-gray-500 dark:text-gray-300">
                 Execute USDC off-ramps across Stellar anchors by country and corridor.
               </p>
             </Card>
@@ -35,7 +35,7 @@ export default function HomePage() {
       </section>
 
       {/* Explainer */}
-      <section className="rounded-xl border border-gray-200 p-6 dark:border-gray-700">
+      <section className="rounded-xl border border-gray-200 bg-white p-6 dark:border-gray-700 dark:bg-gray-800/50">
         <h2 className="mb-4 text-lg font-semibold text-gray-900 dark:text-white">How it works</h2>
         <div className="grid grid-cols-1 gap-6 md:grid-cols-3">
           {[
@@ -56,12 +56,12 @@ export default function HomePage() {
             },
           ].map(({ step, title, body }) => (
             <div key={step} className="flex gap-4">
-              <div className="flex h-8 w-8 shrink-0 items-center justify-center rounded-full bg-blue-600 text-xs font-bold text-white">
+              <div className="flex h-8 w-8 shrink-0 items-center justify-center rounded-full bg-blue-600 text-xs font-bold text-white dark:bg-blue-500">
                 {step}
               </div>
               <div>
                 <div className="font-medium text-gray-900 dark:text-white">{title}</div>
-                <div className="mt-1 text-sm text-gray-500 dark:text-gray-400">{body}</div>
+                <div className="mt-1 text-sm text-gray-500 dark:text-gray-300">{body}</div>
               </div>
             </div>
           ))}
