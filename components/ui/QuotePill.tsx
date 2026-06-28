@@ -80,12 +80,12 @@ export function QuotePill({ source, expiresAt, onExpire }: QuotePillProps) {
     );
   }
 
-  if (source === 'sep6-info') {
+  if (source === 'sep6-info' || source === 'sep6-fee') {
     return (
       <span
         className="rounded-full bg-purple-100 px-2 py-0.5 text-xs font-medium text-purple-700 dark:bg-purple-900/40 dark:text-purple-300"
         role="status"
-        aria-label="SEP-6 info rate"
+        aria-label="SEP-6 indicative rate"
       >
         SEP-6
       </span>

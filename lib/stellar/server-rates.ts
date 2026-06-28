@@ -1,5 +1,5 @@
 import type { Anchor, AnchorRate, Corridor, RateComparison, Sep1TomlData } from '@/types';
-import { isAnchorAssetEnabled } from '@/constants/anchors';
+import { isAnchorAssetEnabled, USDC_ASSET } from '@/constants/anchors';
 import { getAnchorsByCorridorId, getCorridorById } from './anchors';
 import { resolveAnchor } from './sep1';
 import { assertSep38Capable, getSep38Price } from './sep38';
