@@ -86,59 +86,59 @@ a listed off-ramp anchor; they are dropped from this tracker with a Notes entry.
 
 Host did not complete a TLS connection within the 12 s timeout.
 
-|   # | Domain                | First seen | Last checked | Notes                                                                       |
-| --: | --------------------- | ---------- | ------------ | --------------------------------------------------------------------------- |
-|   1 | `anchormxn.com`       | 2026-06-25 | 2026-06-25   |                                                                             |
-|   2 | `anclax.com`          | 2026-06-25 | 2026-06-25   |                                                                             |
-|   3 | `astral9.io`          | 2026-06-25 | 2026-06-25   |                                                                             |
-|   4 | `auskunft.de`         | 2026-06-25 | 2026-06-25   |                                                                             |
-|   5 | `bac.gold`            | 2026-06-25 | 2026-06-25   |                                                                             |
-|   6 | `bitx.tk`             | 2026-06-25 | 2026-06-25   |                                                                             |
-|   7 | `bostravel.online`    | 2026-06-25 | 2026-06-25   |                                                                             |
-|   8 | `charnatoken.top`     | 2026-06-25 | 2026-06-25   |                                                                             |
-|   9 | `citron.cash`         | 2026-06-25 | 2026-06-25   |                                                                             |
-|  10 | `citystatesm.com`     | 2026-06-25 | 2026-06-25   |                                                                             |
-|  11 | `clickpesa.com`       | 2026-06-25 | 2026-06-25   |                                                                             |
-|  12 | `cowrie.exchange`     | 2026-06-25 | 2026-06-25   | Listed anchor — home-domain probe only; SEP-24 service confirmed separately |
-|  13 | `cryptomover.com`     | 2026-06-25 | 2026-06-25   |                                                                             |
-|  14 | `cryptotari.io`       | 2026-06-25 | 2026-06-25   |                                                                             |
-|  15 | `dead.apay.io`        | 2026-06-25 | 2026-06-25   | Legacy/retired subdomain                                                    |
-|  16 | `equid.co`            | 2026-06-25 | 2026-06-25   |                                                                             |
-|  17 | `fchain.io`           | 2026-06-25 | 2026-06-25   |                                                                             |
-|  18 | `flutterwave.com`     | 2026-06-25 | 2026-06-25   |                                                                             |
-|  19 | `frasindo.com`        | 2026-06-25 | 2026-06-25   |                                                                             |
-|  20 | `freight-coin.com`    | 2026-06-25 | 2026-06-25   |                                                                             |
-|  21 | `funtracker.site`     | 2026-06-25 | 2026-06-25   |                                                                             |
-|  22 | `glitzkoin.com`       | 2026-06-25 | 2026-06-25   |                                                                             |
-|  23 | `goodx.network`       | 2026-06-25 | 2026-06-25   |                                                                             |
-|  24 | `gratz.io`            | 2026-06-25 | 2026-06-25   |                                                                             |
-|  25 | `heir.io`             | 2026-06-25 | 2026-06-25   |                                                                             |
-|  26 | `hotoken.io`          | 2026-06-25 | 2026-06-25   |                                                                             |
-|  27 | `irene.energy`        | 2026-06-25 | 2026-06-25   |                                                                             |
-|  28 | `ixinium.io`          | 2026-06-25 | 2026-06-25   |                                                                             |
-|  29 | `jetmint.org`         | 2026-06-25 | 2026-06-25   |                                                                             |
-|  30 | `levelg.net`          | 2026-06-25 | 2026-06-25   |                                                                             |
-|  31 | `luckybird.io`        | 2026-06-25 | 2026-06-25   |                                                                             |
-|  32 | `luxpayband.io`       | 2026-06-25 | 2026-06-25   |                                                                             |
-|  33 | `merge.lobstr.co`     | 2026-06-25 | 2026-06-25   | LOBSTR aggregator subdomain                                                 |
-|  34 | `mgusd.moneygram.com` | 2026-06-25 | 2026-06-25   | MoneyGram issuer domain; live service runs at stellar.moneygram.com         |
-|  35 | `mobius.network`      | 2026-06-25 | 2026-06-25   |                                                                             |
-|  36 | `moni.com`            | 2026-06-25 | 2026-06-25   |                                                                             |
-|  37 | `mykobo.co`           | 2026-06-25 | 2026-06-25   | EUR off-ramp candidate (see #482)                                           |
-|  38 | `nafuloo.com`         | 2026-06-25 | 2026-06-25   |                                                                             |
-|  39 | `naobtc.com`          | 2026-06-25 | 2026-06-25   |                                                                             |
-|  40 | `nezly.com`           | 2026-06-25 | 2026-06-25   |                                                                             |
-|  41 | `ngnc.online`         | 2026-06-25 | 2026-06-25   |                                                                             |
-|  42 | `ntokens.com`         | 2026-06-25 | 2026-06-25   |                                                                             |
-|  43 | `nydro.energy`        | 2026-06-25 | 2026-06-25   |                                                                             |
-|  44 | `old.repocoin.io`     | 2026-06-25 | 2026-06-25   | Legacy/retired subdomain                                                    |
-|  45 | `old.sureremit.co`    | 2026-06-25 | 2026-06-25   | Legacy/retired subdomain                                                    |
-|  46 | `papayabot.com`       | 2026-06-25 | 2026-06-25   |                                                                             |
-|  47 | `pedity.com`          | 2026-06-25 | 2026-06-25   |                                                                             |
-|  48 | `photon.center`       | 2026-06-25 | 2026-06-25   |                                                                             |
-|  49 | `piiko.co`            | 2026-06-25 | 2026-06-25   |                                                                             |
-|  50 | `repocoin.io`         | 2026-06-25 | 2026-06-25   |                                                                             |
-|  51 | `uhuruwallet.co.za`   | 2026-06-25 | 2026-06-25   |                                                                             |
+|   # | Domain                | First seen | Last checked | Notes                                                                                      |
+| --: | --------------------- | ---------- | ------------ | ------------------------------------------------------------------------------------------ |
+|   1 | `anchormxn.com`       | 2026-06-25 | 2026-06-25   |                                                                                            |
+|   2 | `anclax.com`          | 2026-06-25 | 2026-06-25   |                                                                                            |
+|   3 | `astral9.io`          | 2026-06-25 | 2026-06-25   |                                                                                            |
+|   4 | `auskunft.de`         | 2026-06-25 | 2026-06-25   |                                                                                            |
+|   5 | `bac.gold`            | 2026-06-25 | 2026-06-25   |                                                                                            |
+|   6 | `bitx.tk`             | 2026-06-25 | 2026-06-25   |                                                                                            |
+|   7 | `bostravel.online`    | 2026-06-25 | 2026-06-25   |                                                                                            |
+|   8 | `charnatoken.top`     | 2026-06-25 | 2026-06-25   |                                                                                            |
+|   9 | `citron.cash`         | 2026-06-25 | 2026-06-25   |                                                                                            |
+|  10 | `citystatesm.com`     | 2026-06-25 | 2026-06-25   |                                                                                            |
+|  11 | `clickpesa.com`       | 2026-06-25 | 2026-06-25   |                                                                                            |
+|  12 | `cowrie.exchange`     | 2026-06-25 | 2026-06-25   | Listed anchor — home-domain probe only; SEP-24 service confirmed separately                |
+|  13 | `cryptomover.com`     | 2026-06-25 | 2026-06-25   |                                                                                            |
+|  14 | `cryptotari.io`       | 2026-06-25 | 2026-06-25   |                                                                                            |
+|  15 | `dead.apay.io`        | 2026-06-25 | 2026-06-25   | Legacy/retired subdomain                                                                   |
+|  16 | `equid.co`            | 2026-06-25 | 2026-06-25   |                                                                                            |
+|  17 | `fchain.io`           | 2026-06-25 | 2026-06-25   |                                                                                            |
+|  18 | `flutterwave.com`     | 2026-06-25 | 2026-06-25   |                                                                                            |
+|  19 | `frasindo.com`        | 2026-06-25 | 2026-06-25   |                                                                                            |
+|  20 | `freight-coin.com`    | 2026-06-25 | 2026-06-25   |                                                                                            |
+|  21 | `funtracker.site`     | 2026-06-25 | 2026-06-25   |                                                                                            |
+|  22 | `glitzkoin.com`       | 2026-06-25 | 2026-06-25   |                                                                                            |
+|  23 | `goodx.network`       | 2026-06-25 | 2026-06-25   |                                                                                            |
+|  24 | `gratz.io`            | 2026-06-25 | 2026-06-25   |                                                                                            |
+|  25 | `heir.io`             | 2026-06-25 | 2026-06-25   |                                                                                            |
+|  26 | `hotoken.io`          | 2026-06-25 | 2026-06-25   |                                                                                            |
+|  27 | `irene.energy`        | 2026-06-25 | 2026-06-25   |                                                                                            |
+|  28 | `ixinium.io`          | 2026-06-25 | 2026-06-25   |                                                                                            |
+|  29 | `jetmint.org`         | 2026-06-25 | 2026-06-25   |                                                                                            |
+|  30 | `levelg.net`          | 2026-06-25 | 2026-06-25   |                                                                                            |
+|  31 | `luckybird.io`        | 2026-06-25 | 2026-06-25   |                                                                                            |
+|  32 | `luxpayband.io`       | 2026-06-25 | 2026-06-25   |                                                                                            |
+|  33 | `merge.lobstr.co`     | 2026-06-25 | 2026-06-25   | LOBSTR aggregator subdomain                                                                |
+|  34 | `mgusd.moneygram.com` | 2026-06-25 | 2026-06-25   | MoneyGram issuer domain; live service runs at stellar.moneygram.com                        |
+|  35 | `mobius.network`      | 2026-06-25 | 2026-06-25   |                                                                                            |
+|  36 | `moni.com`            | 2026-06-25 | 2026-06-25   |                                                                                            |
+|  37 | `mykobo.co`           | 2026-06-25 | 2026-06-25   | EUR off-ramp candidate (see #482)                                                          |
+|  38 | `nafuloo.com`         | 2026-06-25 | 2026-06-25   |                                                                                            |
+|  39 | `naobtc.com`          | 2026-06-25 | 2026-06-28   | Crypto-only BTC anchor; no fiat corridor — excluded (#467); see docs/anchors/exclusions.md |
+|  40 | `nezly.com`           | 2026-06-25 | 2026-06-25   |                                                                                            |
+|  41 | `ngnc.online`         | 2026-06-25 | 2026-06-25   |                                                                                            |
+|  42 | `ntokens.com`         | 2026-06-25 | 2026-06-25   |                                                                                            |
+|  43 | `nydro.energy`        | 2026-06-25 | 2026-06-25   |                                                                                            |
+|  44 | `old.repocoin.io`     | 2026-06-25 | 2026-06-25   | Legacy/retired subdomain                                                                   |
+|  45 | `old.sureremit.co`    | 2026-06-25 | 2026-06-25   | Legacy/retired subdomain                                                                   |
+|  46 | `papayabot.com`       | 2026-06-25 | 2026-06-25   |                                                                                            |
+|  47 | `pedity.com`          | 2026-06-25 | 2026-06-25   |                                                                                            |
+|  48 | `photon.center`       | 2026-06-25 | 2026-06-25   |                                                                                            |
+|  49 | `piiko.co`            | 2026-06-25 | 2026-06-25   |                                                                                            |
+|  50 | `repocoin.io`         | 2026-06-25 | 2026-06-25   |                                                                                            |
+|  51 | `uhuruwallet.co.za`   | 2026-06-25 | 2026-06-25   |                                                                                            |
 
 ## Unconfirmed (21)
 
