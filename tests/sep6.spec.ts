@@ -5,10 +5,12 @@ import {
   getSep6Transaction,
   hasSep6,
   getSep6TransferServer,
+  sep6IndicativeRate,
   Sep6AssetDisabledError,
   TERMINAL_STATES,
 } from '@/lib/stellar/sep6';
 import { TimeoutError, Sep6NotSupportedError } from '@/lib/stellar/errors';
+import * as fxRates from '@/lib/fx/rates';
 
 const TRANSFER_SERVER = 'https://sep6.example.com';
 const TRANSACTION_ID = 'txn-sep6-abc123';
@@ -482,5 +484,127 @@ describe('getSep6TransferServer', () => {
     expect(() => getSep6TransferServer({ domain: 'anchor.example.com' })).toThrow(
       Sep6NotSupportedError
     );
+  });
+});
+
+// ─── sep6IndicativeRate ───────────────────────────────────────────────────────
+
+const MOCK_ANCHOR = {
+  id: 'test-anchor',
+  name: 'Test Anchor',
+  homeDomain: 'anchor.example.com',
+  corridors: ['usdc-ngn'],
+  assetCode: 'USDC',
+  assetIssuer: 'GA5ZSEJYB37JRC5AVCIA5MOP4RHTM335X2KGX3IHOJAPP5RE34K4KZVN',
+};
+
+const MOCK_TOML = {
+  domain: 'anchor.example.com',
+  TRANSFER_SERVER: TRANSFER_SERVER,
+};
+
+function mockSep6InfoFetch(feeFixed: number, feePercent: number) {
+  vi.stubGlobal(
+    'fetch',
+    vi.fn(async () => ({
+      ok: true,
+      json: async () => ({
+        withdraw: {
+          USDC: {
+            enabled: true,
+            fee_fixed: feeFixed,
+            fee_percent: feePercent,
+            min_amount: 10,
+            max_amount: 25000,
+            fields: {},
+          },
+        },
+      }),
+    }))
+  );
+}
+
+describe('sep6IndicativeRate', () => {
+  it('returns AnchorRate with source sep6-info for a known flat-fee scenario', async () => {
+    mockSep6InfoFetch(3, 0);
+    vi.spyOn(fxRates, 'getUsdFxRate').mockResolvedValue(1580);
+
+    const rate = await sep6IndicativeRate(MOCK_ANCHOR, MOCK_TOML, 'NGN', 'usdc-ngn', '100', 100);
+
+    expect(rate.source).toBe('sep6-info');
+    expect(rate.anchorId).toBe('test-anchor');
+    expect(rate.anchorName).toBe('Test Anchor');
+    expect(rate.corridorId).toBe('usdc-ngn');
+    expect(rate.fee).toBe(3);
+    expect(rate.feeType).toBe('flat');
+    // (100 - 3) * 1580 = 153260
+    expect(rate.totalReceived).toBeCloseTo(153260, 0);
+    expect(rate.exchangeRate).toBeCloseTo(1532.6, 0);
+    expect(rate.updatedAt).toBeInstanceOf(Date);
+  });
+
+  it('computes percent-fee scenario correctly', async () => {
+    mockSep6InfoFetch(0, 1.5);
+    vi.spyOn(fxRates, 'getUsdFxRate').mockResolvedValue(1580);
+
+    const rate = await sep6IndicativeRate(MOCK_ANCHOR, MOCK_TOML, 'NGN', 'usdc-ngn', '200', 200);
+
+    expect(rate.feeType).toBe('percent');
+    expect(rate.fee).toBeNull();
+    // 200 * (1 - 0.015) * 1580 = 197 * 1580 = 311260
+    expect(rate.totalReceived).toBeCloseTo(311260, 0);
+  });
+
+  it('computes combined fee scenario and returns feeType combined', async () => {
+    mockSep6InfoFetch(2, 0.5);
+    vi.spyOn(fxRates, 'getUsdFxRate').mockResolvedValue(1580);
+
+    const rate = await sep6IndicativeRate(MOCK_ANCHOR, MOCK_TOML, 'NGN', 'usdc-ngn', '100', 100);
+
+    expect(rate.feeType).toBe('combined');
+    expect(rate.fee).toBe(2);
+    // (100 - 2) * (1 - 0.005) * 1580 = 98 * 0.995 * 1580 ≈ 154128.1
+    expect(rate.totalReceived).toBeCloseTo(98 * 0.995 * 1580, 0);
+  });
+
+  it('throws when FX rate makes total non-finite', async () => {
+    mockSep6InfoFetch(0, 0);
+    vi.spyOn(fxRates, 'getUsdFxRate').mockResolvedValue(NaN);
+
+    await expect(
+      sep6IndicativeRate(MOCK_ANCHOR, MOCK_TOML, 'NGN', 'usdc-ngn', '100', 100)
+    ).rejects.toThrow(/could not derive a SEP-6 indicative estimate/);
+  });
+
+  it('throws when sellAmount is 0 (zero-amount estimate)', async () => {
+    mockSep6InfoFetch(0, 0);
+    vi.spyOn(fxRates, 'getUsdFxRate').mockResolvedValue(1580);
+
+    await expect(
+      sep6IndicativeRate(MOCK_ANCHOR, MOCK_TOML, 'NGN', 'usdc-ngn', '0', 0)
+    ).rejects.toThrow(/could not derive a SEP-6 indicative estimate/);
+  });
+
+  it('throws when anchor has no SEP-6 TRANSFER_SERVER', async () => {
+    await expect(
+      sep6IndicativeRate(
+        MOCK_ANCHOR,
+        { domain: 'anchor.example.com' },
+        'NGN',
+        'usdc-ngn',
+        '100',
+        100
+      )
+    ).rejects.toThrow(Sep6NotSupportedError);
+  });
+
+  it('reuses getUsdFxRate exactly — no extra FX fetch', async () => {
+    mockSep6InfoFetch(3, 0);
+    const fxSpy = vi.spyOn(fxRates, 'getUsdFxRate').mockResolvedValue(1580);
+
+    await sep6IndicativeRate(MOCK_ANCHOR, MOCK_TOML, 'NGN', 'usdc-ngn', '100', 100);
+
+    expect(fxSpy).toHaveBeenCalledOnce();
+    expect(fxSpy).toHaveBeenCalledWith('NGN');
   });
 });

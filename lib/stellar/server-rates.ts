@@ -1,9 +1,10 @@
 import type { Anchor, AnchorRate, Corridor, RateComparison, Sep1TomlData } from '@/types';
-import { isAnchorAssetEnabled } from '@/constants/anchors';
+import { isAnchorAssetEnabled, USDC_ASSET } from '@/constants/anchors';
 import { getAnchorsByCorridorId, getCorridorById } from './anchors';
 import { resolveAnchor } from './sep1';
 import { assertSep38Capable, getSep38Price } from './sep38';
 import { getSep24Info } from './sep24';
+import { getSep6Info } from './sep6';
 import { getUsdFxRate } from '@/lib/fx/rates';
 
 /**
@@ -135,6 +136,61 @@ async function indicativeRate(
     exchangeRate: effectiveRate,
     totalReceived,
     source: 'sep24-fee', // rendered as "Indicative" by QuotePill
+    updatedAt: new Date(),
+  };
+}
+
+function hasSep6(toml: Sep1TomlData): boolean {
+  return !!(toml.capabilities.sep6 && toml.TRANSFER_SERVER);
+}
+
+/**
+ * Builds an *indicative* off-ramp estimate for a SEP-6 anchor: live USD→fiat
+ * reference rate applied to the net USDC after the anchor's SEP-6 fees from
+ * GET /info. This is a Tier-3 fallback when neither SEP-38 nor SEP-24 are
+ * available. The firm rate is set by the anchor at execution time.
+ */
+async function sep6IndicativeRate(
+  anchor: { id: string; name: string },
+  toml: Sep1TomlData,
+  fiatCode: string,
+  corridorId: string,
+  amount: string,
+  sellAmount: number
+): Promise<AnchorRate> {
+  const transferServer = toml.TRANSFER_SERVER!;
+
+  const [config, fxRate] = await Promise.all([
+    withTimeout(
+      getSep6Info(transferServer, USDC_ASSET.code),
+      PER_ANCHOR_TIMEOUT_MS,
+      `${anchor.name} SEP-6 /info`
+    ),
+    getUsdFxRate(fiatCode),
+  ]);
+
+  const feeFixed = config.feeFixed;
+  const feePercent = config.feePercent;
+  const netUsdc = Math.max(0, sellAmount - feeFixed) * (1 - feePercent / 100);
+  const totalReceived = netUsdc * fxRate;
+  const effectiveRate = sellAmount > 0 ? totalReceived / sellAmount : 0;
+
+  if (!Number.isFinite(totalReceived) || totalReceived <= 0 || effectiveRate <= 0) {
+    throw new Error(`could not derive an estimate for ${fiatCode}`);
+  }
+
+  const feeType: AnchorRate['feeType'] =
+    feeFixed > 0 && feePercent > 0 ? 'combined' : feePercent > 0 ? 'percent' : 'flat';
+
+  return {
+    anchorId: anchor.id,
+    anchorName: anchor.name,
+    corridorId,
+    fee: feeFixed > 0 ? feeFixed : null,
+    feeType,
+    exchangeRate: effectiveRate,
+    totalReceived,
+    source: 'sep6-fee',
     updatedAt: new Date(),
   };
 }
@@ -295,6 +351,20 @@ async function quoteAnchorOnCorridor(
     return;
   } catch (err) {
     reasons.push(`Indicative: ${err instanceof Error ? err.message : String(err)}`);
+  }
+
+  // Tier 3 — SEP-6 indicative estimate: live reference FX × the anchor's
+  // SEP-6 /info fees. Last resort for anchors that advertise SEP-6 but not
+  // SEP-38 or SEP-24 (e.g. Cowrie on usdc-ngn).
+  if (hasSep6(toml)) {
+    try {
+      rates.push(
+        await sep6IndicativeRate(anchor, toml, corridor.to, corridorId, amount, sellAmount)
+      );
+      return;
+    } catch (err) {
+      reasons.push(`SEP-6: ${err instanceof Error ? err.message : String(err)}`);
+    }
   }
 
   errors.push({
