@@ -95,12 +95,13 @@ describe('getAnchorById', () => {
 });
 
 describe('getAnchorsByCorridorId', () => {
-  it('returns MoneyGram and Cowrie for usdc-ngn', () => {
+  it('returns MoneyGram, Cowrie, and NGNC for usdc-ngn', () => {
     const anchors = getAnchorsByCorridorId('usdc-ngn');
     const ids = anchors.map((a) => a.id);
     expect(ids).toContain('moneygram');
     expect(ids).toContain('cowrie');
-    expect(ids).toHaveLength(2);
+    expect(ids).toContain('ngnc');
+    expect(ids).toHaveLength(3);
   });
 
   it('returns MoneyGram for usdc-kes', () => {
