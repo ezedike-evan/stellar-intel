@@ -1,5 +1,5 @@
 import { parseSepErrorBody } from './errors';
-import type { CustomerStatus, Sep12CustomerResponse } from '@/types';
+import type { CustomerStatus, Sep12CustomerField, Sep12CustomerResponse } from '@/types';
 
 export type KycFieldType = 'string' | 'binary' | 'date';
 
@@ -19,12 +19,15 @@ function normalizeCustomerStatus(raw: unknown): CustomerStatus {
 
 function parseCustomerBody(data: Record<string, unknown>): Sep12CustomerResponse {
   return {
-    id: typeof data['id'] === 'string' ? data['id'] : undefined,
+    ...(typeof data['id'] === 'string' ? { id: data['id'] } : {}),
     status: normalizeCustomerStatus(data['status']),
-    fields: (data['fields'] as Sep12CustomerResponse['fields']) ?? undefined,
-    provided_fields:
-      (data['provided_fields'] as Sep12CustomerResponse['provided_fields']) ?? undefined,
-    message: typeof data['message'] === 'string' ? data['message'] : undefined,
+    ...(data['fields'] != null
+      ? { fields: data['fields'] as Record<string, Sep12CustomerField> }
+      : {}),
+    ...(data['provided_fields'] != null
+      ? { provided_fields: data['provided_fields'] as Record<string, Sep12CustomerField> }
+      : {}),
+    ...(typeof data['message'] === 'string' ? { message: data['message'] } : {}),
   };
 }
 
