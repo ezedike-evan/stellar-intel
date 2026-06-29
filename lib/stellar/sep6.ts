@@ -1,6 +1,6 @@
 import { Sep6NotSupportedError, SepError, TimeoutError, parseSepErrorBody } from './errors';
 import { TERMINAL_STATES } from './sep24';
-import { mapToCanonical } from './sep24-status-map';
+import { mapToCanonical, normalizeStatus } from './sep24-status-map';
 import type {
   WithdrawStatusValue,
   WithdrawStatus,
@@ -81,33 +81,6 @@ function withTimeout<T>(promise: Promise<T>, ms: number, label: string): Promise
       setTimeout(() => reject(new Error(`${label} timed out after ${ms}ms`)), ms)
     ),
   ]);
-}
-
-// ─── Status helpers ───────────────────────────────────────────────────────────
-
-const KNOWN_STATUSES = new Set<WithdrawStatusValue>([
-  'incomplete',
-  'pending_user_transfer_start',
-  'pending_user_transfer_complete',
-  'pending_external',
-  'pending_anchor',
-  'pending_stellar',
-  'pending_trust',
-  'pending_user',
-  'completed',
-  'refunded',
-  'error',
-  'no_market',
-  'too_small',
-  'too_large',
-  'expired',
-]);
-
-function normalizeStatus(raw: unknown): WithdrawStatusValue {
-  if (typeof raw === 'string' && KNOWN_STATUSES.has(raw as WithdrawStatusValue)) {
-    return raw as WithdrawStatusValue;
-  }
-  return 'pending_external';
 }
 
 // ─── Fetchers ─────────────────────────────────────────────────────────────────

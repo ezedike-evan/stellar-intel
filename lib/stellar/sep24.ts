@@ -2,6 +2,7 @@ import { SepError, parseSepErrorBody } from './errors';
 import { getTransferServer } from './sep1';
 import { getAnchorsByCorridorId, getCorridorById } from './anchors';
 import { computeTotalReceived } from '@/lib/utils';
+import { normalizeStatus } from './sep24-status-map';
 import type {
   Sep24FeeParams,
   AnchorRate,
@@ -24,30 +25,6 @@ export const TERMINAL_STATES: ReadonlySet<WithdrawStatusValue> = new Set([
   'too_small',
   'too_large',
 ]);
-
-const KNOWN_STATUSES = new Set<WithdrawStatusValue>([
-  'incomplete',
-  'pending_user_transfer_start',
-  'pending_user_transfer_complete',
-  'pending_external',
-  'pending_anchor',
-  'pending_stellar',
-  'pending_trust',
-  'pending_user',
-  'completed',
-  'refunded',
-  'error',
-  'no_market',
-  'too_small',
-  'too_large',
-]);
-
-function normalizeStatus(raw: unknown): WithdrawStatusValue {
-  if (typeof raw === 'string' && KNOWN_STATUSES.has(raw as WithdrawStatusValue)) {
-    return raw as WithdrawStatusValue;
-  }
-  return 'pending_external';
-}
 
 /**
  * Fetches the current status of a single SEP-24 transaction.
