@@ -9,7 +9,7 @@ import { KNOWN_ANCHORS } from '@/constants';
 
 export default function HomePage() {
   return (
-    <div className="space-y-16">
+    <div className="space-y-8 sm:space-y-16">
       {/* Hero */}
       <Hero />
 
@@ -26,7 +26,7 @@ export default function HomePage() {
         </h2>
         <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-4">
           <Link href="/offramp">
-            <Card className="group h-full cursor-pointer transition-shadow hover:shadow-md">
+            <Card className="group h-full min-h-[44px] cursor-pointer transition-shadow hover:shadow-md">
               <div className="mb-4 inline-flex rounded-lg p-2.5 bg-green-50 dark:bg-green-950/30">
                 <ArrowDownRight className="h-5 w-5 text-green-600" />
               </div>
@@ -40,7 +40,7 @@ export default function HomePage() {
       </section>
 
       {/* Explainer */}
-      <section className="rounded-xl border border-gray-200 p-6 dark:border-gray-700">
+      <section className="rounded-xl border border-gray-200 p-4 dark:border-gray-700 sm:p-6">
         <h2 className="mb-4 text-lg font-semibold text-gray-900 dark:text-white">How it works</h2>
         <div className="grid grid-cols-1 gap-6 md:grid-cols-3">
           {[
