@@ -19,8 +19,8 @@ export interface Anchor {
    * Example: home domain "mgusd.moneygram.com" (issuer-only) vs service domain "stellar.moneygram.com" (SEP endpoints).
    */
   serviceDomain?: string;
-  /** Known SEP protocol support flags for this anchor. */
-  seps?: Array<'sep6' | 'sep10' | 'sep24' | 'sep31' | 'sep38'>;
+  /** Stellar Ecosystem Proposals this anchor supports (e.g. [1, 10, 6, 24]). */
+  seps?: number[];
 }
 
 /** A payment corridor from one asset to a fiat currency in a given country. */
