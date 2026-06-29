@@ -21,7 +21,7 @@ describe('AnchorCard', () => {
 
     expect(screen.getByText('SEP-31')).toBeInTheDocument();
     expect(screen.getByText('SEP-24')).toBeInTheDocument();
-    expect(screen.getByText('SEP-38')).toBeInTheDocument();
+    expect(screen.getByText('Firm quotes')).toBeInTheDocument();
   });
 
   it('omits SEP-31 when the anchor does not advertise it', () => {
