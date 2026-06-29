@@ -209,7 +209,9 @@ describe('isTerminal', () => {
   });
 
   it('returns false for processing', () => {
-    expect(isTerminal({ type: 'processing', transactionId: TXN, anchorStatus: 'pending_anchor' })).toBe(false);
+    expect(
+      isTerminal({ type: 'processing', transactionId: TXN, anchorStatus: 'pending_anchor' })
+    ).toBe(false);
   });
 
   it('returns false for awaiting_funds', () => {
@@ -227,7 +229,10 @@ describe('sep6Reducer — purity', () => {
   it('does not mutate the input state', () => {
     const state: Sep6MachineState = { type: 'awaiting_funds', transactionId: TXN };
     const frozen = Object.freeze({ ...state });
-    const next = sep6Reducer(frozen as Sep6MachineState, { type: 'FUNDS_SENT', transactionId: TXN });
+    const next = sep6Reducer(frozen as Sep6MachineState, {
+      type: 'FUNDS_SENT',
+      transactionId: TXN,
+    });
     expect(next).not.toBe(frozen);
     expect(frozen.type).toBe('awaiting_funds');
   });

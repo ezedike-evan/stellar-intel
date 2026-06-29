@@ -40,25 +40,17 @@ export function isTerminal(state: Sep6MachineState): boolean {
 
 // ─── Reducer ─────────────────────────────────────────────────────────────────
 
-const FAILED_ANCHOR_STATUSES = new Set([
-  'error',
-  'expired',
-  'no_market',
-  'too_small',
-  'too_large',
-]);
+const FAILED_ANCHOR_STATUSES = new Set(['error', 'expired', 'no_market', 'too_small', 'too_large']);
 
-export function sep6Reducer(
-  state: Sep6MachineState,
-  event: Sep6MachineEvent
-): Sep6MachineState {
+export function sep6Reducer(state: Sep6MachineState, event: Sep6MachineEvent): Sep6MachineState {
   if (event.type === 'RESET') return { type: 'idle' };
 
   switch (state.type) {
     case 'idle': {
       if (event.type === 'INITIATE') return { type: 'idle' };
       if (event.type === 'NEEDS_INFO') return { type: 'collecting_info', fields: event.fields };
-      if (event.type === 'FUNDS_REQUIRED') return { type: 'awaiting_funds', transactionId: event.transactionId };
+      if (event.type === 'FUNDS_REQUIRED')
+        return { type: 'awaiting_funds', transactionId: event.transactionId };
       return state;
     }
 
@@ -69,8 +61,14 @@ export function sep6Reducer(
     }
 
     case 'awaiting_funds': {
-      if (event.type === 'FUNDS_SENT') return { type: 'processing', transactionId: event.transactionId, anchorStatus: 'pending_stellar' };
-      if (event.type === 'CANCEL') return { type: 'failed', transactionId: state.transactionId, reason: 'cancelled' };
+      if (event.type === 'FUNDS_SENT')
+        return {
+          type: 'processing',
+          transactionId: event.transactionId,
+          anchorStatus: 'pending_stellar',
+        };
+      if (event.type === 'CANCEL')
+        return { type: 'failed', transactionId: state.transactionId, reason: 'cancelled' };
       if (event.type === 'POLL_UPDATE') {
         return applyPollUpdate(event.transactionId, event.anchorStatus);
       }
@@ -81,7 +79,8 @@ export function sep6Reducer(
       if (event.type === 'POLL_UPDATE') {
         return applyPollUpdate(event.transactionId, event.anchorStatus);
       }
-      if (event.type === 'CANCEL') return { type: 'failed', transactionId: state.transactionId, reason: 'cancelled' };
+      if (event.type === 'CANCEL')
+        return { type: 'failed', transactionId: state.transactionId, reason: 'cancelled' };
       return state;
     }
 
@@ -95,6 +94,7 @@ export function sep6Reducer(
 function applyPollUpdate(transactionId: string, anchorStatus: string): Sep6MachineState {
   if (anchorStatus === 'completed') return { type: 'completed', transactionId };
   if (anchorStatus === 'refunded') return { type: 'refunded', transactionId };
-  if (FAILED_ANCHOR_STATUSES.has(anchorStatus)) return { type: 'failed', transactionId, reason: anchorStatus };
+  if (FAILED_ANCHOR_STATUSES.has(anchorStatus))
+    return { type: 'failed', transactionId, reason: anchorStatus };
   return { type: 'processing', transactionId, anchorStatus };
 }
