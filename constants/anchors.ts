@@ -36,13 +36,14 @@ export const ANCHORS: Anchor[] = [
     assetIssuer: USDC_ISSUER,
   },
   {
+    // SEP-6 programmatic withdraw — rates are indicative, not firm quotes
     id: 'cowrie',
     name: 'Cowrie Exchange',
     homeDomain: 'cowrie.exchange',
     corridors: ['usdc-ngn'],
+    seps: ['sep6', 'sep10'],
     assetCode: 'USDC',
     assetIssuer: USDC_ISSUER,
-    seps: ['sep6'],
   },
   {
     id: 'anclap',
