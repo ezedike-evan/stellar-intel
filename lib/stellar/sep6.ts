@@ -265,8 +265,15 @@ export async function sep6IndicativeRate(
   const totalReceived = netSellAmount * fxRate;
   const effectiveRate = sellAmount > 0 ? totalReceived / sellAmount : 0;
 
-  if (!Number.isFinite(totalReceived) || totalReceived <= 0 || !Number.isFinite(effectiveRate) || effectiveRate <= 0) {
-    throw new Error(`could not derive a SEP-6 indicative estimate for ${fiatCode} (amount: ${amount})`);
+  if (
+    !Number.isFinite(totalReceived) ||
+    totalReceived <= 0 ||
+    !Number.isFinite(effectiveRate) ||
+    effectiveRate <= 0
+  ) {
+    throw new Error(
+      `could not derive a SEP-6 indicative estimate for ${fiatCode} (amount: ${amount})`
+    );
   }
 
   const feeType: AnchorRate['feeType'] =

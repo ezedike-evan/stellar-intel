@@ -587,7 +587,14 @@ describe('sep6IndicativeRate', () => {
 
   it('throws when anchor has no SEP-6 TRANSFER_SERVER', async () => {
     await expect(
-      sep6IndicativeRate(MOCK_ANCHOR, { domain: 'anchor.example.com' }, 'NGN', 'usdc-ngn', '100', 100)
+      sep6IndicativeRate(
+        MOCK_ANCHOR,
+        { domain: 'anchor.example.com' },
+        'NGN',
+        'usdc-ngn',
+        '100',
+        100
+      )
     ).rejects.toThrow(Sep6NotSupportedError);
   });
 
