@@ -56,15 +56,31 @@ test.describe('[#455] SEP-6 withdraw happy path', () => {
   test.beforeEach(async ({ page }) => {
     // Suppress API-rates call — we don't need real rates for these tests
     await page.route('/api/rates**', (route) =>
-      route.fulfill({ status: 200, contentType: 'application/json', body: JSON.stringify({ corridorId: 'usdc-ngn', rates: [], pending: [], bestRateId: '', errors: [] }) })
+      route.fulfill({
+        status: 200,
+        contentType: 'application/json',
+        body: JSON.stringify({
+          corridorId: 'usdc-ngn',
+          rates: [],
+          pending: [],
+          bestRateId: '',
+          errors: [],
+        }),
+      })
     );
 
     // Suppress reputation append calls
-    await page.route('/api/reputation/append', (route) => route.fulfill({ status: 201, body: '{}' }));
+    await page.route('/api/reputation/append', (route) =>
+      route.fulfill({ status: 201, body: '{}' })
+    );
 
     // Mock the anchor /info endpoint (used by the proxy)
     await page.route(`${MOCK_TRANSFER_SERVER}/info**`, (route) =>
-      route.fulfill({ status: 200, contentType: 'application/json', body: JSON.stringify(sep6InfoResponse) })
+      route.fulfill({
+        status: 200,
+        contentType: 'application/json',
+        body: JSON.stringify(sep6InfoResponse),
+      })
     );
   });
 
@@ -75,16 +91,24 @@ test.describe('[#455] SEP-6 withdraw happy path', () => {
 
     // Mock: first poll returns pending_stellar
     await page.route(`${MOCK_TRANSFER_SERVER}/transaction**`, (route) =>
-      route.fulfill({ status: 200, contentType: 'application/json', body: JSON.stringify(pollPendingStellar) })
+      route.fulfill({
+        status: 200,
+        contentType: 'application/json',
+        body: JSON.stringify(pollPendingStellar),
+      })
     );
 
     await page.goto(trackingUrl());
     await page.waitForLoadState('networkidle');
 
     // StatusTracker renders when trackingTransactionId is set
-    await expect(page.locator('[data-testid="status-tracker"], .status-tracker, [aria-label*="status" i], [aria-label*="transaction" i]').or(
-      page.getByText(/pending|processing|stellar/i)
-    )).toBeVisible({ timeout: 10_000 });
+    await expect(
+      page
+        .locator(
+          '[data-testid="status-tracker"], .status-tracker, [aria-label*="status" i], [aria-label*="transaction" i]'
+        )
+        .or(page.getByText(/pending|processing|stellar/i))
+    ).toBeVisible({ timeout: 10_000 });
   });
 
   // ── Status tracker progresses to completed ────────────────────────────────────
@@ -100,8 +124,8 @@ test.describe('[#455] SEP-6 withdraw happy path', () => {
         pollCount === 1
           ? pollPendingStellar
           : pollCount === 2
-          ? pollPendingExternal
-          : pollCompleted;
+            ? pollPendingExternal
+            : pollCompleted;
       route.fulfill({ status: 200, contentType: 'application/json', body: JSON.stringify(body) });
     });
 
@@ -109,9 +133,9 @@ test.describe('[#455] SEP-6 withdraw happy path', () => {
 
     // Wait for the status tracker to reach completed. The hook polls every 2 s
     // (initial interval); with fake responses it should resolve quickly.
-    await expect(
-      page.getByText(/completed|delivered|success/i).first()
-    ).toBeVisible({ timeout: 30_000 });
+    await expect(page.getByText(/completed|delivered|success/i).first()).toBeVisible({
+      timeout: 30_000,
+    });
   });
 
   // ── /withdraw needs_info mock ─────────────────────────────────────────────────
@@ -181,7 +205,11 @@ test.describe('[#455] SEP-6 withdraw happy path', () => {
     await page.addInitScript(seedSession(MOCK_NONCE, MOCK_JWT));
 
     await page.route(`${MOCK_TRANSFER_SERVER}/transaction**`, (route) =>
-      route.fulfill({ status: 200, contentType: 'application/json', body: JSON.stringify(pollPendingStellar) })
+      route.fulfill({
+        status: 200,
+        contentType: 'application/json',
+        body: JSON.stringify(pollPendingStellar),
+      })
     );
 
     await page.goto(trackingUrl());
