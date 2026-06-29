@@ -53,6 +53,20 @@ export const ANCHORS: Anchor[] = [
     assetIssuer: USDC_ISSUER,
     seps: ['sep6', 'sep24'],
   },
+  // mykobo.co: EUR fiat corridor — SEP-6, SEP-24, SEP-31 enabled, issues EURC (EUR-pegged 1:1).
+  // Verified 2026-06-29. TOML: TRANSFER_SERVER_SEP0024 = https://stellar.mykobo.co/sep24
+  // SEP-6: TRANSFER_SERVER = https://stellar.mykobo.co/sep6.
+  // /info: withdraw.EURC.enabled = true. Serves USDC→EUR corridor.
+  {
+    id: 'mykobo',
+    name: 'MyKobo',
+    homeDomain: 'mykobo.co',
+    serviceDomain: 'stellar.mykobo.co',
+    corridors: ['usdc-eur'],
+    assetCode: 'EURC',
+    assetIssuer: 'GAQRF3UGHBT6JYQZ7YSUYCIYWAF4T2SAA5237Q5LIQYJOHHFAWDXZ7NM',
+    seps: ['sep6', 'sep24', 'sep31'],
+  },
   // ntokens.com: BRL fiat corridor — SEP-24 withdraw enabled, SEP-6 + SEP-31 also present.
   // Verified 2026-06-26. TOML: TRANSFER_SERVER_SEP0024 = https://ntokens-box.bpventures.us/sep24
   // /info: withdraw.BRL.enabled = true. Issues BRL token anchored 1:1 to Brazilian Real.
