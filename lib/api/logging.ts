@@ -1,3 +1,5 @@
+import { getLogger } from '@/lib/logger';
+
 export function generateRequestId(): string {
   if (typeof globalThis.crypto?.randomUUID === 'function') {
     return globalThis.crypto.randomUUID();
@@ -6,5 +8,5 @@ export function generateRequestId(): string {
 }
 
 export function logStructured(data: Record<string, unknown>): void {
-  console.log(JSON.stringify(data));
+  getLogger('structured').info(data);
 }
