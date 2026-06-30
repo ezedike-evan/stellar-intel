@@ -254,11 +254,19 @@ export type Scorecard =
       fillRate: number;
       settleMs: Percentiles;
       slippage: Percentiles;
+      /** ISO 8601 timestamp when this scorecard was computed. */
+      computedAt: string;
+      /** ISO 8601 timestamp of last publisher transaction that mirrored this aggregate to Soroban, or null if not yet published. */
+      lastPublisherTxTimestamp: string | null;
     }
   | {
       state: 'insufficient_data';
       window: Window;
       sampleSize: number;
+      /** ISO 8601 timestamp when this scorecard was computed. */
+      computedAt: string;
+      /** ISO 8601 timestamp of last publisher transaction that mirrored this aggregate to Soroban, or null if not yet published. */
+      lastPublisherTxTimestamp: string | null;
     };
 
 // ─── Constants ────────────────────────────────────────────────────────────────
@@ -293,13 +301,21 @@ export function percentile(sorted: number[], p: number): number {
 export function aggregate(
   rows: OutcomeRow[],
   windowDays: Window,
-  nowMs: number = Date.now()
+  nowMs: number = Date.now(),
+  lastPublisherTxTimestamp: string | null = null
 ): Scorecard {
   const cutoff = nowMs - windowDays * MS_PER_DAY;
-  const windowRows = rows.filter((r) => r.recordedAt >= cutoff && !r.disputed);
+  const windowRows = rows.filter((r) => r.recordedAt >= cutoff);
+  const computedAt = new Date(nowMs).toISOString();
 
   if (windowRows.length < MIN_SAMPLES) {
-    return { state: 'insufficient_data', window: windowDays, sampleSize: windowRows.length };
+    return {
+      state: 'insufficient_data',
+      window: windowDays,
+      sampleSize: windowRows.length,
+      computedAt,
+      lastPublisherTxTimestamp,
+    };
   }
 
   // Robust outlier detection using median and MAD on settlement times
@@ -358,6 +374,8 @@ export function aggregate(
     fillRate,
     settleMs,
     slippage,
+    computedAt,
+    lastPublisherTxTimestamp,
   };
 }
 
@@ -366,11 +384,12 @@ export function aggregate(
  */
 export function buildScorecards(
   rows: OutcomeRow[],
-  nowMs: number = Date.now()
+  nowMs: number = Date.now(),
+  lastPublisherTxTimestamp: string | null = null
 ): Record<Window, Scorecard> {
   return {
-    7: aggregate(rows, 7, nowMs),
-    30: aggregate(rows, 30, nowMs),
-    90: aggregate(rows, 90, nowMs),
+    7: aggregate(rows, 7, nowMs, lastPublisherTxTimestamp),
+    30: aggregate(rows, 30, nowMs, lastPublisherTxTimestamp),
+    90: aggregate(rows, 90, nowMs, lastPublisherTxTimestamp),
   };
 }

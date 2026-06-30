@@ -1,4 +1,4 @@
-import type { Anchor, Corridor, StellarAsset } from '@/types';
+import type { Anchor, Corridor, FeatureGatedAnchorAssetCode, StellarAsset } from '@/types';
 import { USDC_ISSUER } from '@/lib/config';
 
 // ─── USDC asset ───────────────────────────────────────────────────────────────
@@ -8,6 +8,20 @@ export const USDC_ASSET: StellarAsset = {
   issuer: USDC_ISSUER,
   name: 'USD Coin',
 };
+
+// USDC remains the default registry asset. USDT entries can be onboarded now,
+// but the rate path will ignore them unless this deployment flag is explicitly on.
+const enabledFlagValues = new Set(['1', 'on', 'true']);
+
+export const ANCHOR_ASSET_FLAGS: Record<FeatureGatedAnchorAssetCode, boolean> = {
+  USDT: enabledFlagValues.has((process.env.NEXT_PUBLIC_USDT_ENABLED ?? '').toLowerCase()),
+};
+
+/** Returns whether an anchor asset is available to the live rate path. */
+export function isAnchorAssetEnabled(assetCode: string): boolean {
+  if (assetCode === 'USDT') return ANCHOR_ASSET_FLAGS.USDT;
+  return true;
+}
 
 // ─── Anchors ──────────────────────────────────────────────────────────────────
 
@@ -22,13 +36,14 @@ export const ANCHORS: Anchor[] = [
     assetIssuer: USDC_ISSUER,
   },
   {
+    // SEP-6 programmatic withdraw — rates are indicative, not firm quotes
     id: 'cowrie',
     name: 'Cowrie Exchange',
     homeDomain: 'cowrie.exchange',
     corridors: ['usdc-ngn'],
+    seps: ['sep6', 'sep10'],
     assetCode: 'USDC',
     assetIssuer: USDC_ISSUER,
-    seps: ['sep6'],
   },
   {
     id: 'anclap',
@@ -38,6 +53,18 @@ export const ANCHORS: Anchor[] = [
     assetCode: 'USDC',
     assetIssuer: USDC_ISSUER,
     seps: ['sep6', 'sep24'],
+  },
+  // ngnc.online: NGN fiat corridor — SEP-24 withdraw enabled.
+  // Verified 2026-06-29. TOML: TRANSFER_SERVER_SEP0024 present. /info: withdraw.USDC.enabled = true.
+  // Serves USDC→NGN corridor for Nigeria.
+  {
+    id: 'ngnc',
+    name: 'NGNC',
+    homeDomain: 'ngnc.online',
+    corridors: ['usdc-ngn'],
+    assetCode: 'USDC',
+    assetIssuer: USDC_ISSUER,
+    seps: ['sep24'],
   },
   // ntokens.com: BRL fiat corridor — SEP-24 withdraw enabled, SEP-6 + SEP-31 also present.
   // Verified 2026-06-26. TOML: TRANSFER_SERVER_SEP0024 = https://ntokens-box.bpventures.us/sep24

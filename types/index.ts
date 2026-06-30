@@ -1,12 +1,17 @@
 // ─── Anchors ─────────────────────────────────────────────────────────────────
 
+/** Asset codes whose rate path is guarded by an opt-in deployment flag. */
+export type FeatureGatedAnchorAssetCode = 'USDT';
+
 /** A Stellar anchor that supports SEP-24 withdrawals and/or deposits. */
 export interface Anchor {
   id: string;
   name: string;
   homeDomain: string;
   corridors: string[]; // corridor IDs this anchor serves
+  /** Primary Stellar asset sold through this anchor's registered corridors. */
   assetCode: string;
+  /** Issuer account for `assetCode`; used to build SEP-38 asset identifiers. */
   assetIssuer: string;
   /**
    * Optional service domain distinct from home domain.
@@ -34,13 +39,13 @@ export interface AnchorRate {
   anchorId: string;
   anchorName: string;
   corridorId: string;
-  fee: number | null; // flat fee in USDC; null when anchor is unreachable
+  fee: number | null; // flat fee in the anchor's sold asset; null when unreachable
   feeType: 'flat' | 'percent' | 'combined';
-  exchangeRate: number | null; // local currency units per 1 USDC; null when anchor is unreachable
+  exchangeRate: number | null; // local currency units per sold asset; null when unreachable
   totalReceived: number | null; // computed: (amount - fee) * exchangeRate; null when anchor is unreachable
   updatedAt: Date;
   /** Discriminates the origin of the rate data. */
-  source: 'sep38' | 'sep24-fee' | 'unavailable';
+  source: 'sep38' | 'sep24-fee' | 'sep6-info' | 'sep6-fee' | 'unavailable';
   expiresAt?: Date | undefined;
   /**
    * SEP-38 firm quote id, when this rate originated from a quote server.
@@ -488,3 +493,23 @@ export type Sep6WithdrawResponse =
   | Sep6WithdrawInteractive
   | Sep6WithdrawNonInteractive
   | Sep6WithdrawNeedsInfo;
+
+// ─── SEP-12 ───────────────────────────────────────────────────────────────────
+
+/** Normalized customer status returned by SEP-12 GET /customer. */
+export type CustomerStatus = 'ACCEPTED' | 'NEEDS_INFO' | 'PROCESSING' | 'REJECTED';
+
+export interface Sep12CustomerField {
+  description?: string;
+  type?: string;
+  error?: string;
+  status?: string;
+}
+
+export interface Sep12CustomerResponse {
+  id?: string;
+  status: CustomerStatus;
+  fields?: Record<string, Sep12CustomerField>;
+  provided_fields?: Record<string, Sep12CustomerField>;
+  message?: string;
+}

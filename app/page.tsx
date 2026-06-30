@@ -2,6 +2,8 @@ import Link from 'next/link';
 import { ArrowDownRight, Globe } from 'lucide-react';
 import { Card } from '@/components/ui/Card';
 import { Hero } from '@/components/landing/Hero';
+import { StatBar } from '@/components/landing/StatBar';
+import { CorridorStrip } from '@/components/landing/CorridorStrip';
 import { KNOWN_ANCHORS } from '@/constants';
 
 export default function HomePage() {
@@ -11,17 +13,10 @@ export default function HomePage() {
       <Hero />
 
       {/* Stat bar */}
-      <section className="rounded-xl border border-gray-200 bg-gray-50 p-4 dark:border-gray-700 dark:bg-gray-800/50">
-        <div className="flex items-center gap-3">
-          <Globe className="h-5 w-5 text-blue-600" />
-          <div>
-            <div className="text-xl font-bold text-gray-900 dark:text-white">
-              {KNOWN_ANCHORS.length}
-            </div>
-            <div className="text-xs text-gray-500 dark:text-gray-400">Anchors tracked</div>
-          </div>
-        </div>
-      </section>
+      <StatBar stats={[{ icon: Globe, value: KNOWN_ANCHORS.length, label: 'Anchors tracked' }]} />
+
+      {/* Supported corridors */}
+      <CorridorStrip />
 
       {/* Module card */}
       <section>

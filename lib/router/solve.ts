@@ -57,7 +57,7 @@ function logSolveAttempt(
     log.error = attempt.error;
   }
 
-  logStructured(log as any);
+  logStructured(log);
 }
 
 /**

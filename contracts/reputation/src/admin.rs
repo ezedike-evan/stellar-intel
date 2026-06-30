@@ -14,6 +14,8 @@ pub enum DataKey {
     Admin,
     /// The list of registered anchor ids.
     Anchors,
+    /// The whitelist of publisher addresses.
+    Publishers,
 }
 
 /// Store the admin on first initialization. Returns `AlreadyInitialized` if an
