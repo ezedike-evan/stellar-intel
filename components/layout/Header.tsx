@@ -40,8 +40,7 @@ export function Header() {
         const res = await fetch('/api/publisher/health');
         if (res.ok) {
           const health: PublisherHealth = await res.json();
-          const isStale =
-            health.staleSinceMs !== null && health.staleSinceMs > STALE_THRESHOLD_MS;
+          const isStale = health.staleSinceMs !== null && health.staleSinceMs > STALE_THRESHOLD_MS;
           setPublisherStale(isStale);
         }
       } catch {
