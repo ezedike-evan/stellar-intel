@@ -20,6 +20,9 @@ const MOCK_RESOLVED_ANCHOR: ResolvedAnchor = {
   WEB_AUTH_ENDPOINT: 'https://test.anchor.com/auth',
   SIGNING_KEY: null,
   NETWORK_PASSPHRASE: null,
+  ORG_URL: null,
+  ORG_SUPPORT_EMAIL: null,
+  ORG_SUPPORT_URL: null,
   CURRENCIES: [],
   capabilities: {
     sep10: true,
@@ -79,8 +82,8 @@ describe('solve - initial quote selection', () => {
     expect(result.selectedRate?.fee).toBe('3');
     expect(result.selectedRate?.totalReceived).toBe(97); // 100 - 3 * 1
     expect(result.attempts).toHaveLength(1);
-    expect(result.attempts[0].attemptNumber).toBe(1);
-    expect(result.attempts[0].error).toBeNull();
+    expect(result.attempts[0]!.attemptNumber).toBe(1);
+    expect(result.attempts[0]!.error).toBeNull();
     expect(result.solveRequestId).toBeDefined();
   });
 
@@ -103,7 +106,7 @@ describe('solve - initial quote selection', () => {
       feeType: 'external',
     });
 
-    const attempt = result.attempts[0];
+    const attempt = result.attempts[0]!;
     expect(attempt.attemptNumber).toBe(1);
     expect(attempt.selectedAnchorId).toBe('anchor1');
     expect(attempt.selectedAnchorName).toBe('Anchor 1');
@@ -279,9 +282,9 @@ describe('handleQuoteRejection - fallback flow', () => {
     expect(result.success).toBe(true);
     expect(result.selectedAnchor?.id).toBe('anchor2');
     expect(result.attempts).toHaveLength(3); // original + rejection + fallback
-    expect(result.attempts[1].error).toBe('Quote rejected by anchor');
-    expect(result.attempts[2].selectedAnchorId).toBe('anchor2');
-    expect(result.attempts[2].error).toBeNull();
+    expect(result.attempts[1]!.error).toBe('Quote rejected by anchor');
+    expect(result.attempts[2]!.selectedAnchorId).toBe('anchor2');
+    expect(result.attempts[2]!.error).toBeNull();
     expect(result.solveRequestId).toBeDefined();
   });
 
@@ -321,7 +324,7 @@ describe('handleQuoteRejection - fallback flow', () => {
     expect(result.selectedAnchor?.id).toBe('anchor2');
 
     // But internal logging tracks all attempts
-    const rejectionAttempt = result.attempts[1];
+    const rejectionAttempt = result.attempts[1]!;
     expect(rejectionAttempt.attemptNumber).toBe(2);
     expect(rejectionAttempt.selectedAnchorId).toBe('anchor1');
     expect(rejectionAttempt.error).toBe('Quote rejected by anchor');
@@ -441,11 +444,11 @@ describe('handleQuoteRejection - fallback flow', () => {
 
     // Verify all attempts are preserved in order
     expect(result.attempts[0]).toEqual(originalAttempt);
-    expect(result.attempts[1].attemptNumber).toBe(2);
-    expect(result.attempts[1].error).toBe('Quote rejected by anchor');
-    expect(result.attempts[2].attemptNumber).toBe(3);
-    expect(result.attempts[2].selectedAnchorId).toBe('anchor2');
-    expect(result.attempts[2].error).toBeNull();
+    expect(result.attempts[1]!.attemptNumber).toBe(2);
+    expect(result.attempts[1]!.error).toBe('Quote rejected by anchor');
+    expect(result.attempts[2]!.attemptNumber).toBe(3);
+    expect(result.attempts[2]!.selectedAnchorId).toBe('anchor2');
+    expect(result.attempts[2]!.error).toBeNull();
   });
 
   it('excludes failed anchors from fallback candidates', async () => {
