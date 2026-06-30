@@ -28,12 +28,17 @@ describe('discoverAnchorsForCorridor', () => {
     const result = await discoverAnchorsForCorridor('usdc-ngn');
     const ids = result.map((anchor) => anchor.id);
 
-    expect(ids).toEqual(['cowrie']);
+    expect(ids).toEqual(['cowrie', 'ngnc']);
     expect(result).toEqual([
       expect.objectContaining({
         id: 'cowrie',
         TRANSFER_SERVER_SEP0024: 'https://cowrie.exchange/sep24',
         WEB_AUTH_ENDPOINT: 'https://cowrie.exchange/auth',
+      }),
+      expect.objectContaining({
+        id: 'ngnc',
+        TRANSFER_SERVER_SEP0024: 'https://ngnc.online/sep24',
+        WEB_AUTH_ENDPOINT: 'https://ngnc.online/auth',
       }),
     ]);
   });

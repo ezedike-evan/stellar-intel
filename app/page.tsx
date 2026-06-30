@@ -3,6 +3,7 @@ import { ArrowDownRight, Globe } from 'lucide-react';
 import { Card } from '@/components/ui/Card';
 import { Hero } from '@/components/landing/Hero';
 import { StatBar } from '@/components/landing/StatBar';
+import { CorridorStrip } from '@/components/landing/CorridorStrip';
 import { Faq } from '@/components/landing/Faq';
 import { KNOWN_ANCHORS } from '@/constants';
 
@@ -14,6 +15,9 @@ export default function HomePage() {
 
       {/* Stat bar */}
       <StatBar stats={[{ icon: Globe, value: KNOWN_ANCHORS.length, label: 'Anchors tracked' }]} />
+
+      {/* Supported corridors */}
+      <CorridorStrip />
 
       {/* Module card */}
       <section>

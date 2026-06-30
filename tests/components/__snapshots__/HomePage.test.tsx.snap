@@ -91,6 +91,55 @@ exports[`HomePage > matches snapshot 1`] = `
       </div>
     </div>
   </section>
+  <section
+    aria-label="Supported corridors"
+  >
+    <p
+      class="mb-3 text-xs font-semibold uppercase tracking-wide text-gray-500 dark:text-gray-400"
+    >
+      Supported corridors
+    </p>
+    <ul
+      class="flex flex-wrap gap-2"
+    >
+      <li
+        class="inline-flex items-center gap-2 rounded-full border border-gray-200 bg-white px-3 py-1.5 text-sm font-medium text-gray-700 dark:border-gray-700 dark:bg-gray-800 dark:text-gray-300"
+      >
+        <span
+          aria-hidden="true"
+          class="text-base leading-none"
+        >
+          🇳🇬
+        </span>
+        <span>
+          NGN
+        </span>
+        <span
+          class="sr-only"
+        >
+          Nigeria
+        </span>
+      </li>
+      <li
+        class="inline-flex items-center gap-2 rounded-full border border-gray-200 bg-white px-3 py-1.5 text-sm font-medium text-gray-700 dark:border-gray-700 dark:bg-gray-800 dark:text-gray-300"
+      >
+        <span
+          aria-hidden="true"
+          class="text-base leading-none"
+        >
+          🇰🇪
+        </span>
+        <span>
+          KES
+        </span>
+        <span
+          class="sr-only"
+        >
+          Kenya
+        </span>
+      </li>
+    </ul>
+  </section>
   <section>
     <h2
       class="mb-6 text-xl font-semibold text-gray-900 dark:text-white"

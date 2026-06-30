@@ -54,6 +54,18 @@ export const ANCHORS: Anchor[] = [
     assetIssuer: USDC_ISSUER,
     seps: ['sep6', 'sep24'],
   },
+  // ngnc.online: NGN fiat corridor — SEP-24 withdraw enabled.
+  // Verified 2026-06-29. TOML: TRANSFER_SERVER_SEP0024 present. /info: withdraw.USDC.enabled = true.
+  // Serves USDC→NGN corridor for Nigeria.
+  {
+    id: 'ngnc',
+    name: 'NGNC',
+    homeDomain: 'ngnc.online',
+    corridors: ['usdc-ngn'],
+    assetCode: 'USDC',
+    assetIssuer: USDC_ISSUER,
+    seps: ['sep24'],
+  },
   // ntokens.com: BRL fiat corridor — SEP-24 withdraw enabled, SEP-6 + SEP-31 also present.
   // Verified 2026-06-26. TOML: TRANSFER_SERVER_SEP0024 = https://ntokens-box.bpventures.us/sep24
   // /info: withdraw.BRL.enabled = true. Issues BRL token anchored 1:1 to Brazilian Real.
