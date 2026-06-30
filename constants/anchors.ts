@@ -1,5 +1,6 @@
 import type { Anchor, Corridor, FeatureGatedAnchorAssetCode, StellarAsset } from '@/types';
 import { USDC_ISSUER } from '@/lib/config';
+import { flags } from '@/lib/flags';
 
 // ─── USDC asset ───────────────────────────────────────────────────────────────
 
@@ -171,4 +172,47 @@ export const CORRIDORS: Corridor[] = [
     countryCode: 'BR',
     countryName: 'Brazil',
   },
+  // ─── v1.1 target corridors ────────────────────────────────────────────────
+  // Scaffolded ahead of anchor onboarding (see .github/ISSUE_TEMPLATE/anchor-onboard.yml).
+  // Gated behind the `v11Corridors` flag AND anchor coverage — see V11_CORRIDOR_IDS
+  // and VISIBLE_CORRIDORS below. They remain in CORRIDORS so lookups and validation
+  // resolve, but stay out of selectors until an anchor serves them.
+  {
+    id: 'usdc-zar',
+    from: 'USDC',
+    to: 'ZAR',
+    countryCode: 'ZA',
+    countryName: 'South Africa',
+  },
+  // XOF is the West African CFA franc, shared across UEMOA states. We anchor the
+  // corridor's country metadata to Senegal as the primary onboarding market.
+  {
+    id: 'usdc-xof',
+    from: 'USDC',
+    to: 'XOF',
+    countryCode: 'SN',
+    countryName: 'Senegal',
+  },
 ];
+
+/**
+ * Corridor IDs gated behind the `v11Corridors` feature flag. These are defined
+ * in CORRIDORS but excluded from VISIBLE_CORRIDORS until the flag is enabled and
+ * at least one anchor serves them.
+ */
+export const V11_CORRIDOR_IDS: ReadonlySet<string> = new Set(['usdc-zar', 'usdc-xof']);
+
+/** Corridor IDs that at least one anchor in the registry currently serves. */
+const SERVED_CORRIDOR_IDS: ReadonlySet<string> = new Set(
+  ANCHORS.flatMap((anchor) => anchor.corridors)
+);
+
+/**
+ * Corridors safe to surface in selectors. Non-gated corridors always appear;
+ * v1.1 gated corridors appear only when the `v11Corridors` flag is on AND an
+ * anchor serves them — so a scaffolded corridor stays hidden until it's live.
+ */
+export const VISIBLE_CORRIDORS: Corridor[] = CORRIDORS.filter((c) => {
+  if (!V11_CORRIDOR_IDS.has(c.id)) return true;
+  return flags.v11Corridors && SERVED_CORRIDOR_IDS.has(c.id);
+});
