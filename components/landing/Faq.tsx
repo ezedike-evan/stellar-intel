@@ -69,10 +69,7 @@ export function Faq() {
 
   return (
     <section aria-labelledby="faq-heading">
-      <h2
-        id="faq-heading"
-        className="mb-6 text-xl font-semibold text-gray-900 dark:text-white"
-      >
+      <h2 id="faq-heading" className="mb-6 text-xl font-semibold text-gray-900 dark:text-white">
         Frequently asked questions
       </h2>
       <dl className="divide-y divide-gray-200 rounded-xl border border-gray-200 dark:divide-gray-700 dark:border-gray-700">
