@@ -86,21 +86,27 @@ fn permission_matrix() {
             Caller::ThirdParty => &third_party,
         };
 
+        // Init and whitelist publishers under full auth before applying the
+        // per-case auth mode.
+        env.mock_all_auths();
+        client.init(&admin);
+        client.add_publisher(&admin, &admin);
+        client.add_publisher(&admin, &publisher);
+
         // An authorized caller signs the invocation; an unauthorized one does
         // not, so its `require_auth` reverts.
-        if case.authorized {
-            env.mock_all_auths();
-        } else {
+        if !case.authorized {
             env.set_auths(&[]);
         }
 
         let anchor = String::from_str(&env, "moneygram");
+        let corridor = String::from_str(&env, "usdc-ngn");
 
         let ok = match case.entrypoint {
             Entrypoint::SubmitOutcome => {
                 let hash = String::from_str(&env, "0xoutcome");
                 client
-                    .try_submit_outcome(caller, &anchor, &hash, &42u64, &true)
+                    .try_submit_outcome(caller, &anchor, &corridor, &hash, &42u64, &true)
                     .is_ok()
             }
             Entrypoint::RecentOutcomes => client.try_recent_outcomes(&anchor, &5u32).is_ok(),

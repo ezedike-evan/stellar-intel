@@ -16,14 +16,16 @@ fn test_recent_outcomes() {
     env.mock_all_auths();
     let (client, admin) = setup(&env);
     client.init(&admin);
+    client.add_publisher(&admin, &admin);
     let anchor = String::from_str(&env, "testanchor");
+    let corridor = String::from_str(&env, "usdc-ngn");
 
     // Submit 5 outcomes
     for i in 0..5 {
         let hash = String::from_str(&env, &format!("hash{}", i));
         let settle = 10 + i as u64;
         let success = i % 2 == 0;
-        client.submit_outcome(&admin, &anchor, &hash, &settle, &success);
+        client.submit_outcome(&admin, &anchor, &corridor, &hash, &settle, &success);
     }
 
     // Retrieve the last 3 outcomes

@@ -67,14 +67,17 @@ fn contract_state_is_disjoint_from_upgrade_metadata() {
     env.mock_all_auths();
     let (client, admin) = setup(&env);
 
+    client.init(&admin);
     client.init_upgrade(&admin);
+    client.add_publisher(&admin, &admin);
 
     // Record some outcome state alongside the upgrade metadata.
     let anchor = String::from_str(&env, "moneygram");
+    let corridor = String::from_str(&env, "usdc-ngn");
     let h1 = String::from_str(&env, "hash-1");
     let h2 = String::from_str(&env, "hash-2");
-    client.submit_outcome(&admin, &anchor, &h1, &10u64, &true);
-    client.submit_outcome(&admin, &anchor, &h2, &20u64, &false);
+    client.submit_outcome(&admin, &anchor, &corridor, &h1, &10u64, &true);
+    client.submit_outcome(&admin, &anchor, &corridor, &h2, &20u64, &false);
 
     // The version stamp lives under its own key and does not perturb the
     // outcome history: an upgrade touches only code plus this version key, so

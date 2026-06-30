@@ -23,12 +23,15 @@ const MAX_MEMORY_BYTES: u64 = 5_000_000;
 /// Number of prior submits used to prove cost does not run away with history.
 const HISTORY_DEPTH: u32 = 25;
 
-fn setup(env: &Env) -> (ReputationContractClient<'_>, Address, String) {
+fn setup(env: &Env) -> (ReputationContractClient<'_>, Address, String, String) {
     let contract_id = env.register(ReputationContract, ());
     let client = ReputationContractClient::new(env, &contract_id);
     let admin = Address::generate(env);
     let anchor = String::from_str(env, "moneygram");
-    (client, admin, anchor)
+    let corridor = String::from_str(env, "usdc-ngn");
+    client.init(&admin);
+    client.add_publisher(&admin, &admin);
+    (client, admin, anchor, corridor)
 }
 
 /// Measure the cost of one `submit_outcome` into an empty anchor.
@@ -36,13 +39,13 @@ fn setup(env: &Env) -> (ReputationContractClient<'_>, Address, String) {
 fn submit_outcome_stays_within_gas_budget() {
     let env = Env::default();
     env.mock_all_auths();
-    let (client, admin, anchor) = setup(&env);
+    let (client, admin, anchor, corridor) = setup(&env);
     let hash = String::from_str(&env, "0xoutcomehash");
 
-    let budget = env.cost_estimate().budget();
+    let mut budget = env.cost_estimate().budget();
     budget.reset_default();
 
-    client.submit_outcome(&admin, &anchor, &hash, &42u64, &true);
+    client.submit_outcome(&admin, &anchor, &corridor, &hash, &42u64, &true);
 
     let cpu = budget.cpu_instruction_cost();
     let mem = budget.memory_bytes_cost();
@@ -66,18 +69,18 @@ fn submit_outcome_stays_within_gas_budget() {
 fn submit_outcome_cost_is_bounded_under_history() {
     let env = Env::default();
     env.mock_all_auths();
-    let (client, admin, anchor) = setup(&env);
+    let (client, admin, anchor, corridor) = setup(&env);
 
     for i in 0..HISTORY_DEPTH {
         let hash = String::from_str(&env, "0xprior");
-        client.submit_outcome(&admin, &anchor, &hash, &(i as u64), &true);
+        client.submit_outcome(&admin, &anchor, &corridor, &hash, &(i as u64), &true);
     }
 
     let hash = String::from_str(&env, "0xmeasured");
-    let budget = env.cost_estimate().budget();
+    let mut budget = env.cost_estimate().budget();
     budget.reset_default();
 
-    client.submit_outcome(&admin, &anchor, &hash, &99u64, &true);
+    client.submit_outcome(&admin, &anchor, &corridor, &hash, &99u64, &true);
 
     let cpu = budget.cpu_instruction_cost();
     let mem = budget.memory_bytes_cost();

@@ -65,8 +65,7 @@ pub fn get_score_for_corridor(env: &Env, anchor_id: String, corridor: String) ->
         env.storage()
             .persistent()
             .get(&key)
-            .unwrap_or(Ok(default_metrics))
-            .unwrap();
+            .unwrap_or(default_metrics);
 
     let composite_bps = compute_composite_bps(fill_rate_bps, slippage_bps, settle_seconds_p50);
     (composite_bps, fill_rate_bps, settle_seconds_p50, n)

@@ -1,11 +1,12 @@
 use soroban_sdk::{Address, Env, String, Vec};
 
-use crate::{Error, publishers};
+use crate::{Error, aggregate, publishers};
 
 pub fn submit_outcome(
     env: &Env,
     publisher: &Address,
     anchor_id: String,
+    corridor: String,
     outcome_hash: String,
     settle_seconds: u64,
     success: bool,
@@ -24,5 +25,7 @@ pub fn submit_outcome(
 
     outcomes.push_back((outcome_hash, settle_seconds, success));
     env.storage().persistent().set(&anchor_id, &outcomes);
+
+    aggregate::record(env, &anchor_id, &corridor, settle_seconds, success);
     Ok(())
 }
