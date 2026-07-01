@@ -1,12 +1,25 @@
 #![no_std]
-use soroban_sdk::{contract, contractimpl, Address, BytesN, Env, String, Vec};
+use soroban_sdk::{contract, contracterror, contractimpl, Address, BytesN, Env, String, Vec};
 
 pub mod admin;
 pub mod anchors;
-pub mod error;
+pub mod outcome;
+pub mod publishers;
 pub mod history;
 pub mod score;
 pub mod upgrade;
+
+#[contracterror]
+#[derive(Clone, Debug, Eq, PartialEq)]
+pub enum Error {
+    AlreadyInitialized,
+    NotInitialized,
+    Unauthorized,
+    AnchorExists,
+    PublisherExists,
+    PublisherNotFound,
+    PublisherUnauthorized,
+}
 
 #[contract]
 pub struct ReputationContract;
@@ -34,16 +47,22 @@ impl ReputationContract {
         admin::get_admin(&env)
     }
 
-    pub fn add_publisher(env: Env, caller: Address, publisher: Address) -> Result<(), Error> {
+    pub fn add_publisher(
+        env: Env,
+        caller: Address,
+        publisher: Address,
+    ) -> Result<(), Error> {
         admin::require_admin(&env, &caller)?;
-        publishers::add(&env, publisher);
-        Ok(())
+        publishers::add(&env, publisher)
     }
 
-    pub fn revoke_publisher(env: Env, caller: Address, publisher: Address) -> Result<(), Error> {
+    pub fn revoke_publisher(
+        env: Env,
+        caller: Address,
+        publisher: Address,
+    ) -> Result<(), Error> {
         admin::require_admin(&env, &caller)?;
-        publishers::revoke(&env, publisher);
-        Ok(())
+        publishers::revoke(&env, publisher)
     }
 
     pub fn list_publishers(env: Env) -> Vec<Address> {
@@ -57,8 +76,8 @@ impl ReputationContract {
         outcome_hash: String,
         settle_seconds: u64,
         success: bool,
-    ) {
-        outcome::submit_outcome(&env, publisher, anchor_id, outcome_hash, settle_seconds, success);
+    ) -> Result<(), Error> {
+        outcome::submit_outcome(&env, &publisher, anchor_id, outcome_hash, settle_seconds, success)
     }
 
     /// Return the last `n` outcome aggregates for an anchor in descending time order.
