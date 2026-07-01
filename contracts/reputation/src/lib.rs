@@ -2,7 +2,9 @@
 use soroban_sdk::{contract, contracterror, contractimpl, Address, BytesN, Env, String, Vec};
 
 pub mod admin;
+pub mod aggregate;
 pub mod anchors;
+pub mod storage;
 pub mod outcome;
 pub mod publishers;
 pub mod history;
@@ -12,13 +14,13 @@ pub mod upgrade;
 #[contracterror]
 #[derive(Clone, Debug, Eq, PartialEq)]
 pub enum Error {
-    AlreadyInitialized,
-    NotInitialized,
-    Unauthorized,
-    AnchorExists,
-    PublisherExists,
-    PublisherNotFound,
-    PublisherUnauthorized,
+    AlreadyInitialized    = 1,
+    NotInitialized        = 2,
+    Unauthorized          = 3,
+    AnchorExists          = 4,
+    PublisherExists       = 5,
+    PublisherNotFound     = 6,
+    PublisherUnauthorized = 7,
 }
 
 #[contract]
@@ -73,11 +75,23 @@ impl ReputationContract {
         env: Env,
         publisher: Address,
         anchor_id: String,
+        corridor: String,
         outcome_hash: String,
         settle_seconds: u64,
         success: bool,
     ) -> Result<(), Error> {
-        outcome::submit_outcome(&env, &publisher, anchor_id, outcome_hash, settle_seconds, success)
+        outcome::submit_outcome(&env, &publisher, anchor_id, corridor, outcome_hash, settle_seconds, success)
+    }
+
+    /// Return the rolling aggregate for an (anchor, corridor) pair:
+    /// `(total, successes, settle_seconds_sum)`.
+    /// Returns `(0, 0, 0)` when no outcomes have been recorded for that pair.
+    pub fn get_corridor_aggregate(
+        env: Env,
+        anchor_id: String,
+        corridor: String,
+    ) -> (u32, u32, u64) {
+        aggregate::get(&env, &anchor_id, &corridor)
     }
 
     /// Return the last `n` outcome aggregates for an anchor in descending time order.
