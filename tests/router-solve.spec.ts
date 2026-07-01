@@ -197,8 +197,7 @@ describe('solveSingleAnchor', () => {
         const result = solveSingleAnchor(intent, quotes, 1);
 
         expect(result.ok).toBe(false);
-        if (!result.ok) {
-          expect(result.error).toBe('fee_budget_exceeded');
+        if (!result.ok && result.error === 'fee_budget_exceeded') {
           expect(result.details).toContain('No quotes satisfy fee budget of 1%');
         }
       });

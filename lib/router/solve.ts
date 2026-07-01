@@ -176,7 +176,11 @@ export function solveSingleAnchor(
 
 export class NoEligibleRouteError extends Error {
   constructor(
-    public code: 'no_eligible_route' | 'floor_not_met' | 'all_quotes_expired' | 'fee_budget_exceeded',
+    public code:
+      | 'no_eligible_route'
+      | 'floor_not_met'
+      | 'all_quotes_expired'
+      | 'fee_budget_exceeded',
     message: string
   ) {
     super(message);
