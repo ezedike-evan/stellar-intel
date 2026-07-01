@@ -493,3 +493,23 @@ export type Sep6WithdrawResponse =
   | Sep6WithdrawInteractive
   | Sep6WithdrawNonInteractive
   | Sep6WithdrawNeedsInfo;
+
+// ─── SEP-12 ───────────────────────────────────────────────────────────────────
+
+/** Normalized customer status returned by SEP-12 GET /customer. */
+export type CustomerStatus = 'ACCEPTED' | 'NEEDS_INFO' | 'PROCESSING' | 'REJECTED';
+
+export interface Sep12CustomerField {
+  description?: string;
+  type?: string;
+  error?: string;
+  status?: string;
+}
+
+export interface Sep12CustomerResponse {
+  id?: string;
+  status: CustomerStatus;
+  fields?: Record<string, Sep12CustomerField>;
+  provided_fields?: Record<string, Sep12CustomerField>;
+  message?: string;
+}
