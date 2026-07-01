@@ -80,6 +80,11 @@ export const ANCHORS: Anchor[] = [
     assetIssuer: 'GAQRF3UGHBT6JYQZ7YSUYCIYWAF4T2SAA5237Q5LIQYJOHHFAWDXZ7NM',
     seps: ['sep6', 'sep24', 'sep31'],
   },
+  // ultracapital.xyz: NOT integrated — crypto yield-token platform, no fiat off-ramp.
+  // Verified 2026-06-29. TOML present (SEP-6 + SEP-24). SEP-24 /info withdraw assets: ETH,
+  // yUSDC, BTC, yBTC, yXLM, yETH. anchor_asset_type = "crypto" throughout — no fiat corridor.
+  // Decision (B031): bucket as crypto-only; revisit if a fiat asset is added.
+
   // ntokens.com: BRL fiat corridor — SEP-24 withdraw enabled, SEP-6 + SEP-31 also present.
   // Verified 2026-06-26. TOML: TRANSFER_SERVER_SEP0024 = https://ntokens-box.bpventures.us/sep24
   // /info: withdraw.BRL.enabled = true. Issues BRL token anchored 1:1 to Brazilian Real.
