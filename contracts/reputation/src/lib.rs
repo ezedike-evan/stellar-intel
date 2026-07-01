@@ -4,6 +4,7 @@ use soroban_sdk::{contract, contracterror, contractimpl, Address, BytesN, Env, S
 pub mod admin;
 pub mod aggregate;
 pub mod anchors;
+pub mod storage;
 pub mod outcome;
 pub mod publishers;
 pub mod history;

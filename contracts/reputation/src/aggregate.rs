@@ -1,13 +1,10 @@
-use soroban_sdk::{contracttype, Env, String};
+use soroban_sdk::{Env, String};
 
-#[contracttype]
-enum AggKey {
-    Corridor(String, String),
-}
+use crate::storage::DataKey;
 
-/// Record one outcome into the (anchor, corridor) rolling aggregate.
+/// Record one outcome into the (anchor, corridor) aggregate.
 ///
-/// Existing data from the prior anchor-only storage schema is not migrated;
+/// Existing data from the old anchor-only storage schema is not migrated;
 /// aggregates start at zero for each (anchor, corridor) pair.
 pub fn record(
     env: &Env,
@@ -16,7 +13,7 @@ pub fn record(
     settle_seconds: u64,
     success: bool,
 ) {
-    let key = AggKey::Corridor(anchor_id.clone(), corridor.clone());
+    let key = DataKey::CorridorAggregate(anchor_id.clone(), corridor.clone());
     let (total, successes, settle_sum): (u32, u32, u64) =
         env.storage().persistent().get(&key).unwrap_or((0, 0, 0));
 
@@ -30,9 +27,9 @@ pub fn record(
     );
 }
 
-/// Return `(total, successes, settle_seconds_sum)` for an (anchor, corridor) pair.
+/// Return the rolling aggregate for (anchor, corridor): `(total, successes, settle_seconds_sum)`.
 /// Returns `(0, 0, 0)` when no outcomes have been submitted for that pair.
 pub fn get(env: &Env, anchor_id: &String, corridor: &String) -> (u32, u32, u64) {
-    let key = AggKey::Corridor(anchor_id.clone(), corridor.clone());
+    let key = DataKey::CorridorAggregate(anchor_id.clone(), corridor.clone());
     env.storage().persistent().get(&key).unwrap_or((0, 0, 0))
 }

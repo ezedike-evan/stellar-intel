@@ -45,7 +45,7 @@ fn non_admin_cannot_add_publisher() {
 }
 
 #[test]
-fn unauthorized_publisher_cannot_submit() {
+fn unauthorized_submission_is_rejected() {
     let env = Env::default();
     env.mock_all_auths();
     let (client, admin) = setup(&env);
@@ -53,7 +53,7 @@ fn unauthorized_publisher_cannot_submit() {
 
     let stranger = Address::generate(&env);
     let anchor_id = String::from_str(&env, "anchor1");
-    let corridor = String::from_str(&env, "usdc-ngn");
+    let corridor = String::from_str(&env, "NGN-USD");
     let outcome_hash = String::from_str(&env, "hash1");
 
     let res = client.try_submit_outcome(&stranger, &anchor_id, &corridor, &outcome_hash, &60, &true);
@@ -69,10 +69,11 @@ fn authorized_publisher_can_submit() {
 
     let publisher = Address::generate(&env);
     let anchor_id = String::from_str(&env, "anchor1");
-    let corridor = String::from_str(&env, "usdc-ngn");
+    let corridor = String::from_str(&env, "NGN-USD");
     let outcome_hash = String::from_str(&env, "hash1");
 
     client.add_publisher(&admin, &publisher);
+
     client.submit_outcome(&publisher, &anchor_id, &corridor, &outcome_hash, &60, &true);
 
     let outcomes = client.recent_outcomes(&anchor_id, &10);
@@ -88,7 +89,7 @@ fn whitelisted_admin_can_submit() {
     client.add_publisher(&admin, &admin);
 
     let anchor_id = String::from_str(&env, "anchor1");
-    let corridor = String::from_str(&env, "usdc-ngn");
+    let corridor = String::from_str(&env, "NGN-USD");
     let outcome_hash = String::from_str(&env, "hash1");
 
     client.submit_outcome(&admin, &anchor_id, &corridor, &outcome_hash, &60, &true);

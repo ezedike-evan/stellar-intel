@@ -36,10 +36,13 @@ fn aggregate_accumulates_per_corridor() {
 
     let anchor = String::from_str(&env, "cowrie");
     let corridor = String::from_str(&env, "usdc-ngn");
+    let h1 = String::from_str(&env, "hash-1");
+    let h2 = String::from_str(&env, "hash-2");
+    let h3 = String::from_str(&env, "hash-3");
 
-    client.submit_outcome(&publisher, &anchor, &corridor, &String::from_str(&env, "hash-1"), &30, &true);
-    client.submit_outcome(&publisher, &anchor, &corridor, &String::from_str(&env, "hash-2"), &60, &false);
-    client.submit_outcome(&publisher, &anchor, &corridor, &String::from_str(&env, "hash-3"), &90, &true);
+    client.submit_outcome(&publisher, &anchor, &corridor, &h1, &30, &true);
+    client.submit_outcome(&publisher, &anchor, &corridor, &h2, &60, &false);
+    client.submit_outcome(&publisher, &anchor, &corridor, &h3, &90, &true);
 
     let (total, successes, settle_sum) = client.get_corridor_aggregate(&anchor, &corridor);
     assert_eq!(total, 3);

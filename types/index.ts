@@ -367,7 +367,8 @@ export type SolverResult =
   | { ok: true; plan: Plan }
   | { ok: false; error: 'no_eligible_route' }
   | { ok: false; error: 'floor_not_met'; details: string }
-  | { ok: false; error: 'all_quotes_expired'; details: string };
+  | { ok: false; error: 'all_quotes_expired'; details: string }
+  | { ok: false; error: 'fee_budget_exceeded'; details: string };
 
 // ─── API ──────────────────────────────────────────────────────────────────────
 

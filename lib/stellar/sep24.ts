@@ -26,11 +26,15 @@ export const TERMINAL_STATES: ReadonlySet<WithdrawStatusValue> = new Set([
   'too_large',
 ]);
 
-/**
- * Fetches the current status of a single SEP-24 transaction.
- * Unknown anchor status strings are normalized to "pending_external" rather than throwing.
- */
-export async function getSep24Transaction(
+const RETRYABLE_STATUS_CODES = new Set([500, 502, 503, 504]);
+const GET_SEP24_TRANSACTION_MAX_ATTEMPTS = 3;
+const GET_SEP24_TRANSACTION_RETRY_BASE_MS = 500;
+
+function sleep(ms: number): Promise<void> {
+  return new Promise((resolve) => setTimeout(resolve, ms));
+}
+
+async function fetchSep24TransactionOnce(
   transferServer: string,
   transactionId: string,
   jwt: string,
@@ -71,6 +75,37 @@ export async function getSep24Transaction(
       externalTransactionId: tx['external_transaction_id'] as string,
     }),
   };
+}
+
+/**
+ * Fetches the current status of a single SEP-24 transaction.
+ * Unknown anchor status strings are normalized to "pending_external" rather than throwing.
+ * Transient 5xx failures are retried before surface-level failure.
+ */
+export async function getSep24Transaction(
+  transferServer: string,
+  transactionId: string,
+  jwt: string,
+  signal?: AbortSignal
+): Promise<Sep24Transaction> {
+  let attempt = 0;
+  while (true) {
+    attempt += 1;
+    try {
+      return await fetchSep24TransactionOnce(transferServer, transactionId, jwt, signal);
+    } catch (error) {
+      if (
+        attempt < GET_SEP24_TRANSACTION_MAX_ATTEMPTS &&
+        error instanceof SepError &&
+        RETRYABLE_STATUS_CODES.has(error.httpStatus)
+      ) {
+        const delayMs = Math.min(GET_SEP24_TRANSACTION_RETRY_BASE_MS * 2 ** (attempt - 1), 2000);
+        await sleep(delayMs);
+        continue;
+      }
+      throw error;
+    }
+  }
 }
 
 // ─── Typed errors ─────────────────────────────────────────────────────────────
