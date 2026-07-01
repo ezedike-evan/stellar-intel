@@ -31,6 +31,13 @@ export interface ServerRatesResult extends RateComparison {
  */
 const SEP38_CONTEXTS = ['sep6', 'sep31', 'sep24'] as const;
 
+/**
+ * Upper bound for the SEP-6 /info round-trip. This tier is outside B043's scope
+ * (config-driven timeouts cover toml, sep38, sep24Info only) so it keeps the
+ * previous fixed timeout.
+ */
+const SEP6_INFO_TIMEOUT_MS = 8_000;
+
 // ─── Config-driven timeouts / retries ─────────────────────────────────────────
 
 export interface ServerRatesTierConfig {
@@ -264,7 +271,7 @@ async function sep6IndicativeRate(
   const [config, fxRate] = await Promise.all([
     withTimeout(
       getSep6Info(transferServer, USDC_ASSET.code),
-      PER_ANCHOR_TIMEOUT_MS,
+      SEP6_INFO_TIMEOUT_MS,
       `${anchor.name} SEP-6 /info`
     ),
     getUsdFxRate(fiatCode),
