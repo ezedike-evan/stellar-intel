@@ -13,7 +13,6 @@ pub mod upgrade;
 
 #[contracterror]
 #[derive(Clone, Debug, Eq, PartialEq)]
-#[repr(u32)]
 pub enum Error {
     AlreadyInitialized    = 1,
     NotInitialized        = 2,
