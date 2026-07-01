@@ -27,7 +27,10 @@ describe('HomePage', () => {
 
   it('off-ramp card is the primary CTA and links to /offramp', () => {
     const { getByRole } = render(<HomePage />);
-    const link = getByRole('link', { name: /off-ramp/i });
+    // The Hero now also renders an "Off-ramp now" CTA to the same route, so
+    // match on the card's distinguishing body copy rather than "off-ramp"
+    // alone to keep this query unambiguous.
+    const link = getByRole('link', { name: /execute usdc off-ramps across stellar anchors/i });
     expect(link).toBeTruthy();
     expect((link as HTMLAnchorElement).href).toContain('/offramp');
   });

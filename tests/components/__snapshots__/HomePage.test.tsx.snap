@@ -45,6 +45,20 @@ exports[`HomePage > matches snapshot 1`] = `
     >
       Stellar Intel is the execution layer for cross-border stablecoin flows — execute USDC off-ramps across anchors for Nigeria, Kenya, Ghana, Mexico, and more in one click.
     </p>
+    <div
+      class="mt-8 flex flex-wrap items-center justify-center gap-4"
+    >
+      <a
+        href="/offramp"
+      >
+        Off-ramp now
+      </a>
+      <a
+        href="/anchors"
+      >
+        View anchors
+      </a>
+    </div>
   </section>
   <section
     class="rounded-xl border border-gray-200 bg-gray-50 p-4 dark:border-gray-700 dark:bg-gray-800/50"
