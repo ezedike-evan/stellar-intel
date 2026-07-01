@@ -57,7 +57,9 @@ export function RatePreview() {
   if (!data || data.corridors.length === 0) {
     return (
       <div className="rounded-xl border border-gray-200 bg-gray-50 p-6 text-center dark:border-gray-700 dark:bg-gray-900/60">
-        <p className="text-sm text-gray-500 dark:text-gray-400">No rate preview available right now.</p>
+        <p className="text-sm text-gray-500 dark:text-gray-400">
+          No rate preview available right now.
+        </p>
       </div>
     );
   }
@@ -67,7 +69,9 @@ export function RatePreview() {
   if (corridorsWithBest.length === 0) {
     return (
       <div className="rounded-xl border border-gray-200 bg-gray-50 p-6 text-center dark:border-gray-700 dark:bg-gray-900/60">
-        <p className="text-sm text-gray-500 dark:text-gray-400">No anchors are returning rates at the moment.</p>
+        <p className="text-sm text-gray-500 dark:text-gray-400">
+          No anchors are returning rates at the moment.
+        </p>
       </div>
     );
   }
@@ -77,10 +81,18 @@ export function RatePreview() {
       <table className="w-full text-sm">
         <thead>
           <tr className="border-b border-gray-200 bg-gray-50 dark:border-gray-700 dark:bg-gray-800/50">
-            <th className="px-4 py-3 text-left font-medium text-gray-600 dark:text-gray-400">Corridor</th>
-            <th className="px-4 py-3 text-left font-medium text-gray-600 dark:text-gray-400">Best Anchor</th>
-            <th className="px-4 py-3 text-right font-medium text-gray-600 dark:text-gray-400">Rate</th>
-            <th className="px-4 py-3 text-right font-medium text-gray-600 dark:text-gray-400">You Receive</th>
+            <th className="px-4 py-3 text-left font-medium text-gray-600 dark:text-gray-400">
+              Corridor
+            </th>
+            <th className="px-4 py-3 text-left font-medium text-gray-600 dark:text-gray-400">
+              Best Anchor
+            </th>
+            <th className="px-4 py-3 text-right font-medium text-gray-600 dark:text-gray-400">
+              Rate
+            </th>
+            <th className="px-4 py-3 text-right font-medium text-gray-600 dark:text-gray-400">
+              You Receive
+            </th>
           </tr>
         </thead>
         <tbody>
