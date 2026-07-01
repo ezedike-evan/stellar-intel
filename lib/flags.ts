@@ -1,8 +1,4 @@
-export type FlagName =
-  | 'intentFlow'
-  | 'reputationWrites'
-  | 'mcpAdvertisement'
-  | 'v11Corridors';
+export type FlagName = 'intentFlow' | 'reputationWrites' | 'mcpAdvertisement' | 'v11Corridors';
 
 export const flags: Record<FlagName, boolean> = {
   // Default to enabled unless explicitly set to 'off'
