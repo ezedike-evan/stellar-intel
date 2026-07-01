@@ -36,13 +36,14 @@ export const ANCHORS: Anchor[] = [
     assetIssuer: USDC_ISSUER,
   },
   {
+    // SEP-6 programmatic withdraw — rates are indicative, not firm quotes
     id: 'cowrie',
     name: 'Cowrie Exchange',
     homeDomain: 'cowrie.exchange',
     corridors: ['usdc-ngn'],
+    seps: ['sep6', 'sep10'],
     assetCode: 'USDC',
     assetIssuer: USDC_ISSUER,
-    seps: ['sep6'],
   },
   {
     id: 'anclap',
@@ -52,6 +53,18 @@ export const ANCHORS: Anchor[] = [
     assetCode: 'USDC',
     assetIssuer: USDC_ISSUER,
     seps: ['sep6', 'sep24'],
+  },
+  // ngnc.online: NGN fiat corridor — SEP-24 withdraw enabled.
+  // Verified 2026-06-29. TOML: TRANSFER_SERVER_SEP0024 present. /info: withdraw.USDC.enabled = true.
+  // Serves USDC→NGN corridor for Nigeria.
+  {
+    id: 'ngnc',
+    name: 'NGNC',
+    homeDomain: 'ngnc.online',
+    corridors: ['usdc-ngn'],
+    assetCode: 'USDC',
+    assetIssuer: USDC_ISSUER,
+    seps: ['sep24'],
   },
   // ultracapital.xyz: NOT integrated — crypto yield-token platform, no fiat off-ramp.
   // Verified 2026-06-29. TOML present (SEP-6 + SEP-24). SEP-24 /info withdraw assets: ETH,

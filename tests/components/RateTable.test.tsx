@@ -80,4 +80,28 @@ describe('RateTable', () => {
     );
     expect(screen.getByText('No rates available for this corridor.')).toBeInTheDocument();
   });
+
+  it('renders "Indicative (SEP-6)" badge for sep6-info rows', () => {
+    const sep6Rate: AnchorRate = {
+      ...makeRate('yellowcard', 152000),
+      anchorName: 'Yellow Card',
+      source: 'sep6-info' as const,
+    };
+    const sep38Rate: AnchorRate = {
+      ...makeRate('cowrie', 154840),
+      source: 'sep38' as const,
+      expiresAt: new Date(Date.now() + 60_000),
+    };
+    const mixedRates: RateComparison = {
+      corridorId: 'usdc-ngn',
+      bestRateId: 'cowrie',
+      pending: [],
+      rates: [sep6Rate, sep38Rate],
+    };
+    render(
+      <RateTable rates={mixedRates} isLoading={false} error={undefined} onSelectAnchor={vi.fn()} />
+    );
+    expect(screen.getByText('Indicative (SEP-6)')).toBeInTheDocument();
+    expect(screen.getByRole('timer')).toBeInTheDocument();
+  });
 });

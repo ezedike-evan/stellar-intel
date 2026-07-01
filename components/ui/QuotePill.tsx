@@ -80,7 +80,19 @@ export function QuotePill({ source, expiresAt, onExpire }: QuotePillProps) {
     );
   }
 
-  if (source === 'sep6-info' || source === 'sep6-fee') {
+  if (source === 'sep6-info') {
+    return (
+      <span
+        className="rounded-full bg-yellow-100 px-2 py-0.5 text-xs font-medium text-yellow-700 dark:bg-yellow-900/40 dark:text-yellow-300"
+        role="status"
+        aria-label="SEP-6 indicative rate"
+      >
+        Indicative (SEP-6)
+      </span>
+    );
+  }
+
+  if (source === 'sep6-fee') {
     return (
       <span
         className="rounded-full bg-purple-100 px-2 py-0.5 text-xs font-medium text-purple-700 dark:bg-purple-900/40 dark:text-purple-300"
