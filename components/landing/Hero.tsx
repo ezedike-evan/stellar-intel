@@ -9,13 +9,13 @@ export function Hero() {
         Stellar Execution Layer
       </div>
       <h1 className="mb-4 text-3xl font-bold tracking-tight text-gray-900 dark:text-white sm:text-4xl md:text-5xl">
-        Where stablecoin transactions
+        The execution layer for
         <br className="hidden sm:block" />
-        <span className="text-blue-600">happen on Stellar.</span>
+        <span className="text-blue-600">stablecoin off-ramps.</span>
       </h1>
       <p className="mx-auto max-w-2xl text-lg text-gray-600 dark:text-gray-400">
-        Stellar Intel is the execution layer for cross-border stablecoin flows — execute USDC
-        off-ramps across anchors for Nigeria, Kenya, Ghana, Mexico, and more in one click.
+        Compare live SEP-38 quotes across every Stellar anchor, then settle a non-custodial USDC
+        off-ramp to Nigeria, Kenya, Ghana, Mexico, and more — in a single signed intent.
       </p>
       <div className="mt-8 flex flex-wrap items-center justify-center gap-4">
         <Link
