@@ -4,6 +4,7 @@ import { Card } from '@/components/ui/Card';
 import { Hero } from '@/components/landing/Hero';
 import { StatBar } from '@/components/landing/StatBar';
 import { CorridorStrip } from '@/components/landing/CorridorStrip';
+import { ComparisonTeaser } from '@/components/landing/ComparisonTeaser';
 import { Faq } from '@/components/landing/Faq';
 import { KNOWN_ANCHORS } from '@/constants';
 
@@ -18,6 +19,9 @@ export default function HomePage() {
 
       {/* Supported corridors */}
       <CorridorStrip />
+
+      {/* Comparison teaser */}
+      <ComparisonTeaser />
 
       {/* Module card */}
       <section>
