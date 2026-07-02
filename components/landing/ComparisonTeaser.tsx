@@ -70,14 +70,8 @@ export function ComparisonTeaser() {
           </thead>
           <tbody>
             {SAMPLE_QUOTES.map((q) => (
-              <tr
-                key={q.anchor}
-                className="border-t border-gray-100 dark:border-gray-800"
-              >
-                <th
-                  scope="row"
-                  className="py-2 pr-4 font-medium text-gray-900 dark:text-white"
-                >
+              <tr key={q.anchor} className="border-t border-gray-100 dark:border-gray-800">
+                <th scope="row" className="py-2 pr-4 font-medium text-gray-900 dark:text-white">
                   {q.anchor}
                 </th>
                 <td className="py-2 pr-4 text-gray-600 dark:text-gray-300">{q.rate}</td>

@@ -216,3 +216,34 @@ export const VISIBLE_CORRIDORS: Corridor[] = CORRIDORS.filter((c) => {
   if (!V11_CORRIDOR_IDS.has(c.id)) return true;
   return flags.v11Corridors && SERVED_CORRIDOR_IDS.has(c.id);
 });
+
+// ─── Registry stats ─────────────────────────────────────────────────────────────
+
+/** Headline registry counts for the landing stat bar. */
+export interface RegistryStats {
+  /** Number of integrated anchors. */
+  anchors: number;
+  /** Distinct corridors actually served by at least one anchor. */
+  corridors: number;
+  /** Distinct destination countries reachable through those corridors. */
+  countries: number;
+}
+
+/**
+ * Derive headline counts from the registry (#B074). Corridors and countries are
+ * counted from the corridors anchors actually serve — not the full corridor
+ * table — so the stat bar never advertises a route with no anchor behind it.
+ */
+export function registryStats(): RegistryStats {
+  const servedCorridorIds = new Set(ANCHORS.flatMap((anchor) => anchor.corridors));
+  const countryCodes = new Set(
+    CORRIDORS.filter((corridor) => servedCorridorIds.has(corridor.id)).map(
+      (corridor) => corridor.countryCode
+    )
+  );
+  return {
+    anchors: ANCHORS.length,
+    corridors: servedCorridorIds.size,
+    countries: countryCodes.size,
+  };
+}

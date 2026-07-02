@@ -1,21 +1,28 @@
 import Link from 'next/link';
-import { ArrowDownRight, Globe } from 'lucide-react';
+import { ArrowDownRight, Globe, Landmark, Route } from 'lucide-react';
 import { Card } from '@/components/ui/Card';
 import { Hero } from '@/components/landing/Hero';
 import { StatBar } from '@/components/landing/StatBar';
 import { CorridorStrip } from '@/components/landing/CorridorStrip';
 import { ComparisonTeaser } from '@/components/landing/ComparisonTeaser';
 import { Faq } from '@/components/landing/Faq';
-import { KNOWN_ANCHORS } from '@/constants';
+import { registryStats } from '@/constants';
 
 export default function HomePage() {
+  const stats = registryStats();
   return (
     <div className="space-y-8 sm:space-y-16">
       {/* Hero */}
       <Hero />
 
-      {/* Stat bar */}
-      <StatBar stats={[{ icon: Globe, value: KNOWN_ANCHORS.length, label: 'Anchors tracked' }]} />
+      {/* Stat bar — counts derived from the anchor registry */}
+      <StatBar
+        stats={[
+          { icon: Landmark, value: stats.anchors, label: 'Anchors tracked' },
+          { icon: Route, value: stats.corridors, label: 'Corridors live' },
+          { icon: Globe, value: stats.countries, label: 'Countries reachable' },
+        ]}
+      />
 
       {/* Supported corridors */}
       <CorridorStrip />
