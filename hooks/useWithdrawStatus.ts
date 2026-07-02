@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useRef } from 'react';
 import useSWR from 'swr';
-import { TERMINAL_STATES } from '@/lib/stellar/sep24';
+import { TERMINAL_STATES, getSep24Transaction } from '@/lib/stellar/sep24';
 import type { Sep24Transaction, WithdrawStatusValue } from '@/types';
 import type { OutcomeStatus } from '@/types/reputation';
 
@@ -39,31 +39,7 @@ async function fetchTransaction(
   [transferServer, transactionId, jwt]: [string, string, string],
   signal?: AbortSignal
 ): Promise<Sep24Transaction> {
-  const res = await fetch(`${transferServer}/transaction?id=${transactionId}`, {
-    headers: { Authorization: `Bearer ${jwt}` },
-    ...(signal !== undefined ? { signal } : {}),
-  });
-
-  if (!res.ok) {
-    throw new Error(`Status poll failed: HTTP ${res.status}`);
-  }
-
-  const data = (await res.json()) as { transaction?: Record<string, unknown> };
-  const tx = data.transaction ?? {};
-
-  return {
-    id: String(tx['id'] ?? transactionId),
-    status: (tx['status'] as WithdrawStatusValue) ?? 'incomplete',
-    amountIn: tx['amount_in'] as string | undefined,
-    amountInAsset: tx['amount_in_asset'] as string | undefined,
-    amountOut: tx['amount_out'] as string | undefined,
-    amountOutAsset: tx['amount_out_asset'] as string | undefined,
-    amountFee: tx['amount_fee'] as string | undefined,
-    updatedAt: new Date(),
-    stellarTransactionId: tx['stellar_transaction_id'] as string | undefined,
-    externalTransactionId: tx['external_transaction_id'] as string | undefined,
-    refunds: tx['refunds'] as Sep24Transaction['refunds'],
-  };
+  return getSep24Transaction(transferServer, transactionId, jwt, signal);
 }
 
 export interface UseWithdrawStatusResult {

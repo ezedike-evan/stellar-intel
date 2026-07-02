@@ -1,12 +1,27 @@
 #![no_std]
-use soroban_sdk::{contract, contractimpl, Address, BytesN, Env, String, Vec};
+use soroban_sdk::{contract, contracterror, contractimpl, Address, BytesN, Env, String, Vec};
 
 pub mod admin;
+pub mod aggregate;
 pub mod anchors;
-pub mod error;
+pub mod storage;
+pub mod outcome;
+pub mod publishers;
 pub mod history;
 pub mod score;
 pub mod upgrade;
+
+#[contracterror]
+#[derive(Clone, Debug, Eq, PartialEq)]
+pub enum Error {
+    AlreadyInitialized    = 1,
+    NotInitialized        = 2,
+    Unauthorized          = 3,
+    AnchorExists          = 4,
+    PublisherExists       = 5,
+    PublisherNotFound     = 6,
+    PublisherUnauthorized = 7,
+}
 
 #[contract]
 pub struct ReputationContract;
@@ -34,16 +49,22 @@ impl ReputationContract {
         admin::get_admin(&env)
     }
 
-    pub fn add_publisher(env: Env, caller: Address, publisher: Address) -> Result<(), Error> {
+    pub fn add_publisher(
+        env: Env,
+        caller: Address,
+        publisher: Address,
+    ) -> Result<(), Error> {
         admin::require_admin(&env, &caller)?;
-        publishers::add(&env, publisher);
-        Ok(())
+        publishers::add(&env, publisher)
     }
 
-    pub fn revoke_publisher(env: Env, caller: Address, publisher: Address) -> Result<(), Error> {
+    pub fn revoke_publisher(
+        env: Env,
+        caller: Address,
+        publisher: Address,
+    ) -> Result<(), Error> {
         admin::require_admin(&env, &caller)?;
-        publishers::revoke(&env, publisher);
-        Ok(())
+        publishers::revoke(&env, publisher)
     }
 
     pub fn list_publishers(env: Env) -> Vec<Address> {
@@ -54,11 +75,23 @@ impl ReputationContract {
         env: Env,
         publisher: Address,
         anchor_id: String,
+        corridor: String,
         outcome_hash: String,
         settle_seconds: u64,
         success: bool,
-    ) {
-        outcome::submit_outcome(&env, publisher, anchor_id, outcome_hash, settle_seconds, success);
+    ) -> Result<(), Error> {
+        outcome::submit_outcome(&env, &publisher, anchor_id, corridor, outcome_hash, settle_seconds, success)
+    }
+
+    /// Return the rolling aggregate for an (anchor, corridor) pair:
+    /// `(total, successes, settle_seconds_sum)`.
+    /// Returns `(0, 0, 0)` when no outcomes have been recorded for that pair.
+    pub fn get_corridor_aggregate(
+        env: Env,
+        anchor_id: String,
+        corridor: String,
+    ) -> (u32, u32, u64) {
+        aggregate::get(&env, &anchor_id, &corridor)
     }
 
     /// Return the last `n` outcome aggregates for an anchor in descending time order.
