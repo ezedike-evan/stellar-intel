@@ -1,9 +1,12 @@
 import { Sep6NotSupportedError, SepError, TimeoutError, parseSepErrorBody } from './errors';
 import { TERMINAL_STATES } from './sep24';
-import { mapToCanonical } from './sep24-status-map';
+import { mapToCanonical, normalizeStatus } from './sep24-status-map';
+import { getUsdFxRate } from '@/lib/fx/rates';
 import type {
   WithdrawStatusValue,
   WithdrawStatus,
+  Anchor,
+  AnchorRate,
   Sep6WithdrawParams,
   Sep6WithdrawResponse,
 } from '@/types';
@@ -81,33 +84,6 @@ function withTimeout<T>(promise: Promise<T>, ms: number, label: string): Promise
       setTimeout(() => reject(new Error(`${label} timed out after ${ms}ms`)), ms)
     ),
   ]);
-}
-
-// ─── Status helpers ───────────────────────────────────────────────────────────
-
-const KNOWN_STATUSES = new Set<WithdrawStatusValue>([
-  'incomplete',
-  'pending_user_transfer_start',
-  'pending_user_transfer_complete',
-  'pending_external',
-  'pending_anchor',
-  'pending_stellar',
-  'pending_trust',
-  'pending_user',
-  'completed',
-  'refunded',
-  'error',
-  'no_market',
-  'too_small',
-  'too_large',
-  'expired',
-]);
-
-function normalizeStatus(raw: unknown): WithdrawStatusValue {
-  if (typeof raw === 'string' && KNOWN_STATUSES.has(raw as WithdrawStatusValue)) {
-    return raw as WithdrawStatusValue;
-  }
-  return 'pending_external';
 }
 
 // ─── Fetchers ─────────────────────────────────────────────────────────────────
@@ -254,4 +230,64 @@ export function getSep6TransferServer(toml: Sep6CapableToml): string {
     throw new Sep6NotSupportedError(toml.domain ?? 'unknown');
   }
   return (toml.TRANSFER_SERVER as string).trim();
+}
+
+// ─── Indicative rate ─────────────────────────────────────────────────────────
+
+/**
+ * Builds an *indicative* off-ramp estimate for an anchor using its published
+ * SEP-6 /info withdraw fees combined with a live USD→fiat reference rate.
+ *
+ * Mirrors the SEP-24 indicative rate logic in server-rates.ts but sources fees
+ * from SEP-6 /info instead of SEP-24 /info.  The firm rate is set by the
+ * anchor inside the SEP-6 flow at execution.
+ *
+ * Throws when the computed estimate is non-finite or ≤ 0.
+ */
+export async function sep6IndicativeRate(
+  anchor: Anchor,
+  toml: Sep6CapableToml,
+  fiatCode: string,
+  corridorId: string,
+  amount: string,
+  sellAmount: number
+): Promise<AnchorRate> {
+  const transferServer = getSep6TransferServer(toml);
+
+  const [info, fxRate] = await Promise.all([
+    getSep6Info(transferServer, anchor.assetCode),
+    getUsdFxRate(fiatCode),
+  ]);
+
+  const feeFixed = info.feeFixed;
+  const feePercent = info.feePercent;
+  const netSellAmount = Math.max(0, sellAmount - feeFixed) * (1 - feePercent / 100);
+  const totalReceived = netSellAmount * fxRate;
+  const effectiveRate = sellAmount > 0 ? totalReceived / sellAmount : 0;
+
+  if (
+    !Number.isFinite(totalReceived) ||
+    totalReceived <= 0 ||
+    !Number.isFinite(effectiveRate) ||
+    effectiveRate <= 0
+  ) {
+    throw new Error(
+      `could not derive a SEP-6 indicative estimate for ${fiatCode} (amount: ${amount})`
+    );
+  }
+
+  const feeType: AnchorRate['feeType'] =
+    feeFixed > 0 && feePercent > 0 ? 'combined' : feePercent > 0 ? 'percent' : 'flat';
+
+  return {
+    anchorId: anchor.id,
+    anchorName: anchor.name,
+    corridorId,
+    fee: feeFixed > 0 ? feeFixed : null,
+    feeType,
+    exchangeRate: effectiveRate,
+    totalReceived,
+    source: 'sep6-info',
+    updatedAt: new Date(),
+  };
 }
