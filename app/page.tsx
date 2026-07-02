@@ -36,13 +36,17 @@ export default function HomePage() {
           Start executing
         </h2>
         <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-4">
-          <Link href="/offramp">
+          <Link
+            href="/offramp"
+            aria-label="Off-ramp — route a USDC off-ramp to the cheapest anchor, by country and corridor"
+            className="block rounded-xl focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-blue-600 focus-visible:ring-offset-2 dark:focus-visible:ring-offset-gray-950"
+          >
             <Card className="group h-full min-h-[44px] cursor-pointer transition-shadow hover:shadow-md">
               <div className="mb-4 inline-flex rounded-lg p-2.5 bg-green-50 dark:bg-green-950/30">
-                <ArrowDownRight className="h-5 w-5 text-green-600" />
+                <ArrowDownRight className="h-5 w-5 text-green-600" aria-hidden="true" />
               </div>
               <h3 className="mb-2 font-semibold text-gray-900 dark:text-white">Off-ramp</h3>
-              <p className="text-sm text-gray-500 dark:text-gray-400">
+              <p className="text-sm text-gray-600 dark:text-gray-400">
                 Route a USDC off-ramp to the cheapest anchor, by country and corridor.
               </p>
             </Card>
@@ -77,7 +81,7 @@ export default function HomePage() {
               </div>
               <div>
                 <div className="font-medium text-gray-900 dark:text-white">{title}</div>
-                <div className="mt-1 text-sm text-gray-500 dark:text-gray-400">{body}</div>
+                <div className="mt-1 text-sm text-gray-600 dark:text-gray-400">{body}</div>
               </div>
             </div>
           ))}

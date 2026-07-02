@@ -21,7 +21,10 @@ export interface Stat {
  */
 export function StatBar({ stats }: { stats: Stat[] }) {
   return (
-    <section className="grid grid-cols-1 gap-4 rounded-xl border border-gray-200 bg-gray-50 p-4 dark:border-gray-700 dark:bg-gray-800/50 sm:grid-cols-3">
+    <section
+      aria-label="Key statistics"
+      className="grid grid-cols-1 gap-4 rounded-xl border border-gray-200 bg-gray-50 p-4 dark:border-gray-700 dark:bg-gray-800/50 sm:grid-cols-3"
+    >
       {stats.map(({ icon: Icon, value, label }) => (
         <div key={label} className="flex items-center gap-3">
           <Icon className="h-5 w-5 shrink-0 text-blue-600" aria-hidden="true" />

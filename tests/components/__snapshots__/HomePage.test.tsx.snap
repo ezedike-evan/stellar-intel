@@ -5,6 +5,7 @@ exports[`HomePage > matches snapshot 1`] = `
   class="space-y-8 sm:space-y-16"
 >
   <section
+    aria-labelledby="hero-heading"
     class="py-8 text-center sm:py-12"
   >
     <div
@@ -31,6 +32,7 @@ exports[`HomePage > matches snapshot 1`] = `
     </div>
     <h1
       class="mb-4 text-3xl font-bold tracking-tight text-gray-900 dark:text-white sm:text-4xl md:text-5xl"
+      id="hero-heading"
     >
       The execution layer for
       <br
@@ -63,6 +65,7 @@ exports[`HomePage > matches snapshot 1`] = `
     </div>
   </section>
   <section
+    aria-label="Key statistics"
     class="grid grid-cols-1 gap-4 rounded-xl border border-gray-200 bg-gray-50 p-4 dark:border-gray-700 dark:bg-gray-800/50 sm:grid-cols-3"
   >
     <div
@@ -484,7 +487,7 @@ exports[`HomePage > matches snapshot 1`] = `
             Off-ramp
           </h3>
           <p
-            class="text-sm text-gray-500 dark:text-gray-400"
+            class="text-sm text-gray-600 dark:text-gray-400"
           >
             Route a USDC off-ramp to the cheapest anchor, by country and corridor.
           </p>
@@ -518,7 +521,7 @@ exports[`HomePage > matches snapshot 1`] = `
             Pick your corridor
           </div>
           <div
-            class="mt-1 text-sm text-gray-500 dark:text-gray-400"
+            class="mt-1 text-sm text-gray-600 dark:text-gray-400"
           >
             Choose a destination country and the USDC amount to withdraw.
           </div>
@@ -539,7 +542,7 @@ exports[`HomePage > matches snapshot 1`] = `
             Compare live quotes
           </div>
           <div
-            class="mt-1 text-sm text-gray-500 dark:text-gray-400"
+            class="mt-1 text-sm text-gray-600 dark:text-gray-400"
           >
             We pull live SEP-38 quotes from every integrated anchor.
           </div>
@@ -560,7 +563,7 @@ exports[`HomePage > matches snapshot 1`] = `
             Execute in one click
           </div>
           <div
-            class="mt-1 text-sm text-gray-500 dark:text-gray-400"
+            class="mt-1 text-sm text-gray-600 dark:text-gray-400"
           >
             Sign once and settle directly on Stellar with Freighter — non-custodial.
           </div>
