@@ -1,4 +1,5 @@
 import { describe, it, expect } from 'vitest';
+import type { Anchor } from '@/types';
 import {
   ANCHORS,
   CORRIDORS,
@@ -7,6 +8,7 @@ import {
   getAnchorsByCorridorId,
   getCorridorById,
   isValidCorridorId,
+  transferCapable,
 } from '@/lib/stellar/anchors';
 
 describe('ANCHORS', () => {
@@ -160,5 +162,57 @@ describe('isValidCorridorId', () => {
 
   it('returns false for an empty string', () => {
     expect(isValidCorridorId('')).toBe(false);
+  });
+});
+
+describe('transferCapable', () => {
+  const issuerOnly: Anchor = {
+    id: 'x',
+    name: 'x',
+    homeDomain: 'x',
+    corridors: [],
+    assetCode: 'x',
+    assetIssuer: 'x',
+    seps: ['sep10'],
+  };
+
+  it('returns false for an issuer-only anchor (SEP-10 auth only)', () => {
+    expect(transferCapable(issuerOnly)).toBe(false);
+  });
+
+  it('returns true for an anchor with SEP-6', () => {
+    expect(transferCapable({ ...issuerOnly, seps: ['sep10', 'sep6'] })).toBe(true);
+  });
+
+  it('returns true for an anchor with SEP-24', () => {
+    expect(transferCapable({ ...issuerOnly, seps: ['sep10', 'sep24'] })).toBe(true);
+  });
+
+  it('returns true for an anchor with SEP-31', () => {
+    expect(transferCapable({ ...issuerOnly, seps: ['sep10', 'sep31'] })).toBe(true);
+  });
+
+  it('returns false when seps is undefined', () => {
+    const { seps: _, ...noSeps } = issuerOnly;
+    expect(transferCapable(noSeps as Anchor)).toBe(false);
+  });
+});
+
+describe('getAnchorsByCorridorId excludes issuer-only anchors', () => {
+  it('returns only transfer-capable anchors for usdc-ngn', () => {
+    const results = getAnchorsByCorridorId('usdc-ngn');
+    for (const anchor of results) {
+      expect(transferCapable(anchor)).toBe(true);
+    }
+  });
+
+  it('does not include anchors lacking transfer SEPs', () => {
+    // Every registered anchor serving usdc-ngn is transfer-capable; an
+    // issuer-only anchor (e.g. seps: ['sep10'] only) added in the future
+    // would be excluded by the filter.
+    const results = getAnchorsByCorridorId('usdc-ngn');
+    const ids = results.map((a) => a.id);
+    expect(ids).toContain('moneygram');
+    expect(ids).toContain('cowrie');
   });
 });

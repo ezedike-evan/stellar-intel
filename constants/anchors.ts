@@ -35,6 +35,7 @@ export const ANCHORS: Anchor[] = [
     corridors: ['usdc-ngn', 'usdc-kes', 'usdc-ghs', 'usdc-mxn', 'usdc-brl'],
     assetCode: 'USDC',
     assetIssuer: USDC_ISSUER,
+    seps: ['sep10', 'sep24'],
   },
   {
     // SEP-6 programmatic withdraw — rates are indicative, not firm quotes
@@ -97,6 +98,7 @@ export const ANCHORS: Anchor[] = [
     corridors: ['brl-brl'],
     assetCode: 'BRL',
     assetIssuer: 'GDVKY2GU2DRXWTBEYJJWSFXIGBZV6AZNBVVSUHEPZI54LIS6BA7DVVSP',
+    seps: ['sep6', 'sep24', 'sep31'],
   },
 ];
 
