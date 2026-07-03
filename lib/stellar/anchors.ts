@@ -91,14 +91,35 @@ export async function getResolvedAnchorById(id: string): Promise<ResolvedAnchor>
   return { ...anchor, ...result.data };
 }
 
+// SEPs that indicate transfer capability (deposit/withdrawal/send)
+// SEP-6: programmatic transfer, SEP-24: interactive transfer,
+// SEP-31: cross-border payment
+const TRANSFER_SEPS: ReadonlyArray<NonNullable<Anchor['seps']>[number]> = [
+  'sep6',
+  'sep24',
+  'sep31',
+];
+
+/**
+ * Returns true if the anchor supports at least one transfer SEP
+ * (SEP-6, SEP-24, or SEP-31). Issuer-only anchors that lack all
+ * three are excluded from corridor selectors and the rate engine.
+ */
+export function transferCapable(anchor: Anchor): boolean {
+  return anchor.seps?.some((sep) => TRANSFER_SEPS.includes(sep)) ?? false;
+}
+
 /**
  * Returns all anchors that serve the given corridor.
  * Anchors auto-flagged `degraded` by the nightly validator are excluded so they
  * stay hidden from selectors (rate solicitation, off-ramp options).
+ * Excludes issuer-only anchors that lack transfer SEPs.
  * Returns an empty array if no anchors support the corridor.
  */
 export function getAnchorsByCorridorId(corridorId: string): Anchor[] {
-  return ANCHORS.filter((a) => a.corridors.includes(corridorId) && !isAnchorDegraded(a.id));
+  return ANCHORS.filter((a) => a.corridors.includes(corridorId) && !isAnchorDegraded(a.id)).filter(
+    transferCapable
+  );
 }
 
 /**
