@@ -14,9 +14,7 @@ const COUNTRY_FLAGS: Record<string, string> = {
 };
 
 // Only show corridors that have at least one transfer-capable anchor
-const SELECTABLE_CORRIDORS = CORRIDORS.filter(
-  (c) => getAnchorsByCorridorId(c.id).length > 0
-);
+const SELECTABLE_CORRIDORS = CORRIDORS.filter((c) => getAnchorsByCorridorId(c.id).length > 0);
 
 interface CorridorSelectorProps {
   value: string;

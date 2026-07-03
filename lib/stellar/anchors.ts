@@ -94,7 +94,11 @@ export async function getResolvedAnchorById(id: string): Promise<ResolvedAnchor>
 // SEPs that indicate transfer capability (deposit/withdrawal/send)
 // SEP-6: programmatic transfer, SEP-24: interactive transfer,
 // SEP-31: cross-border payment
-const TRANSFER_SEPS: ReadonlyArray<NonNullable<Anchor['seps']>[number]> = ['sep6', 'sep24', 'sep31'];
+const TRANSFER_SEPS: ReadonlyArray<NonNullable<Anchor['seps']>[number]> = [
+  'sep6',
+  'sep24',
+  'sep31',
+];
 
 /**
  * Returns true if the anchor supports at least one transfer SEP
@@ -113,7 +117,9 @@ export function transferCapable(anchor: Anchor): boolean {
  * Returns an empty array if no anchors support the corridor.
  */
 export function getAnchorsByCorridorId(corridorId: string): Anchor[] {
-  return ANCHORS.filter((a) => a.corridors.includes(corridorId) && !isAnchorDegraded(a.id)).filter(transferCapable);
+  return ANCHORS.filter((a) => a.corridors.includes(corridorId) && !isAnchorDegraded(a.id)).filter(
+    transferCapable
+  );
 }
 
 /**
