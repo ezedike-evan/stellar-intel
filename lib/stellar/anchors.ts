@@ -94,7 +94,7 @@ export async function getResolvedAnchorById(id: string): Promise<ResolvedAnchor>
 // SEPs that indicate transfer capability (deposit/withdrawal/send)
 // SEP-6: programmatic transfer, SEP-24: interactive transfer,
 // SEP-31: cross-border payment
-const TRANSFER_SEPS = [6, 24, 31];
+const TRANSFER_SEPS: ReadonlyArray<NonNullable<Anchor['seps']>[number]> = ['sep6', 'sep24', 'sep31'];
 
 /**
  * Returns true if the anchor supports at least one transfer SEP

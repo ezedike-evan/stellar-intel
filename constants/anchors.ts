@@ -25,7 +25,6 @@ export function isAnchorAssetEnabled(assetCode: string): boolean {
 }
 
 // ─── Anchors ──────────────────────────────────────────────────────────────────
-// seps: Stellar Ecosystem Proposals this anchor supports
 
 export const ANCHORS: Anchor[] = [
   {
@@ -36,7 +35,7 @@ export const ANCHORS: Anchor[] = [
     corridors: ['usdc-ngn', 'usdc-kes', 'usdc-ghs', 'usdc-mxn', 'usdc-brl'],
     assetCode: 'USDC',
     assetIssuer: USDC_ISSUER,
-    seps: [1, 10, 6, 24],
+    seps: ['sep10', 'sep24'],
   },
   {
     // SEP-6 programmatic withdraw — rates are indicative, not firm quotes
@@ -44,9 +43,9 @@ export const ANCHORS: Anchor[] = [
     name: 'Cowrie Exchange',
     homeDomain: 'cowrie.exchange',
     corridors: ['usdc-ngn'],
+    seps: ['sep6', 'sep10'],
     assetCode: 'USDC',
     assetIssuer: USDC_ISSUER,
-    seps: [1, 10, 6, 24],
   },
   {
     id: 'anclap',
@@ -55,7 +54,7 @@ export const ANCHORS: Anchor[] = [
     corridors: ['usdc-ars', 'usdc-pen'],
     assetCode: 'USDC',
     assetIssuer: USDC_ISSUER,
-    seps: [1, 10, 6, 24],
+    seps: ['sep6', 'sep24'],
   },
   // ngnc.online: NGN fiat corridor — SEP-24 withdraw enabled.
   // Verified 2026-06-29. TOML: TRANSFER_SERVER_SEP0024 present. /info: withdraw.USDC.enabled = true.
@@ -67,7 +66,7 @@ export const ANCHORS: Anchor[] = [
     corridors: ['usdc-ngn'],
     assetCode: 'USDC',
     assetIssuer: USDC_ISSUER,
-    seps: [1, 10, 6, 24],
+    seps: ['sep24'],
   },
   // mykobo.co: EUR fiat corridor — SEP-6, SEP-24, SEP-31 enabled, issues EURC (EUR-pegged 1:1).
   // Verified 2026-06-29. TOML: TRANSFER_SERVER_SEP0024 = https://stellar.mykobo.co/sep24
@@ -81,7 +80,7 @@ export const ANCHORS: Anchor[] = [
     corridors: ['usdc-eur'],
     assetCode: 'EURC',
     assetIssuer: 'GAQRF3UGHBT6JYQZ7YSUYCIYWAF4T2SAA5237Q5LIQYJOHHFAWDXZ7NM',
-    seps: [1, 10, 6, 24],
+    seps: ['sep6', 'sep24', 'sep31'],
   },
   // ultracapital.xyz: NOT integrated — crypto yield-token platform, no fiat off-ramp.
   // Verified 2026-06-29. TOML present (SEP-6 + SEP-24). SEP-24 /info withdraw assets: ETH,
@@ -99,7 +98,7 @@ export const ANCHORS: Anchor[] = [
     corridors: ['brl-brl'],
     assetCode: 'BRL',
     assetIssuer: 'GDVKY2GU2DRXWTBEYJJWSFXIGBZV6AZNBVVSUHEPZI54LIS6BA7DVVSP',
-    seps: [1, 10, 6, 24],
+    seps: ['sep6', 'sep24', 'sep31'],
   },
 ];
 

@@ -166,30 +166,30 @@ describe('isValidCorridorId', () => {
 });
 
 describe('transferCapable', () => {
-  const issuerOnly = {
+  const issuerOnly: Anchor = {
     id: 'x',
     name: 'x',
     homeDomain: 'x',
-    corridors: [] as string[],
+    corridors: [],
     assetCode: 'x',
     assetIssuer: 'x',
-    seps: [1, 10],
+    seps: ['sep10'],
   };
 
-  it('returns false for an issuer-only anchor (SEP-1 and SEP-10 only)', () => {
+  it('returns false for an issuer-only anchor (SEP-10 auth only)', () => {
     expect(transferCapable(issuerOnly)).toBe(false);
   });
 
   it('returns true for an anchor with SEP-6', () => {
-    expect(transferCapable({ ...issuerOnly, seps: [1, 10, 6] })).toBe(true);
+    expect(transferCapable({ ...issuerOnly, seps: ['sep10', 'sep6'] })).toBe(true);
   });
 
   it('returns true for an anchor with SEP-24', () => {
-    expect(transferCapable({ ...issuerOnly, seps: [1, 10, 24] })).toBe(true);
+    expect(transferCapable({ ...issuerOnly, seps: ['sep10', 'sep24'] })).toBe(true);
   });
 
   it('returns true for an anchor with SEP-31', () => {
-    expect(transferCapable({ ...issuerOnly, seps: [1, 10, 31] })).toBe(true);
+    expect(transferCapable({ ...issuerOnly, seps: ['sep10', 'sep31'] })).toBe(true);
   });
 
   it('returns false when seps is undefined', () => {
@@ -207,9 +207,9 @@ describe('getAnchorsByCorridorId excludes issuer-only anchors', () => {
   });
 
   it('does not include anchors lacking transfer SEPs', () => {
-    // All known anchors have seps: [1, 10, 6, 24] so all should pass;
-    // an issuer-only anchor added to ANCHORS in the future with only
-    // seps: [1] would be excluded by the filter.
+    // Every registered anchor serving usdc-ngn is transfer-capable; an
+    // issuer-only anchor (e.g. seps: ['sep10'] only) added in the future
+    // would be excluded by the filter.
     const results = getAnchorsByCorridorId('usdc-ngn');
     const ids = results.map((a) => a.id);
     expect(ids).toContain('moneygram');
