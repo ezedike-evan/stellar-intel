@@ -1,4 +1,4 @@
-import { NextResponse } from 'next/server';
+import { NextRequest, NextResponse } from 'next/server';
 import { acquireLock, releaseLock } from '@/lib/reputation/lock';
 import { withLoggerContext } from '@/lib/logger';
 
@@ -7,7 +7,12 @@ const LOCK_TTL_MS = 5 * 60 * 1000;
 
 let lastRefreshAt: Date | null = null;
 
-export async function POST(): Promise<NextResponse> {
+export async function POST(request: NextRequest): Promise<NextResponse> {
+  const auth = request.headers.get('authorization');
+  if (auth !== `Bearer ${process.env.CRON_SECRET}`) {
+    return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
+  }
+
   return withLoggerContext('api.reputation.refresh', async (logger) => {
     if (!acquireLock(LOCK_KEY, LOCK_TTL_MS)) {
       logger.warn({ event: 'refresh_conflict' });

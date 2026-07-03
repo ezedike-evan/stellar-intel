@@ -122,6 +122,24 @@ export class TimeoutError extends StellarIntelError {
   }
 }
 
+/**
+ * Thrown when an anchor's stellar.toml does not advertise a TRANSFER_SERVER and
+ * therefore cannot be used for the SEP-6 programmatic transfer API. Mirrors the
+ * capability assertion used for SEP-38 ({@link AnchorError} hierarchy).
+ */
+export class Sep6NotSupportedError extends AnchorError {
+  readonly domain: string;
+
+  constructor(domain: string) {
+    super(
+      `Anchor "${domain}" does not advertise TRANSFER_SERVER and cannot be used for SEP-6.`,
+      ErrorCode.ANCHOR_INVALID_RESPONSE
+    );
+    this.name = 'Sep6NotSupportedError';
+    this.domain = domain;
+  }
+}
+
 // ─── Type guards ──────────────────────────────────────────────────────────────
 
 export function isStellarIntelError(value: unknown): value is StellarIntelError {

@@ -70,6 +70,52 @@ jobs:
             echo "::warning::$FAIL anchor domain(s) failed the nightly probe"
           fi
 
+  anchor-survey-snapshot:
+    name: Anchor fleet JSON snapshot
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/checkout@v7
+      - uses: actions/setup-node@v6
+        with:
+          node-version: '20'
+          cache: 'npm'
+      - run: npm ci
+
+      - name: Run anchor survey (snapshot)
+        shell: bash
+        run: |
+          set -euo pipefail
+          node scripts/anchor-survey.mjs --json > anchors.snapshot.json
+
+      - name: Upload anchors snapshot artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: anchors-snapshot-${{ github.run_id }}
+          path: anchors.snapshot.json
+          if-no-files-found: error
+
+      - name: Commit anchors snapshot
+        shell: bash
+        run: |
+          set -euo pipefail
+
+          git config user.name "github-actions[bot]"
+          git config user.email "github-actions[bot]@users.noreply.github.com"
+
+          # Skip commit if JSON output is identical.
+          if git diff --quiet -- anchors.snapshot.json; then
+            echo "anchors.snapshot.json unchanged; skipping commit"
+            exit 0
+          fi
+
+          git add anchors.snapshot.json
+          git commit -m "nightly: update anchors snapshot $(date -u +%F)"
+
+          # Push back to the branch that triggered this workflow.
+          git push
+
   reputation-integrity:
     name: Reputation aggregate integrity
     runs-on: ubuntu-latest
@@ -93,7 +139,7 @@ jobs:
   open-issue-on-failure:
     name: Open tracking issue on failure
     runs-on: ubuntu-latest
-    needs: [anchor-domains, reputation-integrity]
+    needs: [anchor-domains, reputation-integrity, anchor-survey-snapshot]
     if: failure()
     steps:
       - uses: actions/github-script@v9
@@ -117,3 +163,4 @@ jobs:
               body,
               labels: ['bug', 'needs-triage', 'module/ops'],
             });
+

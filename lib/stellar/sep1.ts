@@ -1,14 +1,11 @@
 import { StellarToml } from '@stellar/stellar-sdk';
 import type { ResolvedAnchor, Sep1TomlData } from '@/types';
 import { ANCHORS } from './anchors';
+import { getCachedToml, setCachedToml, invalidateCachedToml, clearTomlCache } from './toml-cache';
 
 // ─── Result type ──────────────────────────────────────────────────────────────
 
 export type TomlResult = { ok: true; data: Sep1TomlData } | { ok: false; error: string };
-
-// ─── In-memory cache ──────────────────────────────────────────────────────────
-
-const TTL_MS = 15 * 60 * 1000; // 15 minutes
 
 // ─── Retry policy ─────────────────────────────────────────────────────────────
 
@@ -17,13 +14,6 @@ const TOML_RETRY_BASE_MS = 250; // exponential backoff base: 250ms, 500ms, …
 const TOML_RETRY_BUDGET_MS = 5000; // wall-clock budget; stop before exceeding it
 
 const sleep = (ms: number) => new Promise((resolve) => setTimeout(resolve, ms));
-
-interface CacheEntry {
-  data: Sep1TomlData;
-  expiresAt: number;
-}
-
-const cache = new Map<string, CacheEntry>();
 
 // ─── Internal helpers ─────────────────────────────────────────────────────────
 
@@ -74,10 +64,14 @@ function toSep1TomlData(domain: string, raw: Record<string, unknown>): Sep1TomlD
   const webAuthEndpoint = getString(raw, 'WEB_AUTH_ENDPOINT');
   const signingKey = getString(raw, 'SIGNING_KEY');
   const quoteServer = getString(raw, 'ANCHOR_QUOTE_SERVER');
+  const sep6TransferServer = getString(raw, 'TRANSFER_SERVER');
+  const directPaymentServer = getString(raw, 'DIRECT_PAYMENT_SERVER');
 
   return {
     domain,
     TRANSFER_SERVER_SEP0024: transferServer,
+    TRANSFER_SERVER: sep6TransferServer,
+    DIRECT_PAYMENT_SERVER: directPaymentServer,
     ANCHOR_QUOTE_SERVER: quoteServer,
     WEB_AUTH_ENDPOINT: webAuthEndpoint,
     SIGNING_KEY: signingKey,
@@ -92,7 +86,15 @@ function toSep1TomlData(domain: string, raw: Record<string, unknown>): Sep1TomlD
       /** Derived from ANCHOR_QUOTE_SERVER presence — the authoritative source for SEP-38 capability. */
       sep38: Boolean(quoteServer),
       sep12: Boolean(signingKey),
+      sep6: Boolean(sep6TransferServer),
+      sep31: Boolean(directPaymentServer),
     },
+    seps: [
+      ...(sep6TransferServer ? (['sep6'] as const) : []),
+      ...(transferServer ? (['sep24'] as const) : []),
+      ...(quoteServer ? (['sep38'] as const) : []),
+      ...(directPaymentServer ? (['sep31'] as const) : []),
+    ],
   };
 }
 
@@ -112,6 +114,25 @@ function requireTomlField(
   }
 
   return value;
+}
+
+/**
+ * Detects if a domain appears to be issuer-only (not hosting service endpoints).
+ * Issuer-only domains typically contain issuer-specific subdomains (e.g., "mgusd.moneygram.com")
+ * whereas service domains are generic service subdomains (e.g., "stellar.moneygram.com").
+ *
+ * @param homeDomain - The home domain to check
+ * @param serviceDomain - Optional explicit service domain; if provided and different from homeDomain, homeDomain is issuer-only
+ * @returns true if domain appears to be issuer-only, false otherwise
+ */
+export function isIssuerOnlyDomain(homeDomain: string, serviceDomain?: string): boolean {
+  // If a service domain is explicitly provided and differs from home domain,
+  // the home domain is issuer-only
+  if (serviceDomain && serviceDomain !== homeDomain) {
+    return true;
+  }
+
+  return false;
 }
 
 /**
@@ -139,14 +160,21 @@ export function resolveAnchorSupportHref(toml: Sep1TomlData): string | null {
 
 /**
  * Resolves an anchor stellar.toml file via SEP-1.
- * Results are cached in memory for 15 minutes. Failed resolutions are not cached.
+ *
+ * Results are cached in memory (TTL ~10 min) keyed by home domain. Pass
+ * `{ bypassCache: true }` to force a fresh resolution — used by the nightly
+ * validator so it always checks live anchor data. Failed resolutions are not
+ * cached.
  */
-export async function resolveAnchor(domain: string): Promise<Sep1TomlData> {
+export async function resolveAnchor(
+  domain: string,
+  opts: { bypassCache?: boolean } = {}
+): Promise<Sep1TomlData> {
   const cacheKey = normalizeDomain(domain);
-  const cached = cache.get(cacheKey);
 
-  if (cached && cached.expiresAt > Date.now()) {
-    return cached.data;
+  if (!opts.bypassCache) {
+    const cached = getCachedToml(cacheKey);
+    if (cached) return cached;
   }
 
   // Retry transient resolution failures with exponential backoff, bounded by a
@@ -159,7 +187,7 @@ export async function resolveAnchor(domain: string): Promise<Sep1TomlData> {
       const raw = (await StellarToml.Resolver.resolve(cacheKey)) as Record<string, unknown>;
       const data = toSep1TomlData(cacheKey, raw);
 
-      cache.set(cacheKey, { data, expiresAt: Date.now() + TTL_MS });
+      setCachedToml(cacheKey, data);
       return data;
     } catch (err) {
       lastError = err;
@@ -175,7 +203,7 @@ export async function resolveAnchor(domain: string): Promise<Sep1TomlData> {
     }
   }
 
-  cache.delete(cacheKey);
+  invalidateCachedToml(cacheKey);
   throw new Error(
     `Failed to resolve stellar.toml for "${cacheKey}": ${
       lastError instanceof Error ? lastError.message : String(lastError)
@@ -218,10 +246,15 @@ export async function getWebAuthEndpoint(domain: string): Promise<string> {
 /**
  * Resolves stellar.toml for all known anchors in parallel.
  * Anchors that fail resolution are skipped.
+ * For each anchor, uses serviceDomain if available, otherwise falls back to homeDomain.
  */
 export async function resolveAllAnchors(): Promise<Record<string, ResolvedAnchor>> {
   const results = await Promise.allSettled(
-    ANCHORS.map((anchor) => resolveAnchor(anchor.homeDomain).then((data) => ({ anchor, data })))
+    ANCHORS.map((anchor) => {
+      // Use serviceDomain if provided, otherwise use homeDomain
+      const domainToResolve = anchor.serviceDomain || anchor.homeDomain;
+      return resolveAnchor(domainToResolve).then((data) => ({ anchor, data }));
+    })
   );
 
   const resolved: Record<string, ResolvedAnchor> = {};
@@ -242,10 +275,10 @@ export async function resolveAllAnchors(): Promise<Record<string, ResolvedAnchor
 
 /** Exposed for testing only — clears the in-memory TOML cache. */
 export function _clearTomlCache(): void {
-  cache.clear();
+  clearTomlCache();
 }
 
 /** Exposed for testing only — injects a pre-validated cache entry. */
 export function _seedTomlCache(domain: string, data: Sep1TomlData): void {
-  cache.set(domain, { data, expiresAt: Date.now() + TTL_MS });
+  setCachedToml(domain, data);
 }

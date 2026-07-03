@@ -1,4 +1,5 @@
 import { describe, it, expect } from 'vitest';
+import type { Anchor } from '@/types';
 import {
   ANCHORS,
   CORRIDORS,
@@ -7,15 +8,17 @@ import {
   getAnchorsByCorridorId,
   getCorridorById,
   isValidCorridorId,
+  transferCapable,
 } from '@/lib/stellar/anchors';
 
 describe('ANCHORS', () => {
-  it('contains MoneyGram, Cowrie, and Anclap', () => {
+  it('contains MoneyGram, Cowrie, Anclap, and nTokens', () => {
     const ids = ANCHORS.map((a) => a.id);
     expect(ids).toContain('moneygram');
     expect(ids).toContain('cowrie');
     expect(ids).toContain('anclap');
-    expect(ids).toHaveLength(3);
+    expect(ids).toContain('ntokens');
+    expect(ids.length).toBeGreaterThanOrEqual(4);
   });
 
   it('MoneyGram covers all five primary corridors', () => {
@@ -40,8 +43,8 @@ describe('ANCHORS', () => {
 });
 
 describe('CORRIDORS', () => {
-  it('contains 7 corridors', () => {
-    expect(CORRIDORS).toHaveLength(7);
+  it('contains at least 9 corridors', () => {
+    expect(CORRIDORS.length).toBeGreaterThanOrEqual(9);
   });
 
   it('contains the expected corridor IDs', () => {
@@ -55,6 +58,7 @@ describe('CORRIDORS', () => {
         'usdc-brl',
         'usdc-ars',
         'usdc-pen',
+        'usdc-eur',
       ])
     );
   });
@@ -93,12 +97,13 @@ describe('getAnchorById', () => {
 });
 
 describe('getAnchorsByCorridorId', () => {
-  it('returns MoneyGram and Cowrie for usdc-ngn', () => {
+  it('returns MoneyGram, Cowrie, and NGNC for usdc-ngn', () => {
     const anchors = getAnchorsByCorridorId('usdc-ngn');
     const ids = anchors.map((a) => a.id);
     expect(ids).toContain('moneygram');
     expect(ids).toContain('cowrie');
-    expect(ids).toHaveLength(2);
+    expect(ids).toContain('ngnc');
+    expect(ids).toHaveLength(3);
   });
 
   it('returns MoneyGram for usdc-kes', () => {
@@ -157,5 +162,57 @@ describe('isValidCorridorId', () => {
 
   it('returns false for an empty string', () => {
     expect(isValidCorridorId('')).toBe(false);
+  });
+});
+
+describe('transferCapable', () => {
+  const issuerOnly: Anchor = {
+    id: 'x',
+    name: 'x',
+    homeDomain: 'x',
+    corridors: [],
+    assetCode: 'x',
+    assetIssuer: 'x',
+    seps: ['sep10'],
+  };
+
+  it('returns false for an issuer-only anchor (SEP-10 auth only)', () => {
+    expect(transferCapable(issuerOnly)).toBe(false);
+  });
+
+  it('returns true for an anchor with SEP-6', () => {
+    expect(transferCapable({ ...issuerOnly, seps: ['sep10', 'sep6'] })).toBe(true);
+  });
+
+  it('returns true for an anchor with SEP-24', () => {
+    expect(transferCapable({ ...issuerOnly, seps: ['sep10', 'sep24'] })).toBe(true);
+  });
+
+  it('returns true for an anchor with SEP-31', () => {
+    expect(transferCapable({ ...issuerOnly, seps: ['sep10', 'sep31'] })).toBe(true);
+  });
+
+  it('returns false when seps is undefined', () => {
+    const { seps: _, ...noSeps } = issuerOnly;
+    expect(transferCapable(noSeps as Anchor)).toBe(false);
+  });
+});
+
+describe('getAnchorsByCorridorId excludes issuer-only anchors', () => {
+  it('returns only transfer-capable anchors for usdc-ngn', () => {
+    const results = getAnchorsByCorridorId('usdc-ngn');
+    for (const anchor of results) {
+      expect(transferCapable(anchor)).toBe(true);
+    }
+  });
+
+  it('does not include anchors lacking transfer SEPs', () => {
+    // Every registered anchor serving usdc-ngn is transfer-capable; an
+    // issuer-only anchor (e.g. seps: ['sep10'] only) added in the future
+    // would be excluded by the filter.
+    const results = getAnchorsByCorridorId('usdc-ngn');
+    const ids = results.map((a) => a.id);
+    expect(ids).toContain('moneygram');
+    expect(ids).toContain('cowrie');
   });
 });

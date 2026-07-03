@@ -1,10 +1,17 @@
-import type { NextConfig } from 'next';
-
-// Import env to validate required environment variables at build time.
+﻿import type { NextConfig } from 'next';
 import './lib/env';
 
 const nextConfig: NextConfig = {
-  /* config options here */
+  images: {
+    remotePatterns: [
+      {
+        protocol: 'https',
+        hostname: '**',
+      },
+    ],
+    formats: ['image/avif', 'image/webp'],
+    minimumCacheTTL: 86400,
+  },
 };
 
 export default nextConfig;

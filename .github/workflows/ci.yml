@@ -60,6 +60,19 @@ jobs:
           flags: unit
           name: unit-node20
 
+  # Registry guard — fail if a registered anchor is not transfer-capable per the
+  # survey snapshot (and not allowlisted). Dependency-free, so no `npm ci` needed.
+  registry:
+    name: registry guard
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+      - uses: actions/setup-node@v6
+        with:
+          node-version: '20'
+      - name: Anchor registry ⊆ transfer-capable set
+        run: npm run check:registry
+
   build:
     name: build (node 20)
     needs: check

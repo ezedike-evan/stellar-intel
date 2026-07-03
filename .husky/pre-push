@@ -5,15 +5,21 @@
 
 set -e
 
-echo "→ Prettier (--write, changed files only)"
-# Format only the files changed on this branch, not the whole repo. Base the
+echo "→ Prettier (--check, changed files only)"
+# Check only the files changed on this branch, not the whole repo. Base the
 # diff on the merge-base with origin/main (falls back to HEAD if unavailable).
 BASE="$(git merge-base origin/main HEAD 2>/dev/null || echo HEAD)"
 CHANGED="$(git diff --name-only --diff-filter=ACMR "$BASE" HEAD -- '*.ts' '*.tsx' '*.mjs' '*.json' '*.css' '*.md')"
 if [ -n "$CHANGED" ]; then
-  echo "$CHANGED" | xargs npx prettier --write
+  echo "$CHANGED" | xargs npx prettier --check || {
+    echo ""
+    echo "✗ Prettier formatting issues found. Run:"
+    echo "    npx prettier --write <files listed above>"
+    echo "  then commit the formatted files and push again."
+    exit 1
+  }
 else
-  echo "  (no changed files to format)"
+  echo "  (no changed files to check)"
 fi
 
 echo "→ ESLint (zero warnings)"
