@@ -85,7 +85,9 @@ export function StatBar({ stats }: { stats: Stat[] }) {
         <div key={label} className="flex items-center gap-3">
           <Icon className="h-5 w-5 shrink-0 text-blue-600" aria-hidden="true" />
           <div>
-            <div className="text-xl font-bold text-gray-900 dark:text-white">{value}</div>
+            <div className="text-xl font-bold text-gray-900 dark:text-white">
+              <AnimatedStatValue value={value} />
+            </div>
             <div className="text-xs text-gray-600 dark:text-gray-400">{label}</div>
           </div>
         </div>
