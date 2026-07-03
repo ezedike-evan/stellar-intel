@@ -72,13 +72,13 @@ describe('ETag cache deduplication', () => {
     const request = new NextRequest('http://localhost/v1/public/scores', {
       headers: { 'x-forwarded-for': '1.2.3.4' },
     });
-    
+
     const response1 = await GET(request);
     const etag1 = response1.headers.get('ETag');
-    
+
     const response2 = await GET(request);
     const etag2 = response2.headers.get('ETag');
-    
+
     expect(etag1).toBe(etag2);
     expect(etag1).toMatch(/^"[A-Za-z0-9+/=]+"$/);
   });
@@ -87,7 +87,7 @@ describe('ETag cache deduplication', () => {
     const request = new NextRequest('http://localhost/v1/public/scores', {
       headers: { 'x-forwarded-for': '1.2.3.5' },
     });
-    
+
     const firstResponse = await GET(request);
     const etag = firstResponse.headers.get('ETag');
     expect(etag).not.toBeNull();
@@ -98,7 +98,7 @@ describe('ETag cache deduplication', () => {
         'if-none-match': etag as string,
       },
     });
-    
+
     const cachedResponse = await GET(cachedRequest);
     expect(cachedResponse.status).toBe(304);
   });
