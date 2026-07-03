@@ -52,3 +52,13 @@ update this list alongside `maintainer.md` §11.
 > An anchor leaves this list only when its `stellar.toml` starts advertising a
 > usable `TRANSFER_SERVER` (SEP-6) or `TRANSFER_SERVER_SEP0024` (SEP-24); rerun
 > the survey to confirm before promoting it into `constants/anchors.ts`.
+
+## Other exclusions
+
+Domains excluded for reasons other than missing transfer rails.
+
+### Stellarport
+
+- **Domain:** stellarport.io
+- **Status:** Excluded
+- **Reason:** Stellarport is primarily a Decentralized Exchange (DEX) and gateway for crypto assets (BTC, ETH, XRP, LTC). Verification of their `stellar.toml` reveals that all issued assets are crypto-anchored (`anchor_asset_type="crypto"`). Furthermore, their transfer server endpoint (`a3s.api.stellarport.io`) is unresponsive/non-existent. There is no evidence of fiat settlement or fiat off-ramp services. Thus, it is not suitable for fiat off-ramp integration.

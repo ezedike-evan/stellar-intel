@@ -1,5 +1,7 @@
 use soroban_sdk::{Env, String};
 
+use crate::storage::DataKey;
+
 const MAX_BPS: i128 = 10000;
 const NORM_SETTLE_SECONDS: i128 = 300;
 const MIN_SETTLE_SECONDS: u64 = 1;
@@ -40,7 +42,6 @@ fn compute_composite_bps(fill_rate_bps: i128, slippage_bps: i128, settle_seconds
         return 0;
     }
 
-    // Round to the nearest basis point.
     (numerator + denominator / 2) / denominator
 }
 
@@ -53,20 +54,19 @@ pub fn set_corridor_metrics(
     settle_seconds_p50: u64,
     n: u32,
 ) {
-    let key = (anchor_id, corridor);
     let metrics = (fill_rate_bps, slippage_bps, settle_seconds_p50, n);
-    env.storage().persistent().set(&key, &metrics);
+    env.storage()
+        .persistent()
+        .set(&DataKey::Corridor(anchor_id, corridor), &metrics);
 }
 
 pub fn get_score_for_corridor(env: &Env, anchor_id: String, corridor: String) -> (i128, i128, u64, u32) {
     let default_metrics = (0i128, 0i128, 0u64, 0u32);
-    let key = (anchor_id, corridor);
-    let (fill_rate_bps, slippage_bps, settle_seconds_p50, n): (i128, i128, u64, u32) =
-        env.storage()
-            .persistent()
-            .get(&key)
-            .unwrap_or(Ok(default_metrics))
-            .unwrap();
+    let (fill_rate_bps, slippage_bps, settle_seconds_p50, n): (i128, i128, u64, u32) = env
+        .storage()
+        .persistent()
+        .get(&DataKey::Corridor(anchor_id, corridor))
+        .unwrap_or(default_metrics);
 
     let composite_bps = compute_composite_bps(fill_rate_bps, slippage_bps, settle_seconds_p50);
     (composite_bps, fill_rate_bps, settle_seconds_p50, n)

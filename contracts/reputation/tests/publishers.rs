@@ -15,20 +15,17 @@ fn admin_can_add_and_revoke_publishers() {
     let env = Env::default();
     env.mock_all_auths();
     let (client, admin) = setup(&env);
-    
+
     client.init(&admin);
-    
+
     let publisher = Address::generate(&env);
-    
-    // Initially empty
+
     assert_eq!(client.list_publishers().len(), 0);
-    
-    // Admin adds publisher
+
     client.add_publisher(&admin, &publisher);
     assert_eq!(client.list_publishers().len(), 1);
     assert_eq!(client.list_publishers().get(0).unwrap(), publisher.clone());
-    
-    // Admin revokes publisher
+
     client.revoke_publisher(&admin, &publisher);
     assert_eq!(client.list_publishers().len(), 0);
 }
@@ -39,28 +36,28 @@ fn non_admin_cannot_add_publisher() {
     env.mock_all_auths();
     let (client, admin) = setup(&env);
     client.init(&admin);
-    
+
     let stranger = Address::generate(&env);
     let publisher = Address::generate(&env);
-    
+
     let res = client.try_add_publisher(&stranger, &publisher);
     assert_eq!(res, Err(Ok(Error::Unauthorized)));
 }
 
 #[test]
-#[should_panic(expected = "Unauthorized: caller is not a whitelisted publisher")]
-fn unauthorized_submission_panics() {
+fn unauthorized_submission_is_rejected() {
     let env = Env::default();
     env.mock_all_auths();
     let (client, admin) = setup(&env);
     client.init(&admin);
-    
+
     let stranger = Address::generate(&env);
     let anchor_id = String::from_str(&env, "anchor1");
+    let corridor = String::from_str(&env, "NGN-USD");
     let outcome_hash = String::from_str(&env, "hash1");
-    
-    // This should panic
-    client.submit_outcome(&stranger, &anchor_id, &outcome_hash, &60, &true);
+
+    let res = client.try_submit_outcome(&stranger, &anchor_id, &corridor, &outcome_hash, &60, &true);
+    assert_eq!(res, Err(Ok(Error::PublisherUnauthorized)));
 }
 
 #[test]
@@ -69,33 +66,34 @@ fn authorized_publisher_can_submit() {
     env.mock_all_auths();
     let (client, admin) = setup(&env);
     client.init(&admin);
-    
+
     let publisher = Address::generate(&env);
     let anchor_id = String::from_str(&env, "anchor1");
+    let corridor = String::from_str(&env, "NGN-USD");
     let outcome_hash = String::from_str(&env, "hash1");
-    
+
     client.add_publisher(&admin, &publisher);
-    
-    // This should succeed
-    client.submit_outcome(&publisher, &anchor_id, &outcome_hash, &60, &true);
-    
+
+    client.submit_outcome(&publisher, &anchor_id, &corridor, &outcome_hash, &60, &true);
+
     let outcomes = client.recent_outcomes(&anchor_id, &10);
     assert_eq!(outcomes.len(), 1);
 }
 
 #[test]
-fn admin_can_submit_without_being_explicitly_whitelisted() {
+fn whitelisted_admin_can_submit() {
     let env = Env::default();
     env.mock_all_auths();
     let (client, admin) = setup(&env);
     client.init(&admin);
-    
+    client.add_publisher(&admin, &admin);
+
     let anchor_id = String::from_str(&env, "anchor1");
+    let corridor = String::from_str(&env, "NGN-USD");
     let outcome_hash = String::from_str(&env, "hash1");
-    
-    // This should succeed because admin is always allowed
-    client.submit_outcome(&admin, &anchor_id, &outcome_hash, &60, &true);
-    
+
+    client.submit_outcome(&admin, &anchor_id, &corridor, &outcome_hash, &60, &true);
+
     let outcomes = client.recent_outcomes(&anchor_id, &10);
     assert_eq!(outcomes.len(), 1);
 }

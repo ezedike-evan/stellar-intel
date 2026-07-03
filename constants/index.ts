@@ -1,5 +1,6 @@
 import type { Country, StellarAsset } from '@/types';
-export { KNOWN_ANCHORS, ANCHORS, CORRIDORS, ANCHOR_HOME_DOMAINS } from './anchors';
+export { KNOWN_ANCHORS, ANCHORS, CORRIDORS, ANCHOR_HOME_DOMAINS, registryStats } from './anchors';
+export type { RegistryStats } from './anchors';
 
 import { env } from '@/lib/env';
 export const STELLAR_NETWORK = env.NEXT_PUBLIC_STELLAR_NETWORK;

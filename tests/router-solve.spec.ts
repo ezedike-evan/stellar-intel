@@ -180,6 +180,55 @@ describe('solveSingleAnchor', () => {
         expect(result.details).toContain('No quotes meet minimum receive of 200000');
       }
     });
+
+    describe('Fee budget validation', () => {
+      it('rejects quotes whose fee exceeds the configured budget', () => {
+        const intent = createTestIntent();
+        const quotes = [
+          createTestQuote({
+            id: 'quote-expensive',
+            anchorName: 'Expensive Anchor',
+            fee: { total: '2', percent: '2' },
+            buy_amount: '150000',
+            netAmount: '150000',
+          }),
+        ];
+
+        const result = solveSingleAnchor(intent, quotes, 1);
+
+        expect(result.ok).toBe(false);
+        if (!result.ok && result.error === 'fee_budget_exceeded') {
+          expect(result.details).toContain('No quotes satisfy fee budget of 1%');
+        }
+      });
+
+      it('ignores over-budget quotes and selects an in-budget quote', () => {
+        const intent = createTestIntent();
+        const quotes = [
+          createTestQuote({
+            id: 'quote-expensive',
+            anchorName: 'Expensive Anchor',
+            fee: { total: '2', percent: '2' },
+            buy_amount: '150000',
+            netAmount: '150000',
+          }),
+          createTestQuote({
+            id: 'quote-cheap',
+            anchorName: 'Cheap Anchor',
+            fee: { total: '0.5', percent: '0.5' },
+            buy_amount: '149000',
+            netAmount: '149000',
+          }),
+        ];
+
+        const result = solveSingleAnchor(intent, quotes, 1);
+
+        expect(result.ok).toBe(true);
+        if (result.ok) {
+          expect(result.plan.quoteId).toBe('quote-cheap');
+        }
+      });
+    });
   });
 
   describe('Expiration: reject expired quotes and deadlines', () => {
