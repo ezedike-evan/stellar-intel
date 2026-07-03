@@ -1,7 +1,7 @@
 import Link from 'next/link';
 import { sha, buildTime } from '@/lib/version';
 
-const REPO_URL = 'https://github.com/Ezedike-Evan/stellar-intel';
+const REPO_URL = 'https://github.com/ezedike-evan/stellar-intel';
 const DISCORD_URL = 'https://discord.gg/stellar';
 
 const FOOTER_COLUMNS = [
@@ -58,7 +58,7 @@ export function Footer() {
               <ul className="space-y-2">
                 {column.links.map((link) => (
                   <li key={link.href}>
-                    {link.external ? (
+                    {'external' in link && link.external ? (
                       <a
                         href={link.href}
                         target="_blank"
