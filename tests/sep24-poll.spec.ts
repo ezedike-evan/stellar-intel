@@ -1,4 +1,5 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest';
+import { act } from '@testing-library/react';
 import { getSep24Transaction, TERMINAL_STATES } from '@/lib/stellar/sep24';
 
 const TRANSFER_SERVER = 'https://cowrie.exchange/sep24';
@@ -139,6 +140,42 @@ describe('getSep24Transaction', () => {
     await expect(getSep24Transaction(TRANSFER_SERVER, TRANSACTION_ID, JWT)).rejects.toThrow(
       /HTTP 401/
     );
+  });
+
+  it('retries transient 5xx failures before succeeding', async () => {
+    vi.useFakeTimers();
+    const fetchMock = vi
+      .fn()
+      .mockResolvedValueOnce({
+        ok: false,
+        status: 500,
+        json: async () => ({ error: 'Internal error' }),
+      })
+      .mockResolvedValueOnce({
+        ok: false,
+        status: 502,
+        json: async () => ({ error: 'Bad gateway' }),
+      })
+      .mockResolvedValueOnce({
+        ok: true,
+        json: async () => ({ transaction: { id: TRANSACTION_ID, status: 'pending_external' } }),
+      });
+
+    vi.stubGlobal('fetch', fetchMock);
+
+    const promise = getSep24Transaction(TRANSFER_SERVER, TRANSACTION_ID, JWT);
+
+    await act(async () => {
+      await vi.advanceTimersByTimeAsync(500);
+    });
+    await act(async () => {
+      await vi.advanceTimersByTimeAsync(1000);
+    });
+
+    const result = await promise;
+    expect(result.status).toBe('pending_external');
+    expect(fetchMock).toHaveBeenCalledTimes(3);
+    vi.useRealTimers();
   });
 });
 

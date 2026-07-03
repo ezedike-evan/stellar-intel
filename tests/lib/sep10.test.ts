@@ -1,6 +1,12 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest';
 import { Networks } from '@stellar/stellar-sdk';
-import { fetchChallenge, signChallenge, submitChallenge, authenticate } from '@/lib/stellar/sep10';
+import {
+  fetchChallenge,
+  signChallenge,
+  submitChallenge,
+  authenticate,
+  NetworkMismatchError,
+} from '@/lib/stellar/sep10';
 import * as sep1 from '@/lib/stellar/sep1';
 
 const WEB_AUTH_ENDPOINT = 'https://cowrie.exchange/auth';
@@ -151,6 +157,48 @@ describe('submitChallenge', () => {
 describe('signChallenge', () => {
   it('returns the signed XDR from Freighter', async () => {
     const freighter = await getFreighter();
+    vi.mocked(freighter.getNetwork).mockResolvedValue({
+      network: 'PUBLIC',
+      networkPassphrase: Networks.PUBLIC,
+    });
+    vi.mocked(freighter.signTransaction).mockResolvedValue({
+      signedTxXdr: SIGNED_XDR,
+      signerAddress: PUBLIC_KEY,
+    });
+
+    const result = await signChallenge(CHALLENGE_XDR, Networks.PUBLIC);
+    expect(result).toBe(SIGNED_XDR);
+  });
+
+  it('throws NetworkMismatchError without signing when Freighter is on the wrong network', async () => {
+    const freighter = await getFreighter();
+    vi.mocked(freighter.signTransaction).mockClear();
+    vi.mocked(freighter.getNetwork).mockResolvedValue({
+      network: 'TESTNET',
+      networkPassphrase: Networks.TESTNET,
+    });
+
+    await expect(signChallenge(CHALLENGE_XDR, Networks.PUBLIC)).rejects.toBeInstanceOf(
+      NetworkMismatchError
+    );
+    expect(freighter.signTransaction).not.toHaveBeenCalled();
+  });
+
+  it('names both networks in the mismatch guidance', async () => {
+    const freighter = await getFreighter();
+    vi.mocked(freighter.getNetwork).mockResolvedValue({
+      network: 'TESTNET',
+      networkPassphrase: Networks.TESTNET,
+    });
+
+    await expect(signChallenge(CHALLENGE_XDR, Networks.PUBLIC)).rejects.toThrow(
+      /Switch network in Freighter to Mainnet \(Public\).*currently set to Testnet/
+    );
+  });
+
+  it('proceeds to sign when Freighter network cannot be read', async () => {
+    const freighter = await getFreighter();
+    vi.mocked(freighter.getNetwork).mockRejectedValue(new Error('extension unavailable'));
     vi.mocked(freighter.signTransaction).mockResolvedValue({
       signedTxXdr: SIGNED_XDR,
       signerAddress: PUBLIC_KEY,
@@ -162,6 +210,10 @@ describe('signChallenge', () => {
 
   it('throws "User rejected signing" when Freighter returns an error', async () => {
     const freighter = await getFreighter();
+    vi.mocked(freighter.getNetwork).mockResolvedValue({
+      network: 'PUBLIC',
+      networkPassphrase: Networks.PUBLIC,
+    });
     vi.mocked(freighter.signTransaction).mockResolvedValue({
       signedTxXdr: '',
       signerAddress: '',
