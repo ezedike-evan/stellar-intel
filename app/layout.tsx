@@ -66,7 +66,9 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
           }}
         />
       </head>
-      <body className={`${inter.variable} ${inter.className} min-h-screen bg-background`}>
+      <body
+        className={`${inter.variable} ${inter.className} flex min-h-screen flex-col bg-background`}
+      >
         <ThemeProvider>
           <WalletProvider>
             <ToastProvider>
