@@ -6,6 +6,7 @@
  *   - solveWithFallback: rate-based fallback re-solve across SEP-24 anchors (issue #215)
  */
 
+import { env } from '@/lib/env';
 import { fetchAllAnchorFees, computeRateComparison } from '@/lib/stellar/sep24';
 import type {
   AnchorRate,
@@ -25,40 +26,55 @@ import type {
  * Uses BigInt scaled to 7 decimal places to avoid float precision loss on
  * large financial amounts.
  */
+const DECIMAL_SCALE = 10n ** 7n;
+
+export const TypedError = {
+  FeeBudgetExceeded: 'fee_budget_exceeded' as const,
+} as const;
+
+function parseDecimal(value: string): bigint {
+  let str = value.trim();
+  let sign = 1n;
+  if (str.startsWith('-')) {
+    sign = -1n;
+    str = str.slice(1);
+  } else if (str.startsWith('+')) {
+    str = str.slice(1);
+  }
+
+  let exp = 0;
+  const eIdx = str.search(/[eE]/);
+  if (eIdx !== -1) {
+    exp = parseInt(str.slice(eIdx + 1), 10) || 0;
+    str = str.slice(0, eIdx);
+  }
+
+  const [intPart = '0', fracPart = ''] = str.split('.');
+  const digits = `${intPart}${fracPart}`.replace(/\D/g, '') || '0';
+  const pointFromRight = fracPart.length - exp;
+  const shift = 7 - pointFromRight; // scale to 7 decimal places
+  const magnitude =
+    shift >= 0 ? BigInt(digits) * 10n ** BigInt(shift) : BigInt(digits) / 10n ** BigInt(-shift);
+  return sign * magnitude;
+}
+
 function compareDecimals(a: string, b: string): number {
-  // Convert a decimal string — including scientific notation like "1.5e3" — to a
-  // fixed-point bigint scaled to 7 decimal places, avoiding float precision loss.
-  const toBigInt = (s: string): bigint => {
-    let str = s.trim();
-    let sign = 1n;
-    if (str.startsWith('-')) {
-      sign = -1n;
-      str = str.slice(1);
-    } else if (str.startsWith('+')) {
-      str = str.slice(1);
-    }
-
-    let exp = 0;
-    const eIdx = str.search(/[eE]/);
-    if (eIdx !== -1) {
-      exp = parseInt(str.slice(eIdx + 1), 10) || 0;
-      str = str.slice(0, eIdx);
-    }
-
-    const [intPart = '0', fracPart = ''] = str.split('.');
-    const digits = `${intPart}${fracPart}`.replace(/\D/g, '') || '0';
-    // Digits to the right of the decimal point after applying the exponent.
-    const pointFromRight = fracPart.length - exp;
-    const shift = 7 - pointFromRight; // scale to 7 decimal places
-    const magnitude =
-      shift >= 0 ? BigInt(digits) * 10n ** BigInt(shift) : BigInt(digits) / 10n ** BigInt(-shift);
-    return sign * magnitude;
-  };
-  const bigA = toBigInt(a);
-  const bigB = toBigInt(b);
+  const bigA = parseDecimal(a);
+  const bigB = parseDecimal(b);
   if (bigA < bigB) return -1;
   if (bigA > bigB) return 1;
   return 0;
+}
+
+function exceedsFeeBudget(quote: EvaluatedQuote, budgetPct: number): boolean {
+  if (budgetPct >= 100) return false;
+  if (compareDecimals(quote.sell_amount, '0') === 0) return false;
+
+  const feeScaled = parseDecimal(quote.fee.total);
+  const sellScaled = parseDecimal(quote.sell_amount);
+  const budgetScaled = parseDecimal(String(budgetPct));
+
+  return feeScaled * 100n * DECIMAL_SCALE > sellScaled * budgetScaled;
 }
 
 function meetsFloor(quote: EvaluatedQuote, intent: Intent): boolean {
@@ -77,7 +93,11 @@ function isQuoteExpired(expiresAt: string): boolean {
  * Selects the best single-anchor SEP-38 quote that meets the intent's floor
  * and deadline constraints. Returns a typed discriminated-union result.
  */
-export function solveSingleAnchor(intent: Intent, evaluatedQuotes: EvaluatedQuote[]): SolverResult {
+export function solveSingleAnchor(
+  intent: Intent,
+  evaluatedQuotes: EvaluatedQuote[],
+  feeBudgetPct: number = env.FEE_BUDGET_PCT
+): SolverResult {
   if (isDeadlineExpired(intent.deadline)) {
     return {
       ok: false,
@@ -89,12 +109,15 @@ export function solveSingleAnchor(intent: Intent, evaluatedQuotes: EvaluatedQuot
   const validQuotes: EvaluatedQuote[] = [];
   const expiredQuotes: EvaluatedQuote[] = [];
   const floorViolations: EvaluatedQuote[] = [];
+  const feeBudgetViolations: EvaluatedQuote[] = [];
 
   for (const quote of evaluatedQuotes) {
     if (isQuoteExpired(quote.expires_at)) {
       expiredQuotes.push(quote);
     } else if (!meetsFloor(quote, intent)) {
       floorViolations.push(quote);
+    } else if (exceedsFeeBudget(quote, feeBudgetPct)) {
+      feeBudgetViolations.push(quote);
     } else {
       validQuotes.push(quote);
     }
@@ -109,6 +132,16 @@ export function solveSingleAnchor(intent: Intent, evaluatedQuotes: EvaluatedQuot
         ok: false,
         error: 'all_quotes_expired',
         details: `All ${evaluatedQuotes.length} quote(s) have expired`,
+      };
+    }
+    if (feeBudgetViolations.length > 0) {
+      const detail = feeBudgetViolations
+        .map((q) => `${q.anchorName}: ${q.fee.total}/${q.sell_amount} ${intent.sellAsset.code}`)
+        .join('; ');
+      return {
+        ok: false,
+        error: TypedError.FeeBudgetExceeded,
+        details: `No quotes satisfy fee budget of ${feeBudgetPct}%. ${detail}`,
       };
     }
     if (floorViolations.length > 0) {
@@ -143,7 +176,11 @@ export function solveSingleAnchor(intent: Intent, evaluatedQuotes: EvaluatedQuot
 
 export class NoEligibleRouteError extends Error {
   constructor(
-    public code: 'no_eligible_route' | 'floor_not_met' | 'all_quotes_expired',
+    public code:
+      | 'no_eligible_route'
+      | 'floor_not_met'
+      | 'all_quotes_expired'
+      | 'fee_budget_exceeded',
     message: string
   ) {
     super(message);

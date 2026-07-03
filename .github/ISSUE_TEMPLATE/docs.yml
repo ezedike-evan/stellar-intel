@@ -1,6 +1,6 @@
 name: 📖 Documentation issue
 description: Something in the docs is wrong, missing, confusing, or out of date.
-title: "[DOCS] <doc file or section> — <short description>"
+title: '[DOCS] <doc file or section> — <short description>'
 labels:
   - docs
   - triage
@@ -21,7 +21,7 @@ body:
     attributes:
       label: Which document?
       description: Path relative to the repo root.
-      placeholder: "docs/ARCHITECTURE.md"
+      placeholder: 'docs/ARCHITECTURE.md'
     validations:
       required: true
 
@@ -30,7 +30,7 @@ body:
     attributes:
       label: Which section / anchor?
       description: Heading or `#anchor-slug`. Helps a reviewer land on the right paragraph.
-      placeholder: "§ 4.3 SEP-24 — interactive withdrawal"
+      placeholder: '§ 4.3 SEP-24 — interactive withdrawal'
 
   - type: dropdown
     id: category

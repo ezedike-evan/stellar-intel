@@ -43,7 +43,7 @@ function runGasTest(): string {
     return execFileSync(
       'cargo',
       ['test', '--test', 'gas', '--', '--nocapture', '--test-threads=1'],
-      { cwd: CONTRACT_DIR, encoding: 'utf8' },
+      { cwd: CONTRACT_DIR, encoding: 'utf8' }
     );
   } catch (err) {
     const e = err as { stdout?: string; stderr?: string; message?: string };

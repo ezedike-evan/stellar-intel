@@ -4,6 +4,7 @@ import { buildScorecards, type OutcomeRow } from '@/lib/reputation/aggregate';
 import { getHistoryBuckets } from '@/lib/reputation/buckets';
 import { getReputationStore } from '@/lib/reputation/store';
 import { AnchorProfile, type AnchorProfileData } from '@/components/offramp/AnchorProfile';
+import { ScorecardCard } from '@/components/offramp/ScorecardCard';
 
 function mapOutcomeRows(
   rows: Awaited<ReturnType<ReturnType<typeof getReputationStore>['query']>>
@@ -39,9 +40,7 @@ async function loadAnchorRows(anchorId: string) {
 export const revalidate = 300;
 
 export function generateStaticParams(): Array<{ id: string }> {
-  return [...ANCHORS]
-    .slice(0, 20)
-    .map((anchor) => ({ id: anchor.id }));
+  return ANCHORS.map((anchor) => ({ id: anchor.id }));
 }
 
 export default async function AnchorDetailPage({
@@ -110,8 +109,13 @@ export default async function AnchorDetailPage({
   };
 
   return (
-    <main className="mx-auto max-w-5xl px-4 py-8">
+    <main className="mx-auto max-w-5xl space-y-8 px-4 py-8">
       <AnchorProfile data={profileData} />
+      <ScorecardCard
+        anchorId={anchor.id}
+        window="30d"
+        latestOracleTxHash={oracleTxFromRows ?? undefined}
+      />
     </main>
   );
 }

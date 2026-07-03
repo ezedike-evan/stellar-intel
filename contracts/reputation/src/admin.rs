@@ -3,18 +3,10 @@
 //! Stores a single administrator address in instance storage and provides the
 //! authorization gate used by mutating contract functions.
 
-use soroban_sdk::{contracttype, Address, Env};
+use soroban_sdk::{Address, Env};
 
+use crate::storage::DataKey;
 use crate::Error;
-
-#[contracttype]
-#[derive(Clone)]
-pub enum DataKey {
-    /// The contract administrator.
-    Admin,
-    /// The list of registered anchor ids.
-    Anchors,
-}
 
 /// Store the admin on first initialization. Returns `AlreadyInitialized` if an
 /// admin is already set.
@@ -47,7 +39,6 @@ pub fn require_admin(env: &Env, caller: &Address) -> Result<(), Error> {
         return Err(Error::Unauthorized);
     }
 
-    // Enforce that the admin actually signed this invocation.
     admin.require_auth();
     Ok(())
 }

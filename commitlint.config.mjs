@@ -32,6 +32,7 @@ const config = {
       [
         'offramp',
         'onramp',
+        'anchors',
         'intent',
         'router',
         'reputation',
@@ -42,6 +43,7 @@ const config = {
         'ui',
         'brand',
         'sep1',
+        'sep6',
         'sep10',
         'sep24',
         'sep38',

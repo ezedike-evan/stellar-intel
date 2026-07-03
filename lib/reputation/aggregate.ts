@@ -59,10 +59,35 @@ export function computeCorridorAggregate(
   }
 
   const successCount = relevant.filter((e) => e.success).length;
-  const times = relevant.map((e) => e.settlementMs).sort((a, b) => a - b);
-  const avgSettlementMs = Math.round(times.reduce((s, v) => s + v, 0) / times.length);
-  const p50SettlementMs = times[Math.floor(times.length * 0.5)] ?? null;
-  const p95SettlementMs = times[Math.floor(times.length * 0.95)] ?? null;
+  // Robust outlier filtering using median and MAD
+  const allTimes = relevant
+    .filter((e) => e.success)
+    .map((e) => e.settlementMs)
+    .sort((a, b) => a - b);
+  const median = allTimes.length > 0 ? percentile(allTimes, 50) : null;
+  const mad =
+    allTimes.length > 0
+      ? percentile(
+          allTimes.map((v) => Math.abs(v - (median as number))).sort((a, b) => a - b),
+          50
+        )
+      : null;
+  const filteredTimes =
+    median !== null && mad !== null
+      ? allTimes.filter((v) => Math.abs(v - (median as number)) <= 3 * (mad as number))
+      : allTimes;
+  const avgSettlementMs =
+    filteredTimes.length > 0
+      ? Math.round(filteredTimes.reduce((s, v) => s + v, 0) / filteredTimes.length)
+      : null;
+  const p50SettlementMs =
+    filteredTimes.length > 0
+      ? (filteredTimes[Math.floor(filteredTimes.length * 0.5)] ?? null)
+      : null;
+  const p95SettlementMs =
+    filteredTimes.length > 0
+      ? (filteredTimes[Math.floor(filteredTimes.length * 0.95)] ?? null)
+      : null;
 
   const successRate = successCount / relevant.length;
   const speedScore = p50SettlementMs !== null ? Math.max(0, 1 - p50SettlementMs / 3600000) : 0;
@@ -202,6 +227,9 @@ export interface OutcomeRow {
   slippage: number | null;
   /** Unix timestamp (ms) when the row was recorded. */
   recordedAt: number;
+  /** When true the row is excluded from all aggregate computations (#164/#168). */
+  disputed?: boolean;
+  trimmed?: boolean;
 }
 
 /** Rolling window in days — 7, 30, or 90. */
@@ -226,11 +254,19 @@ export type Scorecard =
       fillRate: number;
       settleMs: Percentiles;
       slippage: Percentiles;
+      /** ISO 8601 timestamp when this scorecard was computed. */
+      computedAt: string;
+      /** ISO 8601 timestamp of last publisher transaction that mirrored this aggregate to Soroban, or null if not yet published. */
+      lastPublisherTxTimestamp: string | null;
     }
   | {
       state: 'insufficient_data';
       window: Window;
       sampleSize: number;
+      /** ISO 8601 timestamp when this scorecard was computed. */
+      computedAt: string;
+      /** ISO 8601 timestamp of last publisher transaction that mirrored this aggregate to Soroban, or null if not yet published. */
+      lastPublisherTxTimestamp: string | null;
     };
 
 // ─── Constants ────────────────────────────────────────────────────────────────
@@ -239,7 +275,6 @@ export type Scorecard =
 export const MIN_SAMPLES = 1;
 
 const MS_PER_DAY = 86_400_000;
-
 // ─── Helpers ──────────────────────────────────────────────────────────────────
 
 /**
@@ -266,25 +301,60 @@ export function percentile(sorted: number[], p: number): number {
 export function aggregate(
   rows: OutcomeRow[],
   windowDays: Window,
-  nowMs: number = Date.now()
+  nowMs: number = Date.now(),
+  lastPublisherTxTimestamp: string | null = null
 ): Scorecard {
   const cutoff = nowMs - windowDays * MS_PER_DAY;
   const windowRows = rows.filter((r) => r.recordedAt >= cutoff);
+  const computedAt = new Date(nowMs).toISOString();
 
   if (windowRows.length < MIN_SAMPLES) {
-    return { state: 'insufficient_data', window: windowDays, sampleSize: windowRows.length };
+    return {
+      state: 'insufficient_data',
+      window: windowDays,
+      sampleSize: windowRows.length,
+      computedAt,
+      lastPublisherTxTimestamp,
+    };
   }
 
-  const fillRate = windowRows.filter((r) => r.filled).length / windowRows.length;
-
-  const settleSorted = windowRows
+  // Robust outlier detection using median and MAD on settlement times
+  const settlementValues = windowRows
     .map((r) => r.settleMs)
     .filter((v): v is number => v !== null)
     .sort((a, b) => a - b);
+  const median = settlementValues.length > 0 ? percentile(settlementValues, 50) : null;
+  const mad =
+    settlementValues.length > 0
+      ? percentile(
+          settlementValues.map((v) => Math.abs(v - (median as number))).sort((a, b) => a - b),
+          50
+        )
+      : null;
+  if (median !== null && mad !== null) {
+    for (const r of windowRows) {
+      if (r.settleMs !== null && Math.abs(r.settleMs - (median as number)) > 3 * (mad as number)) {
+        r.trimmed = true;
+      } else {
+        r.trimmed = false;
+      }
+    }
+  } else {
+    for (const r of windowRows) {
+      r.trimmed = false;
+    }
+  }
 
-  const slippageSorted = windowRows
-    .map((r) => r.slippage)
+  const untrimmed = windowRows.filter((r) => !r.trimmed);
+  const fillRate =
+    untrimmed.length > 0 ? untrimmed.filter((r) => r.filled).length / untrimmed.length : 0;
+  const settleSorted = untrimmed
+    .map((r) => r.settleMs)
     .filter((v): v is number => v !== null)
+    .sort((a, b) => a - b);
+  const slippageSorted = untrimmed
+    .map((r) => r.slippage)
+    .filter((s): s is number => s !== null)
     .sort((a, b) => a - b);
 
   const settleMs: Percentiles =
@@ -304,6 +374,8 @@ export function aggregate(
     fillRate,
     settleMs,
     slippage,
+    computedAt,
+    lastPublisherTxTimestamp,
   };
 }
 
@@ -312,11 +384,12 @@ export function aggregate(
  */
 export function buildScorecards(
   rows: OutcomeRow[],
-  nowMs: number = Date.now()
+  nowMs: number = Date.now(),
+  lastPublisherTxTimestamp: string | null = null
 ): Record<Window, Scorecard> {
   return {
-    7: aggregate(rows, 7, nowMs),
-    30: aggregate(rows, 30, nowMs),
-    90: aggregate(rows, 90, nowMs),
+    7: aggregate(rows, 7, nowMs, lastPublisherTxTimestamp),
+    30: aggregate(rows, 30, nowMs, lastPublisherTxTimestamp),
+    90: aggregate(rows, 90, nowMs, lastPublisherTxTimestamp),
   };
 }

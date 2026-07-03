@@ -1,5 +1,7 @@
 import { describe, it, expect, beforeEach } from 'vitest';
 import { checkRateLimit, clearRateLimitStore } from '@/lib/api/rate-limit';
+import { GET } from '@/app/v1/public/scores/route';
+import { NextRequest } from 'next/server';
 
 describe('Rate limiting', () => {
   beforeEach(() => {
@@ -62,5 +64,42 @@ describe('Lock mechanism', () => {
     const reacquired = acquireLock('test-lock-3');
     expect(reacquired).toBe(true);
     releaseLock('test-lock-3');
+  });
+});
+
+describe('ETag cache deduplication', () => {
+  it('returns consistent ETag for identical payload', async () => {
+    const request = new NextRequest('http://localhost/v1/public/scores', {
+      headers: { 'x-forwarded-for': '1.2.3.4' },
+    });
+
+    const response1 = await GET(request);
+    const etag1 = response1.headers.get('ETag');
+
+    const response2 = await GET(request);
+    const etag2 = response2.headers.get('ETag');
+
+    expect(etag1).toBe(etag2);
+    expect(etag1).toMatch(/^"[A-Za-z0-9+/=]+"$/);
+  });
+
+  it('returns 304 when If-None-Match matches current ETag', async () => {
+    const request = new NextRequest('http://localhost/v1/public/scores', {
+      headers: { 'x-forwarded-for': '1.2.3.5' },
+    });
+
+    const firstResponse = await GET(request);
+    const etag = firstResponse.headers.get('ETag');
+    expect(etag).not.toBeNull();
+
+    const cachedRequest = new NextRequest('http://localhost/v1/public/scores', {
+      headers: {
+        'x-forwarded-for': '1.2.3.5',
+        'if-none-match': etag as string,
+      },
+    });
+
+    const cachedResponse = await GET(cachedRequest);
+    expect(cachedResponse.status).toBe(304);
   });
 });

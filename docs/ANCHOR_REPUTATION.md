@@ -104,12 +104,12 @@ During bootstrap:
 
 **Example bootstrap API response** (`GET /api/reputation/[anchor]`):
 
-| Field          | Value                  |
-| -------------- | ---------------------- |
-| `state`        | `"insufficient_data"`  |
-| `sampleSize`   | `0`                    |
-| `compositeScore` | `null`               |
-| `scoreBand`    | _(not assigned)_       |
+| Field            | Value                 |
+| ---------------- | --------------------- |
+| `state`          | `"insufficient_data"` |
+| `sampleSize`     | `0`                   |
+| `compositeScore` | `null`                |
+| `scoreBand`      | _(not assigned)_      |
 
 ### Accruing Reputation
 
@@ -122,17 +122,18 @@ The composite score formula
 ([`lib/reputation/composite.ts`](../lib/reputation/composite.ts)) weights
 three factors equally per transaction — fill rate, slippage, and settlement
 speed — so all transactions within a window contribute with equal weight.
+
 <!-- TODO: verify equal weighting vs recency bias with maintainer — the
      current implementation in aggregate.ts uses a flat window with no
      exponential decay -->
 
 **Progression toward live status:**
 
-| Outcomes | Scorecard `state`    | Score Band | Phase     |
-| -------- | -------------------- | ---------- | --------- |
-| 0        | `insufficient_data`  | _(none)_   | bootstrap |
-| 1–29     | `insufficient_data`  | _(none)_   | bootstrap |
-| 30+      | `ok`                 | green / amber / red | live |
+| Outcomes | Scorecard `state`   | Score Band          | Phase     |
+| -------- | ------------------- | ------------------- | --------- |
+| 0        | `insufficient_data` | _(none)_            | bootstrap |
+| 1–29     | `insufficient_data` | _(none)_            | bootstrap |
+| 30+      | `ok`                | green / amber / red | live      |
 
 The threshold of **30 outcomes** is defined by `MIN_OUTCOMES_THRESHOLD` in
 [`lib/reputation/thresholds.ts`](../lib/reputation/thresholds.ts) and can be
@@ -149,11 +150,11 @@ scorecard window. At that point:
 - A composite score is computed and mapped to a
   [score band](../lib/reputation/bands.ts):
 
-  | Band   | Score range | Label             |
-  | ------ | ----------- | ----------------- |
-  | green  | ≥ 95        | Excellent         |
-  | amber  | 80 – 94     | Needs Improvement |
-  | red    | < 80        | Critical          |
+  | Band  | Score range | Label             |
+  | ----- | ----------- | ----------------- |
+  | green | ≥ 95        | Excellent         |
+  | amber | 80 – 94     | Needs Improvement |
+  | red   | < 80        | Critical          |
 
 - The reputation score is fully evidence-based and trusted by downstream
   consumers for routing and risk decisions

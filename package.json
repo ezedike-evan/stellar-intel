@@ -19,6 +19,7 @@
     "test:watch": "vitest --watch",
     "test:coverage": "vitest --coverage",
     "check:registry": "node ./scripts/check-registry.mjs",
+    "validate:anchors": "node ./scripts/validate-anchors.mjs",
     "emit-version": "node ./scripts/emit-version.js",
     "test:release": "npm run typecheck && npm run lint && npm run format:check && npm run test && npm run build",
     "emit-openapi": "tsx --tsconfig tsconfig.scripts.json scripts/emit-openapi.mts",

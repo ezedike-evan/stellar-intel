@@ -11,9 +11,7 @@ interface CountrySelectorProps {
 // maps to a valid rate route. Adding a corridor (e.g. usdc-eur) is enough to
 // surface its country (Germany) here.
 const CORRIDOR_COUNTRY_CODES = new Set(CORRIDORS.map((c) => c.countryCode));
-const SELECTABLE_COUNTRIES = SUPPORTED_COUNTRIES.filter((c) =>
-  CORRIDOR_COUNTRY_CODES.has(c.code)
-);
+const SELECTABLE_COUNTRIES = SUPPORTED_COUNTRIES.filter((c) => CORRIDOR_COUNTRY_CODES.has(c.code));
 
 export function CountrySelector({ value, onChange }: CountrySelectorProps) {
   return (
