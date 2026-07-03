@@ -11,14 +11,31 @@ const KNOWN_ANCHORS = [
   { anchorId: 'anchor-cowrie', corridor: 'usdc-ngn' },
 ];
 
-let lastEtag = '';
+const PAYLOAD_CACHE_MS = 60_000;
 
-function buildScorePayload() {
+let lastEtag = '';
+let cachedPayload: ReturnType<typeof computeScorePayload> | null = null;
+let cachedAt = 0;
+
+function computeScorePayload() {
   return KNOWN_ANCHORS.map(({ anchorId, corridor }) => ({
     anchorId,
     corridor,
     score30d: computeCorridorAggregate(SAMPLE_EVENTS, anchorId, corridor, 30),
   }));
+}
+
+// Cached for PAYLOAD_CACHE_MS so identical requests within the window get a
+// stable ETag: computeCorridorAggregate stamps a fresh `lastRefresh` on every
+// call, so recomputing per-request made the payload — and therefore the
+// ETag — different on every single request, defeating 304 responses.
+function buildScorePayload() {
+  const now = Date.now();
+  if (!cachedPayload || now - cachedAt >= PAYLOAD_CACHE_MS) {
+    cachedPayload = computeScorePayload();
+    cachedAt = now;
+  }
+  return cachedPayload;
 }
 
 export async function GET(request: NextRequest): Promise<NextResponse> {
@@ -44,7 +61,8 @@ export async function GET(request: NextRequest): Promise<NextResponse> {
     }
 
     const payload = buildScorePayload();
-    const etag = `"${Buffer.from(JSON.stringify(payload)).length}-${Date.now()}"`;
+    const payloadHash = Buffer.from(JSON.stringify(payload)).toString('base64');
+    const etag = `"${payloadHash}"`;
 
     const ifNoneMatch = request.headers.get('if-none-match');
     if (ifNoneMatch && ifNoneMatch === lastEtag) {

@@ -8,6 +8,10 @@ Latest documented snapshot: 92 directory-tagged domains -> 32 reachable
 `stellar.toml` files -> 9 transfer-capable / 23 issuer-only; 60 unreachable or
 unconfirmed.
 
+The 23 issuer-only domains (advertise an asset/issuer but no SEP-6/SEP-24
+transfer rails, so they back no corridor) are enumerated with reasons in
+[`docs/anchors/exclusions.md`](docs/anchors/exclusions.md).
+
 Source: `scripts/anchor-survey.snapshot.json`, generated
 2026-06-25T23:08:26.806Z from
 `https://api.stellar.expert/explorer/public/directory?tag[]=anchor&limit=200`.

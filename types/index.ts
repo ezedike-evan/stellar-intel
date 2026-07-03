@@ -45,7 +45,7 @@ export interface AnchorRate {
   totalReceived: number | null; // computed: (amount - fee) * exchangeRate; null when anchor is unreachable
   updatedAt: Date;
   /** Discriminates the origin of the rate data. */
-  source: 'sep38' | 'sep24-fee' | 'unavailable';
+  source: 'sep38' | 'sep24-fee' | 'sep6-info' | 'sep6-fee' | 'unavailable';
   expiresAt?: Date | undefined;
   /**
    * SEP-38 firm quote id, when this rate originated from a quote server.
@@ -367,7 +367,8 @@ export type SolverResult =
   | { ok: true; plan: Plan }
   | { ok: false; error: 'no_eligible_route' }
   | { ok: false; error: 'floor_not_met'; details: string }
-  | { ok: false; error: 'all_quotes_expired'; details: string };
+  | { ok: false; error: 'all_quotes_expired'; details: string }
+  | { ok: false; error: 'fee_budget_exceeded'; details: string };
 
 // ─── API ──────────────────────────────────────────────────────────────────────
 
@@ -493,3 +494,23 @@ export type Sep6WithdrawResponse =
   | Sep6WithdrawInteractive
   | Sep6WithdrawNonInteractive
   | Sep6WithdrawNeedsInfo;
+
+// ─── SEP-12 ───────────────────────────────────────────────────────────────────
+
+/** Normalized customer status returned by SEP-12 GET /customer. */
+export type CustomerStatus = 'ACCEPTED' | 'NEEDS_INFO' | 'PROCESSING' | 'REJECTED';
+
+export interface Sep12CustomerField {
+  description?: string;
+  type?: string;
+  error?: string;
+  status?: string;
+}
+
+export interface Sep12CustomerResponse {
+  id?: string;
+  status: CustomerStatus;
+  fields?: Record<string, Sep12CustomerField>;
+  provided_fields?: Record<string, Sep12CustomerField>;
+  message?: string;
+}

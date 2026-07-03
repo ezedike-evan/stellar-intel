@@ -16,6 +16,18 @@ export const envSchema = z.object({
     .url()
     .optional()
     .default('https://api.stellar.expert/explorer/public'),
+  FEE_BUDGET_PCT: z.preprocess(
+    (value) => {
+      if (value === undefined || value === null) return '100';
+      return String(value).trim();
+    },
+    z
+      .string()
+      .regex(/^[0-9]+(?:\.[0-9]+)?$/, {
+        message: 'Must be a non-negative percentage (e.g. 1 or 0.5)',
+      })
+      .transform(Number)
+  ),
 });
 
 export type Env = z.infer<typeof envSchema>;
@@ -27,6 +39,7 @@ export function parseEnv(): Env {
     NEXT_PUBLIC_USDC_ISSUER: process.env.NEXT_PUBLIC_USDC_ISSUER,
     NEXT_PUBLIC_APP_NAME: process.env.NEXT_PUBLIC_APP_NAME,
     NEXT_PUBLIC_STELLAR_EXPERT_URL: process.env.NEXT_PUBLIC_STELLAR_EXPERT_URL,
+    FEE_BUDGET_PCT: process.env.FEE_BUDGET_PCT,
   });
 
   if (!result.success) {

@@ -16,7 +16,6 @@ updates:
     commit-message:
       prefix: 'chore(deps)'
       prefix-development: 'chore(deps-dev)'
-      include: 'scope'
     groups:
       next-react:
         patterns:

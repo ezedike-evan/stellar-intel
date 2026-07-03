@@ -1,7 +1,7 @@
 import type { Metadata } from 'next';
 import './globals.css';
 import { inter } from './fonts';
-import { Navbar } from '@/components/layout/Navbar';
+import { Header } from '@/components/layout/Header';
 import { Footer } from '@/components/layout/Footer';
 import { ThemeProvider } from '@/contexts/theme';
 import { BottomNav } from '@/components/layout/BottomNav';
@@ -66,12 +66,14 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
           }}
         />
       </head>
-      <body className={`${inter.variable} ${inter.className} min-h-screen bg-background`}>
+      <body
+        className={`${inter.variable} ${inter.className} flex min-h-screen flex-col bg-background`}
+      >
         <ThemeProvider>
           <WalletProvider>
             <ToastProvider>
               <OfflineBar />
-              <Navbar />
+              <Header />
               <main className="mx-auto max-w-7xl px-4 py-8">{children}</main>
               <Footer />
               <BottomNav />

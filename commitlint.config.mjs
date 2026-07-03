@@ -32,6 +32,7 @@ const config = {
       [
         'offramp',
         'onramp',
+        'anchors',
         'intent',
         'router',
         'reputation',

@@ -1,7 +1,5 @@
 //! Storage / compute gas bounds for the reputation contract (issue #354).
 //!
-//! `submit_outcome` rewrites the whole per-anchor outcome list on every call, so
-//! an unbounded history is the natural place for a storage blowup to creep in.
 //! These tests pin the CPU-instruction and memory cost of a submit under fixed
 //! ceilings and fail if a change pushes past them, turning a silent fee
 //! regression into a red build.
@@ -13,22 +11,18 @@
 use reputation::{ReputationContract, ReputationContractClient};
 use soroban_sdk::{testutils::Address as _, Address, Env, String};
 
-/// Ceilings for a single `submit_outcome` into a fresh anchor. Set generously
-/// above the observed baseline so ordinary metering noise passes, but tight
-/// enough to catch an order-of-magnitude storage blowup. Tighten alongside the
-/// recorded baseline in `scripts/gas-report.ts`.
 const MAX_CPU_INSTRUCTIONS: u64 = 20_000_000;
 const MAX_MEMORY_BYTES: u64 = 5_000_000;
 
-/// Number of prior submits used to prove cost does not run away with history.
 const HISTORY_DEPTH: u32 = 25;
 
-fn setup(env: &Env) -> (ReputationContractClient<'_>, Address, String) {
+fn setup(env: &Env) -> (ReputationContractClient<'_>, Address, String, String) {
     let contract_id = env.register(ReputationContract, ());
     let client = ReputationContractClient::new(env, &contract_id);
     let admin = Address::generate(env);
     let anchor = String::from_str(env, "moneygram");
-    (client, admin, anchor)
+    let corridor = String::from_str(env, "NGN-USD");
+    (client, admin, anchor, corridor)
 }
 
 /// Measure the cost of one `submit_outcome` into an empty anchor.
@@ -36,18 +30,19 @@ fn setup(env: &Env) -> (ReputationContractClient<'_>, Address, String) {
 fn submit_outcome_stays_within_gas_budget() {
     let env = Env::default();
     env.mock_all_auths();
-    let (client, admin, anchor) = setup(&env);
-    let hash = String::from_str(&env, "0xoutcomehash");
+    let (client, admin, anchor, corridor) = setup(&env);
+    client.init(&admin);
+    client.add_publisher(&admin, &admin);
 
-    let budget = env.cost_estimate().budget();
+    let hash = String::from_str(&env, "0xoutcomehash");
+    let mut budget = env.cost_estimate().budget();
     budget.reset_default();
 
-    client.submit_outcome(&admin, &anchor, &hash, &42u64, &true);
+    client.submit_outcome(&admin, &anchor, &corridor, &hash, &42u64, &true);
 
     let cpu = budget.cpu_instruction_cost();
     let mem = budget.memory_bytes_cost();
 
-    // Consumed by scripts/gas-report.ts.
     println!("GAS_REPORT entrypoint=submit_outcome scenario=cold cpu={cpu} mem={mem}");
 
     assert!(
@@ -60,24 +55,25 @@ fn submit_outcome_stays_within_gas_budget() {
     );
 }
 
-/// A submit after `HISTORY_DEPTH` prior submits must also respect the ceiling,
-/// guarding against per-entry cost that scales unacceptably with history.
+/// A submit after `HISTORY_DEPTH` prior submits must also respect the ceiling.
 #[test]
 fn submit_outcome_cost_is_bounded_under_history() {
     let env = Env::default();
     env.mock_all_auths();
-    let (client, admin, anchor) = setup(&env);
+    let (client, admin, anchor, corridor) = setup(&env);
+    client.init(&admin);
+    client.add_publisher(&admin, &admin);
 
     for i in 0..HISTORY_DEPTH {
         let hash = String::from_str(&env, "0xprior");
-        client.submit_outcome(&admin, &anchor, &hash, &(i as u64), &true);
+        client.submit_outcome(&admin, &anchor, &corridor, &hash, &(i as u64), &true);
     }
 
     let hash = String::from_str(&env, "0xmeasured");
-    let budget = env.cost_estimate().budget();
+    let mut budget = env.cost_estimate().budget();
     budget.reset_default();
 
-    client.submit_outcome(&admin, &anchor, &hash, &99u64, &true);
+    client.submit_outcome(&admin, &anchor, &corridor, &hash, &99u64, &true);
 
     let cpu = budget.cpu_instruction_cost();
     let mem = budget.memory_bytes_cost();

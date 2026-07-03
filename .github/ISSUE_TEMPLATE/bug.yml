@@ -1,6 +1,6 @@
 name: 🐛 Bug report
 description: Something that is supposed to work does not. Prefer this over Discussions when you can reproduce.
-title: "[BUG] [SCOPE] <short description>"
+title: '[BUG] [SCOPE] <short description>'
 labels:
   - bug
   - triage
@@ -154,7 +154,7 @@ body:
     attributes:
       label: Commit / version
       description: Git SHA (`git rev-parse HEAD`) or version tag you reproduced on. `main` is not enough.
-      placeholder: "e.g. 45a82eb or v1.0.0"
+      placeholder: 'e.g. 45a82eb or v1.0.0'
     validations:
       required: true
 
@@ -162,7 +162,7 @@ body:
     id: browser
     attributes:
       label: Browser + OS
-      placeholder: "Chrome 126 on macOS 14.5"
+      placeholder: 'Chrome 126 on macOS 14.5'
     validations:
       required: true
 
@@ -171,7 +171,7 @@ body:
     attributes:
       label: Freighter version (if wallet involved)
       description: Shown in the Freighter extension settings. Put `N/A` if wallet is not involved.
-      placeholder: "5.7.0"
+      placeholder: '5.7.0'
 
   - type: dropdown
     id: network
@@ -203,7 +203,7 @@ body:
     attributes:
       label: Stellar transaction hash (if applicable)
       description: If the bug involved an on-ledger transaction, paste the hash so we can inspect it on Stellar Expert.
-      placeholder: "e.g. abc123… or N/A"
+      placeholder: 'e.g. abc123… or N/A'
 
   - type: checkboxes
     id: preflight
