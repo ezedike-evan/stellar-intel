@@ -6,8 +6,27 @@ import { StatBar } from '@/components/landing/StatBar';
 import { CorridorStrip } from '@/components/landing/CorridorStrip';
 import { ComparisonTeaser } from '@/components/landing/ComparisonTeaser';
 import { Faq } from '@/components/landing/Faq';
+import { FeatureGrid } from '@/components/landing/FeatureGrid';
 import { LandingSection } from '@/components/landing/LandingSection';
 import { registryStats } from '@/constants';
+
+const HOW_IT_WORKS_STEPS = [
+  {
+    step: '01',
+    title: 'Pick your corridor',
+    body: 'Choose a destination country and the USDC amount to withdraw.',
+  },
+  {
+    step: '02',
+    title: 'Compare live quotes',
+    body: 'We pull live SEP-38 quotes from every integrated anchor.',
+  },
+  {
+    step: '03',
+    title: 'Execute in one click',
+    body: 'Sign once and settle directly on Stellar with Freighter — non-custodial.',
+  },
+];
 
 export default function HomePage() {
   const stats = registryStats();
@@ -77,40 +96,8 @@ export default function HomePage() {
       </LandingSection>
 
       {/* Explainer */}
-      <LandingSection
-        delay={300}
-        className="rounded-xl border border-gray-200 p-4 dark:border-gray-700 dark:bg-gray-800/50 sm:p-6"
-      >
-        <h2 className="mb-4 text-lg font-semibold text-gray-900 dark:text-white">How it works</h2>
-        <div className="grid grid-cols-1 gap-6 md:grid-cols-3">
-          {[
-            {
-              step: '01',
-              title: 'Pick your corridor',
-              body: 'Choose a destination country and the USDC amount to withdraw.',
-            },
-            {
-              step: '02',
-              title: 'Compare live quotes',
-              body: 'We pull live SEP-38 quotes from every integrated anchor.',
-            },
-            {
-              step: '03',
-              title: 'Execute in one click',
-              body: 'Sign once and settle directly on Stellar with Freighter — non-custodial.',
-            },
-          ].map(({ step, title, body }) => (
-            <div key={step} className="flex gap-4">
-              <div className="flex h-8 w-8 shrink-0 items-center justify-center rounded-full bg-blue-600 text-xs font-bold text-white dark:bg-blue-500">
-                {step}
-              </div>
-              <div>
-                <div className="font-medium text-gray-900 dark:text-white">{title}</div>
-                <div className="mt-1 text-sm text-gray-600 dark:text-gray-300">{body}</div>
-              </div>
-            </div>
-          ))}
-        </div>
+      <LandingSection delay={300}>
+        <FeatureGrid features={HOW_IT_WORKS_STEPS} />
       </LandingSection>
 
       {/* FAQ */}

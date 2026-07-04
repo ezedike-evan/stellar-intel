@@ -562,81 +562,85 @@ exports[`HomePage > matches snapshot 1`] = `
     </div>
   </section>
   <section
-    class="transition-all duration-700 ease-out opacity-0 translate-y-8 motion-reduce:transition-none motion-reduce:transform-none motion-reduce:opacity-100 rounded-xl border border-gray-200 p-4 dark:border-gray-700 dark:bg-gray-800/50 sm:p-6"
+    class="transition-all duration-700 ease-out opacity-0 translate-y-8 motion-reduce:transition-none motion-reduce:transform-none motion-reduce:opacity-100"
     style="transition-delay: 0ms;"
   >
-    <h2
-      class="mb-4 text-lg font-semibold text-gray-900 dark:text-white"
+    <section
+      class="rounded-xl border border-gray-200 p-4 dark:border-gray-700 dark:bg-gray-800/50 sm:p-6"
     >
-      How it works
-    </h2>
-    <div
-      class="grid grid-cols-1 gap-6 md:grid-cols-3"
-    >
+      <h2
+        class="mb-4 text-lg font-semibold text-gray-900 dark:text-white"
+      >
+        How it works
+      </h2>
       <div
-        class="flex gap-4"
+        class="grid grid-cols-1 gap-6 md:grid-cols-3"
       >
         <div
-          class="flex h-8 w-8 shrink-0 items-center justify-center rounded-full bg-blue-600 text-xs font-bold text-white dark:bg-blue-500"
+          class="flex gap-4"
         >
-          01
-        </div>
-        <div>
           <div
-            class="font-medium text-gray-900 dark:text-white"
+            class="flex h-8 w-8 shrink-0 items-center justify-center rounded-full bg-blue-600 text-xs font-bold text-white dark:bg-blue-500"
           >
-            Pick your corridor
+            01
           </div>
+          <div>
+            <div
+              class="font-medium text-gray-900 dark:text-white"
+            >
+              Pick your corridor
+            </div>
+            <div
+              class="mt-1 text-sm text-gray-600 dark:text-gray-300"
+            >
+              Choose a destination country and the USDC amount to withdraw.
+            </div>
+          </div>
+        </div>
+        <div
+          class="flex gap-4"
+        >
           <div
-            class="mt-1 text-sm text-gray-600 dark:text-gray-300"
+            class="flex h-8 w-8 shrink-0 items-center justify-center rounded-full bg-blue-600 text-xs font-bold text-white dark:bg-blue-500"
           >
-            Choose a destination country and the USDC amount to withdraw.
+            02
+          </div>
+          <div>
+            <div
+              class="font-medium text-gray-900 dark:text-white"
+            >
+              Compare live quotes
+            </div>
+            <div
+              class="mt-1 text-sm text-gray-600 dark:text-gray-300"
+            >
+              We pull live SEP-38 quotes from every integrated anchor.
+            </div>
+          </div>
+        </div>
+        <div
+          class="flex gap-4"
+        >
+          <div
+            class="flex h-8 w-8 shrink-0 items-center justify-center rounded-full bg-blue-600 text-xs font-bold text-white dark:bg-blue-500"
+          >
+            03
+          </div>
+          <div>
+            <div
+              class="font-medium text-gray-900 dark:text-white"
+            >
+              Execute in one click
+            </div>
+            <div
+              class="mt-1 text-sm text-gray-600 dark:text-gray-300"
+            >
+              Sign once and settle directly on Stellar with Freighter — non-custodial.
+            </div>
           </div>
         </div>
       </div>
-      <div
-        class="flex gap-4"
-      >
-        <div
-          class="flex h-8 w-8 shrink-0 items-center justify-center rounded-full bg-blue-600 text-xs font-bold text-white dark:bg-blue-500"
-        >
-          02
-        </div>
-        <div>
-          <div
-            class="font-medium text-gray-900 dark:text-white"
-          >
-            Compare live quotes
-          </div>
-          <div
-            class="mt-1 text-sm text-gray-600 dark:text-gray-300"
-          >
-            We pull live SEP-38 quotes from every integrated anchor.
-          </div>
-        </div>
-      </div>
-      <div
-        class="flex gap-4"
-      >
-        <div
-          class="flex h-8 w-8 shrink-0 items-center justify-center rounded-full bg-blue-600 text-xs font-bold text-white dark:bg-blue-500"
-        >
-          03
-        </div>
-        <div>
-          <div
-            class="font-medium text-gray-900 dark:text-white"
-          >
-            Execute in one click
-          </div>
-          <div
-            class="mt-1 text-sm text-gray-600 dark:text-gray-300"
-          >
-            Sign once and settle directly on Stellar with Freighter — non-custodial.
-          </div>
-        </div>
-      </div>
-    </div>
+    </section>
   </section>
   <section
     class="transition-all duration-700 ease-out opacity-0 translate-y-8 motion-reduce:transition-none motion-reduce:transform-none motion-reduce:opacity-100"
