@@ -5,298 +5,313 @@ exports[`HomePage > matches snapshot 1`] = `
   class="space-y-8 sm:space-y-16"
 >
   <section
-    aria-labelledby="hero-heading"
-    class="py-8 text-center sm:py-12"
+    class="transition-all duration-700 ease-out opacity-0 translate-y-8 motion-reduce:transition-none motion-reduce:transform-none motion-reduce:opacity-100"
+    style="transition-delay: 0ms;"
   >
-    <div
-      class="mb-4 inline-flex items-center gap-2 rounded-full bg-blue-50 px-4 py-1.5 text-sm font-medium text-blue-700 dark:bg-blue-900/30 dark:text-blue-300"
+    <section
+      aria-labelledby="hero-heading"
+      class="py-8 text-center sm:py-12"
     >
-      <svg
-        aria-hidden="true"
-        class="lucide lucide-zap h-3.5 w-3.5"
-        fill="none"
-        height="24"
-        stroke="currentColor"
-        stroke-linecap="round"
-        stroke-linejoin="round"
-        stroke-width="2"
-        viewBox="0 0 24 24"
-        width="24"
-        xmlns="http://www.w3.org/2000/svg"
+      <div
+        class="mb-4 inline-flex items-center gap-2 rounded-full bg-blue-50 px-4 py-1.5 text-sm font-medium text-blue-700 dark:bg-blue-900/30 dark:text-blue-300"
       >
-        <path
-          d="M4 14a1 1 0 0 1-.78-1.63l9.9-10.2a.5.5 0 0 1 .86.46l-1.92 6.02A1 1 0 0 0 13 10h7a1 1 0 0 1 .78 1.63l-9.9 10.2a.5.5 0 0 1-.86-.46l1.92-6.02A1 1 0 0 0 11 14z"
+        <svg
+          aria-hidden="true"
+          class="lucide lucide-zap h-3.5 w-3.5"
+          fill="none"
+          height="24"
+          stroke="currentColor"
+          stroke-linecap="round"
+          stroke-linejoin="round"
+          stroke-width="2"
+          viewBox="0 0 24 24"
+          width="24"
+          xmlns="http://www.w3.org/2000/svg"
+        >
+          <path
+            d="M4 14a1 1 0 0 1-.78-1.63l9.9-10.2a.5.5 0 0 1 .86.46l-1.92 6.02A1 1 0 0 0 13 10h7a1 1 0 0 1 .78 1.63l-9.9 10.2a.5.5 0 0 1-.86-.46l1.92-6.02A1 1 0 0 0 11 14z"
+          />
+        </svg>
+        Stellar Execution Layer
+      </div>
+      <h1
+        class="mb-4 text-3xl font-bold tracking-tight text-gray-900 dark:text-white sm:text-4xl md:text-5xl"
+        id="hero-heading"
+      >
+        The execution layer for
+        <br
+          class="hidden sm:block"
         />
-      </svg>
-      Stellar Execution Layer
-    </div>
-    <h1
-      class="mb-4 text-3xl font-bold tracking-tight text-gray-900 dark:text-white sm:text-4xl md:text-5xl"
-      id="hero-heading"
-    >
-      The execution layer for
-      <br
-        class="hidden sm:block"
-      />
-      <span
-        class="text-blue-600 dark:text-blue-400"
+        <span
+          class="text-blue-600 dark:text-blue-400"
+        >
+          stablecoin off-ramps.
+        </span>
+      </h1>
+      <p
+        class="mx-auto max-w-2xl text-lg text-gray-600 dark:text-gray-300"
       >
-        stablecoin off-ramps.
-      </span>
-    </h1>
-    <p
-      class="mx-auto max-w-2xl text-lg text-gray-600 dark:text-gray-300"
-    >
-      Compare live SEP-38 quotes across every Stellar anchor, then settle a non-custodial USDC off-ramp to Nigeria, Kenya, Ghana, Mexico, and more — in a single signed intent.
-    </p>
-    <div
-      class="mt-8 flex flex-wrap items-center justify-center gap-4"
-    >
-      <a
-        href="/offramp"
+        Compare live SEP-38 quotes across every Stellar anchor, then settle a non-custodial USDC off-ramp to Nigeria, Kenya, Ghana, Mexico, and more — in a single signed intent.
+      </p>
+      <div
+        class="mt-8 flex flex-wrap items-center justify-center gap-4"
       >
-        Off-ramp now
-      </a>
-      <a
-        href="/anchors"
-      >
-        View anchors
-      </a>
-    </div>
+        <a
+          href="/offramp"
+        >
+          Off-ramp now
+        </a>
+        <a
+          href="/anchors"
+        >
+          View anchors
+        </a>
+      </div>
+    </section>
   </section>
   <section
-    aria-label="Key statistics"
-    class="grid grid-cols-1 gap-4 rounded-xl border border-gray-200 bg-gray-50 p-4 dark:border-gray-700 dark:bg-gray-800 sm:grid-cols-3"
+    class="transition-all duration-700 ease-out opacity-0 translate-y-8 motion-reduce:transition-none motion-reduce:transform-none motion-reduce:opacity-100"
+    style="transition-delay: 0ms;"
   >
-    <div
-      class="flex items-center gap-3"
+    <section
+      aria-label="Key statistics"
+      class="grid grid-cols-1 gap-4 rounded-xl border border-gray-200 bg-gray-50 p-4 dark:border-gray-700 dark:bg-gray-800 sm:grid-cols-3"
     >
-      <svg
-        aria-hidden="true"
-        class="lucide lucide-landmark h-5 w-5 shrink-0 text-blue-600 dark:text-blue-400"
-        fill="none"
-        height="24"
-        stroke="currentColor"
-        stroke-linecap="round"
-        stroke-linejoin="round"
-        stroke-width="2"
-        viewBox="0 0 24 24"
-        width="24"
-        xmlns="http://www.w3.org/2000/svg"
+      <div
+        class="flex items-center gap-3"
       >
-        <path
-          d="M10 18v-7"
-        />
-        <path
-          d="M11.119 2.205a2 2 0 0 1 1.762 0l7.84 3.846A.5.5 0 0 1 20.5 7h-17a.5.5 0 0 1-.22-.949z"
-        />
-        <path
-          d="M14 18v-7"
-        />
-        <path
-          d="M18 18v-7"
-        />
-        <path
-          d="M3 22h18"
-        />
-        <path
-          d="M6 18v-7"
-        />
-      </svg>
-      <div>
-        <div
-          class="text-xl font-bold text-gray-900 dark:text-white"
+        <svg
+          aria-hidden="true"
+          class="lucide lucide-landmark h-5 w-5 shrink-0 text-blue-600 dark:text-blue-400"
+          fill="none"
+          height="24"
+          stroke="currentColor"
+          stroke-linecap="round"
+          stroke-linejoin="round"
+          stroke-width="2"
+          viewBox="0 0 24 24"
+          width="24"
+          xmlns="http://www.w3.org/2000/svg"
         >
-          <div>
-            <span
-              class="relative inline-grid tabular-nums"
-            >
+          <path
+            d="M10 18v-7"
+          />
+          <path
+            d="M11.119 2.205a2 2 0 0 1 1.762 0l7.84 3.846A.5.5 0 0 1 20.5 7h-17a.5.5 0 0 1-.22-.949z"
+          />
+          <path
+            d="M14 18v-7"
+          />
+          <path
+            d="M18 18v-7"
+          />
+          <path
+            d="M3 22h18"
+          />
+          <path
+            d="M6 18v-7"
+          />
+        </svg>
+        <div>
+          <div
+            class="text-xl font-bold text-gray-900 dark:text-white"
+          >
+            <div>
               <span
-                aria-hidden="true"
-                class="invisible"
+                class="relative inline-grid tabular-nums"
               >
-                3
+                <span
+                  aria-hidden="true"
+                  class="invisible"
+                >
+                  3
+                </span>
+                <span
+                  class="absolute inset-0"
+                >
+                  0
+                </span>
               </span>
-              <span
-                class="absolute inset-0"
-              >
-                0
-              </span>
-            </span>
+            </div>
+          </div>
+          <div
+            class="text-xs text-gray-600 dark:text-gray-300"
+          >
+            Anchors tracked
           </div>
         </div>
-        <div
-          class="text-xs text-gray-600 dark:text-gray-300"
-        >
-          Anchors tracked
-        </div>
       </div>
-    </div>
-    <div
-      class="flex items-center gap-3"
-    >
-      <svg
-        aria-hidden="true"
-        class="lucide lucide-route h-5 w-5 shrink-0 text-blue-600 dark:text-blue-400"
-        fill="none"
-        height="24"
-        stroke="currentColor"
-        stroke-linecap="round"
-        stroke-linejoin="round"
-        stroke-width="2"
-        viewBox="0 0 24 24"
-        width="24"
-        xmlns="http://www.w3.org/2000/svg"
+      <div
+        class="flex items-center gap-3"
       >
-        <circle
-          cx="6"
-          cy="19"
-          r="3"
-        />
-        <path
-          d="M9 19h8.5a3.5 3.5 0 0 0 0-7h-11a3.5 3.5 0 0 1 0-7H15"
-        />
-        <circle
-          cx="18"
-          cy="5"
-          r="3"
-        />
-      </svg>
-      <div>
-        <div
-          class="text-xl font-bold text-gray-900 dark:text-white"
+        <svg
+          aria-hidden="true"
+          class="lucide lucide-route h-5 w-5 shrink-0 text-blue-600 dark:text-blue-400"
+          fill="none"
+          height="24"
+          stroke="currentColor"
+          stroke-linecap="round"
+          stroke-linejoin="round"
+          stroke-width="2"
+          viewBox="0 0 24 24"
+          width="24"
+          xmlns="http://www.w3.org/2000/svg"
         >
-          <div>
-            <span
-              class="relative inline-grid tabular-nums"
-            >
+          <circle
+            cx="6"
+            cy="19"
+            r="3"
+          />
+          <path
+            d="M9 19h8.5a3.5 3.5 0 0 0 0-7h-11a3.5 3.5 0 0 1 0-7H15"
+          />
+          <circle
+            cx="18"
+            cy="5"
+            r="3"
+          />
+        </svg>
+        <div>
+          <div
+            class="text-xl font-bold text-gray-900 dark:text-white"
+          >
+            <div>
               <span
-                aria-hidden="true"
-                class="invisible"
+                class="relative inline-grid tabular-nums"
               >
-                2
+                <span
+                  aria-hidden="true"
+                  class="invisible"
+                >
+                  2
+                </span>
+                <span
+                  class="absolute inset-0"
+                >
+                  0
+                </span>
               </span>
-              <span
-                class="absolute inset-0"
-              >
-                0
-              </span>
-            </span>
+            </div>
+          </div>
+          <div
+            class="text-xs text-gray-600 dark:text-gray-300"
+          >
+            Corridors live
           </div>
         </div>
-        <div
-          class="text-xs text-gray-600 dark:text-gray-300"
-        >
-          Corridors live
-        </div>
       </div>
-    </div>
-    <div
-      class="flex items-center gap-3"
-    >
-      <svg
-        aria-hidden="true"
-        class="lucide lucide-globe h-5 w-5 shrink-0 text-blue-600 dark:text-blue-400"
-        fill="none"
-        height="24"
-        stroke="currentColor"
-        stroke-linecap="round"
-        stroke-linejoin="round"
-        stroke-width="2"
-        viewBox="0 0 24 24"
-        width="24"
-        xmlns="http://www.w3.org/2000/svg"
+      <div
+        class="flex items-center gap-3"
       >
-        <circle
-          cx="12"
-          cy="12"
-          r="10"
-        />
-        <path
-          d="M12 2a14.5 14.5 0 0 0 0 20 14.5 14.5 0 0 0 0-20"
-        />
-        <path
-          d="M2 12h20"
-        />
-      </svg>
-      <div>
-        <div
-          class="text-xl font-bold text-gray-900 dark:text-white"
+        <svg
+          aria-hidden="true"
+          class="lucide lucide-globe h-5 w-5 shrink-0 text-blue-600 dark:text-blue-400"
+          fill="none"
+          height="24"
+          stroke="currentColor"
+          stroke-linecap="round"
+          stroke-linejoin="round"
+          stroke-width="2"
+          viewBox="0 0 24 24"
+          width="24"
+          xmlns="http://www.w3.org/2000/svg"
         >
-          <div>
-            <span
-              class="relative inline-grid tabular-nums"
-            >
+          <circle
+            cx="12"
+            cy="12"
+            r="10"
+          />
+          <path
+            d="M12 2a14.5 14.5 0 0 0 0 20 14.5 14.5 0 0 0 0-20"
+          />
+          <path
+            d="M2 12h20"
+          />
+        </svg>
+        <div>
+          <div
+            class="text-xl font-bold text-gray-900 dark:text-white"
+          >
+            <div>
               <span
-                aria-hidden="true"
-                class="invisible"
+                class="relative inline-grid tabular-nums"
               >
-                2
+                <span
+                  aria-hidden="true"
+                  class="invisible"
+                >
+                  2
+                </span>
+                <span
+                  class="absolute inset-0"
+                >
+                  0
+                </span>
               </span>
-              <span
-                class="absolute inset-0"
-              >
-                0
-              </span>
-            </span>
+            </div>
+          </div>
+          <div
+            class="text-xs text-gray-600 dark:text-gray-300"
+          >
+            Countries reachable
           </div>
         </div>
-        <div
-          class="text-xs text-gray-600 dark:text-gray-300"
-        >
-          Countries reachable
-        </div>
       </div>
-    </div>
+    </section>
   </section>
   <section
-    aria-label="Supported corridors"
+    class="transition-all duration-700 ease-out opacity-0 translate-y-8 motion-reduce:transition-none motion-reduce:transform-none motion-reduce:opacity-100"
+    style="transition-delay: 0ms;"
   >
-    <p
-      class="mb-3 text-xs font-semibold uppercase tracking-wide text-gray-500 dark:text-gray-400"
+    <section
+      aria-label="Supported corridors"
     >
-      Supported corridors
-    </p>
-    <ul
-      class="flex flex-wrap gap-2"
-    >
-      <li
-        class="inline-flex items-center gap-2 rounded-full border border-gray-200 bg-white px-3 py-1.5 text-sm font-medium text-gray-700 dark:border-gray-700 dark:bg-gray-800 dark:text-gray-300"
+      <p
+        class="mb-3 text-xs font-semibold uppercase tracking-wide text-gray-500 dark:text-gray-400"
       >
-        <span
-          aria-hidden="true"
-          class="text-base leading-none"
-        >
-          🇳🇬
-        </span>
-        <span>
-          NGN
-        </span>
-        <span
-          class="sr-only"
-        >
-          Nigeria
-        </span>
-      </li>
-      <li
-        class="inline-flex items-center gap-2 rounded-full border border-gray-200 bg-white px-3 py-1.5 text-sm font-medium text-gray-700 dark:border-gray-700 dark:bg-gray-800 dark:text-gray-300"
+        Supported corridors
+      </p>
+      <ul
+        class="flex flex-wrap gap-2"
       >
-        <span
-          aria-hidden="true"
-          class="text-base leading-none"
+        <li
+          class="inline-flex items-center gap-2 rounded-full border border-gray-200 bg-white px-3 py-1.5 text-sm font-medium text-gray-700 dark:border-gray-700 dark:bg-gray-800 dark:text-gray-300"
         >
-          🇰🇪
-        </span>
-        <span>
-          KES
-        </span>
-        <span
-          class="sr-only"
+          <span
+            aria-hidden="true"
+            class="text-base leading-none"
+          >
+            🇳🇬
+          </span>
+          <span>
+            NGN
+          </span>
+          <span
+            class="sr-only"
+          >
+            Nigeria
+          </span>
+        </li>
+        <li
+          class="inline-flex items-center gap-2 rounded-full border border-gray-200 bg-white px-3 py-1.5 text-sm font-medium text-gray-700 dark:border-gray-700 dark:bg-gray-800 dark:text-gray-300"
         >
-          Kenya
-        </span>
-      </li>
-    </ul>
+          <span
+            aria-hidden="true"
+            class="text-base leading-none"
+          >
+            🇰🇪
+          </span>
+          <span>
+            KES
+          </span>
+          <span
+            class="sr-only"
+          >
+            Kenya
+          </span>
+        </li>
+      </ul>
+    </section>
   </section>
   <section
     aria-labelledby="compare-heading"
@@ -490,7 +505,10 @@ exports[`HomePage > matches snapshot 1`] = `
       </svg>
     </a>
   </section>
-  <section>
+  <section
+    class="transition-all duration-700 ease-out opacity-0 translate-y-8 motion-reduce:transition-none motion-reduce:transform-none motion-reduce:opacity-100"
+    style="transition-delay: 0ms;"
+  >
     <h2
       class="mb-6 text-xl font-semibold text-gray-900 dark:text-white"
     >
@@ -544,7 +562,8 @@ exports[`HomePage > matches snapshot 1`] = `
     </div>
   </section>
   <section
-    class="rounded-xl border border-gray-200 p-4 dark:border-gray-700 dark:bg-gray-800/50 sm:p-6"
+    class="transition-all duration-700 ease-out opacity-0 translate-y-8 motion-reduce:transition-none motion-reduce:transform-none motion-reduce:opacity-100 rounded-xl border border-gray-200 p-4 dark:border-gray-700 dark:bg-gray-800/50 sm:p-6"
+    style="transition-delay: 0ms;"
   >
     <h2
       class="mb-4 text-lg font-semibold text-gray-900 dark:text-white"
@@ -620,338 +639,343 @@ exports[`HomePage > matches snapshot 1`] = `
     </div>
   </section>
   <section
-    aria-labelledby="faq-heading"
+    class="transition-all duration-700 ease-out opacity-0 translate-y-8 motion-reduce:transition-none motion-reduce:transform-none motion-reduce:opacity-100"
+    style="transition-delay: 0ms;"
   >
-    <h2
-      class="mb-6 text-xl font-semibold text-gray-900 dark:text-white"
-      id="faq-heading"
+    <section
+      aria-labelledby="faq-heading"
     >
-      Frequently asked questions
-    </h2>
-    <dl
-      class="divide-y divide-gray-200 rounded-xl border border-gray-200 dark:divide-gray-700 dark:border-gray-700"
-    >
-      <div>
-        <dt
-          id="faq-heading-0"
-        >
-          <button
-            aria-controls="faq-panel-0"
-            aria-expanded="false"
-            class="flex w-full items-center justify-between px-5 py-4 text-left text-sm font-medium text-gray-900 hover:bg-gray-50 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-blue-600 dark:text-white dark:hover:bg-gray-800/60"
-            type="button"
+      <h2
+        class="mb-6 text-xl font-semibold text-gray-900 dark:text-white"
+        id="faq-heading"
+      >
+        Frequently asked questions
+      </h2>
+      <dl
+        class="divide-y divide-gray-200 rounded-xl border border-gray-200 dark:divide-gray-700 dark:border-gray-700"
+      >
+        <div>
+          <dt
+            id="faq-heading-0"
           >
-            <span>
-              Is this custodial? Do you hold my money?
-            </span>
-            <svg
-              aria-hidden="true"
-              class="lucide lucide-chevron-down ml-4 h-4 w-4 shrink-0 text-gray-500 transition-transform duration-200 dark:text-gray-400"
-              fill="none"
-              height="24"
-              stroke="currentColor"
-              stroke-linecap="round"
-              stroke-linejoin="round"
-              stroke-width="2"
-              viewBox="0 0 24 24"
-              width="24"
-              xmlns="http://www.w3.org/2000/svg"
+            <button
+              aria-controls="faq-panel-0"
+              aria-expanded="false"
+              class="flex w-full items-center justify-between px-5 py-4 text-left text-sm font-medium text-gray-900 hover:bg-gray-50 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-blue-600 dark:text-white dark:hover:bg-gray-800/60"
+              type="button"
             >
-              <path
-                d="m6 9 6 6 6-6"
-              />
-            </svg>
-          </button>
-        </dt>
-        <dd
-          class="px-5 pb-4 pt-0 text-sm text-gray-600 dark:text-gray-400"
-          hidden=""
-          id="faq-panel-0"
-        >
-          No. Stellar Intel never holds user funds, user keys, fiat, or KYC data. You sign every transaction in your own wallet; the anchor takes custody under SEP-24/SEP-6; Stellar enforces atomicity.
-        </dd>
-      </div>
-      <div>
-        <dt
-          id="faq-heading-1"
-        >
-          <button
-            aria-controls="faq-panel-1"
-            aria-expanded="false"
-            class="flex w-full items-center justify-between px-5 py-4 text-left text-sm font-medium text-gray-900 hover:bg-gray-50 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-blue-600 dark:text-white dark:hover:bg-gray-800/60"
-            type="button"
+              <span>
+                Is this custodial? Do you hold my money?
+              </span>
+              <svg
+                aria-hidden="true"
+                class="lucide lucide-chevron-down ml-4 h-4 w-4 shrink-0 text-gray-500 transition-transform duration-200 dark:text-gray-400"
+                fill="none"
+                height="24"
+                stroke="currentColor"
+                stroke-linecap="round"
+                stroke-linejoin="round"
+                stroke-width="2"
+                viewBox="0 0 24 24"
+                width="24"
+                xmlns="http://www.w3.org/2000/svg"
+              >
+                <path
+                  d="m6 9 6 6 6-6"
+                />
+              </svg>
+            </button>
+          </dt>
+          <dd
+            class="px-5 pb-4 pt-0 text-sm text-gray-600 dark:text-gray-400"
+            hidden=""
+            id="faq-panel-0"
           >
-            <span>
-              What happens if an anchor fails or doesn't pay out?
-            </span>
-            <svg
-              aria-hidden="true"
-              class="lucide lucide-chevron-down ml-4 h-4 w-4 shrink-0 text-gray-500 transition-transform duration-200 dark:text-gray-400"
-              fill="none"
-              height="24"
-              stroke="currentColor"
-              stroke-linecap="round"
-              stroke-linejoin="round"
-              stroke-width="2"
-              viewBox="0 0 24 24"
-              width="24"
-              xmlns="http://www.w3.org/2000/svg"
-            >
-              <path
-                d="m6 9 6 6 6-6"
-              />
-            </svg>
-          </button>
-        </dt>
-        <dd
-          class="px-5 pb-4 pt-0 text-sm text-gray-600 dark:text-gray-400"
-          hidden=""
-          id="faq-panel-1"
-        >
-          The anchor — not Stellar Intel — is the settlement party. We surface that risk before you choose: each anchor carries a reputation score built from real outcomes (fill rate, slippage, settle latency). A failing anchor ranks down and its failures are recorded. If an outcome is wrong, you can file a dispute, which resolves on signed, replayable evidence.
-        </dd>
-      </div>
-      <div>
-        <dt
-          id="faq-heading-2"
-        >
-          <button
-            aria-controls="faq-panel-2"
-            aria-expanded="false"
-            class="flex w-full items-center justify-between px-5 py-4 text-left text-sm font-medium text-gray-900 hover:bg-gray-50 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-blue-600 dark:text-white dark:hover:bg-gray-800/60"
-            type="button"
+            No. Stellar Intel never holds user funds, user keys, fiat, or KYC data. You sign every transaction in your own wallet; the anchor takes custody under SEP-24/SEP-6; Stellar enforces atomicity.
+          </dd>
+        </div>
+        <div>
+          <dt
+            id="faq-heading-1"
           >
-            <span>
-              How is this different from a block explorer or a single anchor's app?
-            </span>
-            <svg
-              aria-hidden="true"
-              class="lucide lucide-chevron-down ml-4 h-4 w-4 shrink-0 text-gray-500 transition-transform duration-200 dark:text-gray-400"
-              fill="none"
-              height="24"
-              stroke="currentColor"
-              stroke-linecap="round"
-              stroke-linejoin="round"
-              stroke-width="2"
-              viewBox="0 0 24 24"
-              width="24"
-              xmlns="http://www.w3.org/2000/svg"
+            <button
+              aria-controls="faq-panel-1"
+              aria-expanded="false"
+              class="flex w-full items-center justify-between px-5 py-4 text-left text-sm font-medium text-gray-900 hover:bg-gray-50 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-blue-600 dark:text-white dark:hover:bg-gray-800/60"
+              type="button"
             >
-              <path
-                d="m6 9 6 6 6-6"
-              />
-            </svg>
-          </button>
-        </dt>
-        <dd
-          class="px-5 pb-4 pt-0 text-sm text-gray-600 dark:text-gray-400"
-          hidden=""
-          id="faq-panel-2"
-        >
-          We compare live rates across every integrated anchor and rank by net landed value (rate − fees − slippage − historical fill-rate penalty), not headline rate — then let you execute in one click. Plus a public reputation oracle and an MCP agent surface. It's the execution layer, not just a price page.
-        </dd>
-      </div>
-      <div>
-        <dt
-          id="faq-heading-3"
-        >
-          <button
-            aria-controls="faq-panel-3"
-            aria-expanded="false"
-            class="flex w-full items-center justify-between px-5 py-4 text-left text-sm font-medium text-gray-900 hover:bg-gray-50 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-blue-600 dark:text-white dark:hover:bg-gray-800/60"
-            type="button"
+              <span>
+                What happens if an anchor fails or doesn't pay out?
+              </span>
+              <svg
+                aria-hidden="true"
+                class="lucide lucide-chevron-down ml-4 h-4 w-4 shrink-0 text-gray-500 transition-transform duration-200 dark:text-gray-400"
+                fill="none"
+                height="24"
+                stroke="currentColor"
+                stroke-linecap="round"
+                stroke-linejoin="round"
+                stroke-width="2"
+                viewBox="0 0 24 24"
+                width="24"
+                xmlns="http://www.w3.org/2000/svg"
+              >
+                <path
+                  d="m6 9 6 6 6-6"
+                />
+              </svg>
+            </button>
+          </dt>
+          <dd
+            class="px-5 pb-4 pt-0 text-sm text-gray-600 dark:text-gray-400"
+            hidden=""
+            id="faq-panel-1"
           >
-            <span>
-              Why did anchor X not show up in the comparison?
-            </span>
-            <svg
-              aria-hidden="true"
-              class="lucide lucide-chevron-down ml-4 h-4 w-4 shrink-0 text-gray-500 transition-transform duration-200 dark:text-gray-400"
-              fill="none"
-              height="24"
-              stroke="currentColor"
-              stroke-linecap="round"
-              stroke-linejoin="round"
-              stroke-width="2"
-              viewBox="0 0 24 24"
-              width="24"
-              xmlns="http://www.w3.org/2000/svg"
-            >
-              <path
-                d="m6 9 6 6 6-6"
-              />
-            </svg>
-          </button>
-        </dt>
-        <dd
-          class="px-5 pb-4 pt-0 text-sm text-gray-600 dark:text-gray-400"
-          hidden=""
-          id="faq-panel-3"
-        >
-          Most often: the anchor doesn't serve that corridor, or it only exposes a SEP the rate engine doesn't yet quote. Historically SEP-6-only anchors were dropped because the flow was SEP-24-only — SEP-6 support is being added. Failed anchors render as "unavailable" rather than disappearing silently.
-        </dd>
-      </div>
-      <div>
-        <dt
-          id="faq-heading-4"
-        >
-          <button
-            aria-controls="faq-panel-4"
-            aria-expanded="false"
-            class="flex w-full items-center justify-between px-5 py-4 text-left text-sm font-medium text-gray-900 hover:bg-gray-50 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-blue-600 dark:text-white dark:hover:bg-gray-800/60"
-            type="button"
+            The anchor — not Stellar Intel — is the settlement party. We surface that risk before you choose: each anchor carries a reputation score built from real outcomes (fill rate, slippage, settle latency). A failing anchor ranks down and its failures are recorded. If an outcome is wrong, you can file a dispute, which resolves on signed, replayable evidence.
+          </dd>
+        </div>
+        <div>
+          <dt
+            id="faq-heading-2"
           >
-            <span>
-              Which corridors and anchors are supported?
-            </span>
-            <svg
-              aria-hidden="true"
-              class="lucide lucide-chevron-down ml-4 h-4 w-4 shrink-0 text-gray-500 transition-transform duration-200 dark:text-gray-400"
-              fill="none"
-              height="24"
-              stroke="currentColor"
-              stroke-linecap="round"
-              stroke-linejoin="round"
-              stroke-width="2"
-              viewBox="0 0 24 24"
-              width="24"
-              xmlns="http://www.w3.org/2000/svg"
+            <button
+              aria-controls="faq-panel-2"
+              aria-expanded="false"
+              class="flex w-full items-center justify-between px-5 py-4 text-left text-sm font-medium text-gray-900 hover:bg-gray-50 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-blue-600 dark:text-white dark:hover:bg-gray-800/60"
+              type="button"
             >
-              <path
-                d="m6 9 6 6 6-6"
-              />
-            </svg>
-          </button>
-        </dt>
-        <dd
-          class="px-5 pb-4 pt-0 text-sm text-gray-600 dark:text-gray-400"
-          hidden=""
-          id="faq-panel-4"
-        >
-          See the anchor registry in constants/anchors.ts and the live app. Coverage expands via the anchor onboarding process.
-        </dd>
-      </div>
-      <div>
-        <dt
-          id="faq-heading-5"
-        >
-          <button
-            aria-controls="faq-panel-5"
-            aria-expanded="false"
-            class="flex w-full items-center justify-between px-5 py-4 text-left text-sm font-medium text-gray-900 hover:bg-gray-50 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-blue-600 dark:text-white dark:hover:bg-gray-800/60"
-            type="button"
+              <span>
+                How is this different from a block explorer or a single anchor's app?
+              </span>
+              <svg
+                aria-hidden="true"
+                class="lucide lucide-chevron-down ml-4 h-4 w-4 shrink-0 text-gray-500 transition-transform duration-200 dark:text-gray-400"
+                fill="none"
+                height="24"
+                stroke="currentColor"
+                stroke-linecap="round"
+                stroke-linejoin="round"
+                stroke-width="2"
+                viewBox="0 0 24 24"
+                width="24"
+                xmlns="http://www.w3.org/2000/svg"
+              >
+                <path
+                  d="m6 9 6 6 6-6"
+                />
+              </svg>
+            </button>
+          </dt>
+          <dd
+            class="px-5 pb-4 pt-0 text-sm text-gray-600 dark:text-gray-400"
+            hidden=""
+            id="faq-panel-2"
           >
-            <span>
-              Can an AI agent off-ramp through this?
-            </span>
-            <svg
-              aria-hidden="true"
-              class="lucide lucide-chevron-down ml-4 h-4 w-4 shrink-0 text-gray-500 transition-transform duration-200 dark:text-gray-400"
-              fill="none"
-              height="24"
-              stroke="currentColor"
-              stroke-linecap="round"
-              stroke-linejoin="round"
-              stroke-width="2"
-              viewBox="0 0 24 24"
-              width="24"
-              xmlns="http://www.w3.org/2000/svg"
-            >
-              <path
-                d="m6 9 6 6 6-6"
-              />
-            </svg>
-          </button>
-        </dt>
-        <dd
-          class="px-5 pb-4 pt-0 text-sm text-gray-600 dark:text-gray-400"
-          hidden=""
-          id="faq-panel-5"
-        >
-          Yes — an MCP server exposes pricing/comparison and a user-signed execute path. The agent cannot move funds on its own; every executing call must be signed by the user's wallet.
-        </dd>
-      </div>
-      <div>
-        <dt
-          id="faq-heading-6"
-        >
-          <button
-            aria-controls="faq-panel-6"
-            aria-expanded="false"
-            class="flex w-full items-center justify-between px-5 py-4 text-left text-sm font-medium text-gray-900 hover:bg-gray-50 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-blue-600 dark:text-white dark:hover:bg-gray-800/60"
-            type="button"
+            We compare live rates across every integrated anchor and rank by net landed value (rate − fees − slippage − historical fill-rate penalty), not headline rate — then let you execute in one click. Plus a public reputation oracle and an MCP agent surface. It's the execution layer, not just a price page.
+          </dd>
+        </div>
+        <div>
+          <dt
+            id="faq-heading-3"
           >
-            <span>
-              Is there an SDK?
-            </span>
-            <svg
-              aria-hidden="true"
-              class="lucide lucide-chevron-down ml-4 h-4 w-4 shrink-0 text-gray-500 transition-transform duration-200 dark:text-gray-400"
-              fill="none"
-              height="24"
-              stroke="currentColor"
-              stroke-linecap="round"
-              stroke-linejoin="round"
-              stroke-width="2"
-              viewBox="0 0 24 24"
-              width="24"
-              xmlns="http://www.w3.org/2000/svg"
+            <button
+              aria-controls="faq-panel-3"
+              aria-expanded="false"
+              class="flex w-full items-center justify-between px-5 py-4 text-left text-sm font-medium text-gray-900 hover:bg-gray-50 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-blue-600 dark:text-white dark:hover:bg-gray-800/60"
+              type="button"
             >
-              <path
-                d="m6 9 6 6 6-6"
-              />
-            </svg>
-          </button>
-        </dt>
-        <dd
-          class="px-5 pb-4 pt-0 text-sm text-gray-600 dark:text-gray-400"
-          hidden=""
-          id="faq-panel-6"
-        >
-          A typed client (@stellarintel/sdk) is on the roadmap (v4). Today you can call the HTTP API directly.
-        </dd>
-      </div>
-      <div>
-        <dt
-          id="faq-heading-7"
-        >
-          <button
-            aria-controls="faq-panel-7"
-            aria-expanded="false"
-            class="flex w-full items-center justify-between px-5 py-4 text-left text-sm font-medium text-gray-900 hover:bg-gray-50 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-blue-600 dark:text-white dark:hover:bg-gray-800/60"
-            type="button"
+              <span>
+                Why did anchor X not show up in the comparison?
+              </span>
+              <svg
+                aria-hidden="true"
+                class="lucide lucide-chevron-down ml-4 h-4 w-4 shrink-0 text-gray-500 transition-transform duration-200 dark:text-gray-400"
+                fill="none"
+                height="24"
+                stroke="currentColor"
+                stroke-linecap="round"
+                stroke-linejoin="round"
+                stroke-width="2"
+                viewBox="0 0 24 24"
+                width="24"
+                xmlns="http://www.w3.org/2000/svg"
+              >
+                <path
+                  d="m6 9 6 6 6-6"
+                />
+              </svg>
+            </button>
+          </dt>
+          <dd
+            class="px-5 pb-4 pt-0 text-sm text-gray-600 dark:text-gray-400"
+            hidden=""
+            id="faq-panel-3"
           >
-            <span>
-              How do I contribute?
-            </span>
-            <svg
-              aria-hidden="true"
-              class="lucide lucide-chevron-down ml-4 h-4 w-4 shrink-0 text-gray-500 transition-transform duration-200 dark:text-gray-400"
-              fill="none"
-              height="24"
-              stroke="currentColor"
-              stroke-linecap="round"
-              stroke-linejoin="round"
-              stroke-width="2"
-              viewBox="0 0 24 24"
-              width="24"
-              xmlns="http://www.w3.org/2000/svg"
+            Most often: the anchor doesn't serve that corridor, or it only exposes a SEP the rate engine doesn't yet quote. Historically SEP-6-only anchors were dropped because the flow was SEP-24-only — SEP-6 support is being added. Failed anchors render as "unavailable" rather than disappearing silently.
+          </dd>
+        </div>
+        <div>
+          <dt
+            id="faq-heading-4"
+          >
+            <button
+              aria-controls="faq-panel-4"
+              aria-expanded="false"
+              class="flex w-full items-center justify-between px-5 py-4 text-left text-sm font-medium text-gray-900 hover:bg-gray-50 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-blue-600 dark:text-white dark:hover:bg-gray-800/60"
+              type="button"
             >
-              <path
-                d="m6 9 6 6 6-6"
-              />
-            </svg>
-          </button>
-        </dt>
-        <dd
-          class="px-5 pb-4 pt-0 text-sm text-gray-600 dark:text-gray-400"
-          hidden=""
-          id="faq-panel-7"
-        >
-          Read CONTRIBUTING.md, pick a good-first-issue, and open a PR. The docs/COOKBOOK.md has end-to-end recipes.
-        </dd>
-      </div>
-    </dl>
+              <span>
+                Which corridors and anchors are supported?
+              </span>
+              <svg
+                aria-hidden="true"
+                class="lucide lucide-chevron-down ml-4 h-4 w-4 shrink-0 text-gray-500 transition-transform duration-200 dark:text-gray-400"
+                fill="none"
+                height="24"
+                stroke="currentColor"
+                stroke-linecap="round"
+                stroke-linejoin="round"
+                stroke-width="2"
+                viewBox="0 0 24 24"
+                width="24"
+                xmlns="http://www.w3.org/2000/svg"
+              >
+                <path
+                  d="m6 9 6 6 6-6"
+                />
+              </svg>
+            </button>
+          </dt>
+          <dd
+            class="px-5 pb-4 pt-0 text-sm text-gray-600 dark:text-gray-400"
+            hidden=""
+            id="faq-panel-4"
+          >
+            See the anchor registry in constants/anchors.ts and the live app. Coverage expands via the anchor onboarding process.
+          </dd>
+        </div>
+        <div>
+          <dt
+            id="faq-heading-5"
+          >
+            <button
+              aria-controls="faq-panel-5"
+              aria-expanded="false"
+              class="flex w-full items-center justify-between px-5 py-4 text-left text-sm font-medium text-gray-900 hover:bg-gray-50 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-blue-600 dark:text-white dark:hover:bg-gray-800/60"
+              type="button"
+            >
+              <span>
+                Can an AI agent off-ramp through this?
+              </span>
+              <svg
+                aria-hidden="true"
+                class="lucide lucide-chevron-down ml-4 h-4 w-4 shrink-0 text-gray-500 transition-transform duration-200 dark:text-gray-400"
+                fill="none"
+                height="24"
+                stroke="currentColor"
+                stroke-linecap="round"
+                stroke-linejoin="round"
+                stroke-width="2"
+                viewBox="0 0 24 24"
+                width="24"
+                xmlns="http://www.w3.org/2000/svg"
+              >
+                <path
+                  d="m6 9 6 6 6-6"
+                />
+              </svg>
+            </button>
+          </dt>
+          <dd
+            class="px-5 pb-4 pt-0 text-sm text-gray-600 dark:text-gray-400"
+            hidden=""
+            id="faq-panel-5"
+          >
+            Yes — an MCP server exposes pricing/comparison and a user-signed execute path. The agent cannot move funds on its own; every executing call must be signed by the user's wallet.
+          </dd>
+        </div>
+        <div>
+          <dt
+            id="faq-heading-6"
+          >
+            <button
+              aria-controls="faq-panel-6"
+              aria-expanded="false"
+              class="flex w-full items-center justify-between px-5 py-4 text-left text-sm font-medium text-gray-900 hover:bg-gray-50 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-blue-600 dark:text-white dark:hover:bg-gray-800/60"
+              type="button"
+            >
+              <span>
+                Is there an SDK?
+              </span>
+              <svg
+                aria-hidden="true"
+                class="lucide lucide-chevron-down ml-4 h-4 w-4 shrink-0 text-gray-500 transition-transform duration-200 dark:text-gray-400"
+                fill="none"
+                height="24"
+                stroke="currentColor"
+                stroke-linecap="round"
+                stroke-linejoin="round"
+                stroke-width="2"
+                viewBox="0 0 24 24"
+                width="24"
+                xmlns="http://www.w3.org/2000/svg"
+              >
+                <path
+                  d="m6 9 6 6 6-6"
+                />
+              </svg>
+            </button>
+          </dt>
+          <dd
+            class="px-5 pb-4 pt-0 text-sm text-gray-600 dark:text-gray-400"
+            hidden=""
+            id="faq-panel-6"
+          >
+            A typed client (@stellarintel/sdk) is on the roadmap (v4). Today you can call the HTTP API directly.
+          </dd>
+        </div>
+        <div>
+          <dt
+            id="faq-heading-7"
+          >
+            <button
+              aria-controls="faq-panel-7"
+              aria-expanded="false"
+              class="flex w-full items-center justify-between px-5 py-4 text-left text-sm font-medium text-gray-900 hover:bg-gray-50 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-blue-600 dark:text-white dark:hover:bg-gray-800/60"
+              type="button"
+            >
+              <span>
+                How do I contribute?
+              </span>
+              <svg
+                aria-hidden="true"
+                class="lucide lucide-chevron-down ml-4 h-4 w-4 shrink-0 text-gray-500 transition-transform duration-200 dark:text-gray-400"
+                fill="none"
+                height="24"
+                stroke="currentColor"
+                stroke-linecap="round"
+                stroke-linejoin="round"
+                stroke-width="2"
+                viewBox="0 0 24 24"
+                width="24"
+                xmlns="http://www.w3.org/2000/svg"
+              >
+                <path
+                  d="m6 9 6 6 6-6"
+                />
+              </svg>
+            </button>
+          </dt>
+          <dd
+            class="px-5 pb-4 pt-0 text-sm text-gray-600 dark:text-gray-400"
+            hidden=""
+            id="faq-panel-7"
+          >
+            Read CONTRIBUTING.md, pick a good-first-issue, and open a PR. The docs/COOKBOOK.md has end-to-end recipes.
+          </dd>
+        </div>
+      </dl>
+    </section>
   </section>
 </div>
 `;

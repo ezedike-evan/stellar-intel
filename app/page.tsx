@@ -6,6 +6,7 @@ import { StatBar } from '@/components/landing/StatBar';
 import { CorridorStrip } from '@/components/landing/CorridorStrip';
 import { ComparisonTeaser } from '@/components/landing/ComparisonTeaser';
 import { Faq } from '@/components/landing/Faq';
+import { LandingSection } from '@/components/landing/LandingSection';
 import { registryStats } from '@/constants';
 
 export default function HomePage() {
@@ -13,52 +14,58 @@ export default function HomePage() {
   return (
     <div className="space-y-8 sm:space-y-16">
       {/* Hero */}
-      <Hero />
+      <LandingSection delay={0}>
+        <Hero />
+      </LandingSection>
 
       {/* Stat bar — counts derived from the anchor registry */}
-      <StatBar
-        stats={[
-          {
-            icon: (
-              <Landmark
-                className="h-5 w-5 shrink-0 text-blue-600 dark:text-blue-400"
-                aria-hidden="true"
-              />
-            ),
-            value: stats.anchors,
-            label: 'Anchors tracked',
-          },
-          {
-            icon: (
-              <Route
-                className="h-5 w-5 shrink-0 text-blue-600 dark:text-blue-400"
-                aria-hidden="true"
-              />
-            ),
-            value: stats.corridors,
-            label: 'Corridors live',
-          },
-          {
-            icon: (
-              <Globe
-                className="h-5 w-5 shrink-0 text-blue-600 dark:text-blue-400"
-                aria-hidden="true"
-              />
-            ),
-            value: stats.countries,
-            label: 'Countries reachable',
-          },
-        ]}
-      />
+      <LandingSection delay={100}>
+        <StatBar
+          stats={[
+            {
+              icon: (
+                <Landmark
+                  className="h-5 w-5 shrink-0 text-blue-600 dark:text-blue-400"
+                  aria-hidden="true"
+                />
+              ),
+              value: stats.anchors,
+              label: 'Anchors tracked',
+            },
+            {
+              icon: (
+                <Route
+                  className="h-5 w-5 shrink-0 text-blue-600 dark:text-blue-400"
+                  aria-hidden="true"
+                />
+              ),
+              value: stats.corridors,
+              label: 'Corridors live',
+            },
+            {
+              icon: (
+                <Globe
+                  className="h-5 w-5 shrink-0 text-blue-600 dark:text-blue-400"
+                  aria-hidden="true"
+                />
+              ),
+              value: stats.countries,
+              label: 'Countries reachable',
+            },
+          ]}
+        />
+      </LandingSection>
 
       {/* Supported corridors */}
-      <CorridorStrip />
+      <LandingSection delay={150}>
+        <CorridorStrip />
+      </LandingSection>
 
       {/* Comparison teaser */}
       <ComparisonTeaser />
 
       {/* Module card */}
-      <section>
+      <LandingSection delay={200}>
         <h2 className="mb-6 text-xl font-semibold text-gray-900 dark:text-white">
           Start executing
         </h2>
@@ -82,10 +89,13 @@ export default function HomePage() {
             </Card>
           </Link>
         </div>
-      </section>
+      </LandingSection>
 
       {/* Explainer */}
-      <section className="rounded-xl border border-gray-200 p-4 dark:border-gray-700 dark:bg-gray-800/50 sm:p-6">
+      <LandingSection
+        delay={300}
+        className="rounded-xl border border-gray-200 p-4 dark:border-gray-700 dark:bg-gray-800/50 sm:p-6"
+      >
         <h2 className="mb-4 text-lg font-semibold text-gray-900 dark:text-white">How it works</h2>
         <div className="grid grid-cols-1 gap-6 md:grid-cols-3">
           {[
@@ -116,10 +126,12 @@ export default function HomePage() {
             </div>
           ))}
         </div>
-      </section>
+      </LandingSection>
 
       {/* FAQ */}
-      <Faq />
+      <LandingSection delay={350}>
+        <Faq />
+      </LandingSection>
     </div>
   );
 }
