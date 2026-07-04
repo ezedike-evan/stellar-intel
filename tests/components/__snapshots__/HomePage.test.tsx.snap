@@ -13,7 +13,7 @@ exports[`HomePage > matches snapshot 1`] = `
       class="py-8 text-center sm:py-12"
     >
       <div
-        class="mb-4 inline-flex items-center gap-2 rounded-full bg-blue-50 px-4 py-1.5 text-sm font-medium text-blue-700 dark:bg-blue-900/30 dark:text-blue-300"
+        class="mb-4 inline-flex items-center gap-2 rounded-full bg-accent-subtle px-4 py-1.5 text-sm font-medium text-accent"
       >
         <svg
           aria-hidden="true"
@@ -35,7 +35,7 @@ exports[`HomePage > matches snapshot 1`] = `
         Stellar Execution Layer
       </div>
       <h1
-        class="mb-4 text-3xl font-bold tracking-tight text-gray-900 dark:text-white sm:text-4xl md:text-5xl"
+        class="mb-4 text-3xl font-bold tracking-tight text-primary-text sm:text-4xl md:text-5xl"
         id="hero-heading"
       >
         The execution layer for
@@ -43,13 +43,13 @@ exports[`HomePage > matches snapshot 1`] = `
           class="hidden sm:block"
         />
         <span
-          class="text-blue-600 dark:text-blue-400"
+          class="text-accent"
         >
           stablecoin off-ramps.
         </span>
       </h1>
       <p
-        class="mx-auto max-w-2xl text-lg text-gray-600 dark:text-gray-300"
+        class="mx-auto max-w-2xl text-lg text-secondary-text"
       >
         Compare live SEP-38 quotes across every Stellar anchor, then settle a non-custodial USDC off-ramp to Nigeria, Kenya, Ghana, Mexico, and more — in a single signed intent.
       </p>
@@ -75,14 +75,14 @@ exports[`HomePage > matches snapshot 1`] = `
   >
     <section
       aria-label="Key statistics"
-      class="grid grid-cols-1 gap-4 rounded-xl border border-gray-200 bg-gray-50 p-4 dark:border-gray-700 dark:bg-gray-800 sm:grid-cols-3"
+      class="grid grid-cols-1 gap-4 rounded-xl border border-border bg-bg-subtle p-4 sm:grid-cols-3"
     >
       <div
         class="flex items-center gap-3"
       >
         <svg
           aria-hidden="true"
-          class="lucide lucide-landmark h-5 w-5 shrink-0 text-blue-600 dark:text-blue-400"
+          class="lucide lucide-landmark h-5 w-5 shrink-0 text-accent"
           fill="none"
           height="24"
           stroke="currentColor"
@@ -114,7 +114,7 @@ exports[`HomePage > matches snapshot 1`] = `
         </svg>
         <div>
           <div
-            class="text-xl font-bold text-gray-900 dark:text-white"
+            class="text-xl font-bold text-primary-text"
           >
             <div>
               <span
@@ -135,7 +135,7 @@ exports[`HomePage > matches snapshot 1`] = `
             </div>
           </div>
           <div
-            class="text-xs text-gray-600 dark:text-gray-300"
+            class="text-xs text-secondary-text"
           >
             Anchors tracked
           </div>
@@ -146,7 +146,7 @@ exports[`HomePage > matches snapshot 1`] = `
       >
         <svg
           aria-hidden="true"
-          class="lucide lucide-route h-5 w-5 shrink-0 text-blue-600 dark:text-blue-400"
+          class="lucide lucide-route h-5 w-5 shrink-0 text-accent"
           fill="none"
           height="24"
           stroke="currentColor"
@@ -173,7 +173,7 @@ exports[`HomePage > matches snapshot 1`] = `
         </svg>
         <div>
           <div
-            class="text-xl font-bold text-gray-900 dark:text-white"
+            class="text-xl font-bold text-primary-text"
           >
             <div>
               <span
@@ -194,7 +194,7 @@ exports[`HomePage > matches snapshot 1`] = `
             </div>
           </div>
           <div
-            class="text-xs text-gray-600 dark:text-gray-300"
+            class="text-xs text-secondary-text"
           >
             Corridors live
           </div>
@@ -205,7 +205,7 @@ exports[`HomePage > matches snapshot 1`] = `
       >
         <svg
           aria-hidden="true"
-          class="lucide lucide-globe h-5 w-5 shrink-0 text-blue-600 dark:text-blue-400"
+          class="lucide lucide-globe h-5 w-5 shrink-0 text-accent"
           fill="none"
           height="24"
           stroke="currentColor"
@@ -230,7 +230,7 @@ exports[`HomePage > matches snapshot 1`] = `
         </svg>
         <div>
           <div
-            class="text-xl font-bold text-gray-900 dark:text-white"
+            class="text-xl font-bold text-primary-text"
           >
             <div>
               <span
@@ -251,7 +251,7 @@ exports[`HomePage > matches snapshot 1`] = `
             </div>
           </div>
           <div
-            class="text-xs text-gray-600 dark:text-gray-300"
+            class="text-xs text-secondary-text"
           >
             Countries reachable
           </div>

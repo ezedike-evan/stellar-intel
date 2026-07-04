@@ -23,32 +23,17 @@ export default function HomePage() {
         <StatBar
           stats={[
             {
-              icon: (
-                <Landmark
-                  className="h-5 w-5 shrink-0 text-blue-600 dark:text-blue-400"
-                  aria-hidden="true"
-                />
-              ),
+              icon: <Landmark className="h-5 w-5 shrink-0 text-accent" aria-hidden="true" />,
               value: stats.anchors,
               label: 'Anchors tracked',
             },
             {
-              icon: (
-                <Route
-                  className="h-5 w-5 shrink-0 text-blue-600 dark:text-blue-400"
-                  aria-hidden="true"
-                />
-              ),
+              icon: <Route className="h-5 w-5 shrink-0 text-accent" aria-hidden="true" />,
               value: stats.corridors,
               label: 'Corridors live',
             },
             {
-              icon: (
-                <Globe
-                  className="h-5 w-5 shrink-0 text-blue-600 dark:text-blue-400"
-                  aria-hidden="true"
-                />
-              ),
+              icon: <Globe className="h-5 w-5 shrink-0 text-accent" aria-hidden="true" />,
               value: stats.countries,
               label: 'Countries reachable',
             },

@@ -2,6 +2,19 @@
 
 @custom-variant dark (&:where(.dark, .dark *));
 
+/* Theme tokens ---------------------------------------------------------------
+   All landing components MUST use these tokens instead of ad-hoc color values.
+
+   Token              Light       Dark        Usage
+   ─────────────────  ──────────  ──────────  ─────────────────────────────
+   primary-text       #000000     #ffffff     Primary body/heading text
+   secondary-text     #6b7280     #9ca3af     Muted/secondary body text
+   background         #ffffff     #000000     Page background
+   bg-subtle          #f9fafb     #111827     Subtle card/section bg
+   border             #e2e8f0     #1e293b     Card/section borders
+   accent             #2563eb     #93c5fd     Links, icons, highlights
+   accent-subtle      #eff6ff     #172554     Accent badge/pill bg
+   ──────────────────────────────────────────────────────────────────────── */
 @theme {
   --color-primary-text: var(--primary-text);
   --color-secondary-text: var(--secondary-text);
@@ -9,6 +22,7 @@
   --color-bg-subtle: var(--bg-subtle);
   --color-border: var(--border);
   --color-accent: var(--accent);
+  --color-accent-subtle: var(--accent-subtle);
 }
 
 :root {
@@ -18,6 +32,7 @@
   --bg-subtle: #f9fafb;
   --border: #e2e8f0;
   --accent: #2563eb;
+  --accent-subtle: #eff6ff;
 }
 
 .dark {
@@ -26,7 +41,8 @@
   --background: #000000;
   --bg-subtle: #111827;
   --border: #1e293b;
-  --accent: #2563eb;
+  --accent: #93c5fd;
+  --accent-subtle: #172554;
 }
 
 /* Mobile bottom sheet -------------------------------------------------------- */
