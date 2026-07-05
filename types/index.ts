@@ -57,12 +57,20 @@ export interface AnchorRate {
   quoteStatus?: 'firm' | 'expiring' | 'refreshing';
 }
 
+export interface AnchorRateError {
+  anchorId: string;
+  anchorName: string;
+  reason: string;
+}
+
 /** The result of comparing all anchor rates for a single corridor. */
 export interface RateComparison {
   corridorId: string;
   rates: AnchorRate[];
   pending: { anchorId: string; anchorName: string }[]; // Anchors still resolving
   bestRateId: string; // anchorId of the anchor with the highest totalReceived
+
+  errors?: AnchorRateError[];
 }
 
 // ─── Wallet ───────────────────────────────────────────────────────────────────

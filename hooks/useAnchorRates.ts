@@ -1,7 +1,7 @@
 import { useCallback, useEffect, useMemo, useRef, useState, useSyncExternalStore } from 'react';
 import useSWR from 'swr';
 import { measureClient } from '@/lib/metrics';
-import type { AnchorRate, RateComparison } from '@/types';
+import type { AnchorRate, AnchorRateError, RateComparison } from '@/types';
 
 const RATES_REFRESH_INTERVAL_MS = 30_000;
 
@@ -49,6 +49,7 @@ export interface UseAnchorRatesResult {
   refreshInflight: boolean;
   pauseRefresh: () => void;
   resumeRefresh: () => void;
+  anchorErrors: AnchorRateError[];
 }
 
 export function useAnchorRates(
@@ -203,5 +204,6 @@ export function useAnchorRates(
     refreshInflight,
     pauseRefresh,
     resumeRefresh,
+    anchorErrors: data?.errors ?? [],
   };
 }

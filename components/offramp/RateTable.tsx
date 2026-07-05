@@ -1,7 +1,7 @@
 'use client';
 import { useState, useCallback } from 'react';
 import { formatCurrency, formatRate } from '@/lib/utils';
-import type { RateComparison, AnchorRate } from '@/types';
+import type { RateComparison, AnchorRate, AnchorRateError } from '@/types';
 import { Skeleton } from '@/components/ui/Skeleton';
 import { QuotePill } from '@/components/ui/QuotePill';
 import { AnchorLogo } from '@/components/ui/AnchorLogo';
@@ -14,10 +14,12 @@ interface RateTableProps {
   onSelectAnchor: (rate: AnchorRate) => void;
   /** Disables the off-ramp action (e.g. when the wallet is not on mainnet). */
   executeDisabled?: boolean;
+  anchorErrors?: AnchorRateError[];
 }
 
 export function RateTable({
   rates,
+  anchorErrors = [],
   isLoading,
   refreshInflight,
   error,
@@ -86,6 +88,7 @@ export function RateTable({
             !error &&
             rates &&
             rates.rates.length === 0 &&
+            anchorErrors.length === 0 &&
             (!rates.pending || rates.pending.length === 0) && (
               <tr>
                 <td colSpan={5} className="px-4 py-8 text-center text-sm text-gray-500">
@@ -154,6 +157,43 @@ export function RateTable({
                 </tr>
               );
             })}
+
+          {!isLoading &&
+            !error &&
+            anchorErrors.map((anchorError) => (
+              <tr
+                key={`error-${anchorError.anchorId}`}
+                className="border-t border-gray-200 dark:border-gray-700 opacity-50"
+                title={anchorError.reason}
+                aria-label={`${anchorError.anchorName} unavailable: ${anchorError.reason}`}
+              >
+                <td className="px-4 py-3">
+                  <div className="flex items-center gap-2">
+                    <AnchorLogo
+                      anchorId={anchorError.anchorId}
+                      anchorName={anchorError.anchorName}
+                    />
+                    <span className="font-medium text-gray-400 dark:text-gray-500">
+                      {anchorError.anchorName}
+                    </span>
+                    <QuotePill source="unavailable" />
+                  </div>
+                </td>
+                <td className="px-4 py-3 text-right text-gray-400 dark:text-gray-500">—</td>
+                <td className="px-4 py-3 text-right text-gray-400 dark:text-gray-500">—</td>
+                <td className="px-4 py-3 text-right text-gray-400 dark:text-gray-500">—</td>
+                <td className="px-4 py-3 text-right">
+                  <button
+                    disabled
+                    aria-disabled="true"
+                    title={anchorError.reason}
+                    className="rounded-lg bg-gray-200 px-3 py-1.5 text-xs font-medium text-gray-400 cursor-not-allowed dark:bg-gray-700 dark:text-gray-500"
+                  >
+                    Unavailable
+                  </button>
+                </td>
+              </tr>
+            ))}
 
           {!isLoading &&
             !error &&
