@@ -3,8 +3,8 @@ import { ANCHORS, CORRIDORS } from '@/constants/anchors';
 import type { Anchor, Corridor } from '@/types';
 
 // usdc-eur was flagged off until mykobo.co (#639) started serving it.
+// usdc-zar was flagged off until zeam.money (#465) started serving it.
 const FLAGGED_OFF_CORRIDORS = {
-  'usdc-zar': 'v1.1 target corridor, gated behind v11Corridors until an anchor serves it.',
   'usdc-xof': 'v1.1 target corridor, gated behind v11Corridors until an anchor serves it.',
 } as const satisfies Record<string, string>;
 

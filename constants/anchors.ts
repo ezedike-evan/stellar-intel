@@ -103,6 +103,19 @@ export const ANCHORS: Anchor[] = [
     assetIssuer: 'GDVKY2GU2DRXWTBEYJJWSFXIGBZV6AZNBVVSUHEPZI54LIS6BA7DVVSP',
     seps: ['sep6', 'sep24', 'sep31'],
   },
+  // zeam.money: ZAR fiat corridor — SEP-24 withdraw/deposit enabled.
+  // Verified 2026-06-28. TOML: TRANSFER_SERVER_SEP0024 = https://anchor.zeam.money/sep24
+  // /info: deposit/withdraw for USDC enabled.
+  {
+    id: 'zeam',
+    name: 'Zeam Money',
+    homeDomain: 'zeam.money',
+    serviceDomain: 'anchor.zeam.money',
+    corridors: ['usdc-zar'],
+    assetCode: 'USDC',
+    assetIssuer: USDC_ISSUER,
+    seps: ['sep24', 'sep31'],
+  },
 ];
 
 export const KNOWN_ANCHORS = ANCHORS;
