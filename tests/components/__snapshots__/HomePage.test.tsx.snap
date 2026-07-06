@@ -742,74 +742,165 @@ exports[`HomePage > matches snapshot 1`] = `
       class="rounded-xl border border-gray-200 p-4 dark:border-gray-700 dark:bg-gray-800/50 sm:p-6"
     >
       <h2
-        class="mb-4 text-lg font-semibold text-gray-900 dark:text-white"
+        class="mb-6 text-lg font-semibold text-gray-900 dark:text-white"
       >
         How it works
       </h2>
       <div
-        class="grid grid-cols-1 gap-6 md:grid-cols-3"
+        class="flex flex-col gap-8 sm:flex-row sm:items-start sm:gap-0"
       >
         <div
-          class="flex gap-4"
+          class="flex flex-col items-center px-2 text-center sm:flex-1 sm:px-4"
         >
           <div
-            class="flex h-8 w-8 shrink-0 items-center justify-center rounded-full bg-blue-600 text-xs font-bold text-white dark:bg-blue-500"
+            class="mb-3 flex h-12 w-12 items-center justify-center rounded-full bg-blue-50 dark:bg-blue-950/40"
           >
+            <svg
+              aria-hidden="true"
+              class="lucide lucide-globe h-6 w-6 text-blue-600 dark:text-blue-400"
+              fill="none"
+              height="24"
+              stroke="currentColor"
+              stroke-linecap="round"
+              stroke-linejoin="round"
+              stroke-width="2"
+              viewBox="0 0 24 24"
+              width="24"
+              xmlns="http://www.w3.org/2000/svg"
+            >
+              <circle
+                cx="12"
+                cy="12"
+                r="10"
+              />
+              <path
+                d="M12 2a14.5 14.5 0 0 0 0 20 14.5 14.5 0 0 0 0-20"
+              />
+              <path
+                d="M2 12h20"
+              />
+            </svg>
+          </div>
+          <span
+            class="mb-2 text-xs font-semibold uppercase tracking-wider text-gray-500 dark:text-gray-400"
+          >
+            Step 
             01
+          </span>
+          <div
+            class="font-medium text-gray-900 dark:text-white"
+          >
+            Pick your corridor
           </div>
-          <div>
-            <div
-              class="font-medium text-gray-900 dark:text-white"
-            >
-              Pick your corridor
-            </div>
-            <div
-              class="mt-1 text-sm text-gray-600 dark:text-gray-300"
-            >
-              Choose a destination country and the USDC amount to withdraw.
-            </div>
+          <div
+            class="mt-1 text-sm text-gray-600 dark:text-gray-300"
+          >
+            Choose a destination country and the USDC amount to withdraw.
           </div>
         </div>
         <div
-          class="flex gap-4"
+          class="mt-6 hidden w-8 shrink-0 sm:block"
         >
           <div
-            class="flex h-8 w-8 shrink-0 items-center justify-center rounded-full bg-blue-600 text-xs font-bold text-white dark:bg-blue-500"
+            class="h-px w-full bg-gray-200 dark:bg-gray-700"
+          />
+        </div>
+        <div
+          class="flex flex-col items-center px-2 text-center sm:flex-1 sm:px-4"
+        >
+          <div
+            class="mb-3 flex h-12 w-12 items-center justify-center rounded-full bg-blue-50 dark:bg-blue-950/40"
           >
+            <svg
+              aria-hidden="true"
+              class="lucide lucide-chart-column h-6 w-6 text-blue-600 dark:text-blue-400"
+              fill="none"
+              height="24"
+              stroke="currentColor"
+              stroke-linecap="round"
+              stroke-linejoin="round"
+              stroke-width="2"
+              viewBox="0 0 24 24"
+              width="24"
+              xmlns="http://www.w3.org/2000/svg"
+            >
+              <path
+                d="M3 3v16a2 2 0 0 0 2 2h16"
+              />
+              <path
+                d="M18 17V9"
+              />
+              <path
+                d="M13 17V5"
+              />
+              <path
+                d="M8 17v-3"
+              />
+            </svg>
+          </div>
+          <span
+            class="mb-2 text-xs font-semibold uppercase tracking-wider text-gray-500 dark:text-gray-400"
+          >
+            Step 
             02
+          </span>
+          <div
+            class="font-medium text-gray-900 dark:text-white"
+          >
+            Compare live quotes
           </div>
-          <div>
-            <div
-              class="font-medium text-gray-900 dark:text-white"
-            >
-              Compare live quotes
-            </div>
-            <div
-              class="mt-1 text-sm text-gray-600 dark:text-gray-300"
-            >
-              We pull live SEP-38 quotes from every integrated anchor.
-            </div>
+          <div
+            class="mt-1 text-sm text-gray-600 dark:text-gray-300"
+          >
+            We pull live SEP-38 quotes from every integrated anchor.
           </div>
         </div>
         <div
-          class="flex gap-4"
+          class="mt-6 hidden w-8 shrink-0 sm:block"
         >
           <div
-            class="flex h-8 w-8 shrink-0 items-center justify-center rounded-full bg-blue-600 text-xs font-bold text-white dark:bg-blue-500"
+            class="h-px w-full bg-gray-200 dark:bg-gray-700"
+          />
+        </div>
+        <div
+          class="flex flex-col items-center px-2 text-center sm:flex-1 sm:px-4"
+        >
+          <div
+            class="mb-3 flex h-12 w-12 items-center justify-center rounded-full bg-blue-50 dark:bg-blue-950/40"
           >
-            03
+            <svg
+              aria-hidden="true"
+              class="lucide lucide-zap h-6 w-6 text-blue-600 dark:text-blue-400"
+              fill="none"
+              height="24"
+              stroke="currentColor"
+              stroke-linecap="round"
+              stroke-linejoin="round"
+              stroke-width="2"
+              viewBox="0 0 24 24"
+              width="24"
+              xmlns="http://www.w3.org/2000/svg"
+            >
+              <path
+                d="M4 14a1 1 0 0 1-.78-1.63l9.9-10.2a.5.5 0 0 1 .86.46l-1.92 6.02A1 1 0 0 0 13 10h7a1 1 0 0 1 .78 1.63l-9.9 10.2a.5.5 0 0 1-.86-.46l1.92-6.02A1 1 0 0 0 11 14z"
+              />
+            </svg>
           </div>
-          <div>
-            <div
-              class="font-medium text-gray-900 dark:text-white"
-            >
-              Execute in one click
-            </div>
-            <div
-              class="mt-1 text-sm text-gray-600 dark:text-gray-300"
-            >
-              Sign once and settle directly on Stellar with Freighter — non-custodial.
-            </div>
+          <span
+            class="mb-2 text-xs font-semibold uppercase tracking-wider text-gray-500 dark:text-gray-400"
+          >
+            Step 
+            03
+          </span>
+          <div
+            class="font-medium text-gray-900 dark:text-white"
+          >
+            Execute in one click
+          </div>
+          <div
+            class="mt-1 text-sm text-gray-600 dark:text-gray-300"
+          >
+            Sign once and settle directly on Stellar with Freighter — non-custodial.
           </div>
         </div>
       </div>
