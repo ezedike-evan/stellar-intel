@@ -31,7 +31,7 @@ function runWithCorrelationId<T>(correlationId: string, fn: () => T): T {
   return asyncLocalStorage.run({ correlationId }, fn);
 }
 
-function getLogger(moduleName: string) {
+export function getLogger(moduleName: string) {
   const store = asyncLocalStorage.getStore();
   return baseLogger.child({
     module: moduleName,

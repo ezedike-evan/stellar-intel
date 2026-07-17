@@ -11,7 +11,10 @@
  * probe is deterministic under test and never hits the network there.
  */
 
+import { getLogger } from '@/lib/logger';
 import { resolveToml } from '@/lib/stellar/sep1';
+
+const logger = getLogger('reputation/probe');
 
 /** A single reachability/latency observation for one anchor. */
 export interface ProbeSample {
@@ -96,6 +99,7 @@ export async function probeAnchor(
   } catch (err) {
     reachable = false;
     error = err instanceof Error ? err.message : String(err);
+    logger.warn({ event: 'probe.error', domain, error }, 'probe caught an exception');
   }
 
   const end = now();
@@ -106,6 +110,10 @@ export async function probeAnchor(
     at: end,
     ...(error !== undefined ? { error } : {}),
   };
+  logger.info(
+    { event: 'probe.sample', domain, reachable, latencyMs: sample.latencyMs, error },
+    'probe sample recorded'
+  );
   store.record(sample);
   return sample;
 }
@@ -119,7 +127,19 @@ export async function runProbe(
   store: ProbeSampleStore,
   deps?: ProbeDeps
 ): Promise<ProbeSample[]> {
-  return Promise.all(domains.map((domain) => probeAnchor(domain, store, deps)));
+  logger.info({ event: 'probe.run.start', domainCount: domains.length }, 'starting probe run');
+  const samples = await Promise.all(domains.map((domain) => probeAnchor(domain, store, deps)));
+  const reachable = samples.filter((s) => s.reachable).length;
+  logger.info(
+    {
+      event: 'probe.run.complete',
+      total: samples.length,
+      reachable,
+      unreachable: samples.length - reachable,
+    },
+    'probe run complete'
+  );
+  return samples;
 }
 
 /**
