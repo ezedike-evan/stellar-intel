@@ -1,9 +1,12 @@
-import { describe, it, expect, vi } from 'vitest';
+import { describe, it, expect, vi, beforeEach } from 'vitest';
 import {
   buildOutcomeHash,
+  classifyError,
   fetchPendingOutcomes,
   markPublished,
   runBatch,
+  submitToOracle,
+  withRetry,
   type BatchConfig,
   type OutcomeRow,
   type QueryExecutor,
@@ -45,21 +48,28 @@ const BASE_CONFIG: BatchConfig = {
   rpcUrl: 'https://soroban-testnet.stellar.org',
 };
 
-vi.mock('@stellar/stellar-sdk', () => {
-  const submit_outcome = vi.fn().mockResolvedValue({
-    signAndSend: vi.fn().mockResolvedValue({
-      sendTransactionResponse: { hash: 'mock-tx-hash' },
-    }),
+// Hoisted so individual tests can reconfigure the mocked contract-write (e.g.
+// to reject once and then succeed) while the default keeps the happy path.
+const sdkMocks = vi.hoisted(() => ({
+  submitOutcome: vi.fn(),
+  signAndSend: vi.fn(),
+}));
+
+vi.mock('@stellar/stellar-sdk', () => ({
+  Keypair: {
+    fromSecret: vi.fn().mockReturnValue({ publicKey: () => 'GPUBLISHERMOCK' }),
+  },
+  contract: {
+    basicNodeSigner: vi.fn().mockReturnValue({ signTransaction: vi.fn() }),
+    Client: { from: vi.fn().mockResolvedValue({ submit_outcome: sdkMocks.submitOutcome }) },
+  },
+}));
+
+beforeEach(() => {
+  sdkMocks.signAndSend.mockReset().mockResolvedValue({
+    sendTransactionResponse: { hash: 'mock-tx-hash' },
   });
-  return {
-    Keypair: {
-      fromSecret: vi.fn().mockReturnValue({ publicKey: () => 'GPUBLISHERMOCK' }),
-    },
-    contract: {
-      basicNodeSigner: vi.fn().mockReturnValue({ signTransaction: vi.fn() }),
-      Client: { from: vi.fn().mockResolvedValue({ submit_outcome }) },
-    },
-  };
+  sdkMocks.submitOutcome.mockReset().mockResolvedValue({ signAndSend: sdkMocks.signAndSend });
 });
 
 describe('buildOutcomeHash', () => {
@@ -133,5 +143,119 @@ describe('runBatch', () => {
       'mock-tx-hash',
       SAMPLE_ROW.intentHash,
     ]);
+  });
+});
+
+describe('classifyError', () => {
+  it('treats timeouts, 5xx, rate limits, and sequence races as retryable', () => {
+    expect(classifyError(new Error('request timed out'))).toBe('retryable');
+    expect(classifyError({ status: 503, message: 'Service Unavailable' })).toBe('retryable');
+    expect(classifyError({ status: 429, message: 'Too Many Requests' })).toBe('retryable');
+    expect(
+      classifyError({
+        message: 'transaction submission failed',
+        response: { data: { extras: { result_codes: { transaction: 'tx_bad_seq' } } } },
+      })
+    ).toBe('retryable');
+  });
+
+  it('treats malformed batches and contract rejections as non-retryable', () => {
+    expect(classifyError({ status: 400, message: 'tx_malformed' })).toBe('non_retryable');
+    expect(classifyError(new Error('HostError: contract logic rejected the invocation'))).toBe(
+      'non_retryable'
+    );
+  });
+
+  it('treats unknown failures as non-retryable so we fail fast and alert', () => {
+    expect(classifyError(new Error('something unexpected'))).toBe('non_retryable');
+  });
+});
+
+describe('withRetry', () => {
+  const fast = { baseDelayMs: 1, maxDelayMs: 2 };
+
+  // Acceptance criteria: a simulated transient failure retries and succeeds.
+  it('retries a transient failure and eventually succeeds without alerting', async () => {
+    const onAlert = vi.fn();
+    let attempts = 0;
+    const fn = vi.fn(async () => {
+      attempts += 1;
+      if (attempts < 3) throw new Error('ETIMEDOUT');
+      return 'ok';
+    });
+
+    const result = await withRetry(fn, { onAlert, options: fast });
+
+    expect(result).toBe('ok');
+    expect(fn).toHaveBeenCalledTimes(3);
+    expect(onAlert).not.toHaveBeenCalled();
+  });
+
+  // Acceptance criteria: a simulated non-retryable failure fails immediately.
+  it('fails immediately on a non-retryable error and alerts once', async () => {
+    const onAlert = vi.fn();
+    const fn = vi.fn(async () => {
+      throw new Error('HostError: contract logic rejected');
+    });
+
+    await expect(withRetry(fn, { onAlert, options: fast })).rejects.toThrow('contract logic');
+
+    expect(fn).toHaveBeenCalledTimes(1);
+    expect(onAlert).toHaveBeenCalledTimes(1);
+    expect(onAlert).toHaveBeenCalledWith(
+      expect.objectContaining({ reason: 'non_retryable', attempts: 1 })
+    );
+  });
+
+  it('alerts and rethrows once the retry budget is exhausted', async () => {
+    const onAlert = vi.fn();
+    const fn = vi.fn(async () => {
+      throw new Error('socket hang up');
+    });
+
+    await expect(withRetry(fn, { onAlert, options: { ...fast, maxAttempts: 3 } })).rejects.toThrow(
+      'socket hang up'
+    );
+
+    expect(fn).toHaveBeenCalledTimes(3);
+    expect(onAlert).toHaveBeenCalledWith(
+      expect.objectContaining({ reason: 'retries_exhausted', attempts: 3 })
+    );
+  });
+});
+
+describe('submitToOracle retry wiring', () => {
+  const writeConfig = {
+    oracleContractId: BASE_CONFIG.oracleContractId,
+    networkPassphrase: BASE_CONFIG.networkPassphrase,
+    publisherSecret: BASE_CONFIG.publisherSecret,
+    rpcUrl: BASE_CONFIG.rpcUrl,
+  };
+
+  it('retries a transient contract-write failure and eventually succeeds', async () => {
+    sdkMocks.submitOutcome.mockRejectedValueOnce(new Error('fetch failed'));
+    const onAlert = vi.fn();
+
+    const txHash = await submitToOracle([SAMPLE_ROW], {
+      ...writeConfig,
+      onAlert,
+      retry: { baseDelayMs: 1, maxDelayMs: 2 },
+    });
+
+    expect(txHash).toBe('mock-tx-hash');
+    expect(sdkMocks.submitOutcome).toHaveBeenCalledTimes(2);
+    expect(onAlert).not.toHaveBeenCalled();
+  });
+
+  it('fails fast and alerts on a non-retryable contract rejection', async () => {
+    sdkMocks.submitOutcome.mockRejectedValue(new Error('HostError: contract logic rejected'));
+    const onAlert = vi.fn();
+
+    await expect(submitToOracle([SAMPLE_ROW], { ...writeConfig, onAlert })).rejects.toThrow(
+      'contract logic'
+    );
+
+    expect(sdkMocks.submitOutcome).toHaveBeenCalledTimes(1);
+    expect(onAlert).toHaveBeenCalledTimes(1);
   });
 });
