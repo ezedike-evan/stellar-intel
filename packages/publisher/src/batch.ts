@@ -35,7 +35,7 @@ export interface PublishAlert {
   reason: PublishFailureReason;
   error: unknown;
   /** intentHash of the outcome row whose write failed, when known. */
-  intentHash?: string;
+  intentHash?: string | undefined;
   /** Number of attempts made before giving up. */
   attempts: number;
 }
@@ -236,9 +236,9 @@ function backoffDelay(attempt: number, options: RetryOptions): number {
 
 export interface RetryContext {
   /** Forwarded to the alert payload so failures can be traced to a row. */
-  intentHash?: string;
-  onAlert?: AlertHook;
-  options?: Partial<RetryOptions>;
+  intentHash?: string | undefined;
+  onAlert?: AlertHook | undefined;
+  options?: Partial<RetryOptions> | undefined;
 }
 
 /**
