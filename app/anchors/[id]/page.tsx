@@ -1,3 +1,4 @@
+import type { Metadata } from 'next';
 import { notFound } from 'next/navigation';
 import { ANCHORS, CORRIDORS } from '@/constants';
 import { buildScorecards, mapOutcomeRows } from '@/lib/reputation/aggregate';
@@ -5,6 +6,49 @@ import { getHistoryBuckets } from '@/lib/reputation/buckets';
 import { getReputationStore } from '@/lib/reputation/store';
 import { AnchorProfile, type AnchorProfileData } from '@/components/offramp/AnchorProfile';
 import { ScorecardCard } from '@/components/offramp/ScorecardCard';
+
+const SITE_URL = process.env.NEXT_PUBLIC_SITE_URL ?? 'https://stellar-intel.vercel.app';
+const DEFAULT_TITLE = 'Anchor profile — Stellar Intel';
+const DEFAULT_DESCRIPTION =
+  'Explore Stellar anchor reputation, corridor coverage, and recent outcomes on Stellar Intel.';
+
+export async function generateMetadata({
+  params,
+}: {
+  params: Promise<{ id: string }> | { id: string };
+}): Promise<Metadata> {
+  const { id } = await params;
+  const anchor = ANCHORS.find((item) => item.id === id);
+  const title = anchor ? `${anchor.name} — Stellar Intel` : DEFAULT_TITLE;
+  const description = anchor
+    ? `${anchor.name} reputation, corridor coverage, and recent outcomes on Stellar Intel.`
+    : DEFAULT_DESCRIPTION;
+  const url = new URL(anchor ? `/anchors/${anchor.id}` : '/anchors', SITE_URL).toString();
+
+  return {
+    title,
+    description,
+    openGraph: {
+      type: 'website',
+      title,
+      description,
+      url,
+      images: [
+        {
+          url: new URL('/opengraph-image', SITE_URL).toString(),
+          width: 1200,
+          height: 630,
+          alt: 'Stellar Intel — Real-time rate comparison on Stellar',
+        },
+      ],
+    },
+    twitter: {
+      card: 'summary_large_image',
+      title,
+      description,
+    },
+  };
+}
 
 async function loadAnchorRows(anchorId: string) {
   try {
