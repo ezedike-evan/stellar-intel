@@ -1,8 +1,9 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { withRequestLogger } from '@/lib/logger';
-import { isValidCorridorId } from '@/lib/stellar/anchors';
+import { isValidCorridorId, isAnchorDegraded } from '@/lib/stellar/anchors';
 import { fetchCorridorRates } from '@/lib/stellar/server-rates';
 import { AMOUNT_PATTERN } from '@/lib/patterns';
+import { getCachedRate, setCachedRate, invalidateCachedRates } from '@/lib/api/rate-cache';
 
 // Live anchor calls must run per-request, never at build time.
 export const dynamic = 'force-dynamic';
@@ -33,14 +34,37 @@ export async function GET(
       );
     }
 
-    const result = await fetchCorridorRates(corridor, amount);
-    logger.info({
-      event: 'rates_fetched',
-      corridor,
-      amount,
-      quoted: result.rates.length,
-      failed: result.errors.length,
-    });
+    const cached = getCachedRate(corridor, amount);
+    const hasHealthyCachedResult = cached && !cached.rates.some((rate) => isAnchorDegraded(rate.anchorId));
+
+    let result = cached;
+    if (!result || !hasHealthyCachedResult) {
+      if (cached) {
+        for (const rate of cached.rates) {
+          if (isAnchorDegraded(rate.anchorId)) {
+            invalidateCachedRates(rate.anchorId);
+          }
+        }
+      }
+      result = await fetchCorridorRates(corridor, amount);
+      if (result.rates.length > 0) {
+        setCachedRate(corridor, amount, result);
+      }
+      logger.info({
+        event: 'rates_fetched',
+        corridor,
+        amount,
+        quoted: result.rates.length,
+        failed: result.errors?.length ?? 0,
+      });
+    } else {
+      logger.info({
+        event: 'rates_served_from_cache',
+        corridor,
+        amount,
+        quoted: result.rates.length,
+      });
+    }
 
     // Listing rates aren't a locked-in quote — execution re-authenticates and
     // re-quotes with the anchor from scratch, so a short shared cache here
