@@ -44,6 +44,7 @@
     "@stellar/freighter-api": "^6.0.1",
     "@stellar/stellar-sdk": "^16.0.1",
     "@stellarintel/publisher": "^0.1.0",
+    "@testing-library/dom": "^10.4.1",
     "clsx": "^2.1.1",
     "lucide-react": "^1.11.0",
     "next": "16.2.9",

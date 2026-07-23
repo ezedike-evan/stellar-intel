@@ -261,4 +261,22 @@ describe('StatusTracker', () => {
     expect(screen.queryByText(/anchor refunded your USDC/i)).not.toBeInTheDocument();
     expect(screen.queryByText(/expired before settlement/i)).not.toBeInTheDocument();
   });
+
+  it('renders correctly for pending_user_transfer_complete status in USDC->NGN corridor', () => {
+    render(
+      <StatusTracker
+        {...BASE_PROPS}
+        status="pending_user_transfer_complete"
+        amountIn="100"
+        amountInAsset="USDC"
+        amountOut="154840"
+        amountOutAsset="NGN"
+        currencyCode="NGN"
+      />
+    );
+    expect(screen.getByText('Payment received, processing')).toBeInTheDocument();
+    expect(screen.getByText('100 USDC')).toBeInTheDocument();
+    expect(screen.getByText('154840 NGN')).toBeInTheDocument();
+  });
 });
+

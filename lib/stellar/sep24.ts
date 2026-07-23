@@ -69,11 +69,14 @@ async function fetchSep24TransactionOnce(
       (tx['fee_details'] as { total?: string })?.total !== undefined) && {
       amountFee: (tx['amount_fee'] ?? (tx['fee_details'] as { total?: string })?.total) as string,
     }),
-    ...(tx['stellar_transaction_id'] !== undefined && {
-      stellarTransactionId: tx['stellar_transaction_id'] as string,
+    ...((tx['stellar_transaction_id'] ?? tx['stellarTransactionId']) !== undefined && {
+      stellarTransactionId: (tx['stellar_transaction_id'] ?? tx['stellarTransactionId']) as string,
     }),
-    ...(tx['external_transaction_id'] !== undefined && {
-      externalTransactionId: tx['external_transaction_id'] as string,
+    ...((tx['external_transaction_id'] ?? tx['externalTransactionId']) !== undefined && {
+      externalTransactionId: (tx['external_transaction_id'] ?? tx['externalTransactionId']) as string,
+    }),
+    ...(tx['refunds'] !== undefined && {
+      refunds: tx['refunds'] as Sep24Transaction['refunds'],
     }),
   };
 }
