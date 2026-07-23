@@ -73,7 +73,7 @@ describe('solveSingleAnchor', () => {
       }
     });
 
-    it('selects the quote with the highest buy_amount among multiple valid quotes', () => {
+    it('selects the first valid quote with first-match strategy (default)', () => {
       const intent = createTestIntent({ minReceive: '1500' });
       const futureISO = new Date(Date.now() + 300 * 1000).toISOString();
 
@@ -106,9 +106,9 @@ describe('solveSingleAnchor', () => {
 
       expect(result.ok).toBe(true);
       if (result.ok) {
-        expect(result.plan.quoteId).toBe('quote-002');
-        expect(result.plan.netAmount).toBe('152000');
-        expect(result.plan.anchorName).toBe('Anchor B');
+        expect(result.plan.quoteId).toBe('quote-001');
+        expect(result.plan.netAmount).toBe('150000');
+        expect(result.plan.anchorName).toBe('Anchor A');
       }
     });
   });

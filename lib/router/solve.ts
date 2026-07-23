@@ -7,6 +7,7 @@
  */
 
 import { env } from '@/lib/env';
+import { getLogger } from '@/lib/logger';
 import { fetchAllAnchorFees, computeRateComparison } from '@/lib/stellar/sep24';
 import type {
   AnchorRate,
@@ -89,27 +90,32 @@ function isQuoteExpired(expiresAt: string): boolean {
   return new Date(expiresAt).getTime() <= Date.now();
 }
 
+const log = getLogger('router/solve');
+
+function selectQuote(
+  validQuotes: EvaluatedQuote[],
+  strategy: 'first-match' | 'scored'
+): EvaluatedQuote | undefined {
+  if (validQuotes.length === 0) return undefined;
+  if (strategy === 'first-match') {
+    return validQuotes[0];
+  }
+  return validQuotes.reduce((best, current) =>
+    compareDecimals(current.buy_amount, best.buy_amount) > 0 ? current : best
+  );
+}
+
 // ─── Multi-Factor Routing Scoring ─────────────────────────────────────────────
 
-/**
- * Scoring inputs for multi-factor solver routing.
- * Separates rating (pricing), probe reliability (uptime/availability), quote latency,
- * and transaction outcomes (reputation composite score).
- */
 export interface ScoringInputs {
-  /** Map of anchorId to its historical/performance metrics */
   anchorMetrics?: Record<
     string,
     {
-      /** Historical probe reachability/uptime score in [0, 1] */
       reliability?: number;
-      /** Rolling p50 or average quote latency in milliseconds */
       latencyMs?: number;
-      /** Transaction-based composite reputation score from lib/reputation/composite.ts */
       reputationComposite?: number;
     }
   >;
-  /** Custom weights to override the default routing behavior */
   weights?: {
     rate?: number;
     reputation?: number;
@@ -118,14 +124,6 @@ export interface ScoringInputs {
   };
 }
 
-/**
- * Default weights for the multi-factor routing score.
- *
- * - Rate (50%): Primary consideration, ensuring users get competitive rates.
- * - Reputation (30%): Incorporates real transaction fill rate, slippage, and settle time.
- * - Reliability (15%): Historical uptime/reachability to avoid down/flaky anchors.
- * - Latency (5%): Secondary factor to optimize for instant/fast user experiences.
- */
 export const DEFAULT_SCORING_WEIGHTS = {
   rate: 0.5,
   reputation: 0.3,
@@ -133,40 +131,8 @@ export const DEFAULT_SCORING_WEIGHTS = {
   latency: 0.05,
 };
 
-/** Normalization target for quote latency. Latencies >= this receive a score of 0. */
 export const NORM_LATENCY_MS = 2000;
 
-/**
- * Weighting Formula and Composition with Reputation:
- *
- * The routing score is a weighted sum of four normalized metrics:
- *   Score = w_rate * S_rate + w_reputation * S_reputation + w_reliability * S_reliability + w_latency * S_latency
- *
- * Metric Normalization:
- * 1. Rate Score (S_rate):
- *    Normalized relative to the highest (best) rate in the candidate set:
- *      S_rate = rate / maxRate
- *
- * 2. Reputation Score (S_reputation):
- *    Drawn from the transaction-based composite reputation score (lib/reputation/composite.ts):
- *      composite = fillRate * (1 - slippage) / (settleSeconds / NORM_SETTLE_SECONDS)
- *    Since this score is calculated relative to a reference settlement time (300s),
- *    values >= 1.0 are excellent (fast settlement). We cap the input at 1.0 to prevent
- *    a single ultra-fast settlement from overwhelming other routing criteria:
- *      S_reputation = clamp(0.0, 1.0, reputationComposite)
- *
- * 3. Reliability Score (S_reliability):
- *    Historical uptime/reachability fraction from probe data:
- *      S_reliability = clamp(0.0, 1.0, reliability)
- *
- * 4. Latency Score (S_latency):
- *    Linear decay from 0ms (score 1.0) to NORM_LATENCY_MS (score 0.0):
- *      S_latency = max(0, 1 - latencyMs / NORM_LATENCY_MS)
- *
- * By design:
- * - Decoupled: No absolute rate, corridor, or fiat code bounds are assumed.
- * - Normalized: All sub-scores range within [0, 1].
- */
 export function computeRoutingScore(
   rate: number,
   maxRate: number,
@@ -208,6 +174,9 @@ export function solveSingleAnchor(
   feeBudgetPct: number = env.FEE_BUDGET_PCT,
   scoring?: ScoringInputs
 ): SolverResult {
+  const strategy = env.ROUTING_STRATEGY;
+  log.info({ strategy, corridor: intent.corridor }, 'routing decision');
+
   if (isDeadlineExpired(intent.deadline)) {
     return {
       ok: false,
@@ -267,12 +236,11 @@ export function solveSingleAnchor(
     return { ok: false, error: 'no_eligible_route' };
   }
 
-  let bestQuote = validQuotes[0]!;
+  let selectedQuote: EvaluatedQuote | undefined;
 
   if (scoring && scoring.anchorMetrics) {
     const weights = { ...DEFAULT_SCORING_WEIGHTS, ...scoring.weights };
 
-    // Find the max buy amount among valid quotes for relative rate normalization
     let maxBuyAmount = 0;
     for (const q of validQuotes) {
       const amt = Number(q.buy_amount);
@@ -281,6 +249,7 @@ export function solveSingleAnchor(
       }
     }
 
+    let bestQuote = validQuotes[0]!;
     let highestScore = -1;
     for (const quote of validQuotes) {
       const metrics = scoring.anchorMetrics[quote.anchorId];
@@ -303,21 +272,23 @@ export function solveSingleAnchor(
         bestQuote = quote;
       }
     }
+    selectedQuote = bestQuote;
   } else {
-    // Fall back to pure rate solver
-    bestQuote = validQuotes.reduce((best, current) =>
-      compareDecimals(current.buy_amount, best.buy_amount) > 0 ? current : best
-    );
+    selectedQuote = selectQuote(validQuotes, strategy);
+  }
+
+  if (!selectedQuote) {
+    return { ok: false, error: 'no_eligible_route' };
   }
 
   const plan: Plan = {
     type: 'single_anchor',
-    anchorId: bestQuote.anchorId,
-    anchorName: bestQuote.anchorName,
-    quoteId: bestQuote.id,
-    netAmount: bestQuote.buy_amount,
-    fee: bestQuote.fee.total,
-    price: bestQuote.price,
+    anchorId: selectedQuote.anchorId,
+    anchorName: selectedQuote.anchorName,
+    quoteId: selectedQuote.id,
+    netAmount: selectedQuote.buy_amount,
+    fee: selectedQuote.fee.total,
+    price: selectedQuote.price,
   };
 
   return { ok: true, plan };
