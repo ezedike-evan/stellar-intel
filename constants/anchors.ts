@@ -3,13 +3,11 @@ import { USDC_ISSUER } from '@/lib/config';
 import { flags } from '@/lib/flags';
 
 // ─── USDC asset ───────────────────────────────────────────────────────────────
-
 export const USDC_ASSET: StellarAsset = {
   code: 'USDC',
   issuer: USDC_ISSUER,
   name: 'USD Coin',
 };
-
 // USDC remains the default registry asset. USDT entries can be onboarded now,
 // but the rate path will ignore them unless this deployment flag is explicitly on.
 const enabledFlagValues = new Set(['1', 'on', 'true']);

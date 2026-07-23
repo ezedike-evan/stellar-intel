@@ -13,6 +13,7 @@ export const USDC_ASSET: StellarAsset = {
   name: 'USD Coin',
 };
 
+
 export const SUPPORTED_COUNTRIES: Country[] = [
   { code: 'NG', name: 'Nigeria', currency: 'NGN', currencySymbol: '₦', flag: '🇳🇬' },
   { code: 'KE', name: 'Kenya', currency: 'KES', currencySymbol: 'KSh', flag: '🇰🇪' },
