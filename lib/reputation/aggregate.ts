@@ -1,4 +1,4 @@
-import type { OutcomeLogRow } from '@/types/reputation';
+import type { OutcomeLogRow, ProbeLedgerRow } from '@/types/reputation';
 
 export interface AggregateKey {
   anchorId: string;
@@ -413,5 +413,197 @@ export function buildScorecards(
     7: aggregate(rows, 7, nowMs, lastPublisherTxTimestamp),
     30: aggregate(rows, 30, nowMs, lastPublisherTxTimestamp),
     90: aggregate(rows, 90, nowMs, lastPublisherTxTimestamp),
+  };
+}
+
+// ─── Probe coverage progress tracker (Issue #???) ─────────────────────────────
+
+export interface ProbeCoverageGap {
+  /** Start of the gap (inclusive) as ISO date string (YYYY-MM-DD UTC) */
+  startDate: string;
+  /** End of the gap (inclusive) as ISO date string (YYYY-MM-DD UTC) */
+  endDate: string;
+  /** Number of days in the gap */
+  days: number;
+}
+
+export interface AnchorProbeCoverage {
+  /** Anchor domain (from probe samples) */
+  domain: string;
+  /** Days of continuous coverage up to today */
+  continuousDays: number;
+  /** Any gaps in coverage (ordered chronologically) */
+  gaps: ProbeCoverageGap[];
+  /** Earliest probe sample date (YYYY-MM-DD UTC) */
+  firstProbeDate: string | null;
+  /** Latest probe sample date (YYYY-MM-DD UTC) */
+  latestProbeDate: string | null;
+}
+
+export interface ProbeCoverageReport {
+  /** Coverage per anchor domain */
+  anchors: AnchorProbeCoverage[];
+  /** Minimum continuous days across all anchors */
+  minContinuousDays: number;
+  /** Maximum continuous days across all anchors */
+  maxContinuousDays: number;
+  /** Average continuous days across all anchors */
+  avgContinuousDays: number;
+  /** Days until the 90-day threshold is met (based on the anchor with the least continuous coverage) */
+  daysUntilThreshold: number;
+  /** Timestamp when the report was generated (ISO string) */
+  generatedAt: string;
+}
+
+/**
+ * Formats a Date as YYYY-MM-DD (UTC)
+ */
+function formatDateUTC(date: Date): string {
+  const year = date.getUTCFullYear();
+  const month = String(date.getUTCMonth() + 1).padStart(2, '0');
+  const day = String(date.getUTCDate()).padStart(2, '0');
+  return `${year}-${month}-${day}`;
+}
+
+/**
+ * Parses a YYYY-MM-DD (UTC) string into a Date
+ */
+function parseDateUTC(dateStr: string): Date {
+  const [year, month, day] = dateStr.split('-').map(Number);
+  return new Date(Date.UTC(year!, month! - 1, day));
+}
+
+/**
+ * Computes probe coverage for a single anchor given its probe samples
+ */
+export function computeAnchorProbeCoverage(
+  samples: ProbeLedgerRow[],
+  now: Date = new Date()
+): AnchorProbeCoverage {
+  // Map of date (YYYY-MM-DD UTC) to whether there was at least one successful probe
+  const dailyCoverage = new Map<string, boolean>();
+
+  for (const sample of samples) {
+    const sampleDate = formatDateUTC(new Date(sample.probedAt));
+    if (!dailyCoverage.has(sampleDate)) {
+      dailyCoverage.set(sampleDate, false);
+    }
+    if (sample.reachable) {
+      dailyCoverage.set(sampleDate, true);
+    }
+  }
+
+  const sortedDates = Array.from(dailyCoverage.keys()).sort();
+  const firstProbeDate = sortedDates[0] || null;
+  const latestProbeDate = sortedDates[sortedDates.length - 1] || null;
+
+  // Compute gaps
+  const gaps: ProbeCoverageGap[] = [];
+  let currentGapStart: string | null = null;
+
+  if (firstProbeDate) {
+    const start = parseDateUTC(firstProbeDate);
+    const end = parseDateUTC(formatDateUTC(now));
+    const currentDate = new Date(start);
+
+    while (currentDate <= end) {
+      const dateStr = formatDateUTC(currentDate);
+      const hasCoverage = dailyCoverage.get(dateStr) === true;
+
+      if (!hasCoverage) {
+        if (!currentGapStart) {
+          currentGapStart = dateStr;
+        }
+      } else {
+        if (currentGapStart) {
+          const gapStart = parseDateUTC(currentGapStart);
+          const gapEnd = new Date(currentDate);
+          gapEnd.setUTCDate(gapEnd.getUTCDate() - 1);
+          const gapDays =
+            Math.floor((gapEnd.getTime() - gapStart.getTime()) / (1000 * 60 * 60 * 24)) + 1;
+          gaps.push({
+            startDate: currentGapStart,
+            endDate: formatDateUTC(gapEnd),
+            days: gapDays,
+          });
+          currentGapStart = null;
+        }
+      }
+
+      currentDate.setUTCDate(currentDate.getUTCDate() + 1);
+    }
+
+    // If there's an ongoing gap at the end
+    if (currentGapStart) {
+      const gapStart = parseDateUTC(currentGapStart);
+      const gapDays =
+        Math.floor((end.getTime() - gapStart.getTime()) / (1000 * 60 * 60 * 24)) + 1;
+      gaps.push({
+        startDate: currentGapStart,
+        endDate: formatDateUTC(end),
+        days: gapDays,
+      });
+    }
+  }
+
+  // Compute continuous days from today backwards
+  let continuousDays = 0;
+  const today = formatDateUTC(now);
+  let checkDate = new Date(parseDateUTC(today));
+
+  while (true) {
+    const dateStr = formatDateUTC(checkDate);
+    if (dailyCoverage.get(dateStr) === true) {
+      continuousDays++;
+    } else {
+      break;
+    }
+    checkDate.setUTCDate(checkDate.getUTCDate() - 1);
+  }
+
+  return {
+    domain: samples[0]?.domain || '',
+    continuousDays,
+    gaps,
+    firstProbeDate,
+    latestProbeDate,
+  };
+}
+
+/**
+ * Computes the overall probe coverage report across all anchors
+ */
+export function computeProbeCoverageReport(
+  allSamples: ProbeLedgerRow[],
+  now: Date = new Date()
+): ProbeCoverageReport {
+  // Group samples by domain
+  const samplesByDomain = new Map<string, ProbeLedgerRow[]>();
+  for (const sample of allSamples) {
+    const existing = samplesByDomain.get(sample.domain) || [];
+    existing.push(sample);
+    samplesByDomain.set(sample.domain, existing);
+  }
+
+  const anchors: AnchorProbeCoverage[] = [];
+  for (const [domain, samples] of samplesByDomain) {
+    anchors.push(computeAnchorProbeCoverage(samples, now));
+  }
+
+  const continuousDaysList = anchors.map((a) => a.continuousDays);
+  const minContinuousDays = continuousDaysList.length ? Math.min(...continuousDaysList) : 0;
+  const maxContinuousDays = continuousDaysList.length ? Math.max(...continuousDaysList) : 0;
+  const avgContinuousDays = continuousDaysList.length
+    ? continuousDaysList.reduce((a, b) => a + b, 0) / continuousDaysList.length
+    : 0;
+  const daysUntilThreshold = Math.max(0, 90 - minContinuousDays);
+
+  return {
+    anchors,
+    minContinuousDays,
+    maxContinuousDays,
+    avgContinuousDays,
+    daysUntilThreshold,
+    generatedAt: now.toISOString(),
   };
 }
