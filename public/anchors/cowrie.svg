@@ -1,0 +1,12 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 128 128" width="128" height="128">
+  <defs>
+    <linearGradient id="cowrieGrad" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" stop-color="#E2B743" />
+      <stop offset="100%" stop-color="#A07817" />
+    </linearGradient>
+  </defs>
+  <circle cx="64" cy="64" r="56" fill="url(#cowrieGrad)" />
+  <path d="M64 28C46 28 42 54 42 64C42 88 54 100 64 100C74 100 86 88 86 64C86 54 82 28 64 28Z" fill="#FFFFFF" />
+  <path d="M64 34V92" stroke="url(#cowrieGrad)" stroke-width="5" stroke-linecap="round" />
+  <path d="M56 46H60 M56 56H60 M56 66H60 M56 76H60 M56 82H60 M72 46H68 M72 56H68 M72 66H68 M72 76H68 M72 82H68" stroke="url(#cowrieGrad)" stroke-width="3" stroke-linecap="round" />
+</svg>

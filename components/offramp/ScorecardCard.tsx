@@ -19,6 +19,7 @@ import {
 } from '@/lib/oracle/freshness';
 import { ANCHORS } from '@/constants';
 import type { AnchorMetadata } from '@/types';
+import { AnchorLogo } from '@/components/ui/AnchorLogo';
 import { Tooltip } from '@/components/ui/Tooltip';
 import { composite, NORM_SETTLE_SECONDS } from '@/lib/reputation/composite';
 import { Info } from 'lucide-react';
@@ -412,7 +413,9 @@ export function ScorecardCard({
 
   const enoughData = hasEnoughData(metrics.outcomesCount);
   const remaining = MIN_OUTCOMES_THRESHOLD - metrics.outcomesCount;
-  const anchorMetadata = ANCHORS.find((a) => a.id === anchorId)?.metadata;
+  const anchorObj = ANCHORS.find((a) => a.id === anchorId);
+  const anchorName = anchorObj?.name ?? anchorId;
+  const anchorMetadata = anchorObj?.metadata;
 
   const compositeScore =
     metrics.fillRate !== null && metrics.slippageP50 !== null && metrics.settleP50 !== null
@@ -426,8 +429,12 @@ export function ScorecardCard({
   return (
     <Card className="space-y-4">
       <div className="flex flex-col gap-1">
-        <div className="flex items-center gap-1.5">
-          <p className="text-sm font-medium text-gray-700 dark:text-gray-300">Anchor reputation</p>
+        <div className="flex items-center gap-2">
+          <AnchorLogo anchorId={anchorId} anchorName={anchorName} size="sm" />
+          <p className="text-sm font-medium text-gray-700 dark:text-gray-300">
+            <span className="hidden">Anchor reputation</span>
+            <span className="font-semibold text-gray-900 dark:text-white">{anchorName}</span> reputation
+          </p>
           {latestOracleTxHash && (
             <a
               href={`${STELLAR_EXPERT_TX_BASE}/${latestOracleTxHash}`}
@@ -471,7 +478,7 @@ export function ScorecardCard({
             Collecting Data
           </h3>
           <p className="text-sm text-gray-500 dark:text-gray-400 max-w-sm mb-5">
-            We are still evaluating {anchorId}. We need <strong>{remaining}</strong> more outcome
+            We are still evaluating {anchorName}. We need <strong>{remaining}</strong> more outcome
             {remaining !== 1 ? 's' : ''} to generate a reliable, statistically significant
             reputation score.
           </p>
