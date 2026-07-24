@@ -14,12 +14,15 @@ describe('useCountdown', () => {
   it('starts at the full duration and ticks down once per second', () => {
     const { result } = renderHook(() => useCountdown(30_000, 'key-1'));
     expect(result.current.secondsRemaining).toBe(30);
+    expect(result.current.progress).toBe(0);
+    expect(result.current.totalSeconds).toBe(30);
 
     act(() => {
       vi.advanceTimersByTime(5_000);
     });
     expect(result.current.secondsRemaining).toBe(25);
     expect(result.current.elapsedSeconds).toBe(5);
+    expect(result.current.progress).toBeCloseTo(5 / 30, 2);
   });
 
   it('clamps at 0 once the duration has fully elapsed', () => {

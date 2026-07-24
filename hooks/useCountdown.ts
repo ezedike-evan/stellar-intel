@@ -8,6 +8,10 @@ export interface UseCountdownResult {
   /** Whole seconds elapsed since the last resetKey change — used for the reduced-motion fallback. */
   elapsedSeconds: number;
   prefersReducedMotion: boolean;
+  /** Progress through the countdown as a value from 0 (just reset) to 1 (expired). */
+  progress: number;
+  /** Total duration in whole seconds (ceil of durationMs / 1000). */
+  totalSeconds: number;
 }
 
 interface CountdownState {
@@ -58,10 +62,13 @@ export function useCountdown(durationMs: number, resetKey: unknown): UseCountdow
   }, []);
 
   const elapsedMs = now - startTime;
+  const clampedMs = Math.min(elapsedMs, durationMs);
 
   return {
     secondsRemaining: Math.max(0, Math.ceil((durationMs - elapsedMs) / 1000)),
     elapsedSeconds: Math.max(0, Math.floor(elapsedMs / 1000)),
     prefersReducedMotion,
+    progress: durationMs > 0 ? clampedMs / durationMs : 0,
+    totalSeconds: Math.ceil(durationMs / 1000),
   };
 }
