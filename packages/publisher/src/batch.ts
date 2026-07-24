@@ -285,7 +285,7 @@ interface OracleSubmitClient {
     anchor_id: string;
     corridor: string;
     outcome_hash: string;
-    settle_seconds: number;
+    settle_seconds: bigint;
     success: boolean;
   }): Promise<{ signAndSend(): Promise<{ sendTransactionResponse?: { hash?: string } }> }>;
 }
@@ -324,7 +324,7 @@ export async function submitToOracle(
           anchor_id: row.anchorId,
           corridor: row.corridor,
           outcome_hash: buildOutcomeHash(row),
-          settle_seconds: row.settleSeconds ?? 0,
+          settle_seconds: BigInt(row.settleSeconds ?? 0),
           success: row.outcome === 'completed',
         });
         return assembled.signAndSend();
