@@ -24,6 +24,7 @@ import { useCountdown } from '@/hooks/useCountdown';
 import { useWallet } from '@/contexts/WalletContext';
 import { useWithdrawStatus } from '@/hooks/useWithdrawStatus';
 import { useWalletBalance } from '@/hooks/useWalletBalance';
+import { amountBucket, FUNNEL_EVENTS, trackFunnelEvent } from '@/lib/analytics';
 import { VISIBLE_CORRIDORS } from '@/constants/anchors';
 import type { AnchorRate } from '@/types';
 
@@ -108,6 +109,18 @@ function OfframpContent() {
     router.replace(`?${sp.toString()}`, { scroll: false });
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [corridorId, amount, trackingTransactionId]);
+
+  const handleCorridorChange = useCallback(
+    (nextCorridorId: string) => {
+      if (nextCorridorId === corridorId) return;
+      setCorridorId(nextCorridorId);
+      trackFunnelEvent(FUNNEL_EVENTS.corridorSelected, {
+        corridor: nextCorridorId,
+        amount_bucket: amountBucket(amount),
+      });
+    },
+    [corridorId, amount, setCorridorId]
+  );
 
   const handleSelectAnchor = useCallback((rate: AnchorRate) => {
     setSelectedRate(rate);
@@ -207,7 +220,7 @@ function OfframpContent() {
       <DisclaimerBanner />
 
       <div className="grid grid-cols-1 gap-4 rounded-xl border border-gray-200 bg-gray-50 p-4 dark:border-gray-700 dark:bg-gray-800/50 sm:grid-cols-2">
-        <CorridorSelector value={corridorId} onChange={setCorridorId} />
+        <CorridorSelector value={corridorId} onChange={handleCorridorChange} />
         <AmountInput
           value={amount}
           onChange={setAmount}
