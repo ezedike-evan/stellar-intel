@@ -17,7 +17,10 @@ class SqliteBackedPgExecutor implements SqlExecutor {
     // Postgres $n params are positional-by-number and can appear out of textual
     // order, so map them to better-sqlite3 named params (@pN) for a faithful run.
     // Multi-statement DDL (CREATE TABLE / INDEX blocks) must use exec(), not prepare().
-    const stmts = text.split(';').map((s) => s.trim()).filter(Boolean);
+    const stmts = text
+      .split(';')
+      .map((s) => s.trim())
+      .filter(Boolean);
     if (stmts.length > 1) {
       this.db.exec(text);
       return { rows: [] };
