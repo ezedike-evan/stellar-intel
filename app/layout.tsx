@@ -56,6 +56,7 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
   return (
     <html lang="en" suppressHydrationWarning>
       <head>
+        <script defer data-domain="stellar-intel.vercel.app" src="https://plausible.io/js/script.js"></script>
         <script
           dangerouslySetInnerHTML={{
             __html: `
