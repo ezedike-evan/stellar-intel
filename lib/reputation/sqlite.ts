@@ -170,7 +170,10 @@ export class SqliteReputationStore implements ReputationStore {
       .run({ ...row, reachable: row.reachable ? 1 : 0 });
   }
 
-  async queryProbeSamples(domain?: string, filter: ProbeSampleQuery = {}): Promise<ProbeLedgerRow[]> {
+  async queryProbeSamples(
+    domain?: string,
+    filter: ProbeSampleQuery = {}
+  ): Promise<ProbeLedgerRow[]> {
     const where: string[] = [];
     const params: Record<string, unknown> = {};
     if (domain) {
