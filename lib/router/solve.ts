@@ -120,15 +120,15 @@ export interface ScoringInputs {
 
 /**
  * Default weights for the multi-factor routing score.
- * 
+ *
  * - Rate (50%): Primary consideration, ensuring users get competitive rates.
  * - Reputation (30%): Incorporates real transaction fill rate, slippage, and settle time.
  * - Reliability (15%): Historical uptime/reachability to avoid down/flaky anchors.
  * - Latency (5%): Secondary factor to optimize for instant/fast user experiences.
  */
 export const DEFAULT_SCORING_WEIGHTS = {
-  rate: 0.50,
-  reputation: 0.30,
+  rate: 0.5,
+  reputation: 0.3,
   reliability: 0.15,
   latency: 0.05,
 };
@@ -138,15 +138,15 @@ export const NORM_LATENCY_MS = 2000;
 
 /**
  * Weighting Formula and Composition with Reputation:
- * 
+ *
  * The routing score is a weighted sum of four normalized metrics:
  *   Score = w_rate * S_rate + w_reputation * S_reputation + w_reliability * S_reliability + w_latency * S_latency
- * 
+ *
  * Metric Normalization:
  * 1. Rate Score (S_rate):
  *    Normalized relative to the highest (best) rate in the candidate set:
  *      S_rate = rate / maxRate
- * 
+ *
  * 2. Reputation Score (S_reputation):
  *    Drawn from the transaction-based composite reputation score (lib/reputation/composite.ts):
  *      composite = fillRate * (1 - slippage) / (settleSeconds / NORM_SETTLE_SECONDS)
@@ -154,15 +154,15 @@ export const NORM_LATENCY_MS = 2000;
  *    values >= 1.0 are excellent (fast settlement). We cap the input at 1.0 to prevent
  *    a single ultra-fast settlement from overwhelming other routing criteria:
  *      S_reputation = clamp(0.0, 1.0, reputationComposite)
- * 
+ *
  * 3. Reliability Score (S_reliability):
  *    Historical uptime/reachability fraction from probe data:
  *      S_reliability = clamp(0.0, 1.0, reliability)
- * 
+ *
  * 4. Latency Score (S_latency):
  *    Linear decay from 0ms (score 1.0) to NORM_LATENCY_MS (score 0.0):
  *      S_latency = max(0, 1 - latencyMs / NORM_LATENCY_MS)
- * 
+ *
  * By design:
  * - Decoupled: No absolute rate, corridor, or fiat code bounds are assumed.
  * - Normalized: All sub-scores range within [0, 1].
@@ -189,10 +189,7 @@ export function computeRoutingScore(
   if (totalWeight === 0) return 0;
 
   const weightedSum =
-    wRate * sRate +
-    wReputation * sReputation +
-    wReliability * sReliability +
-    wLatency * sLatency;
+    wRate * sRate + wReputation * sReputation + wReliability * sReliability + wLatency * sLatency;
 
   return weightedSum / totalWeight;
 }
@@ -200,7 +197,7 @@ export function computeRoutingScore(
 /**
  * Selects the best single-anchor SEP-38 quote that meets the intent's floor
  * and deadline constraints. Returns a typed discriminated-union result.
- * 
+ *
  * If scoring inputs are provided, it scores quotes based on rate, reliability,
  * latency, and reputation, selecting the highest-scoring candidate. Otherwise,
  * it falls back to selecting by the highest buy_amount (rate).
@@ -274,7 +271,7 @@ export function solveSingleAnchor(
 
   if (scoring && scoring.anchorMetrics) {
     const weights = { ...DEFAULT_SCORING_WEIGHTS, ...scoring.weights };
-    
+
     // Find the max buy amount among valid quotes for relative rate normalization
     let maxBuyAmount = 0;
     for (const q of validQuotes) {

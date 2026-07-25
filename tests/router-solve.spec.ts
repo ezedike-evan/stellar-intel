@@ -413,7 +413,7 @@ describe('solveSingleAnchor', () => {
       }
     });
 
-  it('includes the exchange rate (price) in the plan', () => {
+    it('includes the exchange rate (price) in the plan', () => {
       const intent = createTestIntent();
       const quotes = [
         createTestQuote({
@@ -455,12 +455,12 @@ describe('solveSingleAnchor', () => {
           anchorMetrics: {
             'anchor-high-rate': {
               reliability: 0.1, // 10% reachability
-              latencyMs: 1800,  // high latency
+              latencyMs: 1800, // high latency
               reputationComposite: 0.2,
             },
             'anchor-reliable': {
               reliability: 1.0, // 100% reachability
-              latencyMs: 100,   // super fast
+              latencyMs: 100, // super fast
               reputationComposite: 1.0,
             },
           },
