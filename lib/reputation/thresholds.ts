@@ -8,9 +8,7 @@ export const MIN_OUTCOMES_THRESHOLD = parseInt(process.env.NEXT_PUBLIC_MIN_OUTCO
 // informational only — a drifted anchor is never auto-excluded.
 
 // Fallback to 3% if the environment variable is not set
-export const DRIFT_THRESHOLD_PERCENT = parseFloat(
-  process.env.QUOTE_DRIFT_THRESHOLD_PERCENT || '3'
-);
+export const DRIFT_THRESHOLD_PERCENT = parseFloat(process.env.QUOTE_DRIFT_THRESHOLD_PERCENT || '3');
 
 /**
  * True when a quote's percentage deviation from the cross-anchor median
