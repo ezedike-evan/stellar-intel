@@ -72,8 +72,18 @@ export function Header() {
     <header className="sticky top-0 z-40 border-b border-border bg-background">
       <div className="mx-auto flex max-w-7xl items-center justify-between px-4 py-3">
         <div className="flex items-center gap-2">
-          <Link href="/" className="font-bold text-primary-text">
-            Stellar Intel
+          <Link href="/" aria-label="Stellar Intel — home">
+            {/* SVG wordmark — theme-adaptive via prefers-color-scheme and
+                .dark class. The SVG is served as a static asset so we use a
+                plain <img> here; width/height prevent layout shift. */}
+            {/* eslint-disable-next-line @next/next/no-img-element */}
+            <img
+              src="/wordmark.svg"
+              alt="Stellar Intel"
+              width={168}
+              height={30}
+              className="h-[30px] w-auto"
+            />
           </Link>
           {mcpPresent && (
             <span className="inline-flex items-center gap-1 rounded-full bg-green-100 px-2 py-0.5 text-xs font-medium text-green-800 dark:bg-green-900/30 dark:text-green-400">
