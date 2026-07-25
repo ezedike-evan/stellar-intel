@@ -204,7 +204,10 @@ export class PostgresReputationStore implements ReputationStore {
     );
   }
 
-  async queryProbeSamples(domain?: string, filter: ProbeSampleQuery = {}): Promise<ProbeLedgerRow[]> {
+  async queryProbeSamples(
+    domain?: string,
+    filter: ProbeSampleQuery = {}
+  ): Promise<ProbeLedgerRow[]> {
     await this.init();
     const where: string[] = [];
     const params: unknown[] = [];
