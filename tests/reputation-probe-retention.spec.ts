@@ -14,7 +14,10 @@ class SqliteBackedPgExecutor implements SqlExecutor {
   private readonly db = new Database(':memory:');
   async query(text: string, params: unknown[] = []): Promise<{ rows: Record<string, unknown>[] }> {
     // Multi-statement DDL (CREATE TABLE / INDEX blocks) must use exec(), not prepare().
-    const stmts = text.split(';').map((s) => s.trim()).filter(Boolean);
+    const stmts = text
+      .split(';')
+      .map((s) => s.trim())
+      .filter(Boolean);
     if (stmts.length > 1) {
       this.db.exec(text);
       return { rows: [] };
