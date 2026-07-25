@@ -631,4 +631,3 @@ export function quoteLatencyPercentiles(
   };
   return { p50Ms: rank(50), p95Ms: rank(95), sampleCount: windowed.length };
 }
-
