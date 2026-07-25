@@ -21,17 +21,19 @@ describe('admin cache invalidation endpoint', () => {
   it('invalidates cache for a given anchor', async () => {
     setCachedRate('usdc-ngn', '100', {
       corridorId: 'usdc-ngn',
-      rates: [{
-        anchorId: 'moneygram',
-        anchorName: 'MoneyGram',
-        corridorId: 'usdc-ngn',
-        fee: null,
-        feeType: 'flat',
-        exchangeRate: 1600,
-        totalReceived: 160000,
-        updatedAt: new Date('2024-01-01T00:00:00.000Z'),
-        source: 'sep38',
-      }],
+      rates: [
+        {
+          anchorId: 'moneygram',
+          anchorName: 'MoneyGram',
+          corridorId: 'usdc-ngn',
+          fee: null,
+          feeType: 'flat',
+          exchangeRate: 1600,
+          totalReceived: 160000,
+          updatedAt: new Date('2024-01-01T00:00:00.000Z'),
+          source: 'sep38',
+        },
+      ],
       pending: [],
       bestRateId: 'moneygram',
     });

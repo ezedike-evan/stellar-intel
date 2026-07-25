@@ -35,7 +35,8 @@ export async function GET(
     }
 
     const cached = getCachedRate(corridor, amount);
-    const hasHealthyCachedResult = cached && !cached.rates.some((rate) => isAnchorDegraded(rate.anchorId));
+    const hasHealthyCachedResult =
+      cached && !cached.rates.some((rate) => isAnchorDegraded(rate.anchorId));
 
     let result = cached;
     if (!result || !hasHealthyCachedResult) {

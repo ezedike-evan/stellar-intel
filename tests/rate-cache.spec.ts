@@ -1,5 +1,10 @@
 import { describe, it, expect, beforeEach } from 'vitest';
-import { clearRateCache, getCachedRate, invalidateCachedRates, setCachedRate } from '@/lib/api/rate-cache';
+import {
+  clearRateCache,
+  getCachedRate,
+  invalidateCachedRates,
+  setCachedRate,
+} from '@/lib/api/rate-cache';
 
 describe('rate cache', () => {
   beforeEach(() => {
@@ -9,17 +14,19 @@ describe('rate cache', () => {
   it('invalidates cached rates for a specific anchor', () => {
     setCachedRate('usdc-ngn', '100', {
       corridorId: 'usdc-ngn',
-      rates: [{
-        anchorId: 'moneygram',
-        anchorName: 'MoneyGram',
-        corridorId: 'usdc-ngn',
-        fee: null,
-        feeType: 'flat',
-        exchangeRate: 1600,
-        totalReceived: 160000,
-        updatedAt: new Date('2024-01-01T00:00:00.000Z'),
-        source: 'sep38',
-      }],
+      rates: [
+        {
+          anchorId: 'moneygram',
+          anchorName: 'MoneyGram',
+          corridorId: 'usdc-ngn',
+          fee: null,
+          feeType: 'flat',
+          exchangeRate: 1600,
+          totalReceived: 160000,
+          updatedAt: new Date('2024-01-01T00:00:00.000Z'),
+          source: 'sep38',
+        },
+      ],
       pending: [],
       bestRateId: 'moneygram',
     });
