@@ -34,8 +34,8 @@ export default function MethodologyPage() {
     <main className="mx-auto max-w-4xl space-y-6 px-4 py-8">
       <h1 className="text-3xl font-semibold text-gray-900 dark:text-white">Methodology</h1>
       <p className="text-base text-gray-600 dark:text-gray-300">
-        Stellar Intel evaluates anchors by combining corridor coverage, recent outcome history,
-        and reputation signals to help users compare off-ramp options.
+        Stellar Intel evaluates anchors by combining corridor coverage, recent outcome history, and
+        reputation signals to help users compare off-ramp options.
       </p>
     </main>
   );
