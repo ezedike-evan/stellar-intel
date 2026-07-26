@@ -1,9 +1,13 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { withRequestLogger } from '@/lib/logger';
-import { isValidCorridorId } from '@/lib/stellar/anchors';
+import { isValidCorridorId, isAnchorDegraded } from '@/lib/stellar/anchors';
 import { fetchCorridorRates } from '@/lib/stellar/server-rates';
 import { AMOUNT_PATTERN } from '@/lib/patterns';
-import { getCachedRates, setCachedRates } from '@/lib/api/rates-cache';
+import {
+  getCachedRate,
+  setCachedRate,
+  invalidateCachedRates,
+} from '@/lib/api/rate-cache';
 
 // Live anchor calls must run per-request, never at build time.
 export const dynamic = 'force-dynamic';
@@ -34,37 +38,56 @@ export async function GET(
       );
     }
 
-    const cacheControl = request.headers.get('cache-control') || '';
-    const pragma = request.headers.get('pragma') || '';
-    const forceRefreshParam = new URL(request.url).searchParams.get('forceRefresh') === 'true';
-    const forceRefresh =
-      cacheControl.includes('no-cache') ||
-      cacheControl.includes('no-store') ||
-      pragma.includes('no-cache') ||
-      forceRefreshParam;
+const cacheControl = request.headers.get('cache-control') || '';
+const pragma = request.headers.get('pragma') || '';
+const forceRefreshParam =
+  new URL(request.url).searchParams.get('forceRefresh') === 'true';
 
-    const cached = getCachedRates(corridor, amount, forceRefresh);
-    if (cached) {
-      logger.info({
-        event: 'rates_cache_hit',
-        corridor,
-        amount,
-      });
-      return NextResponse.json(cached, {
-        headers: { 'Cache-Control': 'public, max-age=15, stale-while-revalidate=60' },
-      });
+const forceRefresh =
+  cacheControl.includes('no-cache') ||
+  cacheControl.includes('no-store') ||
+  pragma.includes('no-cache') ||
+  forceRefreshParam;
+
+let result = forceRefresh
+  ? null
+  : getCachedRate(corridor, amount);
+
+const hasHealthyCachedResult =
+  result && !result.rates.some((rate) => isAnchorDegraded(rate.anchorId));
+
+if (!result || !hasHealthyCachedResult) {
+  if (result) {
+    for (const rate of result.rates) {
+      if (isAnchorDegraded(rate.anchorId)) {
+        invalidateCachedRates(rate.anchorId);
+      }
     }
+  }
 
-    const result = await fetchCorridorRates(corridor, amount);
-    setCachedRates(corridor, amount, result);
+  result = await fetchCorridorRates(corridor, amount);
 
-    logger.info({
-      event: 'rates_fetched',
-      corridor,
-      amount,
-      quoted: result.rates.length,
-      failed: result.errors.length,
-    });
+  if (result.rates.length > 0) {
+    setCachedRate(corridor, amount, result);
+  }
+
+  logger.info({
+    event: 'rates_fetched',
+    corridor,
+    amount,
+    quoted: result.rates.length,
+    failed: result.errors?.length ?? 0,
+    forceRefresh,
+  });
+} else {
+  logger.info({
+    event: 'rates_served_from_cache',
+    corridor,
+    amount,
+    quoted: result.rates.length,
+    forceRefresh,
+  });
+}
 
     // Listing rates aren't a locked-in quote — execution re-authenticates and
     // re-quotes with the anchor from scratch, so a short shared cache here

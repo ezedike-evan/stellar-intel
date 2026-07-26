@@ -1,4 +1,9 @@
-import type { LatencyPercentiles, OutcomeLogRow, ProbeKind, ProbeLedgerRow } from '@/types/reputation';
+import type {
+  LatencyPercentiles,
+  OutcomeLogRow,
+  ProbeKind,
+  ProbeLedgerRow,
+} from '@/types/reputation';
 import { SqliteReputationStore } from './sqlite';
 import { PostgresReputationStore, type SqlExecutor } from './postgres';
 

@@ -37,6 +37,11 @@ export const metadata: Metadata = {
   },
   icons: {
     icon: [
+      // SVG favicon — theme-adaptive (light/dark via prefers-color-scheme).
+      // Modern browsers (Chrome 80+, Firefox 41+, Safari 12+) prefer this
+      // over raster favicons when listed first.
+      { url: '/favicon.svg', type: 'image/svg+xml' },
+      // Raster fallbacks for older browsers / OS favicon caches.
       { url: '/favicon.ico', sizes: 'any' },
       { url: '/favicons/favicon-16x16.png', sizes: '16x16', type: 'image/png' },
       { url: '/favicons/favicon-32x32.png', sizes: '32x32', type: 'image/png' },
