@@ -78,6 +78,62 @@ describe('Lock mechanism', () => {
   });
 });
 
+describe('GET /v1/public/scores — route rate limiting', () => {
+  beforeEach(() => {
+    clearRateLimitStore();
+  });
+
+  it('succeeds while under the default rate limit', async () => {
+    const headers = { 'x-forwarded-for': '192.0.2.10' };
+    for (let i = 0; i < 59; i++) {
+      const res = await GET(new NextRequest('http://localhost/v1/public/scores', { headers }));
+      expect(res.status).toBe(200);
+    }
+  });
+
+  it('returns 429 with Retry-After once the bucket is exhausted', async () => {
+    const ip = '192.0.2.20';
+    for (let i = 0; i < 60; i++) {
+      checkRateLimit(ip);
+    }
+
+    const res = await GET(
+      new NextRequest('http://localhost/v1/public/scores', {
+        headers: { 'x-forwarded-for': ip },
+      })
+    );
+
+    expect(res.status).toBe(429);
+    expect(res.headers.get('Retry-After')).toBeTruthy();
+    expect(res.headers.get('X-RateLimit-Remaining')).toBe('0');
+
+    const body = (await res.json()) as { error: string; retryAfter: number };
+    expect(body.error).toBe('Too many requests');
+    expect(body.retryAfter).toBeGreaterThan(0);
+  });
+
+  it('rate-limits independently per IP', async () => {
+    const exhaustedIp = '192.0.2.30';
+    for (let i = 0; i < 60; i++) {
+      checkRateLimit(exhaustedIp);
+    }
+
+    const blocked = await GET(
+      new NextRequest('http://localhost/v1/public/scores', {
+        headers: { 'x-forwarded-for': exhaustedIp },
+      })
+    );
+    expect(blocked.status).toBe(429);
+
+    const otherIpRes = await GET(
+      new NextRequest('http://localhost/v1/public/scores', {
+        headers: { 'x-forwarded-for': '192.0.2.31' },
+      })
+    );
+    expect(otherIpRes.status).toBe(200);
+  });
+});
+
 describe('ETag cache deduplication', () => {
   it('returns consistent ETag for identical payload', async () => {
     const request = new NextRequest('http://localhost/v1/public/scores', {
