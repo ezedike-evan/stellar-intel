@@ -276,7 +276,6 @@ export function solveSingleAnchor(
   } else {
     selectedQuote = selectQuote(validQuotes, strategy);
   }
-
   if (!selectedQuote) {
     return { ok: false, error: 'no_eligible_route' };
   }
