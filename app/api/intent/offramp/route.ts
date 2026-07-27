@@ -10,6 +10,7 @@ import {
   Account,
 } from '@stellar/stellar-sdk';
 import { hashIntent } from '@/lib/intent/hash';
+import { checkRateLimit, getClientIp } from '@/lib/api/rate-limit';
 import { USDC_ISSUER } from '@/lib/config';
 import { withRequestLogger } from '@/lib/logger';
 import { recordIntentError, recordIntentSuccess } from '@/lib/metrics';
@@ -110,6 +111,22 @@ function buildUnsignedOfframpTx(
 
 export async function POST(request: NextRequest): Promise<NextResponse> {
   return withRequestLogger(request, 'api.intent.offramp', async (logger) => {
+    const ip = getClientIp(request.headers);
+    const rl = checkRateLimit(ip, { bucket: 'api.intent.offramp', maxRequests: 20 });
+    if (!rl.allowed) {
+      logger.warn({ event: 'rate_limit_exceeded', ip, retryAfter: rl.retryAfter });
+      return NextResponse.json(
+        { error: 'Too many requests', retryAfter: rl.retryAfter },
+        {
+          status: 429,
+          headers: {
+            'Retry-After': String(rl.retryAfter),
+            'X-RateLimit-Remaining': '0',
+          },
+        }
+      );
+    }
+
     let body: unknown;
     try {
       body = await request.json();

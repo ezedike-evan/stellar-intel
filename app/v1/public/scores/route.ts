@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server';
-import { checkRateLimit } from '@/lib/api/rate-limit';
+import { checkRateLimit, getClientIp } from '@/lib/api/rate-limit';
 import { computeCorridorAggregate, type SettlementEvent } from '@/lib/reputation/aggregate';
 import { withRequestLogger } from '@/lib/logger';
 
@@ -40,10 +40,7 @@ function buildScorePayload() {
 
 export async function GET(request: NextRequest): Promise<NextResponse> {
   return withRequestLogger(request, 'api.public.scores', async (logger) => {
-    const ip =
-      request.headers.get('x-forwarded-for')?.split(',')[0]?.trim() ??
-      request.headers.get('x-real-ip') ??
-      'unknown';
+    const ip = getClientIp(request.headers);
 
     const rl = checkRateLimit(ip);
     if (!rl.allowed) {
@@ -79,5 +76,5 @@ export async function GET(request: NextRequest): Promise<NextResponse> {
         'X-RateLimit-Remaining': String(rl.remaining),
       },
     });
-  })
+  });
 }
