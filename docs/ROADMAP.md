@@ -521,6 +521,7 @@ wave advances them.
 **Docs** — the ten load-bearing doc files listed in
 [`maintainer.md § 3`](../maintainer.md) are updated alongside the code
 that changes their subject. A wave does not ship with out-of-date docs.
+Analytics documentation lives in [`docs/ANALYTICS.md`](ANALYTICS.md).
 
 **Observability** — every wave extends the metric surface. v1.3 seeds
 the logger + counters; v2.1 adds publisher metrics; v3 adds SLA
