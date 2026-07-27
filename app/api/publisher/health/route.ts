@@ -1,4 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server';
+import { checkRateLimit, getClientIp } from '@/lib/api/rate-limit';
 import { withRequestLogger } from '@/lib/logger';
 import { getPublisherHealth } from '@/lib/metrics';
 
@@ -13,6 +14,22 @@ import { getPublisherHealth } from '@/lib/metrics';
  */
 export async function GET(request: NextRequest): Promise<NextResponse> {
   return withRequestLogger(request, 'api.publisher.health', async (logger) => {
+    const ip = getClientIp(request.headers);
+    const rl = checkRateLimit(ip, { bucket: 'api.publisher.health', maxRequests: 120 });
+    if (!rl.allowed) {
+      logger.warn({ event: 'rate_limit_exceeded', ip, retryAfter: rl.retryAfter });
+      return NextResponse.json(
+        { error: 'Too many requests', retryAfter: rl.retryAfter },
+        {
+          status: 429,
+          headers: {
+            'Retry-After': String(rl.retryAfter),
+            'X-RateLimit-Remaining': '0',
+          },
+        }
+      );
+    }
+
     const health = getPublisherHealth();
 
     logger.info({
@@ -22,6 +39,8 @@ export async function GET(request: NextRequest): Promise<NextResponse> {
       hasError: !!health.lastError,
     });
 
-    return NextResponse.json(health);
+    return NextResponse.json(health, {
+      headers: { 'X-RateLimit-Remaining': String(rl.remaining) },
+    });
   });
 }

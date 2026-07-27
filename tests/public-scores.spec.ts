@@ -14,6 +14,17 @@ describe('Rate limiting', () => {
     expect(result.remaining).toBe(59);
   });
 
+  it('supports stricter route-specific buckets', () => {
+    const options = { bucket: 'api.intent.offramp', maxRequests: 2 };
+    expect(checkRateLimit('1.2.3.4', options).allowed).toBe(true);
+    expect(checkRateLimit('1.2.3.4', options).allowed).toBe(true);
+    expect(checkRateLimit('1.2.3.4', options).allowed).toBe(false);
+
+    const defaultBucket = checkRateLimit('1.2.3.4');
+    expect(defaultBucket.allowed).toBe(true);
+    expect(defaultBucket.remaining).toBe(59);
+  });
+
   it('returns 429 after 60 requests', () => {
     for (let i = 0; i < 60; i++) {
       checkRateLimit('1.2.3.5');

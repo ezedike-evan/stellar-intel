@@ -1,6 +1,7 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest';
 import { NextRequest } from 'next/server';
 import { POST } from '@/app/api/intent/offramp/route';
+import { clearRateLimitStore } from '@/lib/api/rate-limit';
 import type { OfframpIntentResponse } from '@/app/api/intent/offramp/route';
 import type { ApiError } from '@/types';
 
@@ -28,6 +29,7 @@ function makeRequest(body: unknown): NextRequest {
 
 beforeEach(() => {
   vi.clearAllMocks();
+  clearRateLimitStore();
 });
 
 // ─── Happy path ────────────────────────────────────────────────────────────────

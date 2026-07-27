@@ -1,4 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server';
+import { checkRateLimit, getClientIp } from '@/lib/api/rate-limit';
 import { withRequestLogger } from '@/lib/logger';
 import { isValidCorridorId } from '@/lib/stellar/anchors';
 import { fetchCorridorRates } from '@/lib/stellar/server-rates';
@@ -17,6 +18,22 @@ export async function GET(
   { params }: { params: Promise<{ corridor: string }> | { corridor: string } }
 ): Promise<NextResponse> {
   return withRequestLogger(request, 'api.rates', async (logger) => {
+    const ip = getClientIp(request.headers);
+    const rl = checkRateLimit(ip, { bucket: 'api.rates', maxRequests: 90 });
+    if (!rl.allowed) {
+      logger.warn({ event: 'rate_limit_exceeded', ip, retryAfter: rl.retryAfter });
+      return NextResponse.json(
+        { error: 'Too many requests', retryAfter: rl.retryAfter },
+        {
+          status: 429,
+          headers: {
+            'Retry-After': String(rl.retryAfter),
+            'X-RateLimit-Remaining': '0',
+          },
+        }
+      );
+    }
+
     const { corridor } = await params;
 
     if (!corridor || !isValidCorridorId(corridor)) {
@@ -46,7 +63,10 @@ export async function GET(
     // re-quotes with the anchor from scratch, so a short shared cache here
     // only affects how stale the comparison table can be, not correctness.
     return NextResponse.json(result, {
-      headers: { 'Cache-Control': 'public, max-age=15, stale-while-revalidate=60' },
+      headers: {
+        'Cache-Control': 'public, max-age=15, stale-while-revalidate=60',
+        'X-RateLimit-Remaining': String(rl.remaining),
+      },
     });
   });
 }
