@@ -195,9 +195,7 @@ describe('POST /api/intent/offramp — rate limiting', () => {
     const blocked = await POST(makeRequest(VALID_INTENT, { 'x-forwarded-for': exhaustedIp }));
     expect(blocked.status).toBe(429);
 
-    const otherIpRes = await POST(
-      makeRequest(VALID_INTENT, { 'x-forwarded-for': '203.0.113.31' })
-    );
+    const otherIpRes = await POST(makeRequest(VALID_INTENT, { 'x-forwarded-for': '203.0.113.31' }));
     expect(otherIpRes.status).toBe(200);
   });
 });
