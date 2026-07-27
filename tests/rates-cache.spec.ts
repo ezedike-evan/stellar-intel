@@ -1,31 +1,13 @@
-import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
+import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { NextRequest } from 'next/server';
-import { clearRatesCache } from '@/lib/api/rates-cache';
+import { clearRateCache } from '@/lib/api/rate-cache';
 import { resetMetrics, getMetricsSnapshot } from '@/lib/metrics';
 
-// Mock server rates fetcher so we don't trigger real network calls in tests.
-const fetchCorridorRatesMock = vi.fn().mockResolvedValue({
-  corridorId: 'usdc-ngn',
-  rates: [
-    {
-      anchorId: 'cowrie',
-      anchorName: 'Cowrie Exchange',
-      corridorId: 'usdc-ngn',
-      fee: 2,
-      feeType: 'flat',
-      exchangeRate: 1580,
-      totalReceived: 153660,
-      source: 'sep24-fee',
-      updatedAt: new Date(),
-    },
-  ],
-  pending: [],
-  bestRateId: 'cowrie',
-  errors: [],
-});
+// Mock the server-side fetcher so the route never touches a real anchor.
+const fetchCorridorRatesMock = vi.fn();
 
 vi.mock('@/lib/stellar/server-rates', () => ({
-  fetchCorridorRates: (...args: any[]) => fetchCorridorRatesMock(...args),
+  fetchCorridorRates: (...args: unknown[]) => fetchCorridorRatesMock(...args),
 }));
 
 import { GET as getRates } from '@/app/api/rates/[corridor]/route';
@@ -35,91 +17,77 @@ function makeRequest(url: string, headers: Record<string, string> = {}): NextReq
   return new NextRequest(url, { headers });
 }
 
-describe('Rates Endpoint Caching & Hit/Miss Observability', () => {
+function callRates(url: string, headers: Record<string, string> = {}) {
+  return getRates(makeRequest(url, headers), { params: { corridor: 'usdc-ngn' } });
+}
+
+describe('rates endpoint cache hit/miss metrics (#737)', () => {
   beforeEach(() => {
-    clearRatesCache();
+    clearRateCache();
     resetMetrics();
-    fetchCorridorRatesMock.mockClear();
+    fetchCorridorRatesMock.mockReset();
+    fetchCorridorRatesMock.mockResolvedValue({
+      corridorId: 'usdc-ngn',
+      rates: [
+        {
+          anchorId: 'cowrie',
+          anchorName: 'Cowrie Exchange',
+          corridorId: 'usdc-ngn',
+          fee: 2,
+          feeType: 'flat',
+          exchangeRate: 1580,
+          totalReceived: 153660,
+          source: 'sep24-fee',
+          updatedAt: new Date(),
+        },
+      ],
+      pending: [],
+      bestRateId: 'cowrie',
+      errors: [],
+    });
   });
 
-  afterEach(() => {
-    vi.restoreAllMocks();
-  });
-
-  it('records miss on first request and caches the result for subsequent hits', async () => {
-    // 1. Initial Request (Miss)
-    const req1 = makeRequest('http://localhost/api/rates/usdc-ngn?amount=100');
-    const res1 = await getRates(req1, { params: { corridor: 'usdc-ngn' } });
+  it('records a miss on the first request and a hit on the next', async () => {
+    const res1 = await callRates('http://localhost/api/rates/usdc-ngn?amount=100');
     expect(res1.status).toBe(200);
     expect(fetchCorridorRatesMock).toHaveBeenCalledTimes(1);
+    expect(getMetricsSnapshot().ratesCache).toEqual({ hits: 0, misses: 1 });
 
-    let metrics = getMetricsSnapshot();
-    expect(metrics.ratesCache.hits).toBe(0);
-    expect(metrics.ratesCache.misses).toBe(1);
-
-    // 2. Second Request (Hit)
-    const req2 = makeRequest('http://localhost/api/rates/usdc-ngn?amount=100');
-    const res2 = await getRates(req2, { params: { corridor: 'usdc-ngn' } });
+    const res2 = await callRates('http://localhost/api/rates/usdc-ngn?amount=100');
     expect(res2.status).toBe(200);
-    expect(fetchCorridorRatesMock).toHaveBeenCalledTimes(1); // Not called again
-
-    metrics = getMetricsSnapshot();
-    expect(metrics.ratesCache.hits).toBe(1);
-    expect(metrics.ratesCache.misses).toBe(1);
-
-    // 3. Exposes the metrics correctly via /api/metrics GET handler
-    const metricsRes = await getMetrics(new NextRequest('http://localhost/api/metrics'));
-    expect(metricsRes.status).toBe(200);
-    const metricsBody = await metricsRes.json();
-    expect(metricsBody.ratesCache.hits).toBe(1);
-    expect(metricsBody.ratesCache.misses).toBe(1);
+    expect(fetchCorridorRatesMock).toHaveBeenCalledTimes(1); // served from cache
+    expect(getMetricsSnapshot().ratesCache).toEqual({ hits: 1, misses: 1 });
   });
 
-  it('bypasses and invalidates the cache when forceRefresh query parameter is true', async () => {
-    // 1. Populate Cache (Miss)
-    const req1 = makeRequest('http://localhost/api/rates/usdc-ngn?amount=100');
-    await getRates(req1, { params: { corridor: 'usdc-ngn' } });
-    expect(fetchCorridorRatesMock).toHaveBeenCalledTimes(1);
+  it('exposes the counters through GET /api/metrics', async () => {
+    await callRates('http://localhost/api/rates/usdc-ngn?amount=100');
+    await callRates('http://localhost/api/rates/usdc-ngn?amount=100');
 
-    // 2. Request with forceRefresh=true (Miss)
-    const req2 = makeRequest('http://localhost/api/rates/usdc-ngn?amount=100&forceRefresh=true');
-    await getRates(req2, { params: { corridor: 'usdc-ngn' } });
-    expect(fetchCorridorRatesMock).toHaveBeenCalledTimes(2); // Fetched again
-
-    const metrics = getMetricsSnapshot();
-    expect(metrics.ratesCache.hits).toBe(0);
-    expect(metrics.ratesCache.misses).toBe(2);
+    const res = await getMetrics(new NextRequest('http://localhost/api/metrics'));
+    expect(res.status).toBe(200);
+    await expect(res.json()).resolves.toMatchObject({ ratesCache: { hits: 1, misses: 1 } });
   });
 
-  it('bypasses and invalidates the cache when Cache-Control header has no-cache or no-store', async () => {
-    // 1. Populate Cache (Miss)
-    const req1 = makeRequest('http://localhost/api/rates/usdc-ngn?amount=100');
-    await getRates(req1, { params: { corridor: 'usdc-ngn' } });
-    expect(fetchCorridorRatesMock).toHaveBeenCalledTimes(1);
+  it('counts a miss and refetches when forceRefresh=true', async () => {
+    await callRates('http://localhost/api/rates/usdc-ngn?amount=100');
+    await callRates('http://localhost/api/rates/usdc-ngn?amount=100&forceRefresh=true');
 
-    // 2. Request with Cache-Control: no-cache (Miss)
-    const req2 = makeRequest('http://localhost/api/rates/usdc-ngn?amount=100', {
-      'cache-control': 'no-cache',
-    });
-    await getRates(req2, { params: { corridor: 'usdc-ngn' } });
     expect(fetchCorridorRatesMock).toHaveBeenCalledTimes(2);
+    expect(getMetricsSnapshot().ratesCache).toEqual({ hits: 0, misses: 2 });
+  });
 
-    // 3. Request with Cache-Control: no-store (Miss)
-    const req3 = makeRequest('http://localhost/api/rates/usdc-ngn?amount=100', {
-      'cache-control': 'no-store',
-    });
-    await getRates(req3, { params: { corridor: 'usdc-ngn' } });
-    expect(fetchCorridorRatesMock).toHaveBeenCalledTimes(3);
+  it('counts a miss and refetches for no-cache / no-store / Pragma bypasses', async () => {
+    await callRates('http://localhost/api/rates/usdc-ngn?amount=100');
 
-    // 4. Request with Pragma: no-cache (Miss)
-    const req4 = makeRequest('http://localhost/api/rates/usdc-ngn?amount=100', {
-      pragma: 'no-cache',
-    });
-    await getRates(req4, { params: { corridor: 'usdc-ngn' } });
+    for (const headers of [
+      { 'cache-control': 'no-cache' },
+      { 'cache-control': 'no-store' },
+      { pragma: 'no-cache' },
+    ]) {
+      await callRates('http://localhost/api/rates/usdc-ngn?amount=100', headers);
+    }
+
     expect(fetchCorridorRatesMock).toHaveBeenCalledTimes(4);
-
-    const metrics = getMetricsSnapshot();
-    expect(metrics.ratesCache.hits).toBe(0);
-    expect(metrics.ratesCache.misses).toBe(4);
+    expect(getMetricsSnapshot().ratesCache).toEqual({ hits: 0, misses: 4 });
   });
 });
