@@ -1,0 +1,14 @@
+{
+  "generatedAt": "2026-07-27T00:00:00Z",
+  "source": "example",
+  "corridors": {
+    "USD->EUR:anchor.example": {
+      "volume": "100000000",
+      "savings": "350000"
+    },
+    "USD->GBP:anchor.example": {
+      "volume": "50000000",
+      "savings": "200000"
+    }
+  }
+}

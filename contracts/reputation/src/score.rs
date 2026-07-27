@@ -6,6 +6,10 @@ const MAX_BPS: i128 = 10000;
 const NORM_SETTLE_SECONDS: i128 = 300;
 const MIN_SETTLE_SECONDS: u64 = 1;
 
+fn v2_key(anchor_id: String, corridor: String) -> DataKey {
+    DataKey::CorridorV2(anchor_id, corridor)
+}
+
 fn clamp_bps(value: i128) -> i128 {
     if value < 0 {
         0
@@ -57,7 +61,8 @@ pub fn set_corridor_metrics(
     let metrics = (fill_rate_bps, slippage_bps, settle_seconds_p50, n);
     env.storage()
         .persistent()
-        .set(&DataKey::Corridor(anchor_id, corridor), &metrics);
+        .set(&DataKey::Corridor(anchor_id.clone(), corridor.clone()), &metrics);
+    env.storage().persistent().set(&v2_key(anchor_id, corridor), &metrics);
 }
 
 pub fn get_score_for_corridor(env: &Env, anchor_id: String, corridor: String) -> (i128, i128, u64, u32) {
@@ -65,9 +70,34 @@ pub fn get_score_for_corridor(env: &Env, anchor_id: String, corridor: String) ->
     let (fill_rate_bps, slippage_bps, settle_seconds_p50, n): (i128, i128, u64, u32) = env
         .storage()
         .persistent()
-        .get(&DataKey::Corridor(anchor_id, corridor))
+        .get(&DataKey::Corridor(anchor_id.clone(), corridor.clone()))
         .unwrap_or(default_metrics);
 
     let composite_bps = compute_composite_bps(fill_rate_bps, slippage_bps, settle_seconds_p50);
     (composite_bps, fill_rate_bps, settle_seconds_p50, n)
+}
+
+pub fn get_score_for_corridor_v2(env: &Env, anchor_id: String, corridor: String) -> (i128, i128, u64, u32) {
+    let default_metrics = (0i128, 0i128, 0u64, 0u32);
+    let (fill_rate_bps, slippage_bps, settle_seconds_p50, n): (i128, i128, u64, u32) = env
+        .storage()
+        .persistent()
+        .get(&v2_key(anchor_id.clone(), corridor.clone()))
+        .unwrap_or(default_metrics);
+
+    let composite_bps = compute_composite_bps(fill_rate_bps, slippage_bps, settle_seconds_p50);
+    (composite_bps, fill_rate_bps, settle_seconds_p50, n)
+}
+
+pub fn set_v2_metrics(
+    env: &Env,
+    anchor_id: String,
+    corridor: String,
+    fill_rate_bps: i128,
+    slippage_bps: i128,
+    settle_seconds_p50: u64,
+    n: u32,
+) {
+    let metrics = (fill_rate_bps, slippage_bps, settle_seconds_p50, n);
+    env.storage().persistent().set(&v2_key(anchor_id, corridor), &metrics);
 }

@@ -8,6 +8,7 @@ pub mod storage;
 pub mod outcome;
 pub mod publishers;
 pub mod history;
+pub mod migration;
 pub mod score;
 pub mod upgrade;
 
@@ -126,6 +127,14 @@ impl ReputationContract {
         score::get_score_for_corridor(&env, anchor_id, corridor)
     }
 
+    pub fn get_score_for_corridor_v2(
+        env: Env,
+        anchor_id: String,
+        corridor: String,
+    ) -> (i128, i128, u64, u32) {
+        score::get_score_for_corridor_v2(&env, anchor_id, corridor)
+    }
+
     pub fn set_corridor_metrics(
         env: Env,
         anchor_id: String,
@@ -136,5 +145,17 @@ impl ReputationContract {
         n: u32,
     ) {
         score::set_corridor_metrics(&env, anchor_id, corridor, fill_rate_bps, slippage_bps, settle_seconds_p50, n);
+    }
+
+    pub fn get_corridor_aggregate_v2(
+        env: Env,
+        anchor_id: String,
+        corridor: String,
+    ) -> (u32, u32, u64) {
+        aggregate::get_v2(&env, &anchor_id, &corridor)
+    }
+
+    pub fn migrate_corridor_state(env: Env, anchor_id: String, corridor: String) {
+        migration::migrate_corridor_state(&env, anchor_id, corridor);
     }
 }

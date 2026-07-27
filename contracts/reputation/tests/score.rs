@@ -87,3 +87,44 @@ fn test_get_score_for_corridor_clamps_metrics() {
     assert_eq!(n, 33);
     assert_eq!(composite_bps, expected_composite_bps(11000, -100, 0));
 }
+
+#[test]
+fn test_v2_score_reader_supports_new_corridors_and_backfills_legacy_metrics() {
+    let env = Env::default();
+    env.mock_all_auths();
+    let (client, admin) = setup(&env);
+    client.init(&admin);
+
+    let anchor = String::from_str(&env, "anchor-zeam");
+    let corridor = String::from_str(&env, "usdc-zar");
+
+    client.set_corridor_metrics(&anchor, &corridor, &9600i128, &80i128, &75u64, &840u32);
+
+    let (composite_bps, fill_rate_bps, settle_seconds_p50, n) =
+        client.get_score_for_corridor_v2(&anchor, &corridor);
+
+    assert_eq!(fill_rate_bps, 9600);
+    assert_eq!(settle_seconds_p50, 75);
+    assert_eq!(n, 840);
+    assert_eq!(composite_bps, expected_composite_bps(9600, 80, 75));
+}
+
+#[test]
+fn test_v2_aggregate_reader_supports_new_corridors_and_backfills_legacy_aggregates() {
+    let env = Env::default();
+    env.mock_all_auths();
+    let (client, admin) = setup(&env);
+    client.init(&admin);
+
+    let anchor = String::from_str(&env, "anchor-xof");
+    let corridor = String::from_str(&env, "usdc-xof");
+    let outcome_hash = String::from_str(&env, "hash-2026-01");
+
+    client.submit_outcome(&admin, &anchor, &corridor, &outcome_hash, &42u64, &true);
+
+    let (total, successes, settle_seconds_sum) = client.get_corridor_aggregate_v2(&anchor, &corridor);
+
+    assert_eq!(total, 1);
+    assert_eq!(successes, 1);
+    assert_eq!(settle_seconds_sum, 42);
+}

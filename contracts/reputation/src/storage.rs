@@ -58,6 +58,12 @@ pub enum DataKey {
     OutcomePage(String, u32),
     /// Corridor performance metrics: `(fill_rate_bps, slippage_bps, settle_seconds_p50, n)`.
     Corridor(String, String),
+    /// v2 corridor performance metrics for migrated reads.
+    CorridorV2(String, String),
     /// Rolling aggregate for an (anchor, corridor) pair: `(total, successes, settle_seconds_sum)`.
     CorridorAggregate(String, String),
+    /// v2 rolling aggregate for an (anchor, corridor) pair.
+    CorridorAggregateV2(String, String),
+    /// Migration marker to avoid re-copying already-migrated state.
+    Migrated(String, String),
 }
