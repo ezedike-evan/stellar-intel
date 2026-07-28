@@ -4,12 +4,19 @@ import { authenticate, NetworkMismatchError } from '@/lib/stellar/sep10';
 import { initiateWithdraw, getWithdrawTransactionRecord } from '@/lib/stellar/sep24';
 import { getResolvedAnchorById } from '@/lib/stellar/anchors';
 import { buildWithdrawPayment, signAndSubmitPayment } from '@/lib/stellar/horizon';
+import {
+  assertSep38Capable,
+  postSep38Quote,
+  onQuoteExpired,
+  QuoteExpiredError,
+} from '@/lib/stellar/sep38';
 import { measureClient } from '@/lib/metrics';
 import { amountBucket, FUNNEL_EVENTS, trackFunnelEvent } from '@/lib/analytics';
 import { stepTimeEstimate } from '@/lib/stellar/step-estimates';
 import { classifyExecuteError, isRetryableExecuteError } from '@/lib/errors/messages';
-import type { AnchorRate, ExecuteDrawerStep } from '@/types';
+import type { AnchorRate, ExecuteDrawerStep, Sep38Quote } from '@/types';
 import { ErrorBoundary } from '@/components/ui/ErrorBoundary';
+import { QuotePill } from '@/components/ui/QuotePill';
 import { KycIframe } from './KycIframe';
 import { FLAGS } from '@/lib/flags';
 
@@ -18,6 +25,7 @@ import { FLAGS } from '@/lib/flags';
 const STEP_LABELS: Record<ExecuteDrawerStep, string> = {
   idle: 'Ready',
   authenticating: 'Proving wallet ownership to anchor…',
+  quoting: 'Locking in a firm quote…',
   initiating: 'Initiating withdrawal…',
   kyc: 'Complete KYC in popup…',
   form: 'Complete KYC form…',
@@ -98,6 +106,16 @@ function ExecuteDrawerContent({
   const [kycOrigin, setKycOrigin] = useState<string | null>(null);
   const [showConfirmDialog, setShowConfirmDialog] = useState(false);
 
+  // The firm SEP-38 quote locked in for this execution, when the anchor
+  // supports one — drives the expiry countdown shown in the summary panel.
+  const [firmQuote, setFirmQuote] = useState<Sep38Quote | null>(null);
+  // Set by the onQuoteExpired watcher; checked at the next safe checkpoint
+  // (before initiating and before building the payment) so a lapsed quote
+  // surfaces a re-quote prompt instead of silently completing at a stale
+  // price.
+  const quoteExpiredRef = useRef(false);
+  const quoteExpiryCleanupRef = useRef<(() => void) | null>(null);
+
   // Live downward-drag offset (px) of the mobile bottom sheet while a swipe is in
   // progress. 0 means the sheet is at rest. Driven by the touch handlers below.
   const [dragOffset, setDragOffset] = useState(0);
@@ -114,6 +132,7 @@ function ExecuteDrawerContent({
   useEffect(() => {
     return () => {
       abortRef.current?.abort();
+      quoteExpiryCleanupRef.current?.();
     };
   }, []);
 
@@ -249,6 +268,10 @@ function ExecuteDrawerContent({
     setStep('authenticating');
     setErrorMsg(null);
     setTxHash(null);
+    setFirmQuote(null);
+    quoteExpiredRef.current = false;
+    quoteExpiryCleanupRef.current?.();
+    quoteExpiryCleanupRef.current = null;
 
     try {
       // Step 0 — Resolve anchor capabilities
@@ -264,8 +287,37 @@ function ExecuteDrawerContent({
         return;
       }
 
+      // Step 1.5 — Lock in a firm SEP-38 quote, when the anchor advertises
+      // one, so the withdrawal executes at a binding price instead of the
+      // indicative rate shown in the table. Anchors without SEP-38 support
+      // fall through to the indicative flow unchanged.
+      let quoteId: string | undefined;
+      let quoteServer: string | null = null;
+      try {
+        quoteServer = assertSep38Capable(anchor);
+      } catch {
+        quoteServer = null;
+      }
+
+      if (quoteServer) {
+        setStep('quoting');
+        const buyAssetCode = rate.corridorId.split('-')[1]?.toUpperCase();
+        const quote = await postSep38Quote(quoteServer, auth.jwt, {
+          sell_asset: `stellar:${anchor.assetCode}:${anchor.assetIssuer}`,
+          buy_asset: `iso4217:${buyAssetCode}`,
+          sell_amount: amount,
+          context: 'sep24',
+        });
+        setFirmQuote(quote);
+        quoteId = quote.id;
+        quoteExpiryCleanupRef.current = onQuoteExpired(quote, () => {
+          quoteExpiredRef.current = true;
+        });
+      }
+
       // Step 2 — Initiate SEP-24 withdraw
       setStep('initiating');
+      if (quoteExpiredRef.current) throw new QuoteExpiredError();
       const withdrawResp = await initiateWithdraw(
         anchor,
         {
@@ -274,6 +326,7 @@ function ExecuteDrawerContent({
           amount,
           account: publicKey,
           jwt: auth.jwt,
+          ...(quoteId ? { quoteId } : {}),
         },
         signal
       );
@@ -293,6 +346,11 @@ function ExecuteDrawerContent({
       // Clear refs once the Promise has settled.
       kycResolveRef.current = null;
       kycRejectRef.current = null;
+
+      // KYC can take anywhere from seconds to minutes — re-check the firm
+      // quote here rather than silently building a payment against a price
+      // the anchor may no longer honor.
+      if (quoteExpiredRef.current) throw new QuoteExpiredError();
 
       // Step 4 — Fetch transaction record
       setStep('building');
@@ -323,6 +381,8 @@ function ExecuteDrawerContent({
       setTxHash(result.hash ?? null);
       setStep('done');
       trackFunnelEvent(FUNNEL_EVENTS.executionCompleted, funnelProps);
+      quoteExpiryCleanupRef.current?.();
+      quoteExpiryCleanupRef.current = null;
 
       // Hand tracking data to the page, then close so StatusTracker owns the viewport.
       onExecuteStarted(transactionId, transferServer, auth.jwt, anchor.homeDomain);
@@ -509,6 +569,20 @@ function ExecuteDrawerContent({
                     {rate.corridorId.split('-')[1]?.toUpperCase()}
                   </dd>
                 </div>
+                {firmQuote && (
+                  <div className="flex items-center justify-between border-t border-gray-100 pt-2 dark:border-gray-700">
+                    <dt className="text-gray-500">Price</dt>
+                    <dd>
+                      <QuotePill
+                        source="sep38"
+                        expiresAt={new Date(firmQuote.expires_at)}
+                        onExpire={() => {
+                          quoteExpiredRef.current = true;
+                        }}
+                      />
+                    </dd>
+                  </div>
+                )}
               </dl>
             </div>
           )}
@@ -707,6 +781,7 @@ function ExecuteDrawerErrorFallback({
 
 const ORDERED_STEPS: ExecuteDrawerStep[] = [
   'authenticating',
+  'quoting',
   'initiating',
   'kyc',
   'form',

@@ -1,6 +1,7 @@
 import { AnchorError, NetworkError, TimeoutError, UserRejectedError } from '@/lib/stellar/errors';
 import { NetworkMismatchError } from '@/lib/stellar/sep10';
 import { Sep24WithdrawError } from '@/lib/stellar/sep24';
+import { QuoteExpiredError } from '@/lib/stellar/sep38';
 
 /**
  * Maps an ExecuteDrawer failure to a human-readable message a user can act
@@ -14,6 +15,9 @@ export function classifyExecuteError(err: unknown): string {
 
   if (err instanceof NetworkMismatchError) return message;
   if (err instanceof UserRejectedError) return 'Freighter rejected the signature request.';
+  if (err instanceof QuoteExpiredError) {
+    return 'Your firm quote expired before the transaction could complete. Get a new quote to continue at the current price.';
+  }
 
   const lower = message.toLowerCase();
 
@@ -40,6 +44,7 @@ export function classifyExecuteError(err: unknown): string {
 export function isRetryableExecuteError(err: unknown): boolean {
   if (err instanceof NetworkMismatchError) return false;
   if (err instanceof UserRejectedError) return false;
+  if (err instanceof QuoteExpiredError) return true;
   if (err instanceof TimeoutError) return true;
   if (err instanceof NetworkError) return true;
   if (err instanceof AnchorError) return err.httpStatus === 0 || err.httpStatus >= 500;

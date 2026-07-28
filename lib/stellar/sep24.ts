@@ -523,7 +523,7 @@ export async function initiateWithdraw(
   params: Sep24WithdrawRequest,
   signal?: AbortSignal
 ): Promise<Sep24WithdrawResponse> {
-  const { jwt, assetCode, assetIssuer, amount, account } = params;
+  const { jwt, assetCode, assetIssuer, amount, account, quoteId } = params;
   const transferServer = anchor.TRANSFER_SERVER_SEP0024;
 
   if (!transferServer || !anchor.capabilities.sep24) {
@@ -544,6 +544,10 @@ export async function initiateWithdraw(
       amount,
       account,
       lang: 'en',
+      // Threads the SEP-38 firm quote id so the anchor honors the locked-in
+      // price instead of re-quoting at settlement. Omitted when no firm
+      // quote was available (e.g. the anchor doesn't advertise SEP-38).
+      ...(quoteId ? { quote_id: quoteId } : {}),
     }),
     ...(signal ? { signal } : {}),
   });

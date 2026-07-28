@@ -27,6 +27,14 @@ vi.mock('@/lib/stellar/sep1', () => ({
   getTransferServer: vi.fn(),
 }));
 
+vi.mock('@/lib/stellar/sep38', async () => {
+  const actual = await vi.importActual<any>('@/lib/stellar/sep38');
+  return {
+    ...actual,
+    postSep38Quote: vi.fn(),
+  };
+});
+
 vi.mock('@/lib/stellar/anchors', () => ({
   getAnchorById: vi.fn(),
   getResolvedAnchorById: vi.fn(),
@@ -72,6 +80,7 @@ vi.mock('@/components/offramp/KycIframe', async () => {
 
 import * as sep10 from '@/lib/stellar/sep10';
 import * as sep24 from '@/lib/stellar/sep24';
+import * as sep38 from '@/lib/stellar/sep38';
 import * as sep1 from '@/lib/stellar/sep1';
 import * as anchors from '@/lib/stellar/anchors';
 import * as horizon from '@/lib/stellar/horizon';
@@ -80,6 +89,7 @@ const mockAuthenticate = vi.mocked(sep10.authenticate);
 const mockInitiateWithdraw = vi.mocked(sep24.initiateWithdraw);
 const mockOpenWithdrawPopup = vi.mocked(sep24.openWithdrawPopup);
 const mockGetWithdrawTransactionRecord = vi.mocked(sep24.getWithdrawTransactionRecord);
+const mockPostSep38Quote = vi.mocked(sep38.postSep38Quote);
 const _mockGetTransferServer = vi.mocked(sep1.getTransferServer);
 const mockGetAnchorById = vi.mocked(anchors.getAnchorById);
 const mockGetResolvedAnchorById = vi.mocked(anchors.getResolvedAnchorById);
@@ -124,6 +134,23 @@ const RESOLVED_ANCHOR = {
     { code: 'USDC', issuer: 'GA5ZSEJYB37JRC5AVCIA5MOP4RHTM335X2KGX3IHOJAPP5RE34K4KZVN' },
   ],
   capabilities: { sep10: true, sep24: true, sep38: false, sep12: false },
+};
+
+const SEP38_ANCHOR = {
+  ...RESOLVED_ANCHOR,
+  ANCHOR_QUOTE_SERVER: 'https://quotes.cowrie.exchange',
+  capabilities: { sep10: true, sep24: true, sep38: true, sep12: false },
+};
+
+const FIRM_QUOTE = {
+  id: 'quote-firm-abc',
+  price: '1580',
+  total_price: '1578',
+  sell_amount: '100',
+  buy_amount: '157800',
+  fee: { total: '2' },
+  expires_at: new Date(Date.now() + 60_000).toISOString(),
+  context: 'sep24' as const,
 };
 
 const PUBLIC_KEY = 'GABCDEFGHIJKLMNOPQRSTUVWXYZ012345678901234567890123456789';
@@ -417,5 +444,109 @@ describe('ExecuteDrawer', () => {
     // In done step
     fireEvent.keyDown(window, { key: 'Escape' });
     expect(onClose).not.toHaveBeenCalled();
+  });
+
+  // ─── Firm SEP-38 quote wiring ─────────────────────────────────────────────
+
+  it('requests a firm SEP-38 quote and threads quote_id into the withdraw request for a SEP-38 anchor', async () => {
+    mockGetResolvedAnchorById.mockResolvedValue(SEP38_ANCHOR);
+    mockPostSep38Quote.mockResolvedValue(FIRM_QUOTE);
+
+    render(
+      <ExecuteDrawer
+        rate={RATE}
+        amount="100"
+        publicKey={PUBLIC_KEY}
+        onClose={vi.fn()}
+        onExecuteStarted={vi.fn()}
+      />
+    );
+
+    fireEvent.click(screen.getByText('Start Off-ramp'));
+
+    await waitFor(() =>
+      expect(mockPostSep38Quote).toHaveBeenCalledWith(
+        'https://quotes.cowrie.exchange',
+        AUTH.jwt,
+        expect.objectContaining({
+          sell_asset: `stellar:${SEP38_ANCHOR.assetCode}:${SEP38_ANCHOR.assetIssuer}`,
+          buy_asset: 'iso4217:NGN',
+          sell_amount: '100',
+          context: 'sep24',
+        })
+      )
+    );
+
+    await waitFor(() =>
+      expect(mockInitiateWithdraw).toHaveBeenCalledWith(
+        SEP38_ANCHOR,
+        expect.objectContaining({ quoteId: FIRM_QUOTE.id }),
+        expect.anything()
+      )
+    );
+
+    // Firm quote countdown is visible in the summary panel.
+    expect(screen.getByRole('timer')).toHaveAccessibleName(/Firm quote expires in/);
+  });
+
+  it('skips the firm quote step and omits quoteId for anchors without SEP-38 support', async () => {
+    render(
+      <ExecuteDrawer
+        rate={RATE}
+        amount="100"
+        publicKey={PUBLIC_KEY}
+        onClose={vi.fn()}
+        onExecuteStarted={vi.fn()}
+      />
+    );
+
+    fireEvent.click(screen.getByText('Start Off-ramp'));
+
+    await waitFor(() => expect(mockInitiateWithdraw).toHaveBeenCalled());
+
+    expect(mockPostSep38Quote).not.toHaveBeenCalled();
+    const [, params] = mockInitiateWithdraw.mock.calls[0]!;
+    expect(params).not.toHaveProperty('quoteId');
+    expect(screen.queryByRole('timer')).not.toBeInTheDocument();
+  });
+
+  it('shows a re-quote prompt instead of silently completing when the firm quote expires mid-flow', async () => {
+    mockGetResolvedAnchorById.mockResolvedValue(SEP38_ANCHOR);
+    mockPostSep38Quote.mockResolvedValue({
+      ...FIRM_QUOTE,
+      expires_at: new Date(Date.now() + 20).toISOString(),
+    });
+
+    render(
+      <ExecuteDrawer
+        rate={RATE}
+        amount="100"
+        publicKey={PUBLIC_KEY}
+        onClose={vi.fn()}
+        onExecuteStarted={vi.fn()}
+      />
+    );
+
+    fireEvent.click(screen.getByText('Start Off-ramp'));
+
+    await waitFor(() => expect(screen.getByTestId('kyc-iframe-mock')).toBeInTheDocument());
+
+    // Let the quote's expiry timer fire before the (human-driven) KYC step completes.
+    await new Promise((resolve) => setTimeout(resolve, 50));
+
+    act(() => {
+      window.dispatchEvent(
+        new MessageEvent('message', {
+          data: { type: 'stellar_transaction_created', transaction_id: 'txn-123' },
+          origin: 'https://anchor.example',
+        })
+      );
+    });
+
+    await waitFor(() =>
+      expect(screen.getByText(/Your firm quote expired before the transaction/)).toBeInTheDocument()
+    );
+    expect(mockBuildWithdrawPayment).not.toHaveBeenCalled();
+    expect(screen.getByRole('button', { name: 'Retry' })).toBeInTheDocument();
   });
 });

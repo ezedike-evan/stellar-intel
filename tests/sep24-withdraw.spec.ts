@@ -151,6 +151,48 @@ describe('initiateWithdraw — POST /transactions/withdraw/interactive', () => {
     );
   });
 
+  it('includes quote_id in the POST body when a firm quote id is provided', async () => {
+    let body: Record<string, unknown> = {};
+    vi.stubGlobal(
+      'fetch',
+      vi.fn(async (_url: string, opts: RequestInit) => {
+        body = JSON.parse(opts.body as string) as Record<string, unknown>;
+        return {
+          ok: true,
+          json: async () => ({
+            type: 'interactive_customer_info_needed',
+            url: 'https://u',
+            id: 'id1',
+          }),
+        };
+      })
+    );
+
+    await initiateWithdraw(RESOLVED_ANCHOR, { ...PARAMS, quoteId: 'quote-abc-123' });
+    expect(body['quote_id']).toBe('quote-abc-123');
+  });
+
+  it('omits quote_id from the POST body when no firm quote id is provided', async () => {
+    let body: Record<string, unknown> = {};
+    vi.stubGlobal(
+      'fetch',
+      vi.fn(async (_url: string, opts: RequestInit) => {
+        body = JSON.parse(opts.body as string) as Record<string, unknown>;
+        return {
+          ok: true,
+          json: async () => ({
+            type: 'interactive_customer_info_needed',
+            url: 'https://u',
+            id: 'id1',
+          }),
+        };
+      })
+    );
+
+    await initiateWithdraw(RESOLVED_ANCHOR, PARAMS);
+    expect(body).not.toHaveProperty('quote_id');
+  });
+
   it('throws when url field is absent from the response', async () => {
     vi.stubGlobal(
       'fetch',

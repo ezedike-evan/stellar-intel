@@ -230,6 +230,8 @@ export interface Sep24WithdrawRequest {
   amount: string;
   account: string; // user's Stellar public key
   jwt: string;
+  /** SEP-38 firm quote id, when the anchor supports quote-bound withdrawals. */
+  quoteId?: string;
 }
 
 /** Response from POST /transactions/withdraw/interactive. */
@@ -412,6 +414,7 @@ export type RiskLevel = 'low' | 'medium' | 'high';
 export type ExecuteDrawerStep =
   | 'idle'
   | 'authenticating'
+  | 'quoting'
   | 'initiating'
   | 'kyc'
   | 'form'
@@ -491,9 +494,7 @@ export interface Sep6WithdrawNeedsInfo {
 
 /** Union of all three SEP-6 /withdraw response shapes. */
 export type Sep6WithdrawResponse =
-  | Sep6WithdrawInteractive
-  | Sep6WithdrawNonInteractive
-  | Sep6WithdrawNeedsInfo;
+  Sep6WithdrawInteractive | Sep6WithdrawNonInteractive | Sep6WithdrawNeedsInfo;
 
 // ─── SEP-12 ───────────────────────────────────────────────────────────────────
 

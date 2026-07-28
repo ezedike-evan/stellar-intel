@@ -35,6 +35,19 @@ export class Sep38ParseError extends Error {
   }
 }
 
+/**
+ * Thrown when a firm SEP-38 quote lapses before the flow that requested it
+ * could finish using it (e.g. the user spent too long in an anchor's KYC
+ * step). Callers should prompt for a fresh quote rather than silently
+ * submitting against a price that is no longer honored.
+ */
+export class QuoteExpiredError extends Error {
+  constructor(message = 'Your firm quote expired before the transaction could complete.') {
+    super(message);
+    this.name = 'QuoteExpiredError';
+  }
+}
+
 // ─── In-memory cache ──────────────────────────────────────────────────────────
 
 const TTL_MS = 10 * 60 * 1000; // 10 minutes
