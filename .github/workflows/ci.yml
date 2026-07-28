@@ -104,8 +104,8 @@ jobs:
         with:
           workspaces: crates/stellar-intel-reputation
       - name: cargo test
-        run: cargo test --manifest-path crates/stellar-intel-reputation/Cargo.toml
+        run: cargo test --manifest-path crates/stellar-intel-reputation/Cargo.toml --locked
       - name: cargo doc
-        run: cargo doc --manifest-path crates/stellar-intel-reputation/Cargo.toml --no-deps
+        run: cargo doc --manifest-path crates/stellar-intel-reputation/Cargo.toml --no-deps --locked
       - name: cargo publish --dry-run
-        run: cargo publish --manifest-path crates/stellar-intel-reputation/Cargo.toml --dry-run
+        run: cargo publish --manifest-path crates/stellar-intel-reputation/Cargo.toml --dry-run --locked
