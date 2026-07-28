@@ -5,6 +5,7 @@ import { initiateWithdraw, getWithdrawTransactionRecord } from '@/lib/stellar/se
 import { getResolvedAnchorById } from '@/lib/stellar/anchors';
 import { buildWithdrawPayment, signAndSubmitPayment } from '@/lib/stellar/horizon';
 import { measureClient } from '@/lib/metrics';
+import { amountBucket, FUNNEL_EVENTS, trackFunnelEvent } from '@/lib/analytics';
 import { stepTimeEstimate } from '@/lib/stellar/step-estimates';
 import { classifyExecuteError, isRetryableExecuteError } from '@/lib/errors/messages';
 import type { AnchorRate, ExecuteDrawerStep } from '@/types';
@@ -117,6 +118,23 @@ function ExecuteDrawerContent({
   }, []);
 
   const isOpen = rate !== null;
+  const openedForRef = useRef<string | null>(null);
+
+  // Fire when the drawer opens for a specific anchor + amount (once per open).
+  useEffect(() => {
+    if (!rate) {
+      openedForRef.current = null;
+      return;
+    }
+    const openKey = `${rate.anchorId}:${rate.corridorId}:${amount}`;
+    if (openedForRef.current === openKey) return;
+    openedForRef.current = openKey;
+    trackFunnelEvent(FUNNEL_EVENTS.executeDrawerOpened, {
+      corridor: rate.corridorId,
+      anchor: rate.anchorId,
+      amount_bucket: amountBucket(amount),
+    });
+  }, [rate, amount]);
 
   // Focus trap — keeps Tab/Shift+Tab cycling within the open dialog (or the
   // confirmation dialog on top of it, when shown) and restores focus to
@@ -169,17 +187,15 @@ function ExecuteDrawerContent({
 
     window.addEventListener('keydown', handleTab);
     return () => window.removeEventListener('keydown', handleTab);
-  }, [isOpen, showConfirmDialog]);
+  }, [isOpen, showConfirmDialog, step]);
 
-  // Handle escape key — close immediately when it's safe to do so (idle/done/
-  // error), otherwise prompt confirmation since a flow is in progress.
+  // Handle escape key — close immediately when it's safe to do so (idle/
+  // error), otherwise do nothing.
   useEffect(() => {
     const handleKeyDown = (event: KeyboardEvent) => {
       if (event.key !== 'Escape' || !isOpen) return;
-      if (['idle', 'done', 'error'].includes(step)) {
+      if (['idle', 'error'].includes(step)) {
         onClose();
-      } else {
-        setShowConfirmDialog(true);
       }
     };
 
@@ -222,6 +238,13 @@ function ExecuteDrawerContent({
     abortRef.current?.abort();
     abortRef.current = new AbortController();
     const { signal } = abortRef.current;
+
+    const funnelProps = {
+      corridor: rate.corridorId,
+      anchor: rate.anchorId,
+      amount_bucket: amountBucket(amount),
+    };
+    trackFunnelEvent(FUNNEL_EVENTS.executionConfirmed, funnelProps);
 
     setStep('authenticating');
     setErrorMsg(null);
@@ -299,6 +322,7 @@ function ExecuteDrawerContent({
       });
       setTxHash(result.hash ?? null);
       setStep('done');
+      trackFunnelEvent(FUNNEL_EVENTS.executionCompleted, funnelProps);
 
       // Hand tracking data to the page, then close so StatusTracker owns the viewport.
       onExecuteStarted(transactionId, transferServer, auth.jwt, anchor.homeDomain);
@@ -310,6 +334,10 @@ function ExecuteDrawerContent({
         setErrorMsg(err.message);
         setErrorIsRetryable(false);
         setStep('error');
+        trackFunnelEvent(FUNNEL_EVENTS.executionFailed, {
+          ...funnelProps,
+          error_class: 'network_mismatch',
+        });
         return;
       }
 
@@ -327,6 +355,10 @@ function ExecuteDrawerContent({
       setErrorMsg(classifyExecuteError(err));
       setErrorIsRetryable(isRetryableExecuteError(err));
       setStep('error');
+      trackFunnelEvent(FUNNEL_EVENTS.executionFailed, {
+        ...funnelProps,
+        error_class: 'execute_error',
+      });
     } finally {
       // Ensure refs are cleaned up even on unexpected throws.
       kycResolveRef.current = null;

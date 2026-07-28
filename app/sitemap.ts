@@ -22,6 +22,11 @@ export default function sitemap(): MetadataRoute.Sitemap {
       lastModified: now,
       changeFrequency: 'daily',
     },
+    {
+      url: `${SITE_URL}/history`,
+      lastModified: now,
+      changeFrequency: 'weekly',
+    },
     ...ANCHORS.map((anchor) => ({
       url: `${SITE_URL}/anchors/${anchor.id}`,
       lastModified: now,

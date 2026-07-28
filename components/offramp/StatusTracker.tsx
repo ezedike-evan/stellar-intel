@@ -285,7 +285,7 @@ export function StatusTracker({
             <div className="flex justify-between">
               <dt className="text-gray-500">You receive</dt>
               <dd className="font-medium text-green-600 dark:text-green-400">
-                {amountOut} {parseAsset(amountOutAsset)}
+                {amountOut} {parseAsset(amountOutAsset) || currencyCode}
               </dd>
             </div>
           )}
@@ -448,6 +448,7 @@ export function StatusTracker({
 function parseAsset(assetStr: string | undefined): string | null {
   if (!assetStr) return null;
   if (assetStr === 'stellar:native') return 'XLM';
+  if (!assetStr.includes(':')) return assetStr;
   const parts = assetStr.split(':');
-  return parts[1] ?? null;
+  return parts[1] ?? parts[0] ?? null;
 }

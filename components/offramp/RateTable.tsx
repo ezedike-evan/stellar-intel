@@ -3,6 +3,7 @@ import { Fragment, useState, useCallback, useMemo, useRef, useEffect } from 'rea
 import Link from 'next/link';
 import { formatCurrency, formatRate } from '@/lib/utils';
 import { nextSortState, sortRates, type SortState } from '@/lib/sort';
+import { FUNNEL_EVENTS, trackFunnelEvent } from '@/lib/analytics';
 import type { RateComparison, AnchorRate, AnchorRateError } from '@/types';
 import { Skeleton } from '@/components/ui/Skeleton';
 import { QuotePill } from '@/components/ui/QuotePill';
@@ -64,6 +65,16 @@ export function RateTable({
 
   const [announcement, setAnnouncement] = useState('');
   const lastAnnouncedKeyRef = useRef<string | null>(null);
+  const lastViewedCorridorRef = useRef<string | null>(null);
+
+  // Fire once per corridor when the rate table first shows results for it.
+  useEffect(() => {
+    if (!rates?.corridorId) return;
+    if (rates.rates.length === 0 && (!rates.pending || rates.pending.length === 0)) return;
+    if (lastViewedCorridorRef.current === rates.corridorId) return;
+    lastViewedCorridorRef.current = rates.corridorId;
+    trackFunnelEvent(FUNNEL_EVENTS.rateTableViewed, { corridor: rates.corridorId });
+  }, [rates]);
 
   useEffect(() => {
     if (!rates || rates.rates.length === 0) return;

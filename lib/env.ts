@@ -17,6 +17,7 @@ export const envSchema = z.object({
     .url()
     .optional()
     .default('https://api.stellar.expert/explorer/public'),
+  ROUTING_STRATEGY: z.enum(['first-match', 'scored']).default('first-match'),
   FEE_BUDGET_PCT: z.preprocess(
     (value) => {
       if (value === undefined || value === null) return '100';
@@ -40,6 +41,7 @@ export function parseEnv(): Env {
     NEXT_PUBLIC_USDC_ISSUER: process.env.NEXT_PUBLIC_USDC_ISSUER,
     NEXT_PUBLIC_APP_NAME: process.env.NEXT_PUBLIC_APP_NAME,
     NEXT_PUBLIC_STELLAR_EXPERT_URL: process.env.NEXT_PUBLIC_STELLAR_EXPERT_URL,
+    ROUTING_STRATEGY: process.env.ROUTING_STRATEGY,
     FEE_BUDGET_PCT: process.env.FEE_BUDGET_PCT,
   });
 

@@ -53,4 +53,38 @@ describe('GET /api/rates/[corridor]', () => {
     expect(res.headers.get('Retry-After')).toBeTruthy();
     expect(res.headers.get('X-RateLimit-Remaining')).toBe('0');
   });
+
+  it('succeeds while under the api.rates limit', async () => {
+    const headers = { 'x-forwarded-for': '9.9.9.10' };
+    for (let i = 0; i < 89; i++) {
+      const res = await GET(
+        makeRequest('http://localhost/api/rates/usdc-ngn?amount=100', headers),
+        { params: { corridor: 'usdc-ngn' } }
+      );
+      expect(res.status).toBe(200);
+    }
+  });
+
+  it('rate-limits independently per IP', async () => {
+    const exhaustedIp = '9.9.9.20';
+    for (let i = 0; i < 90; i++) {
+      checkRateLimit(exhaustedIp, { bucket: 'api.rates', maxRequests: 90 });
+    }
+
+    const blocked = await GET(
+      makeRequest('http://localhost/api/rates/usdc-ngn?amount=100', {
+        'x-forwarded-for': exhaustedIp,
+      }),
+      { params: { corridor: 'usdc-ngn' } }
+    );
+    expect(blocked.status).toBe(429);
+
+    const otherIpRes = await GET(
+      makeRequest('http://localhost/api/rates/usdc-ngn?amount=100', {
+        'x-forwarded-for': '9.9.9.21',
+      }),
+      { params: { corridor: 'usdc-ngn' } }
+    );
+    expect(otherIpRes.status).toBe(200);
+  });
 });

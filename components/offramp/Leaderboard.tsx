@@ -4,6 +4,7 @@ import { formatCurrency, formatRate } from '@/lib/utils';
 import { useAnchorRates } from '@/hooks/useAnchorRates';
 import { Skeleton } from '@/components/ui/Skeleton';
 import type { Corridor } from '@/types';
+import { AnchorLogo } from '@/components/ui/AnchorLogo';
 
 interface LeaderboardProps {
   corridor: Corridor;
@@ -80,6 +81,7 @@ export function Leaderboard({ corridor, limit }: LeaderboardProps) {
                 </td>
                 <td className="px-4 py-3">
                   <div className="flex items-center gap-2">
+                    <AnchorLogo anchorId={rate.anchorId} anchorName={rate.anchorName} size="sm" />
                     <span className="font-medium text-gray-900 dark:text-white">
                       {rate.anchorName}
                     </span>

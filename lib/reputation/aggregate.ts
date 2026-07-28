@@ -415,3 +415,254 @@ export function buildScorecards(
     90: aggregate(rows, 90, nowMs, lastPublisherTxTimestamp),
   };
 }
+
+// ─── 90-day probe-accumulation progress (#OPS) ────────────────────────────────
+// Tracks consecutive daily uptime-probe coverage per anchor toward the mainnet-
+// readiness threshold (90 continuous calendar days with no gaps).
+
+/** Mainnet-readiness threshold — aligned with `PROBE_RETENTION_DAYS` in store.ts. */
+export const PROBE_MAINNET_READINESS_DAYS = 90;
+
+export interface ProbeCoverageSample {
+  probedAt: string;
+  kind: 'uptime' | 'quote';
+}
+
+export interface CoverageGap {
+  /** First missing UTC calendar day (YYYY-MM-DD), inclusive. */
+  start: string;
+  /** Last missing UTC calendar day (YYYY-MM-DD), inclusive. */
+  end: string;
+  /** Number of consecutive missing days in this gap. */
+  days: number;
+}
+
+export interface AnchorProbeCoverage {
+  anchorId: string;
+  domain: string;
+  /** Length of the current consecutive-day streak ending at `streakEnd`. */
+  continuousDays: number;
+  streakStart: string | null;
+  streakEnd: string | null;
+  /** Calendar days with ≥1 uptime probe between first observation and `asOfDay`. */
+  coveredDays: number;
+  daysUntilThreshold: number;
+  thresholdMet: boolean;
+  hasCoverageGaps: boolean;
+  gaps: CoverageGap[];
+  firstProbeDay: string | null;
+  lastProbeDay: string | null;
+}
+
+export interface ProbeCoverageReport {
+  thresholdDays: number;
+  /** UTC calendar day the report was evaluated through (YYYY-MM-DD). */
+  asOfDay: string;
+  computedAt: string;
+  fleetThresholdMet: boolean;
+  /** Days until the slowest anchor reaches the threshold (0 when all have met it). */
+  daysUntilFleetThreshold: number;
+  anchors: AnchorProbeCoverage[];
+}
+
+export interface AnchorProbeDomain {
+  anchorId: string;
+  domain: string;
+}
+
+/** Maps fleet anchors to the domain used for uptime probes. */
+export function anchorProbeDomains(
+  anchors: ReadonlyArray<{ id: string; homeDomain: string; serviceDomain?: string }>
+): AnchorProbeDomain[] {
+  return anchors.map((a) => ({
+    anchorId: a.id,
+    domain: a.serviceDomain ?? a.homeDomain,
+  }));
+}
+
+function utcDayKey(from: Date | string): string {
+  const d = typeof from === 'string' ? new Date(from) : from;
+  return d.toISOString().slice(0, 10);
+}
+
+function addUtcDays(dayKey: string, delta: number): string {
+  const d = new Date(`${dayKey}T00:00:00.000Z`);
+  d.setUTCDate(d.getUTCDate() + delta);
+  return d.toISOString().slice(0, 10);
+}
+
+function inclusiveDaySpan(start: string, end: string): number {
+  if (end < start) return 0;
+  const startMs = Date.parse(`${start}T00:00:00.000Z`);
+  const endMs = Date.parse(`${end}T00:00:00.000Z`);
+  return Math.floor((endMs - startMs) / MS_PER_DAY) + 1;
+}
+
+function uptimeCoveredDays(samples: readonly ProbeCoverageSample[]): Set<string> {
+  const days = new Set<string>();
+  for (const s of samples) {
+    if (s.kind !== 'uptime') continue;
+    days.add(utcDayKey(s.probedAt));
+  }
+  return days;
+}
+
+function findCoverageGaps(
+  covered: ReadonlySet<string>,
+  startDay: string,
+  endDay: string
+): CoverageGap[] {
+  if (endDay < startDay) return [];
+  const gaps: CoverageGap[] = [];
+  let gapStart: string | null = null;
+
+  for (let day = startDay; day <= endDay; day = addUtcDays(day, 1)) {
+    if (!covered.has(day)) {
+      if (gapStart === null) gapStart = day;
+    } else if (gapStart !== null) {
+      const gapEnd = addUtcDays(day, -1);
+      gaps.push({
+        start: gapStart,
+        end: gapEnd,
+        days: inclusiveDaySpan(gapStart, gapEnd),
+      });
+      gapStart = null;
+    }
+  }
+
+  if (gapStart !== null) {
+    gaps.push({
+      start: gapStart,
+      end: endDay,
+      days: inclusiveDaySpan(gapStart, endDay),
+    });
+  }
+
+  return gaps;
+}
+
+function continuousStreakEndingAt(
+  covered: ReadonlySet<string>,
+  endDay: string
+): { days: number; start: string; end: string } | null {
+  if (!covered.has(endDay)) return null;
+  let days = 0;
+  let day = endDay;
+  while (covered.has(day)) {
+    days++;
+    day = addUtcDays(day, -1);
+  }
+  const streakStart = addUtcDays(endDay, -(days - 1));
+  return { days, start: streakStart, end: endDay };
+}
+
+/**
+ * Computes per-anchor probe coverage and fleet-wide progress toward the 90-day
+ * mainnet-readiness threshold from uptime probe samples keyed by probe domain.
+ */
+export function buildProbeCoverageReport(
+  samplesByDomain: ReadonlyMap<string, readonly ProbeCoverageSample[]>,
+  anchors: readonly AnchorProbeDomain[],
+  options?: { now?: Date; thresholdDays?: number }
+): ProbeCoverageReport {
+  const now = options?.now ?? new Date();
+  const thresholdDays = options?.thresholdDays ?? PROBE_MAINNET_READINESS_DAYS;
+  const asOfDay = utcDayKey(now);
+
+  const anchorRows: AnchorProbeCoverage[] = anchors.map(({ anchorId, domain }) => {
+    const samples = samplesByDomain.get(domain) ?? [];
+    const covered = uptimeCoveredDays(samples);
+
+    if (covered.size === 0) {
+      return {
+        anchorId,
+        domain,
+        continuousDays: 0,
+        streakStart: null,
+        streakEnd: null,
+        coveredDays: 0,
+        daysUntilThreshold: thresholdDays,
+        thresholdMet: false,
+        hasCoverageGaps: false,
+        gaps: [],
+        firstProbeDay: null,
+        lastProbeDay: null,
+      };
+    }
+
+    const sortedDays = [...covered].sort();
+    const firstProbeDay = sortedDays[0]!;
+    const lastProbeDay = sortedDays[sortedDays.length - 1]!;
+    const evaluationEnd = asOfDay > lastProbeDay ? asOfDay : lastProbeDay;
+    const gaps = findCoverageGaps(covered, firstProbeDay, evaluationEnd);
+    const streak =
+      continuousStreakEndingAt(covered, asOfDay) ?? continuousStreakEndingAt(covered, lastProbeDay);
+    const continuousDays = streak?.days ?? 0;
+    const thresholdMet = continuousDays >= thresholdDays && gaps.length === 0;
+
+    return {
+      anchorId,
+      domain,
+      continuousDays,
+      streakStart: streak?.start ?? null,
+      streakEnd: streak?.end ?? null,
+      coveredDays: covered.size,
+      daysUntilThreshold: thresholdMet ? 0 : Math.max(0, thresholdDays - continuousDays),
+      thresholdMet,
+      hasCoverageGaps: gaps.length > 0,
+      gaps,
+      firstProbeDay,
+      lastProbeDay,
+    };
+  });
+
+  const daysUntilFleetThreshold = anchorRows.reduce(
+    (max, row) => Math.max(max, row.daysUntilThreshold),
+    0
+  );
+  const fleetThresholdMet = anchorRows.every((row) => row.thresholdMet);
+
+  return {
+    thresholdDays,
+    asOfDay,
+    computedAt: now.toISOString(),
+    fleetThresholdMet,
+    daysUntilFleetThreshold,
+    anchors: anchorRows,
+  };
+}
+
+/** Human-readable CLI report for internal ops use. */
+export function formatProbeCoverageReport(report: ProbeCoverageReport): string {
+  const lines: string[] = [
+    `Probe coverage progress (as of ${report.asOfDay} UTC)`,
+    `Mainnet-readiness threshold: ${report.thresholdDays} continuous days`,
+    `Fleet days until threshold: ${report.daysUntilFleetThreshold}${
+      report.fleetThresholdMet ? ' — threshold met' : ''
+    }`,
+    '',
+  ];
+
+  for (const a of report.anchors) {
+    lines.push(`${a.anchorId} (${a.domain})`);
+    lines.push(
+      `  continuous days: ${a.continuousDays} | covered calendar days: ${a.coveredDays} | until threshold: ${a.daysUntilThreshold}`
+    );
+    if (a.streakStart && a.streakEnd) {
+      lines.push(`  current streak: ${a.streakStart} → ${a.streakEnd}`);
+    }
+    if (a.hasCoverageGaps) {
+      lines.push(`  coverage gaps: ${a.gaps.length}`);
+      for (const gap of a.gaps) {
+        lines.push(`    - ${gap.start} → ${gap.end} (${gap.days} day${gap.days === 1 ? '' : 's'})`);
+      }
+    } else if (a.firstProbeDay) {
+      lines.push('  coverage gaps: none');
+    } else {
+      lines.push('  coverage gaps: n/a (no probes yet)');
+    }
+    lines.push('');
+  }
+
+  return lines.join('\n').trimEnd();
+}

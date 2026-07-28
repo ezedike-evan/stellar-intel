@@ -551,6 +551,7 @@ stellar-intel/
 │   └── useTheme.ts                # ✅
 ├── lib/
 │   ├── config.ts                  # ✅ env-guarded config
+│   ├── analytics.ts               # ✅ funnel event tracking + PII redaction
 │   ├── utils.ts                   # ✅ computeTotalReceived, format helpers
 │   └── stellar/
 │       ├── anchors.ts             # ✅ registry (MoneyGram, Cowrie, Anclap)
@@ -582,7 +583,8 @@ stellar-intel/
 │   ├── THREAT_MODEL.md            # adversaries + mitigations
 │   ├── NON_CUSTODY.md             # custody manifesto
 │   ├── JURISDICTIONAL.md          # money-transmission memo
-│   └── SECURITY.md                # disclosure policy
+│   ├── SECURITY.md                # disclosure policy
+│   └── ANALYTICS.md               # funnel dashboard + event taxonomy
 └── .github/workflows/             # ✅ ci, codeql, lighthouse, data-health, …
 ```
 

@@ -40,7 +40,9 @@ async function main(): Promise<void> {
       oracleContractId: requireEnv('ORACLE_CONTRACT_ID'),
       networkPassphrase:
         process.env['STELLAR_NETWORK_PASSPHRASE'] ??
-        'Public Global Stellar Network ; September 2015',
+        (process.env['SOROBAN_RPC_URL']?.includes('testnet')
+          ? 'Test SDF Network ; September 2015'
+          : 'Public Global Stellar Network ; September 2015'),
       publisherSecret: requireEnv('PUBLISHER_SECRET'),
       horizonUrl: process.env['HORIZON_URL'] ?? 'https://horizon.stellar.org',
       rpcUrl: process.env['SOROBAN_RPC_URL'] ?? 'https://mainnet.sorobanrpc.com',

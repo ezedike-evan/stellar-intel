@@ -1,0 +1,78 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 224 40" role="img"
+  aria-label="Stellar Intel"
+  fill="none">
+  <defs>
+    <!--
+      Accent gradient matches the brand palette from public/brand/social-preview.svg
+      and complements the app accent tokens (#2563eb light / #93c5fd dark).
+    -->
+    <linearGradient id="wm-accent" x1="0" y1="0" x2="0" y2="1">
+      <stop offset="0"   stop-color="#7c5cff"/>
+      <stop offset="1"   stop-color="#3ad29f"/>
+    </linearGradient>
+
+    <style>
+      /*
+       * Light mode (default)
+       * Tokens mirror globals.css: primary-text #000000, accent #2563eb
+       */
+      .wm-text { fill: #000000; }
+      .wm-sep  { fill: #2563eb; }
+
+      /*
+       * Dark mode — OS-level preference (covers <img> embedding where the
+       * parent DOM .dark class is not accessible to the SVG).
+       * Tokens mirror globals.css: primary-text #ffffff, accent #93c5fd
+       */
+      @media (prefers-color-scheme: dark) {
+        .wm-text { fill: #ffffff; }
+        .wm-sep  { fill: #93c5fd; }
+      }
+
+      /*
+       * Dark mode — manual theme toggle via .dark class on <html>.
+       * Works when the SVG is inlined or used as <object>/<use>.
+       */
+      :root.dark .wm-text,
+      .dark .wm-text { fill: #ffffff; }
+      :root.dark .wm-sep,
+      .dark .wm-sep  { fill: #93c5fd; }
+    </style>
+  </defs>
+
+  <!--
+    Brand mark: three vertically-stacked accent squares.
+    Echoes the stacked-squares motif used in social-preview.svg.
+    Column: 7 × 7 px with 2 px gaps → sits within a 7 × 23 px bounding box.
+  -->
+  <rect x="0" y="9"  width="7" height="7" rx="1.5" fill="url(#wm-accent)"/>
+  <rect x="0" y="18" width="7" height="7" rx="1.5" fill="url(#wm-accent)" opacity="0.75"/>
+  <rect x="0" y="27" width="7" height="7" rx="1.5" fill="url(#wm-accent)" opacity="0.5"/>
+
+  <!--
+    Wordmark text: "STELLAR" · "INTEL"
+    Inter, uppercase, tracked out.  font-size="16.5" keeps total width
+    comfortably inside the 224 px viewBox.
+    Baseline y="28" vertically centres the cap-height in the 40 px viewport.
+  -->
+  <text
+    x="16" y="28"
+    font-family="Inter, ui-sans-serif, system-ui, -apple-system, Helvetica, Arial, sans-serif"
+    font-size="16.5"
+    font-weight="600"
+    letter-spacing="2"
+    class="wm-text"
+  >STELLAR</text>
+
+  <!-- Mid-dot separator, accent colour, vertically centred on the cap line -->
+  <circle cx="119.5" cy="22" r="2.25" class="wm-sep"/>
+
+  <text
+    x="126" y="28"
+    font-family="Inter, ui-sans-serif, system-ui, -apple-system, Helvetica, Arial, sans-serif"
+    font-size="16.5"
+    font-weight="400"
+    letter-spacing="2"
+    class="wm-text"
+  >INTEL</text>
+</svg>

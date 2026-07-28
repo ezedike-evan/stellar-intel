@@ -15,7 +15,7 @@ import { WalletButton } from '@/components/ui/WalletButton';
 import { AmountInput } from '@/components/ui/AmountInput';
 import { CorridorSelector } from '@/components/ui/CorridorSelector';
 import { RateTable } from '@/components/offramp/RateTable';
-import { AnchorCountBadge } from '@/components/offramp/AnchorCountBadge';
+import { RateTableHeader } from '@/components/offramp/RateTableHeader';
 import { StatusTracker } from '@/components/offramp/StatusTracker';
 import { DisclaimerBanner } from '@/components/offramp/DisclaimerBanner';
 import { ErrorBoundary } from '@/components/ui/ErrorBoundary';
@@ -24,6 +24,7 @@ import { useCountdown } from '@/hooks/useCountdown';
 import { useWallet } from '@/contexts/WalletContext';
 import { useWithdrawStatus } from '@/hooks/useWithdrawStatus';
 import { useWalletBalance } from '@/hooks/useWalletBalance';
+import { amountBucket, FUNNEL_EVENTS, trackFunnelEvent } from '@/lib/analytics';
 import { VISIBLE_CORRIDORS } from '@/constants/anchors';
 import type { AnchorRate } from '@/types';
 
@@ -72,10 +73,8 @@ function OfframpContent() {
   const { isConnected, publicKey, network } = useWallet();
   const { rates, anchorErrors, isLoading, error, mutate, refreshInflight, lastFetchedAt } =
     useAnchorRates(corridorId, amount);
-  const { secondsRemaining, elapsedSeconds, prefersReducedMotion } = useCountdown(
-    RATES_REFRESH_INTERVAL_MS,
-    lastFetchedAt
-  );
+  const { secondsRemaining, elapsedSeconds, prefersReducedMotion, progress, totalSeconds } =
+    useCountdown(RATES_REFRESH_INTERVAL_MS, lastFetchedAt);
   const { balance, isLoading: isBalanceLoading } = useWalletBalance(publicKey);
   const withdrawStatus = useWithdrawStatus(
     trackingTransferServer,
@@ -108,6 +107,18 @@ function OfframpContent() {
     router.replace(`?${sp.toString()}`, { scroll: false });
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [corridorId, amount, trackingTransactionId]);
+
+  const handleCorridorChange = useCallback(
+    (nextCorridorId: string) => {
+      if (nextCorridorId === corridorId) return;
+      setCorridorId(nextCorridorId);
+      trackFunnelEvent(FUNNEL_EVENTS.corridorSelected, {
+        corridor: nextCorridorId,
+        amount_bucket: amountBucket(amount),
+      });
+    },
+    [corridorId, amount, setCorridorId]
+  );
 
   const handleSelectAnchor = useCallback((rate: AnchorRate) => {
     setSelectedRate(rate);
@@ -207,7 +218,7 @@ function OfframpContent() {
       <DisclaimerBanner />
 
       <div className="grid grid-cols-1 gap-4 rounded-xl border border-gray-200 bg-gray-50 p-4 dark:border-gray-700 dark:bg-gray-800/50 sm:grid-cols-2">
-        <CorridorSelector value={corridorId} onChange={setCorridorId} />
+        <CorridorSelector value={corridorId} onChange={handleCorridorChange} />
         <AmountInput
           value={amount}
           onChange={setAmount}
@@ -224,54 +235,20 @@ function OfframpContent() {
       )}
 
       <div ref={rateTableRef}>
-        <div className="mb-3 flex items-center justify-between">
-          <div className="flex items-center gap-2">
-            <h2 className="text-sm font-semibold text-gray-700 dark:text-gray-300">
-              Available Rates
-            </h2>
-            <AnchorCountBadge
-              responding={rates?.rates.length ?? 0}
-              total={
-                (rates?.rates.length ?? 0) + anchorErrors.length + (rates?.pending?.length ?? 0)
-              }
-            />
-            {lastFetchedAt !== null && (
-              <span className="text-xs text-gray-400 dark:text-gray-500">
-                {prefersReducedMotion
-                  ? `Last updated ${elapsedSeconds}s ago`
-                  : `Rates valid for ~${secondsRemaining}s`}
-              </span>
-            )}
-          </div>
-          <button
-            onClick={() => mutate()}
-            aria-label={refreshInflight ? 'Refreshing rates...' : 'Refresh rates'}
-            aria-busy={refreshInflight}
-            className="flex items-center gap-1 rounded-lg px-2 py-1 text-xs text-gray-500 hover:bg-gray-100 hover:text-gray-700 dark:hover:bg-gray-800 dark:hover:text-gray-300"
-          >
-            <svg
-              className="h-3.5 w-3.5"
-              viewBox="0 0 24 24"
-              fill="none"
-              stroke="currentColor"
-              strokeWidth={2}
-              aria-hidden="true"
-            >
-              <path
-                strokeLinecap="round"
-                strokeLinejoin="round"
-                d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15"
-              />
-            </svg>
-            Refresh
-            <kbd
-              aria-hidden="true"
-              className="rounded border border-gray-300 px-1 font-mono text-[10px] font-normal text-gray-400 dark:border-gray-600 dark:text-gray-500"
-            >
-              R
-            </kbd>
-          </button>
-        </div>
+        <RateTableHeader
+          respondingCount={rates?.rates.length ?? 0}
+          totalCount={
+            (rates?.rates.length ?? 0) + anchorErrors.length + (rates?.pending?.length ?? 0)
+          }
+          lastFetchedAt={lastFetchedAt}
+          secondsRemaining={secondsRemaining}
+          elapsedSeconds={elapsedSeconds}
+          prefersReducedMotion={prefersReducedMotion}
+          progress={progress}
+          totalSeconds={totalSeconds}
+          refreshInflight={refreshInflight}
+          onRefresh={() => mutate()}
+        />
         <ErrorBoundary
           resetKeys={[corridorId, amount]}
           fallback={({ resetErrorBoundary }) => (
