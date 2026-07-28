@@ -90,6 +90,24 @@ const IntentRequestSchema = registry.register(
   })
 );
 
+const AnchorHealthResponseSchema = registry.register(
+  'AnchorHealthResponse',
+  z.object({
+    anchorId: z.string().describe('Unique anchor identifier'),
+    status: z
+      .enum(['ok', 'fail', 'unknown', 'stale'])
+      .describe('Current health status: ok, fail, unknown (never checked), or stale (last check >24h ago)'),
+    consecutiveFailures: z.number().describe('Consecutive nightly validation failures'),
+    degraded: z.boolean().describe('True when anchor is auto-flagged degraded after repeated failures'),
+    lastCheckedAt: z
+      .string()
+      .nullable()
+      .describe('ISO timestamp of the last nightly check, or null if never checked'),
+    lastError: z.string().nullable().describe('Failure reason from the last check, or null on success'),
+    stale: z.boolean().describe('True when the last probe is older than 24 hours'),
+  })
+);
+
 // Suppress unused-variable warnings — schemas are referenced only via the registry
 void SignedIntentEnvelopeSchema;
 
@@ -120,6 +138,45 @@ registry.registerPath({
     500: {
       description: 'Transaction build failure',
       content: { 'application/json': { schema: ApiErrorSchema } },
+    },
+  },
+});
+
+registry.registerPath({
+  method: 'get',
+  path: '/api/v1/anchors/{id}/health',
+  summary: 'Get anchor health status',
+  description:
+    "Returns the anchor's current health status, last-probe timestamp, and score breakdown. Returns 'unknown' or 'stale' when probes haven't run recently — honest degradation rather than fabricated data.",
+  tags: ['Anchors'],
+  request: {
+    params: z.object({
+      id: z.string().min(1).describe('Anchor identifier (e.g. moneygram, cowrie, anclap)'),
+    }),
+  },
+  responses: {
+    200: {
+      description: 'Anchor health status',
+      content: { 'application/json': { schema: AnchorHealthResponseSchema } },
+    },
+    400: {
+      description: 'Invalid anchor ID',
+      content: { 'application/json': { schema: ApiErrorSchema } },
+    },
+    404: {
+      description: 'Anchor not found',
+      content: { 'application/json': { schema: ApiErrorSchema } },
+    },
+    429: {
+      description: 'Rate limit exceeded',
+      content: {
+        'application/json': {
+          schema: z.object({
+            error: z.string(),
+            retryAfter: z.number(),
+          }),
+        },
+      },
     },
   },
 });

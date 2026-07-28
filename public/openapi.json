@@ -30,7 +30,7 @@
           },
           "publicKey": {
             "type": "string",
-            "pattern": "^G[A-Z0-9]{55}$"
+            "pattern": "^G[A-Z2-7]{55}$"
           }
         },
         "required": [
@@ -56,7 +56,7 @@
           },
           "publicKey": {
             "type": "string",
-            "pattern": "^G[A-Z0-9]{55}$"
+            "pattern": "^G[A-Z2-7]{55}$"
           }
         },
         "required": [
@@ -225,6 +225,60 @@
           "sender",
           "recipient"
         ]
+      },
+      "AnchorHealthResponse": {
+        "type": "object",
+        "properties": {
+          "anchorId": {
+            "type": "string",
+            "description": "Unique anchor identifier"
+          },
+          "status": {
+            "type": "string",
+            "enum": [
+              "ok",
+              "fail",
+              "unknown",
+              "stale"
+            ],
+            "description": "Current health status: ok, fail, unknown (never checked), or stale (last check >24h ago)"
+          },
+          "consecutiveFailures": {
+            "type": "number",
+            "description": "Consecutive nightly validation failures"
+          },
+          "degraded": {
+            "type": "boolean",
+            "description": "True when anchor is auto-flagged degraded after repeated failures"
+          },
+          "lastCheckedAt": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "description": "ISO timestamp of the last nightly check, or null if never checked"
+          },
+          "lastError": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "description": "Failure reason from the last check, or null on success"
+          },
+          "stale": {
+            "type": "boolean",
+            "description": "True when the last probe is older than 24 hours"
+          }
+        },
+        "required": [
+          "anchorId",
+          "status",
+          "consecutiveFailures",
+          "degraded",
+          "lastCheckedAt",
+          "lastError",
+          "stale"
+        ]
       }
     },
     "parameters": {}
@@ -274,6 +328,82 @@
               "application/json": {
                 "schema": {
                   "$ref": "#/components/schemas/ApiError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/anchors/{id}/health": {
+      "get": {
+        "summary": "Get anchor health status",
+        "description": "Returns the anchor's current health status, last-probe timestamp, and score breakdown. Returns 'unknown' or 'stale' when probes haven't run recently — honest degradation rather than fabricated data.",
+        "tags": [
+          "Anchors"
+        ],
+        "parameters": [
+          {
+            "schema": {
+              "type": "string",
+              "minLength": 1,
+              "description": "Anchor identifier (e.g. moneygram, cowrie, anclap)"
+            },
+            "required": true,
+            "description": "Anchor identifier (e.g. moneygram, cowrie, anclap)",
+            "name": "id",
+            "in": "path"
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Anchor health status",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/AnchorHealthResponse"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Invalid anchor ID",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiError"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Anchor not found",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiError"
+                }
+              }
+            }
+          },
+          "429": {
+            "description": "Rate limit exceeded",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "error": {
+                      "type": "string"
+                    },
+                    "retryAfter": {
+                      "type": "number"
+                    }
+                  },
+                  "required": [
+                    "error",
+                    "retryAfter"
+                  ]
                 }
               }
             }
