@@ -494,7 +494,9 @@ export interface Sep6WithdrawNeedsInfo {
 
 /** Union of all three SEP-6 /withdraw response shapes. */
 export type Sep6WithdrawResponse =
-  Sep6WithdrawInteractive | Sep6WithdrawNonInteractive | Sep6WithdrawNeedsInfo;
+  | Sep6WithdrawInteractive
+  | Sep6WithdrawNonInteractive
+  | Sep6WithdrawNeedsInfo;
 
 // ─── SEP-12 ───────────────────────────────────────────────────────────────────
 
