@@ -452,4 +452,3 @@ function parseAsset(assetStr: string | undefined): string | null {
   const parts = assetStr.split(':');
   return parts[1] ?? parts[0] ?? null;
 }
-

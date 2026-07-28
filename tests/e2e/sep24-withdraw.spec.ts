@@ -69,9 +69,7 @@ test.describe('[#721] SEP-24 live execution flow (USDC→NGN corridor)', () => {
     );
   });
 
-  test('StatusTracker reflects state transitions through to completed status', async ({
-    page,
-  }) => {
+  test('StatusTracker reflects state transitions through to completed status', async ({ page }) => {
     await page.addInitScript(seedSession(MOCK_SEP24_NONCE, MOCK_SEP24_JWT));
 
     const pollSequence = [

@@ -73,7 +73,8 @@ async function fetchSep24TransactionOnce(
       stellarTransactionId: (tx['stellar_transaction_id'] ?? tx['stellarTransactionId']) as string,
     }),
     ...((tx['external_transaction_id'] ?? tx['externalTransactionId']) !== undefined && {
-      externalTransactionId: (tx['external_transaction_id'] ?? tx['externalTransactionId']) as string,
+      externalTransactionId: (tx['external_transaction_id'] ??
+        tx['externalTransactionId']) as string,
     }),
     ...(tx['refunds'] !== undefined && {
       refunds: tx['refunds'] as Sep24Transaction['refunds'],

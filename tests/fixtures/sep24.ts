@@ -53,7 +53,9 @@ export function makeSep24PollResponse(
 }
 
 export const pollSep24UserTransferStart = makeSep24PollResponse('pending_user_transfer_start');
-export const pollSep24UserTransferComplete = makeSep24PollResponse('pending_user_transfer_complete');
+export const pollSep24UserTransferComplete = makeSep24PollResponse(
+  'pending_user_transfer_complete'
+);
 export const pollSep24PendingAnchor = makeSep24PollResponse('pending_anchor');
 export const pollSep24PendingExternal = makeSep24PollResponse('pending_external', {
   external_transaction_id: 'ngn-bank-ref-721',

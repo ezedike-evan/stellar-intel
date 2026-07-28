@@ -279,4 +279,3 @@ describe('StatusTracker', () => {
     expect(screen.getByText('154840 NGN')).toBeInTheDocument();
   });
 });
-
