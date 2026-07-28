@@ -19,8 +19,7 @@ describe('RateTableHeader', () => {
   it('renders the title and anchor count badge', () => {
     render(<RateTableHeader {...baseProps} />);
     expect(screen.getByText('Available Rates')).toBeInTheDocument();
-    expect(screen.getByText('3')).toBeInTheDocument();
-    expect(screen.getByText('5')).toBeInTheDocument();
+    expect(screen.getByText('3 of 5 anchors responding')).toBeInTheDocument();
   });
 
   it('renders the countdown text and progress bar', () => {
@@ -57,13 +56,17 @@ describe('RateTableHeader', () => {
   });
 
   it('progress bar width is computed correctly from progress ratio', () => {
-    render(<RateTableHeader {...baseProps} secondsRemaining={15} progress={15 / 30} totalSeconds={30} />);
+    render(
+      <RateTableHeader {...baseProps} secondsRemaining={15} progress={15 / 30} totalSeconds={30} />
+    );
     const inner = screen.getByRole('progressbar').firstChild as HTMLElement;
     expect(inner.style.width).toBe('50%');
   });
 
   it('progress bar aria-valuenow reflects seconds remaining', () => {
-    render(<RateTableHeader {...baseProps} secondsRemaining={15} progress={15 / 30} totalSeconds={30} />);
+    render(
+      <RateTableHeader {...baseProps} secondsRemaining={15} progress={15 / 30} totalSeconds={30} />
+    );
     const bar = screen.getByRole('progressbar');
     expect(bar).toHaveAttribute('aria-valuenow', '15');
   });

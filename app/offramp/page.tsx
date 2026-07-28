@@ -72,10 +72,8 @@ function OfframpContent() {
   const { isConnected, publicKey, network } = useWallet();
   const { rates, anchorErrors, isLoading, error, mutate, refreshInflight, lastFetchedAt } =
     useAnchorRates(corridorId, amount);
-  const { secondsRemaining, elapsedSeconds, prefersReducedMotion, progress, totalSeconds } = useCountdown(
-    RATES_REFRESH_INTERVAL_MS,
-    lastFetchedAt
-  );
+  const { secondsRemaining, elapsedSeconds, prefersReducedMotion, progress, totalSeconds } =
+    useCountdown(RATES_REFRESH_INTERVAL_MS, lastFetchedAt);
   const { balance, isLoading: isBalanceLoading } = useWalletBalance(publicKey);
   const withdrawStatus = useWithdrawStatus(
     trackingTransferServer,

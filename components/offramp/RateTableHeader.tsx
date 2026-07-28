@@ -48,9 +48,7 @@ export function RateTableHeader({
   return (
     <div className="mb-3 flex items-center justify-between">
       <div className="flex items-center gap-2">
-        <h2 className="text-sm font-semibold text-gray-700 dark:text-gray-300">
-          Available Rates
-        </h2>
+        <h2 className="text-sm font-semibold text-gray-700 dark:text-gray-300">Available Rates</h2>
         <AnchorCountBadge responding={respondingCount} total={totalCount} />
 
         {lastFetchedAt !== null && (
