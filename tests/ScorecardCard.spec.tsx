@@ -56,7 +56,15 @@ describe('ScorecardCard', () => {
 
     render(<ScorecardCard anchorId="example.anchor" window="7d" />);
 
-    expect(screen.getByText('Anchor reputation')).toBeInTheDocument();
+    // The heading splits the anchor name into its own <span>, so match on the
+    // paragraph's full text rather than a single text node.
+    expect(
+      screen.getByText(
+        (_content, element) =>
+          element?.tagName === 'P' &&
+          element.textContent?.replace(/\s+/g, ' ').trim() === 'example.anchor reputation'
+      )
+    ).toBeInTheDocument();
     expect(screen.getByText('Window: 7d')).toBeInTheDocument();
     expect(screen.queryByText('Fill rate')).not.toBeInTheDocument();
   });

@@ -432,8 +432,8 @@ export function ScorecardCard({
         <div className="flex items-center gap-2">
           <AnchorLogo anchorId={anchorId} anchorName={anchorName} size="sm" />
           <p className="text-sm font-medium text-gray-700 dark:text-gray-300">
-            <span className="hidden">Anchor reputation</span>
-            <span className="font-semibold text-gray-900 dark:text-white">{anchorName}</span> reputation
+            <span className="font-semibold text-gray-900 dark:text-white">{anchorName}</span>{' '}
+            reputation
           </p>
           {latestOracleTxHash && (
             <a
