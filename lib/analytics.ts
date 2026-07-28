@@ -1,4 +1,4 @@
-import { PII_FIELDS, type PiiField } from './reputation/redact';
+import { PII_FIELDS } from './reputation/redact';
 
 declare global {
   interface Window {
