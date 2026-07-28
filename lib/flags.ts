@@ -1,4 +1,4 @@
-export type FlagName = 'intentFlow' | 'reputationWrites' | 'mcpAdvertisement' | 'v11Corridors';
+export type FlagName = 'intentFlow' | 'reputationWrites' | 'mcpAdvertisement' | 'v11Corridors' | 'recurringIntents';
 
 export const flags: Record<FlagName, boolean> = {
   // Default to enabled unless explicitly set to 'off'
@@ -9,6 +9,9 @@ export const flags: Record<FlagName, boolean> = {
   // opt in with NEXT_PUBLIC_V11_CORRIDORS=on. Even when on, a corridor stays
   // hidden until at least one anchor serves it (see VISIBLE_CORRIDORS).
   v11Corridors: (process.env.NEXT_PUBLIC_V11_CORRIDORS || 'off') === 'on',
+  // Recurring intents: sign-once execution engine. Default OFF — gated behind
+  // the signed-intent flow. Opt in with NEXT_PUBLIC_RECURRING_INTENTS=on.
+  recurringIntents: (process.env.NEXT_PUBLIC_RECURRING_INTENTS || 'off') === 'on',
 };
 
 export function isFlag(name: FlagName) {
