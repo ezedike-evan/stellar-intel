@@ -7,6 +7,37 @@
 > ([`packages/mcp/`](../packages/mcp/), `@stellarintel/mcp`) is the agent-facing
 > surface that exists today.
 
+## `stellar-intel-reputation` (Rust, on-chain)
+
+Unlike the other SDKs on this page, `stellar-intel-reputation` is not an HTTP
+wrapper — it's the architecturally distinct one. It reads the deployed
+Soroban reputation contract ([`contracts/reputation/`](../contracts/reputation/),
+interface documented in [`docs/ORACLE_SPEC.md`](ORACLE_SPEC.md)) directly
+on-chain from inside another Soroban contract's execution context, with no
+API round trip.
+
+Source lives in this repo today at
+[`crates/stellar-intel-reputation/`](../crates/stellar-intel-reputation/)
+and is publish-ready for crates.io (`cargo publish --dry-run` runs in CI);
+until the maintainer wires up a `CARGO_REGISTRY_TOKEN`, depend on it directly:
+
+```toml
+[dependencies]
+stellar-intel-reputation = { git = "https://github.com/ezedike-evan/stellar-intel", package = "stellar-intel-reputation" }
+# once published: stellar-intel-reputation = "0.2"
+```
+
+```rust,ignore
+use stellar_intel_reputation::ReputationReader;
+
+let reader = ReputationReader::new(&env, oracle_contract_id);
+let score = reader.corridor_score(anchor_id, corridor);
+```
+
+Source and full method list: [`crates/stellar-intel-reputation/README.md`](../crates/stellar-intel-reputation/README.md).
+A runnable example consumer contract lives at
+[`examples/consumer-contract/`](../examples/consumer-contract/).
+
 ## Today: call the HTTP API
 
 Every capability the SDK will wrap is already reachable over HTTP. See

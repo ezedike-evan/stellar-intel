@@ -1,0 +1,29 @@
+name: Publish Rust SDK
+
+on:
+  push:
+    tags:
+      - 'stellar-intel-reputation-v*'
+  workflow_dispatch: {}
+
+permissions:
+  contents: read
+
+jobs:
+  publish:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+
+      - uses: dtolnay/rust-toolchain@stable
+
+      - name: cargo test
+        run: cargo test --manifest-path crates/stellar-intel-reputation/Cargo.toml
+
+      # Requires a CARGO_REGISTRY_TOKEN repo secret (crates.io API token for
+      # an account with publish rights on stellar-intel-reputation). Not set
+      # up yet — this job will fail until a maintainer adds it.
+      - name: cargo publish
+        run: cargo publish --manifest-path crates/stellar-intel-reputation/Cargo.toml
+        env:
+          CARGO_REGISTRY_TOKEN: ${{ secrets.CARGO_REGISTRY_TOKEN }}

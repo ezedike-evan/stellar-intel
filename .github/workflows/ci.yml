@@ -91,3 +91,21 @@ jobs:
           name: next-build
           path: .next
           retention-days: 3
+
+  # Rust consumer SDK — the crate's own test suite (soroban-sdk testutils,
+  # no Soroban CLI / wasm target needed since it never runs as a contract).
+  rust:
+    name: rust (stellar-intel-reputation)
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+      - uses: dtolnay/rust-toolchain@stable
+      - uses: Swatinem/rust-cache@v2
+        with:
+          workspaces: crates/stellar-intel-reputation
+      - name: cargo test
+        run: cargo test --manifest-path crates/stellar-intel-reputation/Cargo.toml
+      - name: cargo doc
+        run: cargo doc --manifest-path crates/stellar-intel-reputation/Cargo.toml --no-deps
+      - name: cargo publish --dry-run
+        run: cargo publish --manifest-path crates/stellar-intel-reputation/Cargo.toml --dry-run

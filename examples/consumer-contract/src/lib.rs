@@ -12,4 +12,17 @@ impl ConsumerContract {
     pub fn read_reputation_score(env: Env, oracle: Address, anchor_id: String) -> u32 {
         ReputationReader::new(&env, oracle).score_bps(anchor_id, 10)
     }
+
+    /// Composite on-chain score for a specific (anchor, corridor) pair, as
+    /// published via the oracle's `set_corridor_metrics` admin entrypoint.
+    pub fn read_corridor_score_bps(
+        env: Env,
+        oracle: Address,
+        anchor_id: String,
+        corridor: String,
+    ) -> i128 {
+        ReputationReader::new(&env, oracle)
+            .corridor_score(anchor_id, corridor)
+            .composite_bps
+    }
 }
