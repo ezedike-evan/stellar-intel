@@ -13,7 +13,10 @@ import type {
   AnchorRate,
   EvaluatedQuote,
   Intent,
+  MultiAnchorPlan,
+  MultiSolverResult,
   Plan,
+  PlanLeg,
   RateComparison,
   SolverResult,
 } from '@/types';
@@ -372,6 +375,134 @@ export function throwIfNoRoute(result: SolverResult): Plan {
   if (result.ok) return result.plan;
   const details = 'details' in result ? ` (${result.details})` : '';
   throw new NoEligibleRouteError(result.error, `${result.error}${details}`);
+}
+
+// ─── solveMultiAnchor (issue #800) ─────────────────────────────────────────────
+
+/** Renders a 7-dp-scaled BigInt back to a trimmed decimal string. */
+function formatDecimal(scaled: bigint): string {
+  const negative = scaled < 0n;
+  const digits = (negative ? -scaled : scaled).toString().padStart(8, '0');
+  const intPart = digits.slice(0, -7);
+  const fracPart = digits.slice(-7).replace(/0+$/, '');
+  return `${negative ? '-' : ''}${intPart}${fracPart ? `.${fracPart}` : ''}`;
+}
+
+export interface MultiAnchorOptions {
+  /** Cap on the number of anchors the order may be split across. */
+  maxAnchors?: number;
+}
+
+/**
+ * Splits an order across multiple anchors, best price first, so a large order
+ * that no single anchor can fill cheaply is routed as tranches. Each anchor
+ * absorbs up to the size its firm quote covers (`sell_amount`); the strategy
+ * walks the price-ranked quotes, filling the remaining amount until the order is
+ * satisfied. The resulting legs are meant to execute as ONE atomic multi-op
+ * Stellar transaction (see `lib/router/multi-op.ts`), so either every leg
+ * settles or none do — a partial fill can never strand funds at one anchor.
+ *
+ * Returns a typed error when the combined liquidity can't fill the order or the
+ * aggregate delivered amount would miss the intent floor.
+ */
+export function solveMultiAnchor(
+  intent: Intent,
+  evaluatedQuotes: EvaluatedQuote[],
+  options: MultiAnchorOptions = {}
+): MultiSolverResult {
+  if (isDeadlineExpired(intent.deadline)) {
+    return {
+      ok: false,
+      error: 'all_quotes_expired',
+      details: `Intent deadline ${intent.deadline} has already passed`,
+    };
+  }
+
+  const live = evaluatedQuotes.filter((q) => !isQuoteExpired(q.expires_at));
+  if (live.length === 0) {
+    if (evaluatedQuotes.length === 0) return { ok: false, error: 'no_eligible_route' };
+    return {
+      ok: false,
+      error: 'all_quotes_expired',
+      details: `All ${evaluatedQuotes.length} quote(s) have expired`,
+    };
+  }
+
+  const maxAnchors = Math.max(
+    1,
+    options.maxAnchors ?? intent.preferences?.maxAnchors ?? live.length
+  );
+
+  // Rank by price (buy per unit sold) descending — best rate for the user first.
+  const ranked = [...live].sort((a, b) => compareDecimals(b.price, a.price));
+
+  const target = parseDecimal(intent.sellAmount);
+  let remaining = target;
+  const legs: PlanLeg[] = [];
+
+  for (const quote of ranked) {
+    if (remaining <= 0n || legs.length >= maxAnchors) break;
+
+    const capacity = parseDecimal(quote.sell_amount);
+    if (capacity <= 0n) continue;
+
+    const alloc = capacity < remaining ? capacity : remaining;
+    const price = parseDecimal(quote.price);
+    // buy = sell * price; both are 7-dp scaled, so divide out one scale factor.
+    const netScaled = (alloc * price) / DECIMAL_SCALE;
+    // Fee is prorated by the fraction of the quote's size this leg consumes.
+    const legFee = (parseDecimal(quote.fee.total) * alloc) / capacity;
+
+    legs.push({
+      anchorId: quote.anchorId,
+      anchorName: quote.anchorName,
+      quoteId: quote.id,
+      sellAmount: formatDecimal(alloc),
+      netAmount: formatDecimal(netScaled),
+      fee: formatDecimal(legFee),
+      price: quote.price,
+    });
+
+    remaining -= alloc;
+  }
+
+  if (remaining > 0n) {
+    return {
+      ok: false,
+      error: 'insufficient_liquidity',
+      details: `Combined anchor liquidity covers ${formatDecimal(target - remaining)} of ${intent.sellAmount} ${intent.sellAsset.code} (max ${maxAnchors} anchors)`,
+    };
+  }
+
+  const totalSellScaled = legs.reduce((sum, leg) => sum + parseDecimal(leg.sellAmount), 0n);
+  const netScaledTotal = legs.reduce((sum, leg) => sum + parseDecimal(leg.netAmount), 0n);
+
+  if (netScaledTotal < parseDecimal(intent.minReceive)) {
+    return {
+      ok: false,
+      error: 'floor_not_met',
+      details: `Aggregate delivered ${formatDecimal(netScaledTotal)} < minimum receive ${intent.minReceive}`,
+    };
+  }
+
+  const plan: MultiAnchorPlan = {
+    type: 'multi_anchor',
+    legs,
+    totalSell: formatDecimal(totalSellScaled),
+    netAmount: formatDecimal(netScaledTotal),
+  };
+
+  log.info(
+    {
+      corridor: intent.corridor,
+      anchors: legs.length,
+      totalSell: plan.totalSell,
+      netAmount: plan.netAmount,
+    },
+    'multi-anchor routing decision'
+  );
+
+  return { ok: true, plan };
 }
 
 // ─── solveWithFallback ────────────────────────────────────────────────────────

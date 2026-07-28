@@ -384,6 +384,40 @@ export type SolverResult =
   | { ok: false; error: 'all_quotes_expired'; details: string }
   | { ok: false; error: 'fee_budget_exceeded'; details: string };
 
+/** One leg of a multi-anchor split — the tranche of the order routed to a single anchor. */
+export interface PlanLeg {
+  anchorId: string;
+  anchorName: string;
+  quoteId: string; // SEP-38 quote id backing this leg
+  sellAmount: string; // tranche routed to this anchor (sell asset)
+  netAmount: string; // delivered by this leg (buy asset)
+  fee: string; // fee for this leg (sell asset)
+  price: string; // exchange rate used for this leg
+}
+
+/**
+ * A multi-anchor execution plan: the order is split across ranked anchors and
+ * executed as a single atomic multi-op Stellar transaction (all legs settle or
+ * none do). Legs are ordered best-price first.
+ */
+export interface MultiAnchorPlan {
+  type: 'multi_anchor';
+  legs: PlanLeg[];
+  totalSell: string; // sum of leg sellAmounts (equals the requested order size when fully filled)
+  netAmount: string; // sum of leg netAmounts (aggregate delivered)
+}
+
+/** Either a single-anchor plan or a multi-anchor split. */
+export type ExecutionPlan = Plan | MultiAnchorPlan;
+
+/** Result of the multi-anchor solver: a split plan to execute or a typed error. */
+export type MultiSolverResult =
+  | { ok: true; plan: MultiAnchorPlan }
+  | { ok: false; error: 'no_eligible_route' }
+  | { ok: false; error: 'floor_not_met'; details: string }
+  | { ok: false; error: 'all_quotes_expired'; details: string }
+  | { ok: false; error: 'insufficient_liquidity'; details: string };
+
 // ─── API ──────────────────────────────────────────────────────────────────────
 
 /** Shape returned by API routes on error. */
