@@ -10,6 +10,8 @@ import type {
   RateComparison,
   Sep24WithdrawRequest,
   Sep24WithdrawResponse,
+  Sep24DepositRequest,
+  Sep24DepositResponse,
   Sep24Transaction,
   WithdrawStatusValue,
   ResolvedAnchor,
@@ -122,6 +124,18 @@ export class Sep24WithdrawError extends Error {
   constructor(status: number, anchorBody: unknown, transferServer: string) {
     super(`Withdraw initiation failed: HTTP ${status} from ${transferServer}`);
     this.name = 'Sep24WithdrawError';
+    this.status = status;
+    this.anchorBody = anchorBody;
+  }
+}
+
+export class Sep24DepositError extends Error {
+  readonly status: number;
+  readonly anchorBody: unknown;
+
+  constructor(status: number, anchorBody: unknown, transferServer: string) {
+    super(`Deposit initiation failed: HTTP ${status} from ${transferServer}`);
+    this.name = 'Sep24DepositError';
     this.status = status;
     this.anchorBody = anchorBody;
   }
@@ -569,6 +583,73 @@ export async function initiateWithdraw(
 
   if (!data['id'] || typeof data['id'] !== 'string') {
     throw new Error('Anchor withdraw response is missing the "id" field');
+  }
+
+  return {
+    type: 'interactive_customer_info_needed',
+    url: data['url'] as string,
+    id: data['id'] as string,
+  };
+}
+
+// ─── Deposit interactive flow ─────────────────────────────────────────────────
+
+/**
+ * POSTs to the anchor's SEP-24 deposit interactive endpoint.
+ * Returns the popup URL and transaction ID issued by the anchor. Mirrors
+ * `initiateWithdraw` for the opposite direction (fiat/on-chain in, asset out).
+ */
+export async function initiateDeposit(
+  anchor: ResolvedAnchor,
+  params: Sep24DepositRequest,
+  signal?: AbortSignal
+): Promise<Sep24DepositResponse> {
+  const { jwt, assetCode, assetIssuer, amount, account } = params;
+  const transferServer = anchor.TRANSFER_SERVER_SEP0024;
+
+  if (!transferServer || !anchor.capabilities.sep24) {
+    throw new Error(`Anchor "${anchor.homeDomain}" does not support SEP-24 deposits.`);
+  }
+
+  const info = await getSep24Info(transferServer).catch(() => null);
+  const assetParams = resolveAssetParams(info, 'deposit', assetCode, assetIssuer);
+
+  const res = await fetch(`${transferServer}/transactions/deposit/interactive`, {
+    method: 'POST',
+    headers: {
+      'Content-Type': 'application/json',
+      Authorization: `Bearer ${jwt}`,
+    },
+    body: JSON.stringify({
+      ...assetParams,
+      amount,
+      account,
+      lang: 'en',
+    }),
+    ...(signal ? { signal } : {}),
+  });
+
+  if (!res.ok) {
+    const body: unknown =
+      typeof res.json === 'function' ? await res.json().catch(() => null) : null;
+    throw new Sep24DepositError(res.status, body, transferServer);
+  }
+
+  const data = (await res.json()) as Record<string, unknown>;
+
+  if (data['type'] !== 'interactive_customer_info_needed') {
+    throw new Error(
+      `Unexpected response type from anchor: "${data['type']}". ` +
+        `Expected "interactive_customer_info_needed".`
+    );
+  }
+
+  if (!data['url'] || typeof data['url'] !== 'string') {
+    throw new Error('Anchor deposit response is missing the "url" field');
+  }
+
+  if (!data['id'] || typeof data['id'] !== 'string') {
+    throw new Error('Anchor deposit response is missing the "id" field');
   }
 
   return {

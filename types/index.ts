@@ -239,6 +239,22 @@ export interface Sep24WithdrawResponse {
   id: string;
 }
 
+/** Body sent to POST /transactions/deposit/interactive. */
+export interface Sep24DepositRequest {
+  assetCode: string;
+  assetIssuer: string;
+  amount: string;
+  account: string; // user's Stellar public key, credited on deposit completion
+  jwt: string;
+}
+
+/** Response from POST /transactions/deposit/interactive. */
+export interface Sep24DepositResponse {
+  type: 'interactive_customer_info_needed';
+  url: string;
+  id: string;
+}
+
 /** All possible raw status strings an anchor may return for a SEP-24 transaction. */
 export type WithdrawStatusValue =
   | 'incomplete'
@@ -429,7 +445,14 @@ export type HopPlanResult =
   | { ok: false; hopId: string; error: string; details?: string };
 
 export type HopExecutionResult =
-  | { ok: true; hopId: string; output: HopAsset; txRef?: string }
+  | {
+      ok: true;
+      hopId: string;
+      output: HopAsset;
+      txRef?: string;
+      /** Connector-specific artifacts, e.g. an unsigned XDR awaiting signature. */
+      details?: Record<string, unknown>;
+    }
   | { ok: false; hopId: string; error: string; details?: string };
 
 /** Shared, read-only context threaded through every hop in a chain. */
