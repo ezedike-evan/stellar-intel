@@ -1,4 +1,4 @@
-import { describe, it, expect, vi } from 'vitest';
+import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
 import { render } from '@testing-library/react';
 import HomePage from '@/app/page';
 
@@ -33,6 +33,10 @@ vi.mock('@/hooks/useAnchorRates', () => ({
           fee: 1,
           totalReceived: 158000,
           source: 'sep38',
+          // Fixed rather than relative to Date.now(): the test suite freezes
+          // system time to 2026-01-01T00:00:00Z, so this must stay in sync
+          // with that value to keep the QuotePill countdown deterministic.
+          expiresAt: new Date('2026-01-01T00:01:00Z'),
         },
       ],
       bestRateId: 'anchor-a',
@@ -43,6 +47,15 @@ vi.mock('@/hooks/useAnchorRates', () => ({
 }));
 
 describe('HomePage', () => {
+  beforeEach(() => {
+    vi.useFakeTimers();
+    vi.setSystemTime(new Date('2026-01-01T00:00:00Z'));
+  });
+
+  afterEach(() => {
+    vi.useRealTimers();
+  });
+
   it('renders execution-layer hero copy', () => {
     const { getByRole } = render(<HomePage />);
     const heading = getByRole('heading', { level: 1 });

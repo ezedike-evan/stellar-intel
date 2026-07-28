@@ -63,3 +63,33 @@ describe('Leaderboard', () => {
     expect(screen.getByText('#2')).toBeInTheDocument();
   });
 });
+
+describe('Leaderboard indicative-rate labeling', () => {
+  it('labels a sep6-only anchor as indicative, not equal-confidence to a firm quote', async () => {
+    vi.resetModules();
+    vi.doMock('@/hooks/useAnchorRates', () => ({
+      useAnchorRates: () => ({
+        rates: {
+          rates: [
+            {
+              anchorId: 'cowrie',
+              anchorName: 'Cowrie Exchange',
+              exchangeRate: 1600,
+              fee: 1,
+              totalReceived: 158000,
+              source: 'sep6-fee',
+            },
+          ],
+          bestRateId: 'cowrie',
+        },
+        isLoading: false,
+        error: undefined,
+      }),
+    }));
+
+    const { Leaderboard: LeaderboardWithMock } = await import('@/components/offramp/Leaderboard');
+    render(<LeaderboardWithMock corridor={CORRIDOR} />);
+
+    expect(screen.getByText('Indicative (SEP-6)')).toBeInTheDocument();
+  });
+});

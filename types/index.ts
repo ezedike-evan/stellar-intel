@@ -62,7 +62,13 @@ export interface AnchorRate {
   exchangeRate: number | null; // local currency units per sold asset; null when unreachable
   totalReceived: number | null; // computed: (amount - fee) * exchangeRate; null when anchor is unreachable
   updatedAt: Date;
-  /** Discriminates the origin of the rate data. */
+  /**
+   * Discriminates the origin of the rate data. `sep38` is the only firm,
+   * binding quote source; every other source (besides `unavailable`) is an
+   * estimate derived from published fee schedules and must never be
+   * presented or scored as equivalent-confidence to a firm SEP-38 quote.
+   * See `isIndicativeRateSource`.
+   */
   source: 'sep38' | 'sep24-fee' | 'sep6-info' | 'sep6-fee' | 'unavailable';
   expiresAt?: Date | undefined;
   /**
@@ -73,6 +79,23 @@ export interface AnchorRate {
   quoteId?: string;
   /** Row-level quote lifecycle state. Only meaningful for source === 'sep38'. */
   quoteStatus?: 'firm' | 'expiring' | 'refreshing';
+}
+
+/**
+ * Rate sources that are estimates, not binding quotes. Modeled generally on
+ * `AnchorRate.source` rather than special-cased per anchor id, so any anchor
+ * whose only integration is SEP-6 (or the SEP-24 /fee fallback) is labeled
+ * indicative — not only Cowrie, the first anchor this applied to.
+ */
+const INDICATIVE_RATE_SOURCES: ReadonlySet<AnchorRate['source']> = new Set([
+  'sep24-fee',
+  'sep6-info',
+  'sep6-fee',
+]);
+
+/** True when a rate is an estimate rather than a firm SEP-38 quote. */
+export function isIndicativeRateSource(source: AnchorRate['source']): boolean {
+  return INDICATIVE_RATE_SOURCES.has(source);
 }
 
 export interface AnchorRateError {

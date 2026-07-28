@@ -945,6 +945,16 @@ exports[`HomePage > matches snapshot 1`] = `
                   >
                     Best
                   </span>
+                  <span
+                    aria-label="Firm quote expires in 60 seconds"
+                    aria-live="polite"
+                    class="rounded-full bg-green-100 px-2 py-0.5 text-xs font-medium text-green-700 dark:bg-green-900/40 dark:text-green-300"
+                    role="timer"
+                  >
+                    Firm · 
+                    60
+                    s left
+                  </span>
                 </div>
               </td>
               <td

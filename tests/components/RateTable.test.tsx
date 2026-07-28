@@ -168,6 +168,55 @@ describe('RateTable', () => {
     expect(screen.getByText('Best Rate')).toBeInTheDocument();
   });
 
+  it('flags the "Best Rate" badge as indicative when the winning rate is not a firm SEP-38 quote', () => {
+    render(
+      <RateTable rates={mockRates} isLoading={false} error={undefined} onSelectAnchor={vi.fn()} />
+    );
+    expect(screen.getByText('based on an indicative rate')).toBeInTheDocument();
+  });
+
+  it('does not flag the "Best Rate" badge as indicative when the winning rate is a firm SEP-38 quote', () => {
+    const firmBestRates: RateComparison = {
+      corridorId: 'usdc-ngn',
+      bestRateId: 'cowrie',
+      pending: [],
+      rates: [
+        {
+          ...makeRate('cowrie', 154840),
+          source: 'sep38' as const,
+          expiresAt: new Date(Date.now() + 60_000),
+        },
+        makeRate('flutterwave', 153260),
+      ],
+    };
+    render(
+      <RateTable
+        rates={firmBestRates}
+        isLoading={false}
+        error={undefined}
+        onSelectAnchor={vi.fn()}
+      />
+    );
+    expect(screen.queryByText('based on an indicative rate')).not.toBeInTheDocument();
+  });
+
+  it('renders "Indicative (SEP-6)" badge for sep6-fee rows, not just sep6-info', () => {
+    const sep6FeeRate: AnchorRate = {
+      ...makeRate('cowrie', 154840),
+      source: 'sep6-fee' as const,
+    };
+    const rates: RateComparison = {
+      corridorId: 'usdc-ngn',
+      bestRateId: 'cowrie',
+      pending: [],
+      rates: [sep6FeeRate],
+    };
+    render(
+      <RateTable rates={rates} isLoading={false} error={undefined} onSelectAnchor={vi.fn()} />
+    );
+    expect(screen.getByText('Indicative (SEP-6)')).toBeInTheDocument();
+  });
+
   it('the error state renders the error message string', () => {
     render(
       <RateTable

@@ -99,7 +99,7 @@ export function QuotePill({ source, expiresAt, onExpire }: QuotePillProps) {
         role="status"
         aria-label="SEP-6 indicative rate"
       >
-        SEP-6
+        Indicative (SEP-6)
       </span>
     );
   }

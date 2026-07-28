@@ -4,7 +4,12 @@ import Link from 'next/link';
 import { formatCurrency, formatRate } from '@/lib/utils';
 import { nextSortState, sortRates, type SortState } from '@/lib/sort';
 import { FUNNEL_EVENTS, trackFunnelEvent } from '@/lib/analytics';
-import type { RateComparison, AnchorRate, AnchorRateError } from '@/types';
+import {
+  isIndicativeRateSource,
+  type RateComparison,
+  type AnchorRate,
+  type AnchorRateError,
+} from '@/types';
 import { Skeleton } from '@/components/ui/Skeleton';
 import { QuotePill } from '@/components/ui/QuotePill';
 import { AnchorLogo } from '@/components/ui/AnchorLogo';
@@ -276,6 +281,14 @@ export function RateTable({
                             <span className="rounded-full bg-blue-100 px-2 py-0.5 text-xs font-medium text-blue-700 dark:bg-blue-900/40 dark:text-blue-300">
                               Best Rate
                             </span>
+                            {isIndicativeRateSource(rate.source) && (
+                              <span
+                                className="text-xs text-gray-500 dark:text-gray-400"
+                                title="This anchor's rate is an estimate, not a firm quote — it may change before you withdraw."
+                              >
+                                based on an indicative rate
+                              </span>
+                            )}
                             {savingsVsWorst !== null && savingsVsWorst > 0 && (
                               <span className="text-xs font-medium text-green-600 dark:text-green-400">
                                 Save {formatCurrency(savingsVsWorst, currency)} vs others

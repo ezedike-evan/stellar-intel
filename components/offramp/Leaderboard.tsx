@@ -5,6 +5,7 @@ import { useAnchorRates } from '@/hooks/useAnchorRates';
 import { Skeleton } from '@/components/ui/Skeleton';
 import type { Corridor } from '@/types';
 import { AnchorLogo } from '@/components/ui/AnchorLogo';
+import { QuotePill } from '@/components/ui/QuotePill';
 
 interface LeaderboardProps {
   corridor: Corridor;
@@ -90,11 +91,7 @@ export function Leaderboard({ corridor, limit }: LeaderboardProps) {
                         Best
                       </span>
                     )}
-                    {isUnavailable && (
-                      <span className="rounded-full bg-red-100 px-2 py-0.5 text-xs font-medium text-red-700 dark:bg-red-900/40 dark:text-red-300">
-                        Unavailable
-                      </span>
-                    )}
+                    <QuotePill source={rate.source} expiresAt={rate.expiresAt || undefined} />
                   </div>
                 </td>
                 <td className="px-4 py-3 text-right text-gray-700 dark:text-gray-300">
