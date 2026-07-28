@@ -344,4 +344,78 @@ describe('ExecuteDrawer', () => {
     fireEvent.click(screen.getByRole('button', { name: 'Close' }));
     expect(onClose).toHaveBeenCalledOnce();
   });
+
+  it('closes the drawer on Escape in idle state', () => {
+    const onClose = vi.fn();
+    render(
+      <ExecuteDrawer
+        rate={RATE}
+        amount="100"
+        publicKey={PUBLIC_KEY}
+        onClose={onClose}
+        onExecuteStarted={vi.fn()}
+      />
+    );
+    fireEvent.keyDown(window, { key: 'Escape' });
+    expect(onClose).toHaveBeenCalledOnce();
+  });
+
+  it('closes the drawer on Escape in error state', async () => {
+    const onClose = vi.fn();
+    mockAuthenticate.mockRejectedValue(new Error('Auth failed'));
+    render(
+      <ExecuteDrawer
+        rate={RATE}
+        amount="100"
+        publicKey={PUBLIC_KEY}
+        onClose={onClose}
+        onExecuteStarted={vi.fn()}
+      />
+    );
+
+    fireEvent.click(screen.getByText('Start Off-ramp'));
+    await waitFor(() => expect(screen.getByText('Auth failed')).toBeInTheDocument());
+
+    fireEvent.keyDown(window, { key: 'Escape' });
+    expect(onClose).toHaveBeenCalledOnce();
+  });
+
+  it('does not close the drawer on Escape in done or mid-flow states', async () => {
+    const onClose = vi.fn();
+    render(
+      <ExecuteDrawer
+        rate={RATE}
+        amount="100"
+        publicKey={PUBLIC_KEY}
+        onClose={onClose}
+        onExecuteStarted={vi.fn()}
+      />
+    );
+
+    fireEvent.click(screen.getByText('Start Off-ramp'));
+    await waitFor(() => expect(mockInitiateWithdraw).toHaveBeenCalled());
+
+    // In authenticating/initiating step
+    fireEvent.keyDown(window, { key: 'Escape' });
+    expect(onClose).not.toHaveBeenCalled();
+
+    // Settle KYC to reach done step
+    act(() => {
+      window.dispatchEvent(
+        new MessageEvent('message', {
+          data: { type: 'stellar_transaction_created', transaction_id: 'txn-123' },
+          origin: 'https://anchor.example',
+        })
+      );
+    });
+
+    await waitFor(() => expect(screen.getByText('abc123txhash')).toBeInTheDocument());
+
+    expect(onClose).toHaveBeenCalledOnce();
+    onClose.mockClear();
+
+    // In done step
+    fireEvent.keyDown(window, { key: 'Escape' });
+    expect(onClose).not.toHaveBeenCalled();
+  });
 });

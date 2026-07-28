@@ -20,6 +20,8 @@ interface CounterState {
   windowMs: number;
   success: number;
   errorByCode: Map<string, number>;
+  ratesCacheHits: number;
+  ratesCacheMisses: number;
 }
 
 const counters: CounterState = {
@@ -27,6 +29,8 @@ const counters: CounterState = {
   windowMs: DEFAULT_RESET_WINDOW_MS,
   success: 0,
   errorByCode: new Map(),
+  ratesCacheHits: 0,
+  ratesCacheMisses: 0,
 };
 
 const anchorLatencies = new Map<string, number[]>();
@@ -36,6 +40,8 @@ function maybeRollWindow(now: number): void {
     counters.windowStartedAt = now;
     counters.success = 0;
     counters.errorByCode.clear();
+    counters.ratesCacheHits = 0;
+    counters.ratesCacheMisses = 0;
   }
 }
 
@@ -45,6 +51,8 @@ export function configureMetricsWindow(windowMs: number, now = Date.now()): void
   counters.windowStartedAt = now;
   counters.success = 0;
   counters.errorByCode.clear();
+  counters.ratesCacheHits = 0;
+  counters.ratesCacheMisses = 0;
 }
 
 export function recordIntentSuccess(now = Date.now()): void {
@@ -55,6 +63,16 @@ export function recordIntentSuccess(now = Date.now()): void {
 export function recordIntentError(code: string, now = Date.now()): void {
   maybeRollWindow(now);
   counters.errorByCode.set(code, (counters.errorByCode.get(code) ?? 0) + 1);
+}
+
+export function recordRatesCacheHit(now = Date.now()): void {
+  maybeRollWindow(now);
+  counters.ratesCacheHits += 1;
+}
+
+export function recordRatesCacheMiss(now = Date.now()): void {
+  maybeRollWindow(now);
+  counters.ratesCacheMisses += 1;
 }
 
 /** Appends a latency sample (ms) for an anchor, evicting the oldest past the cap. */
@@ -88,6 +106,7 @@ export interface MetricsSnapshot {
   window: { startedAt: string; windowMs: number };
   intents: { success: number; errorByCode: Record<string, number>; errorTotal: number };
   anchorLatency: Record<string, AnchorLatencySummary>;
+  ratesCache: { hits: number; misses: number };
 }
 
 export function getMetricsSnapshot(now = Date.now()): MetricsSnapshot {
@@ -113,6 +132,10 @@ export function getMetricsSnapshot(now = Date.now()): MetricsSnapshot {
     },
     intents: { success: counters.success, errorByCode, errorTotal },
     anchorLatency,
+    ratesCache: {
+      hits: counters.ratesCacheHits,
+      misses: counters.ratesCacheMisses,
+    },
   };
 }
 
@@ -121,6 +144,8 @@ export function resetMetrics(): void {
   counters.windowStartedAt = Date.now();
   counters.success = 0;
   counters.errorByCode.clear();
+  counters.ratesCacheHits = 0;
+  counters.ratesCacheMisses = 0;
   anchorLatencies.clear();
 }
 

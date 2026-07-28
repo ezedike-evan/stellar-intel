@@ -3,7 +3,7 @@ import { ImageResponse } from 'next/og';
 // OpenGraph / Twitter social-preview image for the landing route (B092 / #525).
 // Next.js auto-wires this as og:image and twitter:image.
 
-export const alt = 'Stellar Intel — Real-time rate comparison on Stellar';
+export const alt = 'Stellar Intel — The execution layer for stablecoin off-ramps';
 export const size = { width: 1200, height: 630 };
 export const contentType = 'image/png';
 
@@ -47,7 +47,7 @@ export default function OpengraphImage() {
           lineHeight: 1.3,
         }}
       >
-        Real-time rate comparison for off-ramps, on-ramps, yield, and swaps.
+        The execution layer for stablecoin off-ramps.
       </div>
     </div>,
     { ...size }

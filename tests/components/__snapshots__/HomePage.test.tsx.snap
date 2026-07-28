@@ -921,6 +921,21 @@ exports[`HomePage > matches snapshot 1`] = `
                   class="flex items-center gap-2"
                 >
                   <span
+                    class="inline-flex shrink-0 items-center justify-center overflow-hidden rounded-full border border-gray-200 bg-gray-100 font-semibold text-gray-700 shadow-sm dark:border-gray-700 dark:bg-gray-800 dark:text-gray-200 h-7 w-7 text-xs"
+                  >
+                    <img
+                      alt="Anchor A logo"
+                      class="h-full w-full object-contain"
+                      data-nimg="1"
+                      decoding="async"
+                      height="40"
+                      loading="lazy"
+                      src="http://localhost:3000/anchors/anchor-a.svg"
+                      style="color: transparent;"
+                      width="40"
+                    />
+                  </span>
+                  <span
                     class="font-medium text-gray-900 dark:text-white"
                   >
                     Anchor A

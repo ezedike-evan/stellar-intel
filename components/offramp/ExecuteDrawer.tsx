@@ -187,17 +187,15 @@ function ExecuteDrawerContent({
 
     window.addEventListener('keydown', handleTab);
     return () => window.removeEventListener('keydown', handleTab);
-  }, [isOpen, showConfirmDialog]);
+  }, [isOpen, showConfirmDialog, step]);
 
-  // Handle escape key — close immediately when it's safe to do so (idle/done/
-  // error), otherwise prompt confirmation since a flow is in progress.
+  // Handle escape key — close immediately when it's safe to do so (idle/
+  // error), otherwise do nothing.
   useEffect(() => {
     const handleKeyDown = (event: KeyboardEvent) => {
       if (event.key !== 'Escape' || !isOpen) return;
-      if (['idle', 'done', 'error'].includes(step)) {
+      if (['idle', 'error'].includes(step)) {
         onClose();
-      } else {
-        setShowConfirmDialog(true);
       }
     };
 

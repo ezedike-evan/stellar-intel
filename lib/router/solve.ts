@@ -7,6 +7,7 @@
  */
 
 import { env } from '@/lib/env';
+import { getLogger } from '@/lib/logger';
 import { fetchAllAnchorFees, computeRateComparison } from '@/lib/stellar/sep24';
 import type {
   AnchorRate,
@@ -16,6 +17,20 @@ import type {
   RateComparison,
   SolverResult,
 } from '@/types';
+
+const log = getLogger('router/solve');
+
+/**
+ * Routing strategies, gated by the ROUTING_STRATEGY environment flag (issue #730).
+ *
+ * - `first-match`: pick the first eligible quote in candidate order. Cheap and
+ *   fully deterministic; the safe default until the scored solver is validated.
+ * - `scored`: pick by the multi-factor routing score when metrics are supplied,
+ *   otherwise by best rate (highest buy_amount).
+ *
+ * Rollout can be reverted at any time by flipping the flag back to `first-match`.
+ */
+export type RoutingStrategy = 'first-match' | 'scored';
 
 // ─── solveSingleAnchor ────────────────────────────────────────────────────────
 
@@ -198,15 +213,18 @@ export function computeRoutingScore(
  * Selects the best single-anchor SEP-38 quote that meets the intent's floor
  * and deadline constraints. Returns a typed discriminated-union result.
  *
- * If scoring inputs are provided, it scores quotes based on rate, reliability,
- * latency, and reputation, selecting the highest-scoring candidate. Otherwise,
- * it falls back to selecting by the highest buy_amount (rate).
+ * Selection is gated by `strategy` (defaults to the ROUTING_STRATEGY flag):
+ * under `first-match` the first eligible quote wins and scoring is skipped
+ * entirely; under `scored` it scores quotes on rate, reliability, latency, and
+ * reputation when metrics are supplied, falling back to the highest buy_amount
+ * (rate) when they are not.
  */
 export function solveSingleAnchor(
   intent: Intent,
   evaluatedQuotes: EvaluatedQuote[],
   feeBudgetPct: number = env.FEE_BUDGET_PCT,
-  scoring?: ScoringInputs
+  scoring?: ScoringInputs,
+  strategy: RoutingStrategy = env.ROUTING_STRATEGY
 ): SolverResult {
   if (isDeadlineExpired(intent.deadline)) {
     return {
@@ -269,7 +287,9 @@ export function solveSingleAnchor(
 
   let bestQuote = validQuotes[0]!;
 
-  if (scoring && scoring.anchorMetrics) {
+  if (strategy === 'first-match') {
+    // Flag is off: keep the cheap deterministic path, ignore any scoring inputs.
+  } else if (scoring && scoring.anchorMetrics) {
     const weights = { ...DEFAULT_SCORING_WEIGHTS, ...scoring.weights };
 
     // Find the max buy amount among valid quotes for relative rate normalization
@@ -309,6 +329,17 @@ export function solveSingleAnchor(
       compareDecimals(current.buy_amount, best.buy_amount) > 0 ? current : best
     );
   }
+
+  log.info(
+    {
+      strategy,
+      corridor: intent.corridor,
+      anchorId: bestQuote.anchorId,
+      quoteId: bestQuote.id,
+      candidates: validQuotes.length,
+    },
+    'routing decision'
+  );
 
   const plan: Plan = {
     type: 'single_anchor',

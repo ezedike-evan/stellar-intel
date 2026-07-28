@@ -1,6 +1,7 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest';
 import { NextRequest } from 'next/server';
 import { POST } from '@/app/api/intent/offramp/route';
+import { checkRateLimit, clearRateLimitStore } from '@/lib/api/rate-limit';
 import type { OfframpIntentResponse } from '@/app/api/intent/offramp/route';
 import type { ApiError } from '@/types';
 
@@ -18,16 +19,17 @@ const VALID_INTENT = {
   recipient: 'NGN-BANK-ACCOUNT-123',
 };
 
-function makeRequest(body: unknown): NextRequest {
+function makeRequest(body: unknown, headers?: HeadersInit): NextRequest {
   return new NextRequest('http://localhost/api/intent/offramp', {
     method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
+    headers: { 'Content-Type': 'application/json', ...headers },
     body: JSON.stringify(body),
   });
 }
 
 beforeEach(() => {
   vi.clearAllMocks();
+  clearRateLimitStore();
 });
 
 // ─── Happy path ────────────────────────────────────────────────────────────────
@@ -153,5 +155,47 @@ describe('POST /api/intent/offramp — validation errors', () => {
     const err = (await res.json()) as ApiError;
     expect(typeof err.message).toBe('string');
     expect(err.message.length).toBeGreaterThan(0);
+  });
+});
+
+// ─── Rate limiting (429) ────────────────────────────────────────────────────────
+
+describe('POST /api/intent/offramp — rate limiting', () => {
+  it('succeeds while under the api.intent.offramp limit', async () => {
+    const headers = { 'x-forwarded-for': '203.0.113.10' };
+    for (let i = 0; i < 19; i++) {
+      const res = await POST(makeRequest(VALID_INTENT, headers));
+      expect(res.status).toBe(200);
+    }
+  });
+
+  it('returns 429 with Retry-After once the bucket is exhausted', async () => {
+    const ip = '203.0.113.20';
+    for (let i = 0; i < 20; i++) {
+      checkRateLimit(ip, { bucket: 'api.intent.offramp', maxRequests: 20 });
+    }
+
+    const res = await POST(makeRequest(VALID_INTENT, { 'x-forwarded-for': ip }));
+
+    expect(res.status).toBe(429);
+    expect(res.headers.get('Retry-After')).toBeTruthy();
+    expect(res.headers.get('X-RateLimit-Remaining')).toBe('0');
+
+    const body = (await res.json()) as { error: string; retryAfter: number };
+    expect(body.error).toBe('Too many requests');
+    expect(body.retryAfter).toBeGreaterThan(0);
+  });
+
+  it('rate-limits independently per IP', async () => {
+    const exhaustedIp = '203.0.113.30';
+    for (let i = 0; i < 20; i++) {
+      checkRateLimit(exhaustedIp, { bucket: 'api.intent.offramp', maxRequests: 20 });
+    }
+
+    const blocked = await POST(makeRequest(VALID_INTENT, { 'x-forwarded-for': exhaustedIp }));
+    expect(blocked.status).toBe(429);
+
+    const otherIpRes = await POST(makeRequest(VALID_INTENT, { 'x-forwarded-for': '203.0.113.31' }));
+    expect(otherIpRes.status).toBe(200);
   });
 });

@@ -1,5 +1,6 @@
 import Link from 'next/link';
 import { CORRIDORS } from '@/constants';
+import { AnchorLogo } from '@/components/ui/AnchorLogo';
 import type { Anchor } from '@/types';
 import { Badge } from '@/components/ui/Badge';
 import { Card } from '@/components/ui/Card';
@@ -28,9 +29,12 @@ export function AnchorCard({ anchor }: { anchor: Anchor }) {
       className="group block h-full rounded-xl focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-blue-500 focus-visible:ring-offset-2 dark:focus-visible:ring-offset-gray-950"
     >
       <Card className="flex h-full flex-col p-5 transition group-hover:border-blue-300 group-hover:shadow-md dark:group-hover:border-blue-700">
-        <div>
-          <h3 className="text-lg font-semibold text-gray-900 dark:text-white">{anchor.name}</h3>
-          <p className="mt-1 text-sm text-gray-500 dark:text-gray-400">{anchor.homeDomain}</p>
+        <div className="flex items-center gap-3">
+          <AnchorLogo anchorId={anchor.id} anchorName={anchor.name} size="md" />
+          <div>
+            <h3 className="text-lg font-semibold text-gray-900 dark:text-white">{anchor.name}</h3>
+            <p className="mt-1 text-sm text-gray-500 dark:text-gray-400">{anchor.homeDomain}</p>
+          </div>
         </div>
 
         <div className="mt-5">
