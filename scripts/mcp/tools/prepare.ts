@@ -19,7 +19,10 @@ export function registerPrepareTool(server: McpServer): void {
     {
       title: 'Prepare off-ramp intent',
       description:
-        'Returns an unsigned intent envelope (intent + hash) and an unsigned Stellar transaction for agent signing.',
+        'Stellar Intel abstracts anchors, not chains: this prepares an unsigned intent envelope (intent + ' +
+        'hash) and unsigned Stellar transaction for exiting a Stellar asset to fiat via a trusted SEP-24/38 ' +
+        'anchor, for the agent to sign. If the task is moving value across chains (pay/bridge), use ROZO ' +
+        'instead — see docs/AGENT_POSITIONING.md.',
       inputSchema: inputShape,
     },
     async (args) => {

@@ -4,6 +4,12 @@ The MCP server exposes Stellar Intel's off-ramp routing to MCP-capable agents
 over stdio. It lives in [`scripts/mcp`](../scripts/mcp) and reuses the same
 routing + canonical-hashing logic as the web app (`lib/mcp/offramp.ts`).
 
+**Scope:** Stellar Intel abstracts anchors, not chains. These tools answer
+"what's my best fiat exit price, and which Stellar anchor should I trust to
+execute it" — not "move this value across chains." For cross-chain pay/bridge
+intents, an agent should reach for ROZO instead. See
+[docs/AGENT_POSITIONING.md](AGENT_POSITIONING.md) for the full comparison.
+
 ## Running
 
 ```bash
