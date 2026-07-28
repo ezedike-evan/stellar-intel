@@ -1,4 +1,4 @@
-import { PII_FIELDS } from './reputation/redact';
+import { PII_FIELDS, type PiiField } from './reputation/redact';
 
 declare global {
   interface Window {
@@ -15,7 +15,7 @@ export function redactProperties(properties: Record<string, unknown>): Record<st
 
   for (const [key, value] of Object.entries(properties)) {
     // 1. Remove explicit PII keys based on reputation redaction lists
-    if (PII_FIELDS.includes(key as any)) {
+    if ((PII_FIELDS as readonly string[]).includes(key)) {
       safeProps[key] = '[REDACTED]';
       continue;
     }
@@ -44,11 +44,6 @@ export function redactProperties(properties: Record<string, unknown>): Record<st
  */
 export function trackAnalyticsEvent(eventName: string, properties?: Record<string, unknown>) {
   const safeProperties = properties ? redactProperties(properties) : undefined;
-
-  // Staging / Dev console log to confirm events
-  if (process.env.NODE_ENV !== 'production') {
-    console.debug(`[Analytics] Event: ${eventName}`, safeProperties);
-  }
 
   // Send to privacy-respecting provider (Plausible)
   if (typeof window !== 'undefined' && window.plausible) {
