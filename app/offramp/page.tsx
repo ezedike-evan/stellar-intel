@@ -22,7 +22,7 @@ import { ErrorBoundary } from '@/components/ui/ErrorBoundary';
 import { useAnchorRates, RATES_REFRESH_INTERVAL_MS } from '@/hooks/useAnchorRates';
 import { useCountdown } from '@/hooks/useCountdown';
 import { useWallet } from '@/contexts/WalletContext';
-import { useWithdrawStatus } from '@/hooks/useWithdrawStatus';
+import { useWithdrawStatus, type OutcomeAppendContext } from '@/hooks/useWithdrawStatus';
 import { useWalletBalance } from '@/hooks/useWalletBalance';
 import { amountBucket, FUNNEL_EVENTS, trackFunnelEvent } from '@/lib/analytics';
 import { VISIBLE_CORRIDORS } from '@/constants/anchors';
@@ -70,6 +70,11 @@ function OfframpContent() {
   const [trackingNonce, setTrackingNonce] = useState<string | null>(null);
   const [trackingAnchorHomeDomain, setTrackingAnchorHomeDomain] = useState<string | null>(null);
 
+  // Quote context captured when execution starts, so the terminal outcome of a
+  // real off-ramp can be written to the reputation log (#799). Public data only
+  // — no key material ever crosses this boundary (see docs/NON_CUSTODY.md).
+  const [outcomeContext, setOutcomeContext] = useState<OutcomeAppendContext | null>(null);
+
   const { isConnected, publicKey, network } = useWallet();
   const { rates, anchorErrors, isLoading, error, mutate, refreshInflight, lastFetchedAt } =
     useAnchorRates(corridorId, amount);
@@ -79,7 +84,8 @@ function OfframpContent() {
   const withdrawStatus = useWithdrawStatus(
     trackingTransferServer,
     trackingTransactionId,
-    trackingJwt
+    trackingJwt,
+    outcomeContext ?? undefined
   );
 
   useEffect(() => {
@@ -138,8 +144,22 @@ function OfframpContent() {
       setTrackingJwt(jwt);
       setTrackingNonce(nonce);
       setTrackingAnchorHomeDomain(anchorHomeDomain);
+
+      // Capture the quote so the terminal outcome of this real transaction is
+      // logged to the reputation store (#799). The SEP-24 transaction id is the
+      // stable per-transaction identity; a null exchangeRate can't be quoted so
+      // it's skipped (the user can't execute against an unreachable anchor).
+      if (selectedRate && selectedRate.exchangeRate !== null) {
+        setOutcomeContext({
+          intentHash: transactionId,
+          anchorId: selectedRate.anchorId,
+          corridor: selectedRate.corridorId,
+          quotedRate: String(selectedRate.exchangeRate),
+          quotedAmount: amount,
+        });
+      }
     },
-    [router]
+    [router, selectedRate, amount]
   );
 
   useEffect(() => {
@@ -171,6 +191,7 @@ function OfframpContent() {
     setTrackingJwt(null);
     setTrackingNonce(null);
     setTrackingAnchorHomeDomain(null);
+    setOutcomeContext(null);
     rateTableRef.current?.scrollIntoView({ behavior: 'smooth', block: 'start' });
   }, []);
 
