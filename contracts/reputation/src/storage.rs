@@ -60,4 +60,6 @@ pub enum DataKey {
     Corridor(String, String),
     /// Rolling aggregate for an (anchor, corridor) pair: `(total, successes, settle_seconds_sum)`.
     CorridorAggregate(String, String),
+    /// Latest published block-level rate for a corridor (issue #810).
+    CorridorRate(String),
 }

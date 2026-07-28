@@ -10,6 +10,7 @@ pub mod publishers;
 pub mod history;
 pub mod score;
 pub mod upgrade;
+pub mod corridor_rate;
 
 #[contracterror]
 #[derive(Clone, Debug, Eq, PartialEq)]
@@ -21,6 +22,7 @@ pub enum Error {
     PublisherExists       = 5,
     PublisherNotFound     = 6,
     PublisherUnauthorized = 7,
+    InvalidCorridorRate   = 8,
 }
 
 #[contract]
@@ -136,5 +138,22 @@ impl ReputationContract {
         n: u32,
     ) {
         score::set_corridor_metrics(&env, anchor_id, corridor, fill_rate_bps, slippage_bps, settle_seconds_p50, n);
+    }
+
+    /// Publish (or overwrite) the block-level rate for a corridor (issue #810).
+    /// Publisher-only; `rate` is scaled by 10^`decimals` fiat units per 1 USDC.
+    pub fn publish_corridor_rate(
+        env: Env,
+        publisher: Address,
+        corridor: String,
+        rate: i128,
+        decimals: u32,
+    ) -> Result<(), Error> {
+        corridor_rate::publish(&env, &publisher, corridor, rate, decimals)
+    }
+
+    /// Read the latest published rate for `corridor`, or `None` if unset.
+    pub fn get_corridor_rate(env: Env, corridor: String) -> Option<corridor_rate::CorridorRate> {
+        corridor_rate::get(&env, corridor)
     }
 }
