@@ -17,6 +17,10 @@ export interface RateLimitResult {
   allowed: boolean;
   remaining: number;
   retryAfter: number;
+  /** The configured request cap for this bucket's window. */
+  limit: number;
+  /** Epoch ms when the current window resets. */
+  resetAt: number;
 }
 
 export function getClientIp(headers: Headers): string {
@@ -34,16 +38,30 @@ export function checkRateLimit(ip: string, options: RateLimitOptions = {}): Rate
 
   if (!entry || now - entry.windowStart >= windowMs) {
     store.set(key, { count: 1, windowStart: now });
-    return { allowed: true, remaining: maxRequests - 1, retryAfter: 0 };
+    return {
+      allowed: true,
+      remaining: maxRequests - 1,
+      retryAfter: 0,
+      limit: maxRequests,
+      resetAt: now + windowMs,
+    };
   }
 
+  const resetAt = entry.windowStart + windowMs;
+
   if (entry.count >= maxRequests) {
-    const retryAfter = Math.ceil((entry.windowStart + windowMs - now) / 1000);
-    return { allowed: false, remaining: 0, retryAfter };
+    const retryAfter = Math.ceil((resetAt - now) / 1000);
+    return { allowed: false, remaining: 0, retryAfter, limit: maxRequests, resetAt };
   }
 
   entry.count += 1;
-  return { allowed: true, remaining: maxRequests - entry.count, retryAfter: 0 };
+  return {
+    allowed: true,
+    remaining: maxRequests - entry.count,
+    retryAfter: 0,
+    limit: maxRequests,
+    resetAt,
+  };
 }
 
 export function clearRateLimitStore(): void {

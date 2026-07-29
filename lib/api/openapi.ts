@@ -116,6 +116,10 @@ const ApiErrorSchema = registry.register(
   z.object({
     code: z.string().describe('Machine-readable error code'),
     message: z.string().describe('Human-readable error description'),
+    retryAfter: z
+      .number()
+      .optional()
+      .describe('Seconds until the client may retry. Only present for code === "RATE_LIMITED"'),
   })
 );
 
@@ -317,9 +321,21 @@ registry.registerPath({
   path: '/api/intent/offramp',
   summary: 'Submit an off-ramp intent',
   description:
-    'Resolves an anchor route for the given asset corridor, builds an unsigned Stellar payment transaction, and returns a quote ID.',
+    'Resolves an anchor route for the given asset corridor, builds an unsigned Stellar payment transaction, and returns a quote ID. ' +
+    'Every response carries an `API-Version` header and `X-RateLimit-Limit` / `X-RateLimit-Remaining` / `X-RateLimit-Reset` headers. ' +
+    'Send an `Idempotency-Key` header to safely retry: a repeated key within 24h replays the original response ' +
+    '(flagged with `Idempotency-Replayed: true`) instead of re-executing the request. Only 200 and 400 responses are cached under a key; ' +
+    'a 500 is never cached, so a retry with the same key will try again.',
   tags: ['Intent'],
   request: {
+    headers: z.object({
+      'Idempotency-Key': z
+        .string()
+        .optional()
+        .describe(
+          'Client-generated key. A repeated value within 24h replays the original response.'
+        ),
+    }),
     body: {
       required: true,
       content: { 'application/json': { schema: IntentRequestSchema } },
@@ -804,7 +820,8 @@ export function buildOpenApiSpec() {
     openapi: '3.1.0',
     info: {
       title: 'Stellar Intel API',
-      version: '1.2.0',
+      // Keep in sync with API_VERSION in lib/api/response.ts.
+      version: '1.3.0',
       description: [
         'Intent router and anchor rate aggregation API for the Stellar Intel platform.',
         '',

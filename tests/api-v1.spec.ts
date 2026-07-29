@@ -29,12 +29,20 @@ beforeEach(() => {
 
 describe('rateLimitHeaders (#805)', () => {
   it('emits X-RateLimit-* headers, plus Retry-After only when throttled', () => {
-    expect(rateLimitHeaders(20, { allowed: true, remaining: 19, retryAfter: 0 })).toEqual({
+    expect(
+      rateLimitHeaders(20, { allowed: true, remaining: 19, retryAfter: 0, limit: 20, resetAt: 0 })
+    ).toEqual({
       'X-RateLimit-Limit': '20',
       'X-RateLimit-Remaining': '19',
       'X-RateLimit-Reset': '0',
     });
-    const throttled = rateLimitHeaders(20, { allowed: false, remaining: 0, retryAfter: 42 });
+    const throttled = rateLimitHeaders(20, {
+      allowed: false,
+      remaining: 0,
+      retryAfter: 42,
+      limit: 20,
+      resetAt: 0,
+    });
     expect(throttled['Retry-After']).toBe('42');
   });
 });

@@ -568,6 +568,8 @@ export interface ApiError {
   code: string;
   message: string;
   anchorId?: string;
+  /** Seconds until the client may retry. Only meaningful for code === 'RATE_LIMITED'. */
+  retryAfter?: number;
 }
 
 // ─── UI helpers ───────────────────────────────────────────────────────────────
