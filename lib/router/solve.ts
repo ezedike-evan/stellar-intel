@@ -190,10 +190,10 @@ export function computeRoutingScore(
   reputationComposite: number = 1.0,
   weights = DEFAULT_SCORING_WEIGHTS
 ): number {
-  const sRate = maxRate > 0 ? rate / maxRate : 0;
+  const sRate = maxRate > 0 ? Math.max(0, rate / maxRate) : 0;
   const sReputation = Math.max(0, Math.min(1.0, reputationComposite));
   const sReliability = Math.max(0, Math.min(1.0, reliability));
-  const sLatency = Math.max(0, 1 - latencyMs / NORM_LATENCY_MS);
+  const sLatency = Math.max(0, Math.min(1.0, 1 - latencyMs / NORM_LATENCY_MS));
 
   const wRate = weights.rate ?? 0;
   const wReputation = weights.reputation ?? 0;
@@ -214,10 +214,9 @@ export function computeRoutingScore(
  * and deadline constraints. Returns a typed discriminated-union result.
  *
  * Selection is gated by `strategy` (defaults to the ROUTING_STRATEGY flag):
- * under `first-match` the first eligible quote wins and scoring is skipped
- * entirely; under `scored` it scores quotes on rate, reliability, latency, and
+ * under `scored` it scores quotes on rate, reliability, latency, and
  * reputation when metrics are supplied, falling back to the highest buy_amount
- * (rate) when they are not.
+ * (rate) when they are not; under `first-match` the first eligible quote wins.
  */
 export function solveSingleAnchor(
   intent: Intent,
@@ -288,30 +287,31 @@ export function solveSingleAnchor(
   let bestQuote = validQuotes[0]!;
 
   if (strategy === 'first-match') {
-    // Flag is off: keep the cheap deterministic path, ignore any scoring inputs.
+    // Explicit opt-in to legacy first-match behavior
   } else if (scoring && scoring.anchorMetrics) {
     const weights = { ...DEFAULT_SCORING_WEIGHTS, ...scoring.weights };
 
     // Find the max buy amount among valid quotes for relative rate normalization
-    let maxBuyAmount = 0;
+    let maxBuyAmountBig = 0n;
     for (const q of validQuotes) {
-      const amt = Number(q.buy_amount);
-      if (amt > maxBuyAmount) {
-        maxBuyAmount = amt;
+      const amt = parseDecimal(q.buy_amount);
+      if (amt > maxBuyAmountBig) {
+        maxBuyAmountBig = amt;
       }
     }
+    const maxRate = Number(maxBuyAmountBig);
 
     let highestScore = -1;
     for (const quote of validQuotes) {
       const metrics = scoring.anchorMetrics[quote.anchorId];
-      const rate = Number(quote.buy_amount);
+      const rate = Number(parseDecimal(quote.buy_amount));
       const reliability = metrics?.reliability ?? 1.0;
       const latencyMs = metrics?.latencyMs ?? 500;
       const reputationComposite = metrics?.reputationComposite ?? 1.0;
 
       const score = computeRoutingScore(
         rate,
-        maxBuyAmount,
+        maxRate,
         reliability,
         latencyMs,
         reputationComposite,
@@ -321,10 +321,15 @@ export function solveSingleAnchor(
       if (score > highestScore) {
         highestScore = score;
         bestQuote = quote;
+      } else if (Math.abs(score - highestScore) < 1e-9) {
+        // Break ties by preferring higher buy_amount (better rate)
+        if (compareDecimals(quote.buy_amount, bestQuote.buy_amount) > 0) {
+          bestQuote = quote;
+        }
       }
     }
   } else {
-    // Fall back to pure rate solver
+    // Fall back to pure rate solver (highest buy_amount)
     bestQuote = validQuotes.reduce((best, current) =>
       compareDecimals(current.buy_amount, best.buy_amount) > 0 ? current : best
     );

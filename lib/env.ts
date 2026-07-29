@@ -17,7 +17,7 @@ export const envSchema = z.object({
     .url()
     .optional()
     .default('https://api.stellar.expert/explorer/public'),
-  ROUTING_STRATEGY: z.enum(['first-match', 'scored']).default('first-match'),
+  ROUTING_STRATEGY: z.enum(['first-match', 'scored']).default('scored'),
   FEE_BUDGET_PCT: z.preprocess(
     (value) => {
       if (value === undefined || value === null) return '100';
