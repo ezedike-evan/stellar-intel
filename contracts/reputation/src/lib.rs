@@ -197,9 +197,10 @@ impl ReputationContract {
         migration::migrate_all(&env)
     }
 
-    /// V2 version of `get_corridor_aggregate`. Returns the same shape as v1
-    /// but reads from the v2 storage namespace so it can be extended without
-    /// breaking v1 readers.
+    /// V2 version of `get_corridor_aggregate`. The aggregate schema is
+    /// unchanged between v1 and v2 (same `CorridorAggregate` key), so this is
+    /// a direct alias for forward-compatibility when callers are already
+    /// targeting the v2 interface.
     pub fn get_corridor_aggregate_v2(
         env: Env,
         anchor_id: String,
