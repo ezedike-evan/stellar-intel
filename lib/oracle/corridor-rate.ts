@@ -11,7 +11,7 @@ import type { OutcomeLogRow } from '@/types/reputation';
  */
 
 /** The corridors the rate oracle publishes on-chain. */
-export const TARGET_CORRIDORS = ['usdc-ngn', 'usdc-kes', 'usdc-mxn', 'usdc-php'] as const;
+export const TARGET_CORRIDORS = ['usdc-ngn', 'usdc-kes', 'usdc-mxn', 'usdc-php', 'usdc-brl', 'usdc-ars'] as const;
 export type TargetCorridor = (typeof TARGET_CORRIDORS)[number];
 
 /** On-chain publish precision — rate scaled by 10^7 (Stellar's 7-dp convention). */

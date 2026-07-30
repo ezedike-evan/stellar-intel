@@ -25,7 +25,7 @@ fn normalize_settle_seconds(settle_seconds_p50: u64) -> i128 {
     settle_seconds as i128
 }
 
-fn compute_composite_bps(fill_rate_bps: i128, slippage_bps: i128, settle_seconds_p50: u64) -> i128 {
+pub fn compute_composite_bps(fill_rate_bps: i128, slippage_bps: i128, settle_seconds_p50: u64) -> i128 {
     let fill_rate_bps = clamp_bps(fill_rate_bps);
     let slippage_bps = clamp_bps(slippage_bps);
     let settle_seconds = normalize_settle_seconds(settle_seconds_p50);

@@ -135,3 +135,83 @@ export async function listAnchors(config: OracleReadConfig = {}): Promise<string
   const result = await simulateRead('list_anchors', [], config);
   return Array.isArray(result) ? (result as string[]) : [];
 }
+
+// ── V2 entrypoints (multi-corridor expansion, issue #825) ────────────────
+
+export interface CorridorScoreV2 {
+  compositeBps: number;
+  fillRateBps: number;
+  slippageBps: number;
+  settleSecondsP50: number;
+  n: number;
+}
+
+/**
+ * `get_score_for_corridor_v2(anchor_id, corridor) -> (composite_bps, fill_rate_bps, slippage_bps, settle_seconds_p50, n)`.
+ * Falls back to v1 entrypoint if v2 is not available on the deployed contract.
+ */
+export async function getScoreForCorridorV2(
+  anchorId: string,
+  corridor: string,
+  config: OracleReadConfig = {}
+): Promise<CorridorScoreV2 | null> {
+  try {
+    const result = await simulateRead(
+      'get_score_for_corridor_v2',
+      [nativeToScVal(anchorId, { type: 'string' }), nativeToScVal(corridor, { type: 'string' })],
+      config
+    );
+    if (!Array.isArray(result) || result.length !== 5) return null;
+    const [compositeBps, fillRateBps, slippageBps, settleSecondsP50, n] = result as [
+      bigint,
+      bigint,
+      bigint,
+      bigint,
+      number,
+    ];
+    return {
+      compositeBps: Number(compositeBps),
+      fillRateBps: Number(fillRateBps),
+      slippageBps: Number(slippageBps),
+      settleSecondsP50: Number(settleSecondsP50),
+      n: Number(n),
+    };
+  } catch {
+    const v1 = await getScoreForCorridor(anchorId, corridor, config);
+    if (!v1) return null;
+    return {
+      compositeBps: v1.compositeBps,
+      fillRateBps: v1.fillRateBps,
+      slippageBps: 0,
+      settleSecondsP50: v1.settleSecondsP50,
+      n: v1.n,
+    };
+  }
+}
+
+/**
+ * `get_corridor_aggregate_v2(anchor_id, corridor) -> (total, successes, settle_seconds_sum)`.
+ * Falls back to v1 entrypoint if v2 is not available on the deployed contract.
+ */
+export async function getCorridorAggregateV2(
+  anchorId: string,
+  corridor: string,
+  config: OracleReadConfig = {}
+): Promise<CorridorAggregate | null> {
+  try {
+    const result = await simulateRead(
+      'get_corridor_aggregate_v2',
+      [nativeToScVal(anchorId, { type: 'string' }), nativeToScVal(corridor, { type: 'string' })],
+      config
+    );
+    if (!Array.isArray(result) || result.length !== 3) return null;
+    const [total, successes, settleSecondsSum] = result as [bigint, bigint, bigint];
+    return {
+      total: Number(total),
+      successes: Number(successes),
+      settleSecondsSum: Number(settleSecondsSum),
+    };
+  } catch {
+    return getCorridorAggregate(anchorId, corridor, config);
+  }
+}

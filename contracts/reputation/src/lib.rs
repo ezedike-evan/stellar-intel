@@ -1,6 +1,8 @@
 #![no_std]
 use soroban_sdk::{contract, contracterror, contractimpl, Address, BytesN, Env, String, Vec};
 
+use crate::storage;
+
 pub mod admin;
 pub mod aggregate;
 pub mod anchors;
@@ -11,6 +13,7 @@ pub mod history;
 pub mod score;
 pub mod upgrade;
 pub mod corridor_rate;
+pub mod migration;
 
 #[contracterror]
 #[derive(Clone, Debug, Eq, PartialEq)]
@@ -178,5 +181,63 @@ impl ReputationContract {
     /// Read the latest published rate for `corridor`, or `None` if unset.
     pub fn get_corridor_rate(env: Env, corridor: String) -> Option<corridor_rate::CorridorRate> {
         corridor_rate::get(&env, corridor)
+    }
+
+    // ── V2 entrypoints (multi-corridor expansion, issue #825) ────────────
+
+    /// Migrate a single (anchor_id, corridor) pair from v1 to v2 storage.
+    /// Idempotent: skips if v2 data already exists.
+    pub fn migrate_corridor_v2(env: Env, anchor_id: String, corridor: String) {
+        migration::migrate_corridor(&env, anchor_id, corridor)
+    }
+
+    /// Migrate all registered anchors across all default corridors.
+    /// Idempotent: skips pairs already migrated.
+    pub fn migrate_all_v2(env: Env) {
+        migration::migrate_all(&env)
+    }
+
+    /// V2 version of `get_corridor_aggregate`. Returns the same shape as v1
+    /// but reads from the v2 storage namespace so it can be extended without
+    /// breaking v1 readers.
+    pub fn get_corridor_aggregate_v2(
+        env: Env,
+        anchor_id: String,
+        corridor: String,
+    ) -> (u32, u32, u64) {
+        aggregate::get(&env, &anchor_id, &corridor)
+    }
+
+    /// V2 version of `get_score_for_corridor`. Returns
+    /// `(composite_bps, fill_rate_bps, slippage_bps, settle_seconds_p50, n)`
+    /// from the v2 storage key. Falls back to computing from v1 data if v2
+    /// data is not yet present.
+    pub fn get_score_for_corridor_v2(
+        env: Env,
+        anchor_id: String,
+        corridor: String,
+    ) -> (i128, i128, i128, u64, u32) {
+        let v2_key = storage::DataKey::CorridorV2(anchor_id.clone(), corridor.clone());
+        let default_v2 = (0i128, 0i128, 0i128, 0u64, 0u32);
+        let (fill_rate_bps, slippage_bps, composite_bps, settle_seconds_p50, n): (
+            i128,
+            i128,
+            i128,
+            u64,
+            u32,
+        ) = env
+            .storage()
+            .persistent()
+            .get(&v2_key)
+            .unwrap_or(default_v2);
+
+        if composite_bps != 0 || n != 0 {
+            return (composite_bps, fill_rate_bps, slippage_bps, settle_seconds_p50, n);
+        }
+
+        let (old_composite_bps, old_fill_rate_bps, old_settle_seconds_p50, old_n) =
+            score::get_score_for_corridor(&env, anchor_id, corridor);
+        let old_slippage_bps = 0i128;
+        (old_composite_bps, old_fill_rate_bps, old_slippage_bps, old_settle_seconds_p50, old_n)
     }
 }

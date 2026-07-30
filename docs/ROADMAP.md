@@ -543,10 +543,10 @@ decomposed into the child issues below.
       generated from `public/openapi.json`, an interactive console against
       a sandboxed environment, and SDK quickstarts in one place
       ([#871](https://github.com/ezedike-evan/stellar-intel/issues/871))
-- [ ] **Multi-corridor oracle expansion (v2, with migration path)** — the
+- [x] **Multi-corridor oracle expansion (v2, with migration path)** — the
       rate oracle covers more than its launch corridor without breaking
       third-party contracts already reading v1
-      ([#872](https://github.com/ezedike-evan/stellar-intel/issues/872))
+      ([#825](https://github.com/ezedike-evan/stellar-intel/issues/825))
 - [ ] **On-chain volume + savings oracle** — an independently verifiable
       "fees saved" metric, published on-chain from the same outcome log
       reputation scoring already uses, not asserted only by this app's

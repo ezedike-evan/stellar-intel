@@ -66,4 +66,7 @@ pub enum DataKey {
     CorridorAggregate(String, String),
     /// Latest published block-level rate for a corridor (issue #810).
     CorridorRate(String),
+    /// V2 corridor metrics: `(fill_rate_bps, slippage_bps, composite_bps, settle_seconds_p50, n)`.
+    /// Supports multi-corridor expansion without breaking v1 readers.
+    CorridorV2(String, String),
 }
