@@ -561,6 +561,33 @@ decomposed into the child issues below.
       than this app's backend as a trust bottleneck
       ([#875](https://github.com/ezedike-evan/stellar-intel/issues/875))
 
+**Parked — unscoped primitives.** Four of the seven "surviving 1000x"
+primitives scoped under the original Horizon-3 structure have no child issue
+above. Each is gated on something that does not exist yet, which is why no
+wave claimed them. Recorded here so the sequencing is not lost; placement is
+still open.
+
+- [ ] **Recurring intents / subscription remittance** — sign once, later
+      executions run without a fresh signature. Gated on wallet pre-auth
+      standards: Freighter exposes no pre-authorization primitive today, so
+      this cannot start until that lands upstream
+- [ ] **Settlement-guaranteed SLA** — gated on ~10k actuarial observations
+      before a guarantee can be priced; start with $100 caps. Reads the same
+      outcome log the reputation write path already produces
+- [ ] **Chained atomic execution** — on-ramp → swap → yield in one signature.
+      Deferred modules return as solver hops, not standalone tabs: a routing
+      concern inside the existing intent router, not new surface area
+- [ ] **Universal intent collapse** — one input, one signature, any outcome.
+      Ship the identity only after execution volume exists; it is a
+      positioning claim that needs volume behind it, so it sequences last
+      deliberately
+
+The remaining three are already covered above: canonical on-chain corridor
+rates by the multi-corridor oracle expansion plus the Soroban-native read
+path; the verifiable half of the credit layer by the on-chain volume/savings
+oracle (the credit product itself is Year 2+, gated on regulatory memo and
+capital); and the agent-native surface by the SDK and developer-portal work.
+
 **v6 release gate.** Mirrors the H3 success bar this wave was originally
 scoped under, before this document moved from a Horizon-based structure to
 the wave structure above.
