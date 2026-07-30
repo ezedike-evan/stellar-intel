@@ -86,7 +86,7 @@ export function RateTable({
     const best = rates.rates.find((r) => r.anchorId === rates.bestRateId);
     if (!best || best.totalReceived == null) return;
 
-    const key = `${best.anchorId}:${best.totalReceived}`;
+    const key = `${best.anchorId}:${best.totalReceived}:${best.exchangeRate ?? ''}`;
     if (lastAnnouncedKeyRef.current === key) return;
     lastAnnouncedKeyRef.current = key;
 
