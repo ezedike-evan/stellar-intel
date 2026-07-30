@@ -551,11 +551,11 @@ decomposed into the child issues below.
       "fees saved" metric, published on-chain from the same outcome log
       reputation scoring already uses, not asserted only by this app's
       backend ([#826](https://github.com/ezedike-evan/stellar-intel/issues/826))
-- [ ] **Versioning/deprecation policy + community contribution
+- [x] **Versioning/deprecation policy + community contribution
       infrastructure** — a written contract for what `API-Version` actually
       guarantees, and a CONTRIBUTING.md that covers the multi-language
       reality once the Rust/Python SDKs exist
-      ([#874](https://github.com/ezedike-evan/stellar-intel/issues/874))
+      ([#827](https://github.com/ezedike-evan/stellar-intel/issues/827))
 - [ ] **Fully decentralized architecture** — multisig-governed contracts,
       community-maintained SDKs, on-chain as the source of truth rather
       than this app's backend as a trust bottleneck
