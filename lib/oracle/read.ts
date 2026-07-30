@@ -135,3 +135,36 @@ export async function listAnchors(config: OracleReadConfig = {}): Promise<string
   const result = await simulateRead('list_anchors', [], config);
   return Array.isArray(result) ? (result as string[]) : [];
 }
+
+// ── Volume + savings oracle (issue #826) ────────────────────────────────
+
+export interface VolumeSavings {
+  volumeUsdc: number;
+  savingsUsdc: number;
+  settlementCount: number;
+  updatedAt: number;
+}
+
+/**
+ * `get_volume_savings(corridor) -> { volume_usdc, savings_usdc, settlement_count, updated_at } | null`.
+ * Reads the cumulative on-chain volume and estimated savings for a corridor.
+ * Returns `null` when no data has been published for that corridor yet.
+ */
+export async function getVolumeSavings(
+  corridor: string,
+  config: OracleReadConfig = {}
+): Promise<VolumeSavings | null> {
+  const result = await simulateRead(
+    'get_volume_savings',
+    [nativeToScVal(corridor, { type: 'string' })],
+    config
+  );
+  if (!result || typeof result !== 'object') return null;
+  const r = result as Record<string, unknown>;
+  if (!r.volume_usdc && !r.volumeUsdc) return null;
+  const volumeUsdc = Number((r as { volume_usdc?: bigint; volumeUsdc?: bigint }).volume_usdc ?? (r as { volume_usdc?: bigint; volumeUsdc?: bigint }).volumeUsdc ?? 0n);
+  const savingsUsdc = Number((r as { savings_usdc?: bigint; savingsUsdc?: bigint }).savings_usdc ?? (r as { savings_usdc?: bigint; savingsUsdc?: bigint }).savingsUsdc ?? 0n);
+  const settlementCount = Number((r as { settlement_count?: number; settlementCount?: number }).settlement_count ?? (r as { settlement_count?: number; settlementCount?: number }).settlementCount ?? 0);
+  const updatedAt = Number((r as { updated_at?: bigint; updatedAt?: bigint }).updated_at ?? (r as { updated_at?: bigint; updatedAt?: bigint }).updatedAt ?? 0n);
+  return { volumeUsdc, savingsUsdc, settlementCount, updatedAt };
+}

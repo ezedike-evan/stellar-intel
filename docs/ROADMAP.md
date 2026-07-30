@@ -547,10 +547,10 @@ decomposed into the child issues below.
       rate oracle covers more than its launch corridor without breaking
       third-party contracts already reading v1
       ([#872](https://github.com/ezedike-evan/stellar-intel/issues/872))
-- [ ] **On-chain volume + savings oracle** — an independently verifiable
+- [x] **On-chain volume + savings oracle** — an independently verifiable
       "fees saved" metric, published on-chain from the same outcome log
       reputation scoring already uses, not asserted only by this app's
-      backend ([#873](https://github.com/ezedike-evan/stellar-intel/issues/873))
+      backend ([#826](https://github.com/ezedike-evan/stellar-intel/issues/826))
 - [ ] **Versioning/deprecation policy + community contribution
       infrastructure** — a written contract for what `API-Version` actually
       guarantees, and a CONTRIBUTING.md that covers the multi-language

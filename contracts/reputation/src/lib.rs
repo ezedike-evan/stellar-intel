@@ -11,6 +11,7 @@ pub mod history;
 pub mod score;
 pub mod upgrade;
 pub mod corridor_rate;
+pub mod volume_savings;
 
 #[contracterror]
 #[derive(Clone, Debug, Eq, PartialEq)]
@@ -178,5 +179,29 @@ impl ReputationContract {
     /// Read the latest published rate for `corridor`, or `None` if unset.
     pub fn get_corridor_rate(env: Env, corridor: String) -> Option<corridor_rate::CorridorRate> {
         corridor_rate::get(&env, corridor)
+    }
+
+    // ── Volume + savings oracle (issue #826) ─────────────────────────────
+
+    /// Publish a volume + savings increment for a corridor. Publisher-only.
+    /// `volume_delta` and `savings_delta` are in microUSDC (1 USDC = 1_000_000).
+    /// Values are cumulative and monotonically increasing.
+    pub fn add_volume_savings(
+        env: Env,
+        publisher: Address,
+        corridor: String,
+        volume_delta: i128,
+        savings_delta: i128,
+    ) -> Result<(), Error> {
+        volume_savings::add_volume_savings(&env, &publisher, corridor, volume_delta, savings_delta)
+    }
+
+    /// Read the cumulative volume + savings for `corridor`, or `None` if
+    /// no data has been published yet.
+    pub fn get_volume_savings(
+        env: Env,
+        corridor: String,
+    ) -> Option<volume_savings::VolumeSavings> {
+        volume_savings::get(&env, corridor)
     }
 }

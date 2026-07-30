@@ -66,4 +66,6 @@ pub enum DataKey {
     CorridorAggregate(String, String),
     /// Latest published block-level rate for a corridor (issue #810).
     CorridorRate(String),
+    /// Cumulative volume + savings for a corridor (issue #826).
+    VolumeSavings(String),
 }
