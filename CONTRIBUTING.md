@@ -105,8 +105,6 @@ Anchors are defined in `constants/anchors.ts` (re-exported via `constants/index.
 
 ---
 
----
-
 ## Issue Numbering & Label Conventions
 
 This repo uses several namespaces to organise work across waves, modules, and

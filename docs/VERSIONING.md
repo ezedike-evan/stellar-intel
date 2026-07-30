@@ -97,7 +97,7 @@ Expedited removals are announced on all channels with the reason.
 | Soroban oracle contract | Current deployed address | Until a migration is announced and executed |
 | MCP tools | Latest npm release only | Semver within `@stellarintel/mcp` |
 | TypeScript SDK | Latest npm release only | Semver within `@stellarintel/sdk` |
-| Web UI (`app.stellar-intel.com`) | Latest only | No version承诺 — always use the current URL |
+| Web UI (`app.stellar-intel.com`) | Latest only | No version guarantee — always use the current URL |
 
 REST API consumers should specify an `API-Version` header to lock their
 integration to a known surface. Unsigned requests default to the latest
