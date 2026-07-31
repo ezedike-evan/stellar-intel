@@ -68,12 +68,13 @@ async function loadStandings(): Promise<StandingsEntry[]> {
   const { buildScorecards, mapOutcomeRows } = await import('@/lib/reputation/aggregate');
   const { getReputationStore } = await import('@/lib/reputation/store');
 
-  const store = getReputationStore();
-
   const entries = await Promise.all(
     ANCHORS.map(async (anchor) => {
       try {
-        const rows = await store.query({ anchorId: anchor.id });
+        // Resolved inside the try: a postgres backend with no SqlExecutor throws
+        // here, and at prerender time there is none. Same guard as loadAnchorRows
+        // in app/anchors/[id]/page.tsx.
+        const rows = await getReputationStore().query({ anchorId: anchor.id });
         const scorecard = buildScorecards(mapOutcomeRows(rows))[30];
 
         if (scorecard.state !== 'ok') {

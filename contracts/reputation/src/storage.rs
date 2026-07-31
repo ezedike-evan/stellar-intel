@@ -69,4 +69,6 @@ pub enum DataKey {
     /// V2 corridor metrics: `(fill_rate_bps, slippage_bps, composite_bps, settle_seconds_p50, n)`.
     /// Supports multi-corridor expansion without breaking v1 readers.
     CorridorV2(String, String),
+    /// Cumulative volume + savings for a corridor (issue #826).
+    VolumeSavings(String),
 }

@@ -46,6 +46,7 @@ export interface SdfAnchorHealthEntry {
   health: {
     status: SdfHealthStatus;
     lastCheckedAt: string | null;
+    lastStatus: string | null;
     lastError: string | null;
     consecutiveFailures: number;
     /** Fraction [0, 1] of uptime probes that were reachable, over the retained probe window. Null with no samples yet. */
@@ -128,6 +129,7 @@ export function buildSdfAnchorDirectoryExport(
       health: {
         status: statusFor(health),
         lastCheckedAt: health?.lastCheckedAt ?? null,
+        lastStatus: health?.lastStatus ?? null,
         lastError: health?.lastError ?? null,
         consecutiveFailures: health?.consecutiveFailures ?? 0,
         uptime: reachabilityScore(domain, uptimeStore),
