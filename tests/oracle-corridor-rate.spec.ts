@@ -72,7 +72,14 @@ describe('deriveAllCorridorRates (#810)', () => {
     expect(corridors).toEqual(['usdc-kes', 'usdc-ngn', 'usdc-php']);
   });
 
-  it('targets exactly the four USDC corridors', () => {
-    expect([...TARGET_CORRIDORS]).toEqual(['usdc-ngn', 'usdc-kes', 'usdc-mxn', 'usdc-php']);
+  it('targets exactly the six USDC corridors', () => {
+    expect([...TARGET_CORRIDORS]).toEqual([
+      'usdc-ngn',
+      'usdc-kes',
+      'usdc-mxn',
+      'usdc-php',
+      'usdc-brl',
+      'usdc-ars',
+    ]);
   });
 });
