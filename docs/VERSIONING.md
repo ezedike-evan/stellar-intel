@@ -27,13 +27,13 @@ The public API uses a **date-based versioning** scheme: `vYYYY-MM-DD` (e.g.
 overhead of a monotonically incrementing integer major version. Each date
 version is a stable snapshot of the API surface.
 
-| Component             | Version identifier         | Where it lives                        |
-| --------------------- | -------------------------- | ------------------------------------- |
-| HTTP API              | `v2026-07-01`              | `Accept` / `API-Version` header       |
-| Soroban oracle        | Contract address (immutable)| `.deployments/{network}.json`         |
-| MCP tools             | `@stellarintel/mcp` npm    | `package.json` version                |
-| TypeScript SDK        | `@stellarintel/sdk` npm    | `package.json` version                |
-| OpenAPI spec          | `v1` (snapshot)            | `public/openapi.json`                 |
+| Component      | Version identifier           | Where it lives                  |
+| -------------- | ---------------------------- | ------------------------------- |
+| HTTP API       | `v2026-07-01`                | `Accept` / `API-Version` header |
+| Soroban oracle | Contract address (immutable) | `.deployments/{network}.json`   |
+| MCP tools      | `@stellarintel/mcp` npm      | `package.json` version          |
+| TypeScript SDK | `@stellarintel/sdk` npm      | `package.json` version          |
+| OpenAPI spec   | `v1` (snapshot)              | `public/openapi.json`           |
 
 The HTTP API and the Soroban oracle are versioned independently. The REST API
 may ship `v2026-10-01` while the oracle contract remains at its initial
@@ -69,17 +69,18 @@ The following are **not** breaking:
 
 Every breaking change follows a four-phase lifecycle:
 
-| Phase | Duration | What happens |
-| ----- | -------- | ------------ |
-| **Announce** | Day 0 | Deprecation notice posted on announcement channels (see below). The old endpoint or field continues to work unchanged. |
-| **Soft deprecation** | Days 0–90 | The old path still works. Responses include a `Warning: 299 - "deprecated"` header. Logs may warn on server side. |
-| **Hard deprecation** | Days 90–180 | The old path returns `200` + a `Sunset` header with the removal date. Instrumentation counts usage. |
-| **Removal** | Day 180+ | The old path returns `410 Gone` or a Soroban contract error. Consumers must have migrated. |
+| Phase                | Duration    | What happens                                                                                                           |
+| -------------------- | ----------- | ---------------------------------------------------------------------------------------------------------------------- |
+| **Announce**         | Day 0       | Deprecation notice posted on announcement channels (see below). The old endpoint or field continues to work unchanged. |
+| **Soft deprecation** | Days 0–90   | The old path still works. Responses include a `Warning: 299 - "deprecated"` header. Logs may warn on server side.      |
+| **Hard deprecation** | Days 90–180 | The old path returns `200` + a `Sunset` header with the removal date. Instrumentation counts usage.                    |
+| **Removal**          | Day 180+    | The old path returns `410 Gone` or a Soroban contract error. Consumers must have migrated.                             |
 
 Phase durations are minimums. A deprecated endpoint may be kept longer if
 usage remains high, announced via an extended sunset notice.
 
 **Expedited removal** (30-day minimum) is reserved for:
+
 - Security vulnerabilities that cannot be fixed while preserving the old
   contract
 - Data-corruption bugs in a Soroban contract entrypoint
@@ -91,13 +92,13 @@ Expedited removals are announced on all channels with the reason.
 
 ## Version support window
 
-| Surface | Supported versions | Window |
-| ------- | ------------------ | ------ |
-| HTTP REST API | Current + 1 previous | 180 days after the newer version ships |
-| Soroban oracle contract | Current deployed address | Until a migration is announced and executed |
-| MCP tools | Latest npm release only | Semver within `@stellarintel/mcp` |
-| TypeScript SDK | Latest npm release only | Semver within `@stellarintel/sdk` |
-| Web UI (`app.stellar-intel.com`) | Latest only | No version guarantee — always use the current URL |
+| Surface                          | Supported versions       | Window                                            |
+| -------------------------------- | ------------------------ | ------------------------------------------------- |
+| HTTP REST API                    | Current + 1 previous     | 180 days after the newer version ships            |
+| Soroban oracle contract          | Current deployed address | Until a migration is announced and executed       |
+| MCP tools                        | Latest npm release only  | Semver within `@stellarintel/mcp`                 |
+| TypeScript SDK                   | Latest npm release only  | Semver within `@stellarintel/sdk`                 |
+| Web UI (`app.stellar-intel.com`) | Latest only              | No version guarantee — always use the current URL |
 
 REST API consumers should specify an `API-Version` header to lock their
 integration to a known surface. Unsigned requests default to the latest
@@ -133,10 +134,10 @@ API-Version: v2026-07-01
 The `API-Version` request header selects the API version for the request.
 Omit it to receive the latest version (subject to change).
 
-| Behaviour | Version sent | Response |
-| --------- | ------------ | -------- |
-| Consumer targets a known version | `API-Version: v2026-07-01` | Stable surface for that date |
-| Consumer omits the header | (none) | Latest version — may change |
+| Behaviour                             | Version sent               | Response                                         |
+| ------------------------------------- | -------------------------- | ------------------------------------------------ |
+| Consumer targets a known version      | `API-Version: v2026-07-01` | Stable surface for that date                     |
+| Consumer omits the header             | (none)                     | Latest version — may change                      |
 | Consumer sends an unsupported version | `API-Version: v2025-01-01` | `400 Bad Request` with supported versions listed |
 
 **Migration.** To move from one version to the next, update the `API-Version`
@@ -152,6 +153,7 @@ may change or disappear at any time without notice. Do not depend on them in
 production.
 
 An experimental endpoint graduates to stable after:
+
 1. At least one release cycle (180 days) of field use
 2. A documented contract in `public/openapi.json`
 3. A `CHANGELOG.md` entry marking it stable
