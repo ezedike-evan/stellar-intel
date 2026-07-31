@@ -59,6 +59,7 @@ describe('buildSdfAnchorDirectoryExport', () => {
     const entry = report.anchors[0]!;
     expect(entry.anchorId).toBe('cowrie');
     expect(entry.health.status).toBe('unknown');
+    expect(entry.health.lastStatus).toBeNull();
     expect(entry.health.uptime).toBeNull();
     expect(entry.health.avgLatencyMs).toBeNull();
     expect(entry.health.quoteLatencyByCorridor).toEqual({});
@@ -93,6 +94,7 @@ describe('buildSdfAnchorDirectoryExport', () => {
 
     const entry = report.anchors[0]!;
     expect(entry.health.status).toBe('healthy');
+    expect(entry.health.lastStatus).toBe('ok');
     expect(entry.health.uptime).toBeCloseTo(2 / 3);
     expect(entry.health.avgLatencyMs).toBe(150);
     expect(entry.health.quoteLatencyByCorridor['usdc-ngn']).toMatchObject({

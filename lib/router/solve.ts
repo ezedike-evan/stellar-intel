@@ -588,3 +588,137 @@ export async function solveWithFallback(
 
   return { winner: null, comparison: null, attempts };
 }
+
+// ─── Hop chain abstraction (Issue #815) ──────────────────────────────────────
+//
+// Primitive II: on-ramp → swap → yield in one signature.
+// Each module type implements HopExecutor; solveChain validates asset continuity
+// and delegates planning to registered executors — no connector implementations
+// live here.
+
+export type HopKind = 'on-ramp' | 'swap' | 'yield';
+
+/** Minimal asset identifier used for hop-to-hop continuity checks. */
+export interface HopAssetRef {
+  code: string;
+  issuer?: string;
+}
+
+/** One composable step in a chained execution. */
+export interface Hop {
+  kind: HopKind;
+  /** Asset this hop consumes. */
+  sellAsset: HopAssetRef;
+  /** Asset this hop produces. */
+  buyAsset: HopAssetRef;
+  /** Minimum acceptable output from this hop. */
+  minReceive: string;
+}
+
+/** A hop resolved to a concrete executor with estimated amounts. */
+export interface PlannedHop {
+  hop: Hop;
+  /** Stable executor id: anchorId for on-ramp, poolId for swap, protocolId for yield. */
+  executorId: string;
+  /** Estimated net output (after fees) from this hop. */
+  estimatedOut: string;
+  fee: string;
+}
+
+/** Execution plan produced when every hop in a chain is solved. */
+export interface ChainedPlan {
+  type: 'chained';
+  hops: PlannedHop[];
+  /** Estimated net output of the final hop — what the user actually receives. */
+  totalEstimatedOut: string;
+}
+
+/** Discriminated-union result of attempting to solve a hop chain. */
+export type ChainSolverResult =
+  | { ok: true; plan: ChainedPlan }
+  | { ok: false; error: 'empty_chain' }
+  | { ok: false; error: 'asset_mismatch'; hopIndex: number; details: string }
+  | { ok: false; error: 'no_route_for_hop'; hopIndex: number; details: string };
+
+/**
+ * Contract every hop connector (on-ramp, swap, yield) must implement.
+ * The solver calls `planHop` for each hop in the chain; returning `null`
+ * signals that this executor cannot serve the hop and the solver tries the next.
+ */
+export interface HopExecutor {
+  readonly kind: HopKind;
+  readonly executorId: string;
+  planHop(hop: Hop): Promise<PlannedHop | null>;
+}
+
+function assetsMatch(a: HopAssetRef, b: HopAssetRef): boolean {
+  if (a.code.toUpperCase() !== b.code.toUpperCase()) return false;
+  if (a.issuer && b.issuer && a.issuer !== b.issuer) return false;
+  return true;
+}
+
+function assetLabel(a: HopAssetRef): string {
+  return a.issuer ? `${a.code}:${a.issuer.slice(0, 8)}` : a.code;
+}
+
+function validateHopChain(hops: Hop[]): ChainSolverResult | null {
+  if (hops.length === 0) return { ok: false, error: 'empty_chain' };
+  for (let i = 1; i < hops.length; i++) {
+    const prev = hops[i - 1]!;
+    const curr = hops[i]!;
+    if (!assetsMatch(prev.buyAsset, curr.sellAsset)) {
+      return {
+        ok: false,
+        error: 'asset_mismatch',
+        hopIndex: i,
+        details: `hop[${i - 1}] (${prev.kind}) outputs ${assetLabel(prev.buyAsset)} but hop[${i}] (${curr.kind}) expects ${assetLabel(curr.sellAsset)}`,
+      };
+    }
+  }
+  return null;
+}
+
+/**
+ * Plans a chain of hops against a registry of executors.
+ *
+ * Asset continuity is validated before any executor is called. Hops are planned
+ * left-to-right; the first executor of the matching kind that returns a non-null
+ * plan wins. Returns a typed error if any hop cannot be routed.
+ */
+export async function solveChain(
+  hops: Hop[],
+  executors: HopExecutor[]
+): Promise<ChainSolverResult> {
+  const chainError = validateHopChain(hops);
+  if (chainError) return chainError;
+
+  const plannedHops: PlannedHop[] = [];
+
+  for (let i = 0; i < hops.length; i++) {
+    const hop = hops[i]!;
+    const eligible = executors.filter((e) => e.kind === hop.kind);
+
+    let planned: PlannedHop | null = null;
+    for (const executor of eligible) {
+      planned = await executor.planHop(hop);
+      if (planned) break;
+    }
+
+    if (!planned) {
+      return {
+        ok: false,
+        error: 'no_route_for_hop',
+        hopIndex: i,
+        details: `no executor for hop[${i}] (${hop.kind}: ${assetLabel(hop.sellAsset)} -> ${assetLabel(hop.buyAsset)})`,
+      };
+    }
+
+    plannedHops.push(planned);
+  }
+
+  const lastHop = plannedHops[plannedHops.length - 1]!;
+  return {
+    ok: true,
+    plan: { type: 'chained', hops: plannedHops, totalEstimatedOut: lastHop.estimatedOut },
+  };
+}
