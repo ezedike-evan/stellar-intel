@@ -21,6 +21,7 @@ savings = baseline_received - actual_received
 ```
 
 Where:
+
 - **`actual_received`** — the fiat amount the user actually received after
   all anchor fees, derived from the delivered rate in the settled outcome.
 - **`baseline_received`** — the fiat amount the user would have received
@@ -61,12 +62,12 @@ to compute the delta over any interval.
 
 ### Units
 
-| Field | Unit | Description |
-| ----- | ---- | ----------- |
-| `volume_usdc` | microUSDC (1 USDC = 1,000,000) | Cumulative settled volume |
-| `savings_usdc` | microUSDC (1 USDC = 1,000,000) | Cumulative estimated savings |
-| `settlement_count` | count | Number of settlements included |
-| `updated_at` | ledger timestamp | Last update time |
+| Field              | Unit                           | Description                    |
+| ------------------ | ------------------------------ | ------------------------------ |
+| `volume_usdc`      | microUSDC (1 USDC = 1,000,000) | Cumulative settled volume      |
+| `savings_usdc`     | microUSDC (1 USDC = 1,000,000) | Cumulative estimated savings   |
+| `settlement_count` | count                          | Number of settlements included |
+| `updated_at`       | ledger timestamp               | Last update time               |
 
 ### Verifiability
 
