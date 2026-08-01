@@ -143,6 +143,14 @@ Omit it to receive the latest version (subject to change).
 **Migration.** To move from one version to the next, update the `API-Version`
 header and adjust for any breaking changes listed in the changelog.
 
+**Current status.** Request-side version selection is not implemented yet — the
+table above describes the target contract. Today the header travels in the
+other direction only: responses are stamped with `API-Version` carrying the
+OpenAPI spec version from `lib/api/response.ts` (kept in sync with
+`info.version` in `public/openapi.json`), so a client can detect that the
+surface changed. Sending `API-Version` on a request is currently ignored rather
+than rejected.
+
 ---
 
 ## Experimental endpoints
