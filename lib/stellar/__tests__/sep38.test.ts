@@ -5,8 +5,7 @@ import type { Sep1TomlData, Sep38QuoteParams } from '@/types';
 // ─── Shared constants ─────────────────────────────────────────────────────────
 
 /** Canonical USDC sell_asset identifier for the USDC→NGN corridor. */
-const USDC_SELL_ASSET =
-  'stellar:USDC:GA5ZSEJYB37JRC5AVCIA5MOP4RHTM335X2KGX3IHOJAPP5RE34K4KZVN';
+const USDC_SELL_ASSET = 'stellar:USDC:GA5ZSEJYB37JRC5AVCIA5MOP4RHTM335X2KGX3IHOJAPP5RE34K4KZVN';
 /** Canonical NGN buy_asset identifier for the USDC→NGN corridor. */
 const NGN_BUY_ASSET = 'iso4217:NGN';
 

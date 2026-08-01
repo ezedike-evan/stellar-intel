@@ -1,6 +1,6 @@
 # SEP-38 USDC→NGN Rate Verification
 
-**Related issue**: #720  
+**Related issue**: #720\
 **Milestone**: H1 Rung 1 — Data Infra + Grant
 
 ---
@@ -27,11 +27,11 @@ The `lib/stellar/sep38.ts` production module required no changes — `parseQuote
 
 ## Corridor identifiers
 
-| Field        | Value                                                                     |
-| ------------ | ------------------------------------------------------------------------- |
+| Field        | Value                                                                   |
+| ------------ | ----------------------------------------------------------------------- |
 | `sell_asset` | `stellar:USDC:GA5ZSEJYB37JRC5AVCIA5MOP4RHTM335X2KGX3IHOJAPP5RE34K4KZVN` |
-| `buy_asset`  | `iso4217:NGN`                                                             |
-| Corridor ID  | `usdc-ngn`                                                                |
+| `buy_asset`  | `iso4217:NGN`                                                           |
+| Corridor ID  | `usdc-ngn`                                                              |
 
 ---
 
