@@ -90,7 +90,7 @@ jobs:
           node scripts/anchor-survey.mjs --json > anchors.snapshot.json
 
       - name: Upload anchors snapshot artifact
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v7
         with:
           name: anchors-snapshot-${{ github.run_id }}
           path: anchors.snapshot.json
