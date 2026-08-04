@@ -110,20 +110,21 @@ describe('fetchPendingOutcomes', () => {
 });
 
 describe('markPublished', () => {
-  it('does nothing when intentHashes is empty', async () => {
+  it('stamps a single row with its own tx hash', async () => {
     const executor = makeExecutor([]);
-    await markPublished(executor, [], 'some-tx-hash');
-    expect(executor).not.toHaveBeenCalled();
-  });
-
-  it('calls executor with correct placeholders', async () => {
-    const executor = makeExecutor([]);
-    await markPublished(executor, ['hash1', 'hash2'], 'tx-abc');
-    expect(executor).toHaveBeenCalledWith(expect.stringContaining('$2, $3'), [
+    await markPublished(executor, 'hash1', 'tx-abc');
+    expect(executor).toHaveBeenCalledWith(expect.stringContaining('intent_hash = $2'), [
       'tx-abc',
       'hash1',
-      'hash2',
     ]);
+  });
+
+  it('never writes one hash across several rows', async () => {
+    // Regression guard for the shape of the bug, not just an instance of it:
+    // the old signature took an array and an `IN (...)` clause.
+    const executor = makeExecutor([]);
+    await markPublished(executor, 'hash1', 'tx-abc');
+    expect(executor).toHaveBeenCalledWith(expect.not.stringContaining('IN ('), expect.anything());
   });
 });
 
@@ -257,5 +258,75 @@ describe('submitToOracle retry wiring', () => {
 
     expect(sdkMocks.submitOutcome).toHaveBeenCalledTimes(1);
     expect(onAlert).toHaveBeenCalledTimes(1);
+  });
+});
+
+describe('runBatch crash safety (#909)', () => {
+  const THREE_ROWS: OutcomeRow[] = [
+    { ...SAMPLE_ROW, intentHash: 'row-1' },
+    { ...SAMPLE_ROW, intentHash: 'row-2' },
+    { ...SAMPLE_ROW, intentHash: 'row-3' },
+  ];
+
+  /** Executor that answers the SELECT with `rows` and records every UPDATE. */
+  function makeTrackingExecutor(rows: OutcomeRow[]) {
+    const updates: Array<{ intentHash: string; txHash: string }> = [];
+    const executor = vi.fn(async (sql: string, params?: unknown[]) => {
+      if (sql.includes('UPDATE outcome_log')) {
+        const [txHash, intentHash] = params as [string, string];
+        updates.push({ intentHash, txHash });
+        return { rows: [] };
+      }
+      return { rows: rows.map(dbRow) };
+    }) as unknown as QueryExecutor;
+    return { executor, updates };
+  }
+
+  it('stamps every row with its own transaction hash', async () => {
+    const { executor, updates } = makeTrackingExecutor(THREE_ROWS);
+    sdkMocks.signAndSend
+      .mockResolvedValueOnce({ sendTransactionResponse: { hash: 'tx-1' } })
+      .mockResolvedValueOnce({ sendTransactionResponse: { hash: 'tx-2' } })
+      .mockResolvedValueOnce({ sendTransactionResponse: { hash: 'tx-3' } });
+
+    const result = await runBatch({ ...BASE_CONFIG, executor });
+
+    // The bug: all three used to be stamped with the last hash, so two rows
+    // pointed at a transaction that did not carry them.
+    expect(updates).toEqual([
+      { intentHash: 'row-1', txHash: 'tx-1' },
+      { intentHash: 'row-2', txHash: 'tx-2' },
+      { intentHash: 'row-3', txHash: 'tx-3' },
+    ]);
+    expect(result.submitted).toBe(3);
+  });
+
+  it('keeps the rows that landed marked when a later row fails', async () => {
+    const { executor, updates } = makeTrackingExecutor(THREE_ROWS);
+    sdkMocks.signAndSend
+      .mockResolvedValueOnce({ sendTransactionResponse: { hash: 'tx-1' } })
+      .mockResolvedValueOnce({ sendTransactionResponse: { hash: 'tx-2' } })
+      .mockRejectedValue(new Error('HostError: contract logic rejected'));
+
+    await expect(runBatch({ ...BASE_CONFIG, executor })).rejects.toThrow('contract logic');
+
+    // The bug: a throw anywhere left *zero* rows marked, so the next tick
+    // resubmitted rows 1 and 2 that were already on-chain.
+    expect(updates).toEqual([
+      { intentHash: 'row-1', txHash: 'tx-1' },
+      { intentHash: 'row-2', txHash: 'tx-2' },
+    ]);
+  });
+
+  it('refuses to mark a row when the send reports no hash', async () => {
+    const { executor, updates } = makeTrackingExecutor([THREE_ROWS[0]!]);
+    sdkMocks.signAndSend.mockResolvedValue({});
+
+    await expect(runBatch({ ...BASE_CONFIG, executor })).rejects.toThrow(
+      'no transaction hash returned'
+    );
+
+    // Marking it would strand the row: never republished, no usable tx hash.
+    expect(updates).toEqual([]);
   });
 });

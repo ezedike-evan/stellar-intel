@@ -112,18 +112,25 @@ export async function fetchPendingOutcomes(
   }));
 }
 
+/**
+ * Stamps one row with the hash of the transaction that actually carried it.
+ *
+ * Deliberately single-row. This used to take an array and write one hash across
+ * all of them, which was wrong twice over: N-1 rows ended up pointing at another
+ * row's transaction (and `app/anchors/[id]` surfaces that hash to users), and a
+ * mid-batch failure left every row unmarked even though some were already
+ * on-chain — so the next tick resubmitted them.
+ */
 export async function markPublished(
   executor: QueryExecutor,
-  intentHashes: string[],
+  intentHash: string,
   txHash: string
 ): Promise<void> {
-  if (intentHashes.length === 0) return;
-  const placeholders = intentHashes.map((_, i) => `$${i + 2}`).join(', ');
   await executor(
     `UPDATE outcome_log
        SET published_at = NOW(), oracle_tx_hash = $1
-     WHERE intent_hash IN (${placeholders})`,
-    [txHash, ...intentHashes]
+     WHERE intent_hash = $2`,
+    [txHash, intentHash]
   );
 }
 
@@ -290,12 +297,21 @@ interface OracleSubmitClient {
   }): Promise<{ signAndSend(): Promise<{ sendTransactionResponse?: { hash?: string } }> }>;
 }
 
+/**
+ * Called after each row is confirmed on-chain, before the next is attempted.
+ *
+ * This is the crash-safety seam: persisting here means a failure at row k leaves
+ * rows 0..k-1 durably marked instead of losing the whole batch's bookkeeping.
+ */
+export type OnRowSubmitted = (intentHash: string, txHash: string) => Promise<void>;
+
 export async function submitToOracle(
   rows: OutcomeRow[],
   config: Pick<
     BatchConfig,
     'oracleContractId' | 'networkPassphrase' | 'publisherSecret' | 'rpcUrl' | 'retry' | 'onAlert'
-  >
+  >,
+  onRowSubmitted?: OnRowSubmitted
 ): Promise<string> {
   // Dynamic import: @stellar/stellar-sdk ships ESM-only types, and this
   // package builds as CommonJS — a static import would emit a require()
@@ -331,7 +347,15 @@ export async function submitToOracle(
       },
       { intentHash: row.intentHash, onAlert: config.onAlert, options: config.retry }
     );
-    txHash = sent.sendTransactionResponse?.hash ?? txHash;
+    const rowTxHash = sent.sendTransactionResponse?.hash ?? null;
+    if (rowTxHash === null) {
+      // A send that reports no hash is not a confirmed write; marking it
+      // published would strand the row as permanently unpublishable.
+      throw new Error(`submitToOracle: no transaction hash returned for ${row.intentHash}`);
+    }
+
+    await onRowSubmitted?.(row.intentHash, rowTxHash);
+    txHash = rowTxHash;
   }
 
   if (!txHash) {
@@ -347,12 +371,14 @@ export async function runBatch(config: BatchConfig): Promise<BatchResult> {
     return { submitted: 0, skipped: 0, txHash: null };
   }
 
-  const txHash = await submitToOracle(rows, config);
-  await markPublished(
-    config.executor,
-    rows.map((r) => r.intentHash),
-    txHash
-  );
+  let submitted = 0;
+  const txHash = await submitToOracle(rows, config, async (intentHash, rowTxHash) => {
+    await markPublished(config.executor, intentHash, rowTxHash);
+    submitted += 1;
+  });
 
-  return { submitted: rows.length, skipped: 0, txHash };
+  // `submitted` counts rows actually marked, not rows attempted. If this throws
+  // partway the count never reaches rows.length, and the rows that did land stay
+  // marked — the next tick picks up only the remainder.
+  return { submitted, skipped: 0, txHash };
 }
