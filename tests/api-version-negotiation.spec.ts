@@ -1,11 +1,7 @@
 import { describe, it, expect } from 'vitest';
 import { NextRequest, NextResponse } from 'next/server';
 import { withRequestLogger } from '@/lib/logger';
-import {
-  API_VERSION,
-  SUPPORTED_API_VERSIONS,
-  negotiateApiVersion,
-} from '@/lib/api/api-version';
+import { API_VERSION, SUPPORTED_API_VERSIONS, negotiateApiVersion } from '@/lib/api/api-version';
 
 // #888 — docs/VERSIONING.md documented request-side version pinning that no
 // route implemented, so the policy described behaviour that did not exist.
