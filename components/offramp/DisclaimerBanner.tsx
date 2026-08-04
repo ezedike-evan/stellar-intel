@@ -1,5 +1,7 @@
 'use client';
+import Link from 'next/link';
 import { useEffect, useState } from 'react';
+import { DISCLAIMER_TEXT, TERMS_HREF } from '@/lib/legal';
 
 const STORAGE_KEY = 'offramp-disclaimer-dismissed-at';
 const REAPPEAR_AFTER_MS = 30 * 24 * 60 * 60 * 1000;
@@ -33,8 +35,13 @@ export function DisclaimerBanner() {
   return (
     <div className="flex items-start justify-between gap-3 rounded-xl border border-gray-200 bg-gray-50 px-4 py-3 text-xs text-gray-600 dark:border-gray-700 dark:bg-gray-800/50 dark:text-gray-400">
       <p>
-        Stellar Intel is non-custodial. You sign every transaction with your own wallet. Rates are
-        live quotes, not guarantees.
+        {DISCLAIMER_TEXT}{' '}
+        <Link
+          href={TERMS_HREF}
+          className="underline underline-offset-2 hover:text-gray-900 dark:hover:text-gray-200"
+        >
+          Terms
+        </Link>
       </p>
       <button
         onClick={handleDismiss}

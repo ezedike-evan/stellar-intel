@@ -1,4 +1,8 @@
+import { readFileSync } from 'node:fs';
+import { join } from 'node:path';
 import type { Metadata } from 'next';
+import { marked } from 'marked';
+import { PROSE_CLASSES } from '@/lib/prose';
 
 const SITE_URL = process.env.NEXT_PUBLIC_SITE_URL ?? 'https://stellar-intel.vercel.app';
 const TITLE = 'Terms — Stellar Intel';
@@ -29,14 +33,21 @@ export const metadata: Metadata = {
   },
 };
 
+// Renders docs/TERMS_OF_SERVICE.md directly rather than duplicating it here, so
+// the document stays the single source — the same pattern /methodology uses.
+// The page previously carried two sentences of its own prose, which is how a
+// page and the document it is supposed to reflect drift apart (#738).
+function renderTermsDoc(): string {
+  const source = readFileSync(join(process.cwd(), 'docs/TERMS_OF_SERVICE.md'), 'utf-8');
+  return marked.parse(source, { async: false });
+}
+
 export default function TermsPage() {
+  const html = renderTermsDoc();
+
   return (
-    <main className="mx-auto max-w-4xl space-y-6 px-4 py-8">
-      <h1 className="text-3xl font-semibold text-gray-900 dark:text-white">Terms</h1>
-      <p className="text-base text-gray-600 dark:text-gray-300">
-        By using Stellar Intel, you agree to use the site and its information responsibly and at
-        your own risk.
-      </p>
+    <main className="mx-auto max-w-4xl px-4 py-8">
+      <div className={PROSE_CLASSES} dangerouslySetInnerHTML={{ __html: html }} />
     </main>
   );
 }
