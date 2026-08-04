@@ -101,6 +101,13 @@ jobs:
 
       - run: npm ci
 
+      # --dry-run is intentional here, and the job is intentionally read-only.
+      # This runs hourly and exists to raise a degradation issue, nothing more.
+      # The authoritative ledger write (constants/anchor-health.json) belongs to
+      # the `anchor-health-ledger` job in nightly.yml, because the ledger
+      # debounces on `thresholdNights` and wants one write per night rather than
+      # twenty-four. Dropping --dry-run here would fight that debounce, and this
+      # job could not commit the result anyway.
       - name: Validate every registered anchor's toml + SEP-24 endpoint
         id: validate
         run: |
