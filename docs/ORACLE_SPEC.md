@@ -46,9 +46,27 @@ pub fn get_admin(env: &Env) -> Option<Address>
 pub fn require_admin(env: &Env, caller: &Address) -> Result<(), Error>  // internal gate
 ```
 
-`require_admin` is the authorization check that guards `register` /
-`submit_outcome`. Today this is single-admin; the 2-of-3 multi-signer upgrade is
-tracked in the roadmap.
+`require_admin` is the authorization check that guards `register`. Today this is
+single-admin; the 2-of-3 multi-signer upgrade is tracked in #913.
+
+### Who can write what
+
+Every state-changing entrypoint is gated. There are two gates, and which one
+applies depends on whether the write is an operational data feed or a
+governance action.
+
+| Gate                                                         | Entrypoints                                                                                                                               |
+| ------------------------------------------------------------ | ----------------------------------------------------------------------------------------------------------------------------------------- |
+| **Publisher** (`publishers::is_authorized` + `require_auth`) | `submit_outcome`, `set_corridor_metrics`, `publish_corridor_rate`, `add_volume_savings`                                                   |
+| **Admin** (`admin::require_admin`)                           | `register_anchor`, `add_publisher`, `revoke_publisher`, `propose_admin`, `cancel_admin_proposal`, `migrate_corridor_v2`, `migrate_all_v2` |
+| **Candidate self-auth**                                      | `accept_admin`                                                                                                                            |
+| **Upgrade admin**                                            | `upgrade`                                                                                                                                 |
+
+`set_corridor_metrics`, `migrate_corridor_v2` and `migrate_all_v2` were
+**unguarded** until #907 — they took no caller at all, so any account could
+forge an anchor's score inputs or trigger a state migration. Adding the gate was
+a breaking ABI change: all three now take a leading caller `Address` and return
+`Result<(), Error>`.
 
 ## Consuming the oracle
 

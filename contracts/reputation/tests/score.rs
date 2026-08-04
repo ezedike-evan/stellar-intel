@@ -57,10 +57,15 @@ fn test_get_score_for_corridor_reads_stored_metrics_and_computes_composite() {
     let (client, admin) = setup(&env);
     client.init(&admin);
 
+    let publisher = Address::generate(&env);
+    client.add_publisher(&admin, &publisher);
+
     let anchor = String::from_str(&env, "anchor-bitso");
     let corridor = String::from_str(&env, "usdc-ngn");
 
-    client.set_corridor_metrics(&anchor, &corridor, &9700i128, &110i128, &42u64, &1240u32);
+    client.set_corridor_metrics(
+        &publisher, &anchor, &corridor, &9700i128, &110i128, &42u64, &1240u32,
+    );
 
     let (composite_bps, fill_rate_bps, settle_seconds_p50, n) =
         client.get_score_for_corridor(&anchor, &corridor);
@@ -78,10 +83,15 @@ fn test_get_score_for_corridor_clamps_metrics() {
     let (client, admin) = setup(&env);
     client.init(&admin);
 
+    let publisher = Address::generate(&env);
+    client.add_publisher(&admin, &publisher);
+
     let anchor = String::from_str(&env, "anchor-anclax");
     let corridor = String::from_str(&env, "usdc-kes");
 
-    client.set_corridor_metrics(&anchor, &corridor, &11000i128, &-100i128, &0u64, &33u32);
+    client.set_corridor_metrics(
+        &publisher, &anchor, &corridor, &11000i128, &-100i128, &0u64, &33u32,
+    );
 
     let (composite_bps, fill_rate_bps, settle_seconds_p50, n) =
         client.get_score_for_corridor(&anchor, &corridor);

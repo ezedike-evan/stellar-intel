@@ -1,6 +1,7 @@
-use soroban_sdk::{Env, String};
+use soroban_sdk::{Address, Env, String};
 
 use crate::storage::DataKey;
+use crate::{publishers, Error};
 
 const MAX_BPS: i128 = 10000;
 const NORM_SETTLE_SECONDS: i128 = 300;
@@ -44,19 +45,35 @@ pub fn compute_composite_bps(
     (numerator + denominator / 2) / denominator
 }
 
+/// Publisher-only. These metrics feed the published composite score, so an
+/// open write here lets anyone forge any anchor's reputation. Gated the same
+/// way as `submit_outcome` rather than admin-gated, because the publisher
+/// pipeline is what writes them.
+// The parameter list is the contract ABI. Grouping the metrics into a struct to
+// satisfy the 7-argument lint would be a second breaking ABI change on top of
+// the auth fix, for no callers' benefit.
+#[allow(clippy::too_many_arguments)]
 pub fn set_corridor_metrics(
     env: &Env,
+    publisher: &Address,
     anchor_id: String,
     corridor: String,
     fill_rate_bps: i128,
     slippage_bps: i128,
     settle_seconds_p50: u64,
     n: u32,
-) {
+) -> Result<(), Error> {
+    publisher.require_auth();
+
+    if !publishers::is_authorized(env, publisher) {
+        return Err(Error::PublisherUnauthorized);
+    }
+
     let metrics = (fill_rate_bps, slippage_bps, settle_seconds_p50, n);
     env.storage()
         .persistent()
         .set(&DataKey::Corridor(anchor_id, corridor), &metrics);
+    Ok(())
 }
 
 pub fn get_score_for_corridor(

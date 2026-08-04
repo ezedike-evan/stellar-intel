@@ -14,7 +14,7 @@ impl ConsumerContract {
     }
 
     /// Composite on-chain score for a specific (anchor, corridor) pair, as
-    /// published via the oracle's `set_corridor_metrics` admin entrypoint.
+    /// published via the oracle's publisher-gated `set_corridor_metrics` entrypoint.
     pub fn read_corridor_score_bps(
         env: Env,
         oracle: Address,

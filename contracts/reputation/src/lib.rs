@@ -149,24 +149,29 @@ impl ReputationContract {
         score::get_score_for_corridor(&env, anchor_id, corridor)
     }
 
+    /// Publisher-only. Writes the metrics the composite score is derived from.
+    // See the note on score::set_corridor_metrics — the argument list is the ABI.
+    #[allow(clippy::too_many_arguments)]
     pub fn set_corridor_metrics(
         env: Env,
+        publisher: Address,
         anchor_id: String,
         corridor: String,
         fill_rate_bps: i128,
         slippage_bps: i128,
         settle_seconds_p50: u64,
         n: u32,
-    ) {
+    ) -> Result<(), Error> {
         score::set_corridor_metrics(
             &env,
+            &publisher,
             anchor_id,
             corridor,
             fill_rate_bps,
             slippage_bps,
             settle_seconds_p50,
             n,
-        );
+        )
     }
 
     /// Publish (or overwrite) the block-level rate for a corridor (issue #810).
@@ -189,15 +194,20 @@ impl ReputationContract {
     // ── V2 entrypoints (multi-corridor expansion, issue #825) ────────────
 
     /// Migrate a single (anchor_id, corridor) pair from v1 to v2 storage.
-    /// Idempotent: skips if v2 data already exists.
-    pub fn migrate_corridor_v2(env: Env, anchor_id: String, corridor: String) {
-        migration::migrate_corridor(&env, anchor_id, corridor)
+    /// Admin-only; idempotent, so it skips pairs that already have v2 data.
+    pub fn migrate_corridor_v2(
+        env: Env,
+        caller: Address,
+        anchor_id: String,
+        corridor: String,
+    ) -> Result<(), Error> {
+        migration::migrate_corridor(&env, &caller, anchor_id, corridor)
     }
 
     /// Migrate all registered anchors across all default corridors.
-    /// Idempotent: skips pairs already migrated.
-    pub fn migrate_all_v2(env: Env) {
-        migration::migrate_all(&env)
+    /// Admin-only; idempotent, so it skips pairs already migrated.
+    pub fn migrate_all_v2(env: Env, caller: Address) -> Result<(), Error> {
+        migration::migrate_all(&env, &caller)
     }
 
     /// V2 version of `get_corridor_aggregate`. The aggregate schema is
