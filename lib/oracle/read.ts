@@ -21,7 +21,8 @@ import {
   type xdr,
 } from '@stellar/stellar-sdk';
 
-const DEFAULT_ORACLE_CONTRACT_ID = 'CCZ54NTEOVL2DKWCGJA5XHTHOGRDS7JHFKYWEC6QH2IMZLYNM3FBFKDG';
+// Sourced from .deployments/testnet.json rather than hardcoded (#723).
+import { resolveOracleContractId } from './deployment';
 const DEFAULT_RPC_URL = 'https://soroban-testnet.stellar.org';
 const DEFAULT_NETWORK_PASSPHRASE = Networks.TESTNET;
 
@@ -39,7 +40,7 @@ export interface OracleReadConfig {
 
 function resolveConfig(config: OracleReadConfig): Required<OracleReadConfig> {
   return {
-    contractId: config.contractId ?? process.env.ORACLE_CONTRACT_ID ?? DEFAULT_ORACLE_CONTRACT_ID,
+    contractId: resolveOracleContractId(config.contractId),
     rpcUrl: config.rpcUrl ?? process.env.SOROBAN_RPC_URL ?? DEFAULT_RPC_URL,
     networkPassphrase:
       config.networkPassphrase ??
@@ -122,11 +123,22 @@ export async function getScoreForCorridor(
     bigint,
     number,
   ];
+
+  // The contract returns a zeroed tuple for an (anchor, corridor) pair it has
+  // never seen, which is indistinguishable from a genuine score of zero. Report
+  // it as absent instead (#723).
+  //
+  // This is not hypothetical: the deployed testnet contract currently has an
+  // empty anchor registry, so every read returns zeros. Surfacing those as real
+  // scores would put a confident "0" next to every anchor in the demo.
+  const sampleCount = Number(n);
+  if (sampleCount === 0) return null;
+
   return {
     compositeBps: Number(compositeBps),
     fillRateBps: Number(fillRateBps),
     settleSecondsP50: Number(settleSecondsP50),
-    n: Number(n),
+    n: sampleCount,
   };
 }
 

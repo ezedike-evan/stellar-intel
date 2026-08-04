@@ -176,6 +176,23 @@ jobs:
           path: anchors.snapshot.json
           if-no-files-found: error
 
+  oracle-read:
+    name: Testnet oracle read
+    runs-on: ubuntu-latest
+    # Warn-only by design (#723). This talks to a third-party testnet RPC, and a
+    # network outage there is not a defect in this repository — a red main
+    # branch that nobody can fix trains people to ignore the signal.
+    continue-on-error: true
+    steps:
+      - uses: actions/checkout@v7
+      - uses: actions/setup-node@v7
+        with:
+          node-version: '20'
+          cache: 'npm'
+      - run: npm ci
+      - name: Read the deployed reputation oracle
+        run: npx tsx scripts/verify-oracle-read.mts
+
   reputation-integrity:
     name: Reputation aggregate integrity
     runs-on: ubuntu-latest
