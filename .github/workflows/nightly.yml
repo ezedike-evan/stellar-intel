@@ -82,6 +82,7 @@ jobs:
     # raise a degradation issue — it stays --dry-run and read-only.
     permissions:
       contents: write
+      pull-requests: write
     steps:
       - uses: actions/checkout@v7
       - uses: actions/setup-node@v7
@@ -96,24 +97,46 @@ jobs:
           set -euo pipefail
           node scripts/validate-anchors.mjs
 
-      - name: Commit the refreshed ledger
+      # Opens a PR rather than pushing to main. A ruleset on main requires the
+      # `closing-keywords` status check, and a direct push can never satisfy a
+      # required check — every bot push to main is rejected with GH013, which is
+      # exactly what has been happening to anchor-recrawl.yml (see #915).
+      - name: Propose the refreshed ledger
         shell: bash
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: |
           set -euo pipefail
-
-          git config user.name "github-actions[bot]"
-          git config user.email "github-actions[bot]@users.noreply.github.com"
 
           # constants/anchor-health.json is tracked, so a plain diff is a valid
           # emptiness check here (unlike the snapshot case below).
           if git diff --quiet -- constants/anchor-health.json; then
-            echo "anchor-health.json unchanged; skipping commit"
+            echo "anchor-health.json unchanged; nothing to propose"
             exit 0
           fi
 
+          TODAY="$(date -u +%F)"
+          BRANCH="bot/anchor-health-${TODAY}"
+
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+
+          git checkout -b "$BRANCH"
           git add constants/anchor-health.json
-          git commit -m "nightly: refresh anchor health ledger $(date -u +%F)"
-          git push
+          git commit -m "chore(anchors): refresh anchor health ledger ${TODAY}"
+          git push --force-with-lease -u origin "$BRANCH"
+
+          # Re-running on the same day updates the existing branch; do not open
+          # a second PR for it.
+          if gh pr view "$BRANCH" --json number >/dev/null 2>&1; then
+            echo "PR already open for ${BRANCH}"
+          else
+            gh pr create \
+              --base main \
+              --head "$BRANCH" \
+              --title "chore(anchors): refresh anchor health ledger ${TODAY}" \
+              --body "Automated nightly refresh of \`constants/anchor-health.json\` from \`scripts/validate-anchors.mjs\`. Review the status transitions before merging."
+          fi
 
   anchor-survey-snapshot:
     name: Anchor fleet JSON snapshot
