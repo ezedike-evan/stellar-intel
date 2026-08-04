@@ -35,14 +35,49 @@ describe('createReputationStore — postgres executor default (#906)', () => {
     expect(() => createReputationStore({ backend: 'postgres' })).not.toThrow();
   });
 
-  it('throws a directed error when the postgres backend has no DATABASE_URL', async () => {
+  it('throws a directed, typed error when the postgres backend has no DATABASE_URL', async () => {
     delete process.env.DATABASE_URL;
 
-    const { createReputationStore } = await import('@/lib/reputation/store');
+    const { createReputationStore, ReputationStoreUnavailableError } =
+      await import('@/lib/reputation/store');
 
     expect(() => createReputationStore({ backend: 'postgres' })).toThrow(
       /DATABASE_URL is required/
     );
+    // Typed, not just worded: two read paths degrade on this and used to detect
+    // it by string-matching the message, which broke when the message changed.
+    expect(() => createReputationStore({ backend: 'postgres' })).toThrow(
+      ReputationStoreUnavailableError
+    );
+  });
+
+  it('tryGetReputationStore() returns null instead of throwing when unconfigured', async () => {
+    delete process.env.DATABASE_URL;
+    process.env.REPUTATION_BACKEND = 'postgres';
+
+    const { tryGetReputationStore } = await import('@/lib/reputation/store');
+
+    // This is what lets `next build` prerender /anchors/[id] and the leaderboard
+    // render with no durable store, rather than failing the whole build.
+    expect(tryGetReputationStore()).toBeNull();
+  });
+
+  it('tryGetReputationStore() returns a store when one can be built', async () => {
+    process.env.REPUTATION_BACKEND = 'memory';
+
+    const { tryGetReputationStore } = await import('@/lib/reputation/store');
+
+    expect(tryGetReputationStore()).not.toBeNull();
+  });
+
+  it('tryGetReputationStore() still propagates unrelated failures', async () => {
+    process.env.REPUTATION_BACKEND = 'not-a-real-backend';
+
+    const { tryGetReputationStore } = await import('@/lib/reputation/store');
+
+    // Degrading is only correct for "no store configured". A typo in
+    // REPUTATION_BACKEND must not silently render an empty leaderboard.
+    expect(() => tryGetReputationStore()).toThrow(/Unknown reputation store backend/);
   });
 
   it('still honours an explicitly injected executor', async () => {

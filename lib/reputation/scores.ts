@@ -10,7 +10,7 @@
 
 import { ANCHORS } from '@/constants';
 import { buildScorecards, mapOutcomeRows } from '@/lib/reputation/aggregate';
-import { getReputationStore } from '@/lib/reputation/store';
+import { tryGetReputationStore } from '@/lib/reputation/store';
 
 export interface AnchorReputationEntry {
   /** Composite reputation score in [0, 1]. */
@@ -44,14 +44,17 @@ function computeComposite(fill_rate: number, settle_p50: number, slippage_p50: n
  * anchors whose scores could not be retrieved.
  */
 export async function fetchReputationScores(): Promise<Map<string, AnchorReputationEntry>> {
-  const store = getReputationStore();
+  // Null when no durable store is configured; every anchor then scores 0,
+  // matching the per-anchor fallback below. Construction throws before any
+  // query, so that inner catch could not cover this case on its own.
+  const store = tryGetReputationStore();
 
   // Fetch scores for all anchors in parallel; swallow per-anchor errors.
   const scored: Array<{ anchorId: string; score: number }> = (
     await Promise.all(
       ANCHORS.map(async (anchor) => {
         try {
-          const rows = await store.query({ anchorId: anchor.id });
+          const rows = store ? await store.query({ anchorId: anchor.id }) : [];
           const scorecard = buildScorecards(mapOutcomeRows(rows))[30];
 
           if (scorecard.state !== 'ok') {

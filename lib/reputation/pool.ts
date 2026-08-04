@@ -15,15 +15,33 @@ import type { SqlExecutor } from './postgres';
 let pool: Pool | null = null;
 
 /**
- * Lazily builds the process-wide pool. Throws a directed error rather than
- * `pg`'s generic connection failure when `DATABASE_URL` is absent, because a
- * missing URL here means the whole durable-reputation path is misconfigured.
+ * Raised when a durable store cannot be built at all — as opposed to a query
+ * that failed against a working one.
+ *
+ * It is a named type rather than a bare `Error` because callers legitimately
+ * degrade on it: `next build` prerenders pages with `NODE_ENV=production` and
+ * no `DATABASE_URL`, which is a real, expected configuration, not a fault. Two
+ * call sites used to detect that case by string-matching the old message, which
+ * broke the moment the message changed.
+ */
+export class ReputationStoreUnavailableError extends Error {
+  constructor(message: string) {
+    super(message);
+    this.name = 'ReputationStoreUnavailableError';
+  }
+}
+
+/**
+ * Lazily builds the process-wide pool. Raises
+ * `ReputationStoreUnavailableError` rather than `pg`'s generic connection
+ * failure when `DATABASE_URL` is absent, because a missing URL here means the
+ * whole durable-reputation path is unconfigured.
  */
 export function getPool(): Pool {
   if (!pool) {
     const databaseUrl = process.env.DATABASE_URL;
     if (!databaseUrl) {
-      throw new Error(
+      throw new ReputationStoreUnavailableError(
         'DATABASE_URL is required for the postgres reputation backend. ' +
           'Set it, or set REPUTATION_BACKEND=sqlite|memory for a non-durable backend.'
       );

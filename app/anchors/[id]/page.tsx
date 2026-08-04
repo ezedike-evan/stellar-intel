@@ -3,7 +3,7 @@ import { notFound } from 'next/navigation';
 import { ANCHORS, CORRIDORS } from '@/constants';
 import { buildScorecards, mapOutcomeRows } from '@/lib/reputation/aggregate';
 import { getHistoryBuckets } from '@/lib/reputation/buckets';
-import { getReputationStore } from '@/lib/reputation/store';
+import { getReputationStore, ReputationStoreUnavailableError } from '@/lib/reputation/store';
 import { AnchorProfile, type AnchorProfileData } from '@/components/offramp/AnchorProfile';
 import { ScorecardCard } from '@/components/offramp/ScorecardCard';
 
@@ -54,10 +54,12 @@ async function loadAnchorRows(anchorId: string) {
   try {
     return await getReputationStore().query({ anchorId });
   } catch (error) {
-    if (
-      error instanceof Error &&
-      error.message.includes('The postgres backend requires a SqlExecutor')
-    ) {
+    // No durable store configured — `next build` prerenders this page with
+    // NODE_ENV=production and no DATABASE_URL, which is expected, not a fault.
+    // Matched on the error type rather than its message: this used to string-
+    // match 'The postgres backend requires a SqlExecutor', which silently
+    // stopped matching the moment that message changed.
+    if (error instanceof ReputationStoreUnavailableError) {
       return [];
     }
 

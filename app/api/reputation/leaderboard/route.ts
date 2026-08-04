@@ -3,7 +3,7 @@ import { z } from 'zod';
 import { ANCHORS, CORRIDORS } from '@/constants';
 import { withRequestLogger } from '@/lib/logger';
 import { buildScorecards, mapOutcomeRows } from '@/lib/reputation/aggregate';
-import { getReputationStore } from '@/lib/reputation/store';
+import { tryGetReputationStore } from '@/lib/reputation/store';
 import { getScoreForCorridor, type CorridorScore } from '@/lib/oracle/read';
 import type { ApiError } from '@/types';
 
@@ -63,26 +63,15 @@ async function buildLeaderboard(corridorFilter: string | undefined): Promise<Lea
       ? ANCHORS.filter((a) => a.corridors.includes(corridorFilter))
       : ANCHORS;
 
-  const store = getReputationStore();
+  // Null when no durable store is configured (local/dev without DATABASE_URL):
+  // every anchor degrades to an empty — not fake — scorecard rather than the
+  // whole leaderboard failing. This used to be attempted around `store.query`
+  // below, which could never work, because construction throws first.
+  const store = tryGetReputationStore();
 
   const entries = await Promise.all(
     anchors.map(async (anchor): Promise<LeaderboardEntry> => {
-      let rows: Awaited<ReturnType<typeof store.query>> = [];
-      try {
-        rows = await store.query({ anchorId: anchor.id });
-      } catch (error) {
-        // Postgres backend without an executor wired (local/dev without
-        // DATABASE_URL) — degrade to an empty (not fake) scorecard rather
-        // than failing the whole leaderboard.
-        if (
-          !(
-            error instanceof Error &&
-            error.message.includes('The postgres backend requires a SqlExecutor')
-          )
-        ) {
-          throw error;
-        }
-      }
+      const rows = store ? await store.query({ anchorId: anchor.id }) : [];
 
       const scorecard = buildScorecards(mapOutcomeRows(rows))[30];
       const fill_rate = scorecard.state === 'ok' ? scorecard.fillRate : 0;
