@@ -14,6 +14,7 @@ import {
   registeredAnchorsForCorridor,
   routingTargetsForCorridor,
 } from '@/lib/intent/anchor-accounts';
+import { selectAnchor } from '@/lib/intent/routing';
 
 /**
  * lib/intent/offramp.ts
@@ -96,11 +97,20 @@ export type OfframpResult =
  * always yields the same `quoteId` — the basis for idempotent retries.
  */
 export async function createOfframpIntent(intent: Intent): Promise<OfframpResult> {
-  const route = resolveRoute(intent.sourceAsset, intent.destinationAsset);
   const corridorId = `${intent.sourceAsset.toLowerCase()}-${intent.destinationAsset.toLowerCase()}`;
-  const anchorEntry = route
-    ? routingTargetsForCorridor(corridorId).find((t) => t.anchorId === route.anchorId)
-    : undefined;
+
+  // Scored routing when ROUTING_STRATEGY says so, first-match otherwise (#790).
+  const decision = await selectAnchor(corridorId, intent.amount);
+  const anchorEntry = decision?.target;
+  const route: OfframpRoute | null = anchorEntry
+    ? {
+        anchorId: anchorEntry.anchorId,
+        anchorDomain: anchorEntry.anchorDomain,
+        corridorId,
+        estimatedFee: '2',
+        estimatedReceived: '0',
+      }
+    : null;
 
   if (!route || !anchorEntry) {
     // Distinguish "we do not serve this corridor" from "we serve it but have no

@@ -177,7 +177,7 @@ describe('solveSingleAnchor', () => {
       }
     });
 
-    it('defaults to the ROUTING_STRATEGY flag value (scored by default)', () => {
+    it('scores quotes when the scored strategy is selected', () => {
       const intent = createTestIntent({ minReceive: '1500' });
 
       const quotes = [
@@ -197,7 +197,11 @@ describe('solveSingleAnchor', () => {
         }),
       ];
 
-      const result = solveSingleAnchor(intent, quotes);
+      // Strategy passed explicitly. It used to rely on ROUTING_STRATEGY
+      // defaulting to 'scored', but .env.example documents first-match as the
+      // default until scored is validated in staging, and the code default now
+      // matches that (#790).
+      const result = solveSingleAnchor(intent, quotes, undefined, undefined, 'scored');
 
       expect(result.ok).toBe(true);
       if (result.ok) {
@@ -252,7 +256,7 @@ describe('solveSingleAnchor', () => {
         },
       };
 
-      const result = solveSingleAnchor(intent, quotes, 10, scoring);
+      const result = solveSingleAnchor(intent, quotes, 10, scoring, 'scored');
 
       expect(result.ok).toBe(true);
       if (result.ok) {
@@ -299,7 +303,11 @@ describe('solveSingleAnchor', () => {
         }),
       ];
 
-      const result = solveSingleAnchor(intent, quotes);
+      // Strategy passed explicitly. It used to rely on ROUTING_STRATEGY
+      // defaulting to 'scored', but .env.example documents first-match as the
+      // default until scored is validated in staging, and the code default now
+      // matches that (#790).
+      const result = solveSingleAnchor(intent, quotes, undefined, undefined, 'scored');
 
       expect(result.ok).toBe(true);
       if (result.ok) {
