@@ -174,7 +174,7 @@ describe('POST /api/intent/offramp — rate limiting', () => {
   it('returns 429 with Retry-After once the bucket is exhausted', async () => {
     const ip = '203.0.113.20';
     for (let i = 0; i < 20; i++) {
-      checkRateLimit(ip, { bucket: 'api.intent.offramp', maxRequests: 20 });
+      await checkRateLimit(ip, { bucket: 'api.intent.offramp', maxRequests: 20 });
     }
 
     const res = await POST(makeRequest(VALID_INTENT, { 'x-forwarded-for': ip }));
@@ -193,7 +193,7 @@ describe('POST /api/intent/offramp — rate limiting', () => {
   it('rate-limits independently per IP', async () => {
     const exhaustedIp = '203.0.113.30';
     for (let i = 0; i < 20; i++) {
-      checkRateLimit(exhaustedIp, { bucket: 'api.intent.offramp', maxRequests: 20 });
+      await checkRateLimit(exhaustedIp, { bucket: 'api.intent.offramp', maxRequests: 20 });
     }
 
     const blocked = await POST(makeRequest(VALID_INTENT, { 'x-forwarded-for': exhaustedIp }));
@@ -282,7 +282,7 @@ describe('POST /api/intent/offramp — idempotency', () => {
     await POST(makeRequest(VALID_INTENT, headers));
     // Exhaust the bucket directly so a fresh (non-idempotent) request would 429.
     for (let i = 0; i < 20; i++) {
-      checkRateLimit(ip, { bucket: 'api.intent.offramp', maxRequests: 20 });
+      await checkRateLimit(ip, { bucket: 'api.intent.offramp', maxRequests: 20 });
     }
 
     const replay = await POST(makeRequest(VALID_INTENT, headers));

@@ -67,7 +67,7 @@ export async function POST(request: NextRequest): Promise<NextResponse> {
   }
 
   return withLoggerContext('api.reputation.refresh', async (logger) => {
-    if (!acquireLock(LOCK_KEY, LOCK_TTL_MS)) {
+    if (!(await acquireLock(LOCK_KEY, LOCK_TTL_MS))) {
       logger.warn({ event: 'refresh_conflict' });
       return NextResponse.json({ error: 'Refresh already in progress' }, { status: 409 });
     }
@@ -99,7 +99,7 @@ export async function POST(request: NextRequest): Promise<NextResponse> {
         probed,
       });
     } finally {
-      releaseLock(LOCK_KEY);
+      await releaseLock(LOCK_KEY);
     }
   });
 }

@@ -25,7 +25,7 @@ import { getDurablePublisherHealth } from '@/lib/reputation/publisherHealth';
 export async function GET(request: NextRequest): Promise<NextResponse> {
   return withRequestLogger(request, 'api.publisher.health', async (logger) => {
     const ip = getClientIp(request.headers);
-    const rl = checkRateLimit(ip, { bucket: 'api.publisher.health', maxRequests: 120 });
+    const rl = await checkRateLimit(ip, { bucket: 'api.publisher.health', maxRequests: 120 });
     if (!rl.allowed) {
       logger.warn({ event: 'rate_limit_exceeded', ip, retryAfter: rl.retryAfter });
       return NextResponse.json(

@@ -122,7 +122,7 @@ export async function withV1(
   const requestId = request.headers.get('x-request-id') ?? globalThis.crypto.randomUUID();
   const ip = getClientIp(request.headers);
 
-  const rl = checkRateLimit(ip, { bucket: options.bucket, maxRequests: options.maxRequests });
+  const rl = await checkRateLimit(ip, { bucket: options.bucket, maxRequests: options.maxRequests });
   const baseHeaders = { 'X-Request-Id': requestId, ...rateLimitHeaders(options.maxRequests, rl) };
 
   if (!rl.allowed) {

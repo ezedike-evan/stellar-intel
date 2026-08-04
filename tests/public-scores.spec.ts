@@ -8,46 +8,46 @@ describe('Rate limiting', () => {
     clearRateLimitStore();
   });
 
-  it('allows first request', () => {
-    const result = checkRateLimit('1.2.3.4');
+  it('allows first request', async () => {
+    const result = await checkRateLimit('1.2.3.4');
     expect(result.allowed).toBe(true);
     expect(result.remaining).toBe(59);
   });
 
-  it('supports stricter route-specific buckets', () => {
+  it('supports stricter route-specific buckets', async () => {
     const options = { bucket: 'api.intent.offramp', maxRequests: 2 };
-    expect(checkRateLimit('1.2.3.4', options).allowed).toBe(true);
-    expect(checkRateLimit('1.2.3.4', options).allowed).toBe(true);
-    expect(checkRateLimit('1.2.3.4', options).allowed).toBe(false);
+    expect((await checkRateLimit('1.2.3.4', options)).allowed).toBe(true);
+    expect((await checkRateLimit('1.2.3.4', options)).allowed).toBe(true);
+    expect((await checkRateLimit('1.2.3.4', options)).allowed).toBe(false);
 
-    const defaultBucket = checkRateLimit('1.2.3.4');
+    const defaultBucket = await checkRateLimit('1.2.3.4');
     expect(defaultBucket.allowed).toBe(true);
     expect(defaultBucket.remaining).toBe(59);
   });
 
-  it('returns 429 after 60 requests', () => {
+  it('returns 429 after 60 requests', async () => {
     for (let i = 0; i < 60; i++) {
-      checkRateLimit('1.2.3.5');
+      await checkRateLimit('1.2.3.5');
     }
-    const result = checkRateLimit('1.2.3.5');
+    const result = await checkRateLimit('1.2.3.5');
     expect(result.allowed).toBe(false);
     expect(result.remaining).toBe(0);
     expect(result.retryAfter).toBeGreaterThan(0);
   });
 
-  it('different IPs have independent limits', () => {
+  it('different IPs have independent limits', async () => {
     for (let i = 0; i < 60; i++) {
-      checkRateLimit('10.0.0.1');
+      await checkRateLimit('10.0.0.1');
     }
-    const result = checkRateLimit('10.0.0.2');
+    const result = await checkRateLimit('10.0.0.2');
     expect(result.allowed).toBe(true);
   });
 
-  it('provides Retry-After > 0 when rate limited', () => {
+  it('provides Retry-After > 0 when rate limited', async () => {
     for (let i = 0; i < 61; i++) {
-      checkRateLimit('5.5.5.5');
+      await checkRateLimit('5.5.5.5');
     }
-    const result = checkRateLimit('5.5.5.5');
+    const result = await checkRateLimit('5.5.5.5');
     expect(result.retryAfter).toBeGreaterThan(0);
   });
 });
@@ -55,26 +55,26 @@ describe('Rate limiting', () => {
 describe('Lock mechanism', () => {
   it('acquires lock on first call', async () => {
     const { acquireLock, releaseLock } = await import('@/lib/reputation/lock');
-    const acquired = acquireLock('test-lock');
+    const acquired = await acquireLock('test-lock');
     expect(acquired).toBe(true);
-    releaseLock('test-lock');
+    await releaseLock('test-lock');
   });
 
   it('blocks second acquisition while locked', async () => {
     const { acquireLock, releaseLock } = await import('@/lib/reputation/lock');
-    acquireLock('test-lock-2');
-    const second = acquireLock('test-lock-2');
+    await acquireLock('test-lock-2');
+    const second = await acquireLock('test-lock-2');
     expect(second).toBe(false);
-    releaseLock('test-lock-2');
+    await releaseLock('test-lock-2');
   });
 
   it('allows re-acquisition after release', async () => {
     const { acquireLock, releaseLock } = await import('@/lib/reputation/lock');
-    acquireLock('test-lock-3');
-    releaseLock('test-lock-3');
-    const reacquired = acquireLock('test-lock-3');
+    await acquireLock('test-lock-3');
+    await releaseLock('test-lock-3');
+    const reacquired = await acquireLock('test-lock-3');
     expect(reacquired).toBe(true);
-    releaseLock('test-lock-3');
+    await releaseLock('test-lock-3');
   });
 });
 
@@ -94,7 +94,7 @@ describe('GET /v1/public/scores — route rate limiting', () => {
   it('returns 429 with Retry-After once the bucket is exhausted', async () => {
     const ip = '192.0.2.20';
     for (let i = 0; i < 60; i++) {
-      checkRateLimit(ip);
+      await checkRateLimit(ip);
     }
 
     const res = await GET(
@@ -115,7 +115,7 @@ describe('GET /v1/public/scores — route rate limiting', () => {
   it('rate-limits independently per IP', async () => {
     const exhaustedIp = '192.0.2.30';
     for (let i = 0; i < 60; i++) {
-      checkRateLimit(exhaustedIp);
+      await checkRateLimit(exhaustedIp);
     }
 
     const blocked = await GET(

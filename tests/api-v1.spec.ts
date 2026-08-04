@@ -30,7 +30,14 @@ beforeEach(() => {
 describe('rateLimitHeaders (#805)', () => {
   it('emits X-RateLimit-* headers, plus Retry-After only when throttled', () => {
     expect(
-      rateLimitHeaders(20, { allowed: true, remaining: 19, retryAfter: 0, limit: 20, resetAt: 0 })
+      rateLimitHeaders(20, {
+        allowed: true,
+        remaining: 19,
+        retryAfter: 0,
+        limit: 20,
+        resetAt: 0,
+        shared: false,
+      })
     ).toEqual({
       'X-RateLimit-Limit': '20',
       'X-RateLimit-Remaining': '19',
@@ -42,6 +49,7 @@ describe('rateLimitHeaders (#805)', () => {
       retryAfter: 42,
       limit: 20,
       resetAt: 0,
+      shared: false,
     });
     expect(throttled['Retry-After']).toBe('42');
   });

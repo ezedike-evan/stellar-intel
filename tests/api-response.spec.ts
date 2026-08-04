@@ -16,6 +16,7 @@ const RL: RateLimitResult = {
   retryAfter: 0,
   limit: 20,
   resetAt: Date.parse('2026-01-01T00:01:00Z'),
+  shared: false,
 };
 
 describe('withApiHeaders', () => {

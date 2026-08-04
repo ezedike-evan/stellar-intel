@@ -20,7 +20,7 @@ const { handleRequest } = createYoga({
 
 async function handler(request: NextRequest): Promise<Response> {
   const ip = getClientIp(request.headers);
-  const rl = checkRateLimit(ip, { bucket: 'api.graphql', maxRequests: 60 });
+  const rl = await checkRateLimit(ip, { bucket: 'api.graphql', maxRequests: 60 });
   if (!rl.allowed) {
     getLogger('api.graphql').warn({
       event: 'rate_limit_exceeded',

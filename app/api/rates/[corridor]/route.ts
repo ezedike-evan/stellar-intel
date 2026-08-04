@@ -19,7 +19,7 @@ export async function GET(
 ): Promise<NextResponse> {
   return withRequestLogger(request, 'api.rates', async (logger) => {
     const ip = getClientIp(request.headers);
-    const rl = checkRateLimit(ip, { bucket: 'api.rates', maxRequests: 90 });
+    const rl = await checkRateLimit(ip, { bucket: 'api.rates', maxRequests: 90 });
     if (!rl.allowed) {
       logger.warn({ event: 'rate_limit_exceeded', ip, retryAfter: rl.retryAfter });
       return NextResponse.json(

@@ -23,7 +23,7 @@ describe('GET /api/publisher/health — rate limiting', () => {
   it('returns 429 with Retry-After once the bucket is exhausted', async () => {
     const ip = '198.51.100.20';
     for (let i = 0; i < 120; i++) {
-      checkRateLimit(ip, { bucket: 'api.publisher.health', maxRequests: 120 });
+      await checkRateLimit(ip, { bucket: 'api.publisher.health', maxRequests: 120 });
     }
 
     const res = await GET(makeRequest({ 'x-forwarded-for': ip }));
@@ -40,7 +40,7 @@ describe('GET /api/publisher/health — rate limiting', () => {
   it('rate-limits independently per IP', async () => {
     const exhaustedIp = '198.51.100.30';
     for (let i = 0; i < 120; i++) {
-      checkRateLimit(exhaustedIp, { bucket: 'api.publisher.health', maxRequests: 120 });
+      await checkRateLimit(exhaustedIp, { bucket: 'api.publisher.health', maxRequests: 120 });
     }
 
     const blocked = await GET(makeRequest({ 'x-forwarded-for': exhaustedIp }));

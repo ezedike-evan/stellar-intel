@@ -39,7 +39,7 @@ describe('GET /api/rates/[corridor]', () => {
 
   it('returns 429 when the rates bucket is exhausted', async () => {
     for (let i = 0; i < 90; i++) {
-      checkRateLimit('9.9.9.9', { bucket: 'api.rates', maxRequests: 90 });
+      await checkRateLimit('9.9.9.9', { bucket: 'api.rates', maxRequests: 90 });
     }
 
     const res = await GET(
@@ -68,7 +68,7 @@ describe('GET /api/rates/[corridor]', () => {
   it('rate-limits independently per IP', async () => {
     const exhaustedIp = '9.9.9.20';
     for (let i = 0; i < 90; i++) {
-      checkRateLimit(exhaustedIp, { bucket: 'api.rates', maxRequests: 90 });
+      await checkRateLimit(exhaustedIp, { bucket: 'api.rates', maxRequests: 90 });
     }
 
     const blocked = await GET(

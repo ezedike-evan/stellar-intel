@@ -170,7 +170,7 @@ describe('POST /api/graphql — rate limiting', () => {
   it('returns 429 once the api.graphql bucket is exhausted', async () => {
     const ip = '203.0.113.40';
     for (let i = 0; i < 60; i++) {
-      checkRateLimit(ip, { bucket: 'api.graphql', maxRequests: 60 });
+      await checkRateLimit(ip, { bucket: 'api.graphql', maxRequests: 60 });
     }
 
     const res = await POST(

@@ -28,7 +28,7 @@ export async function GET(
   return withRequestLogger(request, 'api.v1.anchor.health', async (logger) => {
     const ip = getClientIp(request.headers);
 
-    const rl = checkRateLimit(ip);
+    const rl = await checkRateLimit(ip);
     if (!rl.allowed) {
       logger.warn({ event: 'rate_limit_exceeded', ip, retryAfter: rl.retryAfter });
       return NextResponse.json(

@@ -21,7 +21,7 @@ export interface IntentPlanResponse {
 export async function POST(request: NextRequest): Promise<NextResponse> {
   return withRequestLogger(request, 'api.intent', async (logger) => {
     const ip = getClientIp(request.headers);
-    const rl = checkRateLimit(ip, { bucket: 'api.intent', maxRequests: 20 });
+    const rl = await checkRateLimit(ip, { bucket: 'api.intent', maxRequests: 20 });
     if (!rl.allowed) {
       logger.warn({ event: 'rate_limit_exceeded', ip, retryAfter: rl.retryAfter });
       return NextResponse.json(

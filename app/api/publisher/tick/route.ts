@@ -61,7 +61,7 @@ export async function GET(request: NextRequest): Promise<NextResponse> {
   }
 
   return withLoggerContext('api.publisher.tick', async (logger) => {
-    if (!acquireLock(LOCK_KEY, LOCK_TTL_MS)) {
+    if (!(await acquireLock(LOCK_KEY, LOCK_TTL_MS))) {
       logger.warn({ event: 'publisher_tick_conflict' });
       return NextResponse.json({ error: 'Publisher tick already in progress' }, { status: 409 });
     }
@@ -86,7 +86,7 @@ export async function GET(request: NextRequest): Promise<NextResponse> {
         { status: 500 }
       );
     } finally {
-      releaseLock(LOCK_KEY);
+      await releaseLock(LOCK_KEY);
     }
   });
 }

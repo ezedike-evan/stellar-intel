@@ -51,7 +51,7 @@ export async function POST(request: NextRequest): Promise<NextResponse> {
     }
 
     const ip = getClientIp(request.headers);
-    const rl = checkRateLimit(ip, { bucket: 'api.intent.offramp', maxRequests: 20 });
+    const rl = await checkRateLimit(ip, { bucket: 'api.intent.offramp', maxRequests: 20 });
     if (!rl.allowed) {
       logger.warn({ event: 'rate_limit_exceeded', ip, retryAfter: rl.retryAfter });
       return rateLimitedResponse(rl);
