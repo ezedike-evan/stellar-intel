@@ -5,19 +5,125 @@ on:
     - cron: '*/5 * * * *'
   workflow_dispatch: {}
 
+permissions:
+  contents: read
+  issues: write
+
+# A tick that overruns its 5-minute slot must not race the next one. The
+# in-process lock in lib/reputation/lock.ts cannot enforce this — it is a
+# module-level Map, so two serverless instances hold two independent locks
+# (#911). Until that is durable, this is the only real mutual exclusion.
+concurrency:
+  group: reputation-cron
+  cancel-in-progress: false
+
 jobs:
   run:
     runs-on: ubuntu-latest
+    outputs:
+      failure_step: ${{ steps.refresh.outcome != 'success' && 'refresh' || steps.reconcile.outcome != 'success' && 'reconcile' || steps.tick.outcome != 'success' && 'publisher tick' || steps.health.outcome != 'success' && 'publisher health' || 'unknown' }}
     steps:
+      # -f makes curl exit non-zero on a 4xx/5xx, so a failing endpoint reds the
+      # job rather than passing silently.
       - name: Refresh
+        id: refresh
         run: |
           curl -fsS -X POST "${{ secrets.APP_URL }}/api/reputation/refresh" \
             -H "Authorization: Bearer ${{ secrets.CRON_SECRET }}"
+
       - name: Reconcile
+        id: reconcile
         run: |
           curl -fsS -X GET "${{ secrets.APP_URL }}/api/reputation/reconcile" \
             -H "Authorization: Bearer ${{ secrets.CRON_SECRET }}"
+
       - name: Publisher tick
+        id: tick
         run: |
           curl -fsS -X GET "${{ secrets.APP_URL }}/api/publisher/tick" \
             -H "Authorization: Bearer ${{ secrets.CRON_SECRET }}"
+
+      # A green tick is not the same as a healthy publisher: the tick can
+      # succeed while publishing nothing. This asserts the durable signal
+      # instead — rows waiting, and none reaching the oracle for an hour.
+      # Skipped when nothing is pending, so a quiet corridor never pages anyone.
+      - name: Check publisher health
+        id: health
+        run: |
+          set -euo pipefail
+          BODY=$(curl -fsS "${{ secrets.APP_URL }}/api/publisher/health")
+          echo "$BODY"
+
+          DURABLE=$(echo "$BODY" | jq -r '.durable')
+          if [ "$DURABLE" != "true" ]; then
+            echo "::warning::Publisher health has no durable backend; skipping staleness check"
+            exit 0
+          fi
+
+          PENDING=$(echo "$BODY" | jq -r '.pendingCount // 0')
+          STALE_MS=$(echo "$BODY" | jq -r '.publishedStaleMs // 0')
+          STALE_LIMIT_MS=3600000
+
+          if [ "$PENDING" -gt 0 ] && [ "$STALE_MS" -gt "$STALE_LIMIT_MS" ]; then
+            echo "::error::$PENDING row(s) pending and nothing published for $((STALE_MS / 60000)) minutes"
+            exit 1
+          fi
+
+          echo "Publisher healthy: pending=$PENDING, last publish ${STALE_MS}ms ago"
+
+  alert:
+    name: Open tracking issue on failure
+    runs-on: ubuntu-latest
+    needs: run
+    if: failure()
+    steps:
+      - uses: actions/github-script@v9
+        env:
+          FAILED_STEP: ${{ needs.run.outputs.failure_step }}
+        with:
+          script: |
+            const today = new Date().toISOString().slice(0, 10);
+            const title = `[publisher] reputation cron failing — ${today}`;
+
+            // One issue per day, commented on rather than duplicated: this
+            // workflow runs every 5 minutes, so an un-deduplicated alert would
+            // file ~288 issues before anyone woke up.
+            const { data: existing } = await github.rest.issues.listForRepo({
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              state: 'open',
+              labels: 'publisher-alert',
+            });
+
+            const failedStep = process.env.FAILED_STEP || 'unknown';
+            const runUrl = `${context.serverUrl}/${context.repo.owner}/${context.repo.repo}/actions/runs/${context.runId}`;
+            const note = `- \`${failedStep}\` failed at ${new Date().toISOString()} — ${runUrl}`;
+
+            const open = existing.find((issue) => issue.title === title);
+            if (open) {
+              await github.rest.issues.createComment({
+                owner: context.repo.owner,
+                repo: context.repo.repo,
+                issue_number: open.number,
+                body: note,
+              });
+              return;
+            }
+
+            await github.rest.issues.create({
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              title,
+              body: [
+                'The reputation cron failed. It runs every 5 minutes, so this issue',
+                'collects the day’s failures rather than opening one per run.',
+                '',
+                note,
+                '',
+                'Check `/api/publisher/health`: `durable: false` means no database is',
+                'configured, `pendingCount > 0` alongside a large `publishedStaleMs`',
+                'means rows are stuck, and `lastError` carries the last in-process',
+                'error (best effort — it resets on a cold start).',
+              ].join('\n'),
+              labels: ['publisher-alert', 'module/ops', 'needs-triage'],
+            });

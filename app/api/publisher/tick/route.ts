@@ -7,6 +7,7 @@ import {
 } from '@stellarintel/publisher';
 import { withLoggerContext } from '@/lib/logger';
 import { acquireLock, releaseLock } from '@/lib/reputation/lock';
+import { recordPublisherError, recordPublisherRun } from '@/lib/metrics';
 import { getPool } from '@/lib/reputation/pool';
 
 export const runtime = 'nodejs';
@@ -67,12 +68,18 @@ export async function GET(request: NextRequest): Promise<NextResponse> {
 
     try {
       const result = await tick();
+      // Actually record the run. These recorders existed but had zero call
+      // sites, which is why /api/publisher/health always reported "never ran"
+      // (#910).
+      recordPublisherRun(result.submitted);
       logger.info({ event: 'publisher_tick_complete', ...result });
       return NextResponse.json({ ok: true, ...result, tickedAt: new Date().toISOString() });
     } catch (err) {
+      const message = err instanceof Error ? err.message : String(err);
+      recordPublisherError(message);
       logger.error({
         event: 'publisher_tick_failed',
-        error: err instanceof Error ? err.message : String(err),
+        error: message,
       });
       return NextResponse.json(
         { error: err instanceof Error ? err.message : 'Publisher tick failed' },

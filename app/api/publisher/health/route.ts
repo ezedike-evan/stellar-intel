@@ -1,16 +1,26 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { checkRateLimit, getClientIp } from '@/lib/api/rate-limit';
 import { withRequestLogger } from '@/lib/logger';
-import { getPublisherHealth } from '@/lib/metrics';
+import { getDurablePublisherHealth } from '@/lib/reputation/publisherHealth';
 
 /**
  * GET /api/publisher/health
  *
- * Returns the current publisher health status including:
- * - lastRun: ISO timestamp of last publisher execution
- * - lastBatchSize: number of items processed in last batch
- * - lastError: last error message (null if successful)
- * - staleSinceMs: milliseconds since last run (null if never run)
+ * Returns the current publisher health status.
+ *
+ * Durable (from `outcome_log`, survives cold starts):
+ * - lastPublishedAt: when a row last reached the oracle
+ * - publishedStaleMs: how long ago that was
+ * - pendingCount: reconciled rows still waiting to publish
+ * - durable: false when no database is configured, so a caller can tell
+ *   "nothing is wrong" apart from "cannot tell"
+ *
+ * In-process (best effort, resets on cold start):
+ * - lastRun / lastBatchSize / lastError / staleSinceMs
+ *
+ * The durable fields exist because the in-process ones are per-instance on
+ * serverless — alerting on them alone fires on cold starts and stays quiet
+ * through real outages (#910).
  */
 export async function GET(request: NextRequest): Promise<NextResponse> {
   return withRequestLogger(request, 'api.publisher.health', async (logger) => {
@@ -30,12 +40,15 @@ export async function GET(request: NextRequest): Promise<NextResponse> {
       );
     }
 
-    const health = getPublisherHealth();
+    const health = await getDurablePublisherHealth();
 
     logger.info({
       event: 'publisher_health_check',
       lastRun: health.lastRun,
-      staleSinceMs: health.staleSinceMs,
+      lastPublishedAt: health.lastPublishedAt,
+      publishedStaleMs: health.publishedStaleMs,
+      pendingCount: health.pendingCount,
+      durable: health.durable,
       hasError: !!health.lastError,
     });
 
