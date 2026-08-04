@@ -276,3 +276,109 @@ export async function getVolumeSavings(
   );
   return { volumeUsdc, savingsUsdc, settlementCount, updatedAt };
 }
+
+/**
+ * Governance configuration of the deployed contract (#913).
+ *
+ * Multisig needs no contract change — the admin is an `Address`, so it may be a
+ * Stellar account with several signers and a threshold, and `require_auth()`
+ * delegates the threshold check to the host. What matters operationally is
+ * *which* accounts these are, and whether the upgrade authority is genuinely
+ * separate from the operational admin. This reads that back rather than
+ * assuming it.
+ */
+export interface OracleGovernance {
+  admin: string | null;
+  pendingAdmin: string | null;
+  upgradeAdmin: string | null;
+  contractVersion: number;
+  /** False when one account holds both operational and upgrade authority. */
+  authoritiesSeparated: boolean;
+  /**
+   * Entrypoints this contract does not implement.
+   *
+   * A deployed contract can be older than the source in this repo, and the
+   * difference is exactly what a pre-flight needs to surface: the testnet
+   * deployment predates `pending_admin`, so it also predates the authorization
+   * fixes in #907 and still carries the unauthenticated write path.
+   */
+  missingEntrypoints: string[];
+}
+
+/**
+ * True when a simulation error means the contract has no such function, as
+ * opposed to the read failing for some other reason.
+ *
+ * Exported so the classification is testable without mocking the Stellar SDK's
+ * transaction-building internals.
+ */
+export function isMissingEntrypointError(message: string): boolean {
+  return message.includes('MissingValue') || message.includes('non-existent contract function');
+}
+
+/**
+ * Builds the governance summary from already-read values.
+ *
+ * Separated from the RPC calls so the interesting part — deciding whether the
+ * two authorities are genuinely distinct — is testable directly.
+ */
+export function deriveGovernance(
+  values: {
+    admin: unknown;
+    pendingAdmin: unknown;
+    upgradeAdmin: unknown;
+    contractVersion: unknown;
+  },
+  missingEntrypoints: string[]
+): OracleGovernance {
+  const admin = typeof values.admin === 'string' ? values.admin : null;
+  const upgradeAdmin = typeof values.upgradeAdmin === 'string' ? values.upgradeAdmin : null;
+
+  return {
+    admin,
+    pendingAdmin: typeof values.pendingAdmin === 'string' ? values.pendingAdmin : null,
+    upgradeAdmin,
+    contractVersion: Number(values.contractVersion ?? 0),
+    // Both unset counts as not separated: an uninitialised upgrade hook is not
+    // a separation of duties, it is an absence of one.
+    authoritiesSeparated: admin !== null && upgradeAdmin !== null && admin !== upgradeAdmin,
+    missingEntrypoints,
+  };
+}
+
+/** Reads one entrypoint, distinguishing "not implemented" from "read failed". */
+async function readOptional(
+  method: string,
+  config: OracleReadConfig,
+  missing: string[]
+): Promise<unknown> {
+  try {
+    return await simulateRead(method, [], config);
+  } catch (err) {
+    const message = err instanceof Error ? err.message : String(err);
+    // The host reports a call to an absent function as MissingValue.
+    if (isMissingEntrypointError(message)) {
+      missing.push(method);
+      return undefined;
+    }
+    throw err;
+  }
+}
+
+export async function getOracleGovernance(
+  config: OracleReadConfig = {}
+): Promise<OracleGovernance> {
+  const missingEntrypoints: string[] = [];
+
+  const [admin, pendingAdmin, upgradeAdmin, contractVersion] = await Promise.all([
+    readOptional('admin', config, missingEntrypoints),
+    readOptional('pending_admin', config, missingEntrypoints),
+    readOptional('upgrade_admin', config, missingEntrypoints),
+    readOptional('contract_version', config, missingEntrypoints),
+  ]);
+
+  return deriveGovernance(
+    { admin, pendingAdmin, upgradeAdmin, contractVersion },
+    missingEntrypoints
+  );
+}

@@ -46,8 +46,42 @@ pub fn get_admin(env: &Env) -> Option<Address>
 pub fn require_admin(env: &Env, caller: &Address) -> Result<(), Error>  // internal gate
 ```
 
-`require_admin` is the authorization check that guards `register`. Today this is
-single-admin; the 2-of-3 multi-signer upgrade is tracked in #913.
+`require_admin` is the authorization check that guards `register`.
+
+### Custody
+
+There are **two independent authorities**, and conflating them is the mistake to
+avoid:
+
+| Authority         | Storage key                | Can do                                              |
+| ----------------- | -------------------------- | --------------------------------------------------- |
+| Operational admin | `DataKey::Admin`           | register anchors, add/revoke publishers, migrations |
+| Upgrade admin     | `UpgradeKey::UpgradeAdmin` | replace the contract WASM                           |
+
+**Multisig requires no contract change.** Both are `soroban_sdk::Address`
+values, so either may be a Stellar account with several signers and a threshold;
+`require_auth()` delegates the threshold check to the host. The two-step handoff
+(`propose_admin` → `accept_admin`, with `cancel_admin_proposal`) means authority
+is never transferred to an address that cannot sign.
+
+What matters operationally is therefore _which accounts these are_, not what the
+contract supports. Read it back rather than assuming:
+
+```bash
+npx tsx scripts/verify-oracle-read.mts
+```
+
+It prints the admin, the upgrade admin, the pending admin and the contract
+version, and warns when the two authorities are the same account — one
+compromised key that can both forge data and replace the code.
+
+> **Current testnet state (checked 2026-08-04).** `contract_version` is `0`, the
+> upgrade admin is unset, and `pending_admin` / `upgrade_admin` are not
+> implemented at all: the deployed bytecode predates them. That also means it
+> predates the authorization fixes in #907, so **the live testnet contract still
+> has the unauthenticated `set_corridor_metrics` write path**. Re-deploy before
+> treating testnet reads as trustworthy. The anchor registry is also empty, so
+> every score read returns "no data".
 
 ### Who can write what
 

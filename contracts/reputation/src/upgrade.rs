@@ -65,6 +65,16 @@ pub fn apply(env: &Env, new_wasm_hash: BytesN<32>) {
     env.deployer().update_current_contract_wasm(new_wasm_hash);
 }
 
+/// Return the address authorized to upgrade the contract, if one is bound.
+///
+/// Read-only. Exposed so custody can be audited from outside: whether the
+/// upgrade authority is a different account from the operational admin, and
+/// whether either is a multisig account, is otherwise unobservable — you would
+/// have to trust an assertion about it (#913).
+pub fn get_upgrade_admin(env: &Env) -> Option<Address> {
+    env.storage().instance().get(&UpgradeKey::UpgradeAdmin)
+}
+
 /// Return the live contract version, or `0` if the upgrade hook is uninitialized.
 pub fn current_version(env: &Env) -> u32 {
     env.storage()

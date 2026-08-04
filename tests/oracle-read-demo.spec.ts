@@ -186,3 +186,72 @@ describe('an unregistered anchor is absent, not zero (#723)', () => {
     });
   });
 });
+
+describe('governance readback (#913)', () => {
+  it('classifies a missing entrypoint apart from a genuine read failure', async () => {
+    const { isMissingEntrypointError } = await import('@/lib/oracle/read');
+
+    // What the host actually returned for the deployed testnet contract.
+    expect(
+      isMissingEntrypointError(
+        'Oracle read "pending_admin" simulation failed: HostError: Error(WasmVm, MissingValue)'
+      )
+    ).toBe(true);
+    expect(isMissingEntrypointError('trying to invoke non-existent contract function')).toBe(true);
+
+    // A network problem is not an absent entrypoint, and must not be silently
+    // recorded as one.
+    expect(isMissingEntrypointError('fetch failed: ECONNREFUSED')).toBe(false);
+  });
+
+  it('flags a deployment older than the source', async () => {
+    const { deriveGovernance } = await import('@/lib/oracle/read');
+
+    // Exactly the deployed testnet contract's shape: it predates the two-step
+    // admin handoff, and therefore predates the auth fixes in #907.
+    const gov = deriveGovernance(
+      { admin: 'GADMIN', pendingAdmin: undefined, upgradeAdmin: undefined, contractVersion: 0 },
+      ['pending_admin', 'upgrade_admin']
+    );
+
+    expect(gov.admin).toBe('GADMIN');
+    expect(gov.upgradeAdmin).toBeNull();
+    expect(gov.contractVersion).toBe(0);
+    expect(gov.missingEntrypoints).toEqual(['pending_admin', 'upgrade_admin']);
+    expect(gov.authoritiesSeparated).toBe(false);
+  });
+
+  it('reports separated authorities when they are distinct accounts', async () => {
+    const { deriveGovernance } = await import('@/lib/oracle/read');
+    const gov = deriveGovernance(
+      { admin: 'GADMIN', pendingAdmin: null, upgradeAdmin: 'GUPGRADE', contractVersion: 3 },
+      []
+    );
+
+    expect(gov.authoritiesSeparated).toBe(true);
+    expect(gov.contractVersion).toBe(3);
+  });
+
+  it('does not call one account holding both roles "separated"', async () => {
+    const { deriveGovernance } = await import('@/lib/oracle/read');
+    const gov = deriveGovernance(
+      { admin: 'GSAME', pendingAdmin: null, upgradeAdmin: 'GSAME', contractVersion: 3 },
+      []
+    );
+
+    // One compromised key could both forge data and replace the code.
+    expect(gov.authoritiesSeparated).toBe(false);
+  });
+
+  it('treats an unset upgrade admin as not separated', async () => {
+    const { deriveGovernance } = await import('@/lib/oracle/read');
+    const gov = deriveGovernance(
+      { admin: 'GADMIN', pendingAdmin: null, upgradeAdmin: null, contractVersion: 0 },
+      []
+    );
+
+    // An uninitialised upgrade hook is an absence of separation, not a
+    // separation — this is the deployed testnet contract's current state.
+    expect(gov.authoritiesSeparated).toBe(false);
+  });
+});

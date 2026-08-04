@@ -152,3 +152,42 @@ fn cancel_is_noop_with_no_pending_proposal() {
     assert!(res.is_ok());
     assert_eq!(client.pending_admin(), None);
 }
+
+// ─── Custody auditability (#913) ──────────────────────────────────────────────
+//
+// Multisig governance needs no contract change: the admin is an `Address`, so
+// it may be a Stellar account with several signers and a threshold, and
+// `require_auth()` delegates the threshold check to the host. What was missing
+// is any way to *confirm* how a deployed contract is configured.
+
+#[test]
+fn upgrade_admin_is_readable() {
+    let env = Env::default();
+    let (client, admin) = setup(&env);
+
+    // Unset until init_upgrade binds it.
+    assert_eq!(client.upgrade_admin(), None);
+
+    let upgrade_admin = Address::generate(&env);
+    env.mock_all_auths();
+    client.init_upgrade(&upgrade_admin);
+
+    assert_eq!(client.upgrade_admin(), Some(upgrade_admin.clone()));
+    // The point of the accessor: an auditor can see that the upgrade authority
+    // is a different account from the operational admin, rather than trusting
+    // an assertion that it is.
+    assert_ne!(client.upgrade_admin(), Some(admin));
+}
+
+#[test]
+fn upgrade_admin_and_admin_can_be_the_same_account_and_it_shows() {
+    let env = Env::default();
+    let (client, admin) = setup(&env);
+
+    env.mock_all_auths();
+    client.init_upgrade(&admin);
+
+    // The contract permits it; the accessor makes it visible rather than
+    // silent, which is the whole point for a mainnet pre-flight check.
+    assert_eq!(client.upgrade_admin(), client.admin());
+}

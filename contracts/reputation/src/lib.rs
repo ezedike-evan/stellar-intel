@@ -141,6 +141,15 @@ impl ReputationContract {
         upgrade::current_version(&env)
     }
 
+    /// Return the address authorized to upgrade the contract.
+    ///
+    /// Separate from `admin()` by design — the upgrade authority is its own
+    /// key. Exposed so an auditor can confirm the two are distinct accounts
+    /// rather than take it on trust (#913).
+    pub fn upgrade_admin(env: Env) -> Option<Address> {
+        upgrade::get_upgrade_admin(&env)
+    }
+
     pub fn get_score_for_corridor(
         env: Env,
         anchor_id: String,

@@ -14,7 +14,12 @@
 // validates the app's NEXT_PUBLIC_* env at import time. This script only needs a
 // corridor id, and a read-only contract check should not require the whole app's
 // configuration to be present.
-import { listAnchors, getCorridorAggregate, getScoreForCorridor } from '../lib/oracle/read.js';
+import {
+  listAnchors,
+  getCorridorAggregate,
+  getScoreForCorridor,
+  getOracleGovernance,
+} from '../lib/oracle/read.js';
 import {
   TESTNET_ORACLE_CONTRACT_ID,
   TESTNET_ORACLE_DEPLOYED_AT,
@@ -35,6 +40,35 @@ function fail(message: string): void {
 async function main(): Promise<void> {
   console.log(`Oracle contract : ${TESTNET_ORACLE_CONTRACT_ID}`);
   console.log(`Deployed at     : ${TESTNET_ORACLE_DEPLOYED_AT}`);
+
+  // Custody first: who controls this contract is the question a mainnet
+  // pre-flight actually needs answered (#913).
+  try {
+    const gov = await getOracleGovernance();
+    console.log(`Contract version: ${gov.contractVersion}`);
+    console.log(`Admin           : ${gov.admin ?? '(unset)'}`);
+    console.log(`Upgrade admin   : ${gov.upgradeAdmin ?? '(unset)'}`);
+    if (gov.pendingAdmin) {
+      console.log(`Pending admin   : ${gov.pendingAdmin}`);
+    }
+    if (gov.missingEntrypoints.length > 0) {
+      // The deployed bytecode is older than this repo's source. Worth shouting
+      // about: it means fixes that look merged are not actually live.
+      console.log(
+        `::warning::Deployed contract is missing ${gov.missingEntrypoints.join(', ')} — ` +
+          'the on-chain bytecode predates the current source. Re-deploy before ' +
+          'relying on anything added since.'
+      );
+    }
+    if (!gov.authoritiesSeparated) {
+      console.log(
+        '::warning::Operational admin and upgrade admin are not two distinct accounts. ' +
+          'One compromised key can both forge data and replace the contract code.'
+      );
+    }
+  } catch (err) {
+    fail(`governance read failed: ${err instanceof Error ? err.message : String(err)}`);
+  }
 
   let anchors: string[];
   try {
