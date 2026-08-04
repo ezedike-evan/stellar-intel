@@ -9,16 +9,21 @@
 
 import { NextResponse } from 'next/server';
 import type { ApiError } from '@/types';
-import type { RateLimitResult } from './rate-limit';
+import {
+  checkRateLimit,
+  getClientIp,
+  type RateLimitOptions,
+  type RateLimitResult,
+} from './rate-limit';
 
 /**
- * The public API's version, kept in sync with `info.version` in
- * lib/api/openapi.ts / public/openapi.json. Surfaced on every response as
- * the `API-Version` header so clients can detect a version change without
- * parsing the URL. Full URL-path versioning (e.g. `/v2/...`) is tracked
- * separately as part of the versioning/deprecation policy (epic #808).
+ * Re-exported so existing importers keep working. Defined in ./api-version so
+ * lib/logger.ts can stamp it without importing this module's dependency chain.
+ * Full URL-path versioning (e.g. `/v2/...`) is tracked separately as part of
+ * the versioning/deprecation policy.
  */
-export const API_VERSION = '1.3.0';
+export { API_VERSION } from './api-version';
+import { API_VERSION } from './api-version';
 
 /** Sets standard headers every public v1 API response should carry. */
 export function withApiHeaders(response: NextResponse): NextResponse {
@@ -51,4 +56,23 @@ export function apiErrorResponse(error: ApiError, status: number): NextResponse 
 /** Wraps a success payload, stamped with the standard API headers. */
 export function apiSuccessResponse<T>(data: T, init?: ResponseInit): NextResponse {
   return withApiHeaders(NextResponse.json<T>(data, init));
+}
+
+/**
+ * Rate-limits a request, returning a ready 429 when over the cap and `null`
+ * when the caller should proceed.
+ *
+ * Exists so adding a limit to a route is two lines rather than a copied block
+ * of header-setting — the reason 20 routes went uncovered while the OpenAPI
+ * spec described the limit as universal (#733).
+ *
+ *   const limited = await enforceRateLimit(request, { bucket: 'api.x', maxRequests: 60 });
+ *   if (limited) return limited;
+ */
+export async function enforceRateLimit(
+  request: Request,
+  options: RateLimitOptions & { bucket: string }
+): Promise<NextResponse | null> {
+  const rl = await checkRateLimit(getClientIp(request.headers), options);
+  return rl.allowed ? null : rateLimitedResponse(rl);
 }

@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { withRequestLogger } from '@/lib/logger';
 import { STELLAR_PUBKEY_PATTERN as ACCOUNT_PATTERN, AMOUNT_PATTERN } from '@/lib/patterns';
+import { enforceRateLimit } from '@/lib/api/response';
 
 export const dynamic = 'force-dynamic';
 
@@ -14,6 +15,12 @@ const ASSET_CODE_PATTERN = /^[A-Z]{1,12}$/;
 // values are forwarded to the anchor but never written to logs.
 export async function POST(request: NextRequest): Promise<NextResponse> {
   return withRequestLogger(request, 'api.sep6.withdraw', async (logger) => {
+    const limited = await enforceRateLimit(request, {
+      bucket: 'api.sep6.withdraw',
+      maxRequests: 20,
+    });
+    if (limited) return limited;
+
     let body: Record<string, unknown>;
     try {
       body = (await request.json()) as Record<string, unknown>;

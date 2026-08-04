@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from 'next/server';
 import { withRequestLogger } from '@/lib/logger';
 import { getBestAnchorSnapshot } from '@/lib/stellar/snapshot';
 import { AMOUNT_PATTERN } from '@/lib/patterns';
+import { enforceRateLimit } from '@/lib/api/response';
 
 export const runtime = 'nodejs';
 
@@ -18,6 +19,12 @@ export const revalidate = 600;
 // without making any live call of its own.
 export async function GET(request: NextRequest): Promise<NextResponse> {
   return withRequestLogger(request, 'api.snapshot', async (logger) => {
+    const limited = await enforceRateLimit(request, {
+      bucket: 'api.snapshot',
+      maxRequests: 120,
+    });
+    if (limited) return limited;
+
     const amount = new URL(request.url).searchParams.get('amount');
     if (amount !== null && (!AMOUNT_PATTERN.test(amount) || Number(amount) <= 0)) {
       logger.warn({ event: 'invalid_amount', amount });

@@ -7,12 +7,19 @@ import {
 } from '@/lib/reputation/aggregate';
 import { withRequestLogger } from '@/lib/logger';
 import { getReputationStore } from '@/lib/reputation/store';
+import { enforceRateLimit } from '@/lib/api/response';
 
 export const runtime = 'nodejs';
 
 /** GET /api/reputation/probe-coverage — 90-day probe-accumulation progress JSON. */
 export async function GET(request: NextRequest): Promise<NextResponse> {
   return withRequestLogger(request, 'api.reputation.probe-coverage', async (logger) => {
+    const limited = await enforceRateLimit(request, {
+      bucket: 'api.reputation.probe-coverage',
+      maxRequests: 60,
+    });
+    if (limited) return limited;
+
     const store = getReputationStore();
     const rows = await store.queryProbeSamples(undefined, { kind: 'uptime' });
     const samplesByDomain = new Map<string, ProbeCoverageSample[]>();

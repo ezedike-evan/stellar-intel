@@ -8,6 +8,7 @@ import {
 import { withRequestLogger } from '@/lib/logger';
 import { getReputationStore } from '@/lib/reputation/store';
 import type { OutcomeLogRow } from '@/types/reputation';
+import { enforceRateLimit } from '@/lib/api/response';
 
 // ─── In-memory stores (seed / replace with DB in a later iteration) ───────────
 
@@ -57,6 +58,12 @@ export async function GET(
   { params }: { params: Promise<{ anchor: string }> | { anchor: string } }
 ): Promise<NextResponse> {
   return withRequestLogger(request, 'api.reputation.anchor', async (logger) => {
+    const limited = await enforceRateLimit(request, {
+      bucket: 'api.reputation.anchor',
+      maxRequests: 120,
+    });
+    if (limited) return limited;
+
     const { anchor } = await params;
 
     if (!anchor || typeof anchor !== 'string') {

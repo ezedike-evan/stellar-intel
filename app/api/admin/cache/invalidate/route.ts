@@ -3,9 +3,16 @@ import { isAdminRequest } from '@/lib/auth/admin';
 import { withRequestLogger } from '@/lib/logger';
 import { invalidateCachedRates, clearRateCache } from '@/lib/api/rate-cache';
 import type { ApiError } from '@/types';
+import { enforceRateLimit } from '@/lib/api/response';
 
 export async function POST(request: NextRequest): Promise<NextResponse> {
   return withRequestLogger(request, 'api.admin.cache.invalidate', async (logger) => {
+    const limited = await enforceRateLimit(request, {
+      bucket: 'api.admin.cache-invalidate',
+      maxRequests: 30,
+    });
+    if (limited) return limited;
+
     if (!isAdminRequest(request)) {
       logger.warn({ event: 'unauthorized_access', path: request.nextUrl.pathname });
       return NextResponse.json<ApiError>(

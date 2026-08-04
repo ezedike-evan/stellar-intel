@@ -7,6 +7,7 @@ import {
   observationFromProbe,
   type ActuarialObservation,
 } from '@/lib/reputation/actuarial';
+import { enforceRateLimit } from '@/lib/api/response';
 
 export const runtime = 'nodejs';
 
@@ -19,6 +20,12 @@ export const runtime = 'nodejs';
  */
 export async function GET(request: NextRequest): Promise<NextResponse> {
   return withRequestLogger(request, 'api.reputation.actuarial', async (logger) => {
+    const limited = await enforceRateLimit(request, {
+      bucket: 'api.reputation.actuarial',
+      maxRequests: 60,
+    });
+    if (limited) return limited;
+
     const store = getReputationStore();
     const [outcomes, probes] = await Promise.all([store.query(), store.queryProbeSamples()]);
 

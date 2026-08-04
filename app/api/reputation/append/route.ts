@@ -3,6 +3,7 @@ import { withRequestLogger } from '@/lib/logger';
 import { getReputationStore } from '@/lib/reputation/store';
 import { AppendOutcomeInputSchema, toOutcomeLogRow } from '@/lib/reputation/schema';
 import type { ApiError } from '@/types';
+import { enforceRateLimit } from '@/lib/api/response';
 
 export const runtime = 'nodejs';
 
@@ -14,6 +15,12 @@ export const runtime = 'nodejs';
 
 export async function POST(request: NextRequest): Promise<NextResponse> {
   return withRequestLogger(request, 'api.reputation.append', async (logger) => {
+    const limited = await enforceRateLimit(request, {
+      bucket: 'api.reputation.append',
+      maxRequests: 20,
+    });
+    if (limited) return limited;
+
     const body = await request.json().catch(() => null);
     const parsed = AppendOutcomeInputSchema.safeParse(body);
 

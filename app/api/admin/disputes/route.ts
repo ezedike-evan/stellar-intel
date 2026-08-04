@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from 'next/server';
 import { isAdminRequest } from '@/lib/auth/admin';
 import { withRequestLogger } from '@/lib/logger';
 import type { ApiError } from '@/types';
+import { enforceRateLimit } from '@/lib/api/response';
 
 export type DisputeStatus = 'pending' | 'accepted' | 'rejected';
 
@@ -20,6 +21,12 @@ const store = new Map<string, Dispute>();
 
 export async function GET(request: NextRequest): Promise<NextResponse> {
   return withRequestLogger(request, 'api.admin.disputes', async (logger) => {
+    const limited = await enforceRateLimit(request, {
+      bucket: 'api.admin.disputes',
+      maxRequests: 60,
+    });
+    if (limited) return limited;
+
     if (!isAdminRequest(request)) {
       logger.warn({ event: 'unauthorized_access', path: request.nextUrl.pathname });
       return NextResponse.json<ApiError>(

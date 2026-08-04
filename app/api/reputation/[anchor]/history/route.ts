@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { z } from 'zod';
 import { ANCHORS } from '@/constants';
+import { enforceRateLimit } from '@/lib/api/response';
 import type { ApiError } from '@/types';
 import type { OutcomeRow } from '@/lib/reputation/aggregate';
 import {
@@ -32,6 +33,12 @@ export async function GET(
   request: NextRequest,
   { params }: { params: Promise<{ anchor: string }> | { anchor: string } }
 ): Promise<NextResponse> {
+  const limited = await enforceRateLimit(request, {
+    bucket: 'api.reputation.history',
+    maxRequests: 120,
+  });
+  if (limited) return limited;
+
   const { anchor } = await params;
 
   const knownAnchor = ANCHORS.find((a) => a.id === anchor);

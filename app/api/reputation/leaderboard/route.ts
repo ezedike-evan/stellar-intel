@@ -6,6 +6,7 @@ import { buildScorecards, mapOutcomeRows } from '@/lib/reputation/aggregate';
 import { tryGetReputationStore } from '@/lib/reputation/store';
 import { getScoreForCorridor, type CorridorScore } from '@/lib/oracle/read';
 import type { ApiError } from '@/types';
+import { enforceRateLimit } from '@/lib/api/response';
 
 // ─── Query param schema ────────────────────────────────────────────────────────
 
@@ -122,6 +123,12 @@ function etagFor(corridor: string | undefined, leaderboard: LeaderboardEntry[]):
 
 export async function GET(request: NextRequest): Promise<NextResponse> {
   return withRequestLogger(request, 'api.reputation.leaderboard', async (logger) => {
+    const limited = await enforceRateLimit(request, {
+      bucket: 'api.reputation.leaderboard',
+      maxRequests: 120,
+    });
+    if (limited) return limited;
+
     const { searchParams } = request.nextUrl;
 
     const rawParams = {

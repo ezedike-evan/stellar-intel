@@ -4,6 +4,7 @@ import { buildSdfAnchorDirectoryExport } from '@/lib/reputation/sdfExport';
 import { withRequestLogger } from '@/lib/logger';
 import { getReputationStore } from '@/lib/reputation/store';
 import type { ProbeLedgerRow } from '@/types/reputation';
+import { enforceRateLimit } from '@/lib/api/response';
 
 export const runtime = 'nodejs';
 
@@ -15,6 +16,12 @@ export const runtime = 'nodejs';
  */
 export async function GET(request: NextRequest): Promise<NextResponse> {
   return withRequestLogger(request, 'api.reputation.sdf-export', async (logger) => {
+    const limited = await enforceRateLimit(request, {
+      bucket: 'api.reputation.sdf-export',
+      maxRequests: 30,
+    });
+    if (limited) return limited;
+
     const store = getReputationStore();
     const rows = await store.queryProbeSamples();
 

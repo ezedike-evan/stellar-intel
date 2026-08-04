@@ -5,6 +5,7 @@ import { isAdminRequest } from '@/lib/auth/admin';
 import { CreateSubscriptionSchema } from '@/lib/webhooks/schema';
 import { getWebhookStore } from '@/lib/webhooks/store';
 import type { ApiError } from '@/types';
+import { enforceRateLimit } from '@/lib/api/response';
 
 export const runtime = 'nodejs';
 
@@ -15,6 +16,12 @@ export const runtime = 'nodejs';
 
 export async function POST(request: NextRequest): Promise<NextResponse> {
   return withRequestLogger(request, 'api.webhooks.subscriptions.create', async (logger) => {
+    const limited = await enforceRateLimit(request, {
+      bucket: 'api.webhooks.subscriptions',
+      maxRequests: 30,
+    });
+    if (limited) return limited;
+
     if (!isAdminRequest(request)) {
       return NextResponse.json<ApiError>(
         { code: 'FORBIDDEN', message: 'Admin key required' },

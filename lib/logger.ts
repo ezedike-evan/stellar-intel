@@ -2,7 +2,7 @@ import pino from 'pino';
 import { AsyncLocalStorage } from 'async_hooks';
 import { NextResponse } from 'next/server';
 import type { NextRequest } from 'next/server';
-import { API_VERSION } from './api/response';
+import { API_VERSION } from './api/api-version';
 
 type LoggerContext = { correlationId: string };
 

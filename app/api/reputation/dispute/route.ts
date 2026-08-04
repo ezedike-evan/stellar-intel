@@ -4,6 +4,7 @@ import { Keypair } from '@stellar/stellar-sdk';
 import { withRequestLogger } from '@/lib/logger';
 import { STELLAR_PUBKEY_PATTERN } from '@/lib/patterns';
 import type { ApiError } from '@/types';
+import { checkRateLimit, clearRateLimitStore } from '@/lib/api/rate-limit';
 
 const DisputeBodySchema = z.object({
   intentHash: z.string().regex(/^[0-9a-f]{64}$/, {
@@ -33,31 +34,29 @@ export interface DisputeRecord {
 
 const disputes = new Map<string, DisputeRecord>();
 
-interface RateLimitEntry {
-  count: number;
-  windowStart: number;
-}
-const rateLimitStore = new Map<string, RateLimitEntry>();
-
 const DISPUTE_WINDOW_MS = 86_400_000; // 24 hours
 const DISPUTE_MAX = 10;
 
-function checkDisputeRateLimit(publicKey: string): boolean {
-  const now = Date.now();
-  const entry = rateLimitStore.get(publicKey);
-
-  if (!entry || now - entry.windowStart >= DISPUTE_WINDOW_MS) {
-    rateLimitStore.set(publicKey, { count: 1, windowStart: now });
-    return true;
-  }
-  if (entry.count >= DISPUTE_MAX) return false;
-  entry.count += 1;
-  return true;
+/**
+ * Per-signer dispute quota, now counted through the shared limiter instead of a
+ * private Map — the private one was per-instance, so the "10 per 24 h" cap was
+ * really 10 per instance per 24 h (#733 / #911).
+ *
+ * Keyed by publicKey rather than IP on purpose: the quota belongs to the signer,
+ * and rotating IPs should not buy more disputes.
+ */
+async function checkDisputeRateLimit(publicKey: string): Promise<boolean> {
+  const result = await checkRateLimit(publicKey, {
+    bucket: 'api.reputation.dispute',
+    maxRequests: DISPUTE_MAX,
+    windowMs: DISPUTE_WINDOW_MS,
+  });
+  return result.allowed;
 }
 
 export function clearDisputeStores(): void {
   disputes.clear();
-  rateLimitStore.clear();
+  clearRateLimitStore();
 }
 
 // ─── Route handler ────────────────────────────────────────────────────────────
@@ -110,7 +109,7 @@ export async function POST(request: NextRequest): Promise<NextResponse> {
       );
     }
 
-    if (!checkDisputeRateLimit(publicKey)) {
+    if (!(await checkDisputeRateLimit(publicKey))) {
       logger.warn({ event: 'rate_limited', publicKey });
       return NextResponse.json<ApiError>(
         { code: 'RATE_LIMITED', message: 'Dispute limit of 10 per 24 h exceeded' },
