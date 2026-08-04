@@ -11,6 +11,14 @@ import type { ApiError } from '@/types';
 // A valid Stellar public key (USDC issuer on mainnet)
 const VALID_SENDER = 'GA5ZSEJYB37JRC5AVCIA5MOP4RHTM335X2KGX3IHOJAPP5RE34K4KZVN';
 
+// Routing now requires explicitly configured payment accounts (#941). These are
+// well-formed keys for test routing only — the previous hardcoded destinations
+// were addresses that did not exist on mainnet.
+const TEST_ANCHOR_ACCOUNTS = JSON.stringify({
+  cowrie: 'GA5ZSEJYB37JRC5AVCIA5MOP4RHTM335X2KGX3IHOJAPP5RE34K4KZVN',
+  moneygram: 'GAZW2PQFFJGH7RH6PB5VQASJIRAGEMZCID72CXYHRM27QYP4R5YRY777',
+});
+
 const VALID_INTENT = {
   type: 'offramp',
   sourceAsset: 'USDC',
@@ -30,8 +38,12 @@ function makeRequest(body: unknown, headers?: HeadersInit): NextRequest {
 
 beforeEach(() => {
   vi.clearAllMocks();
+  vi.unstubAllEnvs();
   clearRateLimitStore();
   clearIdempotencyStore();
+  // Routing is configuration-driven now; without this every corridor is
+  // correctly unroutable (#941).
+  vi.stubEnv('ANCHOR_PAYMENT_ACCOUNTS', TEST_ANCHOR_ACCOUNTS);
 });
 
 // ─── Happy path ────────────────────────────────────────────────────────────────
@@ -75,18 +87,49 @@ describe('POST /api/intent/offramp — happy path', () => {
   it('route includes anchorId, anchorDomain, and corridorId', async () => {
     const res = await POST(makeRequest(VALID_INTENT));
     const data = (await res.json()) as OfframpIntentResponse;
-    expect(data.route.anchorId).toBe('cowrie');
-    expect(data.route.anchorDomain).toBe('cowrie.exchange');
+    // Registry order, not the old hardcoded 'cowrie'. Selection among several
+    // configured anchors stays arbitrary until #790 wires the scorer in — but it
+    // is now arbitrary among anchors that exist and have a verified payment
+    // account, rather than a fixed choice nobody documented.
+    expect(data.route.anchorId).toBe('moneygram');
+    expect(data.route.anchorDomain).toBe('stellar.moneygram.com');
     expect(data.route.corridorId).toBe('usdc-ngn');
   });
 
-  it('accepts a KES corridor and returns the flutterwave anchor', async () => {
+  it('accepts a KES corridor and routes to a registered anchor', async () => {
+    // Was asserting 'flutterwave', which is not in constants/anchors.ts at all —
+    // the test pinned a routing target the rest of the system did not know
+    // about, paying to an address that did not exist (#941).
     const kesIntent = { ...VALID_INTENT, destinationAsset: 'KES' };
     const res = await POST(makeRequest(kesIntent));
     expect(res.status).toBe(200);
     const data = (await res.json()) as OfframpIntentResponse;
-    expect(data.route.anchorId).toBe('flutterwave');
+    expect(data.route.anchorId).toBe('moneygram');
     expect(data.route.corridorId).toBe('usdc-kes');
+  });
+
+  it('refuses to route a corridor with no configured payment account', async () => {
+    vi.stubEnv('ANCHOR_PAYMENT_ACCOUNTS', JSON.stringify({ cowrie: VALID_SENDER }));
+
+    const kesIntent = { ...VALID_INTENT, destinationAsset: 'KES' };
+    const res = await POST(makeRequest(kesIntent));
+
+    // The important half: it fails loudly rather than inventing a destination.
+    expect(res.status).toBe(400);
+    const err = (await res.json()) as ApiError;
+    expect(err.code).toBe('NO_ROUTE');
+    expect(err.message).toContain('No payment account configured');
+    // And it names who *could* serve it, so the gap is actionable.
+    expect(err.message).toContain('moneygram');
+  });
+
+  it('rejects a malformed account rather than routing to it', async () => {
+    vi.stubEnv('ANCHOR_PAYMENT_ACCOUNTS', JSON.stringify({ cowrie: 'not-a-stellar-key' }));
+
+    const res = await POST(makeRequest(VALID_INTENT));
+
+    expect(res.status).toBe(400);
+    expect(((await res.json()) as ApiError).code).toBe('NO_ROUTE');
   });
 });
 

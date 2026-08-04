@@ -1,4 +1,4 @@
-import { describe, it, expect, beforeEach } from 'vitest';
+import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest';
 import { NextRequest } from 'next/server';
 import { POST } from '@/app/api/graphql/route';
 import { checkRateLimit, clearRateLimitStore } from '@/lib/api/rate-limit';
@@ -34,6 +34,16 @@ async function run<T>(
 
 beforeEach(() => {
   clearRateLimitStore();
+  // Routing requires configured payment accounts (#941); GraphQL shares the
+  // same intent core, so it needs the same configuration to route.
+  vi.stubEnv(
+    'ANCHOR_PAYMENT_ACCOUNTS',
+    JSON.stringify({ moneygram: 'GA5ZSEJYB37JRC5AVCIA5MOP4RHTM335X2KGX3IHOJAPP5RE34K4KZVN' })
+  );
+});
+
+afterEach(() => {
+  vi.unstubAllEnvs();
 });
 
 describe('POST /api/graphql — anchors', () => {
@@ -126,7 +136,9 @@ describe('POST /api/graphql — submitOfframpIntent', () => {
     }>(MUTATION, { input: VALID_INPUT });
 
     expect(result.errors).toBeUndefined();
-    expect(result.data?.submitOfframpIntent.route.anchorId).toBe('cowrie');
+    // Registry order among anchors with a configured payment account, rather
+    // than the old hardcoded 'cowrie' (#941).
+    expect(result.data?.submitOfframpIntent.route.anchorId).toBe('moneygram');
     expect(result.data?.submitOfframpIntent.quoteId).toMatch(/^[0-9a-f]{64}$/);
     expect(result.data?.submitOfframpIntent.unsignedTx.length).toBeGreaterThan(10);
   });

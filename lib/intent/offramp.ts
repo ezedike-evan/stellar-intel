@@ -1,6 +1,5 @@
 import {
   Asset,
-  Networks,
   TransactionBuilder,
   Operation,
   Memo,
@@ -9,8 +8,12 @@ import {
 } from '@stellar/stellar-sdk';
 import { z } from 'zod';
 import { hashIntent, type Intent } from '@/lib/intent/hash';
-import { USDC_ISSUER } from '@/lib/config';
+import { NETWORK_PASSPHRASE, USDC_ISSUER } from '@/lib/config';
 import { AMOUNT_PATTERN } from '@/lib/patterns';
+import {
+  registeredAnchorsForCorridor,
+  routingTargetsForCorridor,
+} from '@/lib/intent/anchor-accounts';
 
 /**
  * lib/intent/offramp.ts
@@ -43,29 +46,13 @@ export interface OfframpIntentResponse {
   quoteId: string;
 }
 
-const ANCHOR_ROUTING: Record<
-  string,
-  { anchorId: string; anchorDomain: string; anchorAccount: string }
-> = {
-  'usdc-ngn': {
-    anchorId: 'cowrie',
-    anchorDomain: 'cowrie.exchange',
-    anchorAccount: 'GAIJ3VXNY7RPPLGVVCLGBK7NPHLL5ZRKATHETOA7M7UPZPAAHEGQQIY2',
-  },
-  'usdc-kes': {
-    anchorId: 'flutterwave',
-    anchorDomain: 'flutterwave.com',
-    anchorAccount: 'GC6PVZIZYHHROHYBBOZDJ5ZZI4RH6LDSHRT4K7BA5QGZFKMZ6HAZUQAK',
-  },
-};
-
 export function resolveRoute(sourceAsset: string, destinationAsset: string): OfframpRoute | null {
   const corridorId = `${sourceAsset.toLowerCase()}-${destinationAsset.toLowerCase()}`;
-  const anchor = ANCHOR_ROUTING[corridorId];
-  if (!anchor) return null;
+  const target = routingTargetsForCorridor(corridorId)[0];
+  if (!target) return null;
   return {
-    anchorId: anchor.anchorId,
-    anchorDomain: anchor.anchorDomain,
+    anchorId: target.anchorId,
+    anchorDomain: target.anchorDomain,
     corridorId,
     estimatedFee: '2',
     estimatedReceived: '0',
@@ -85,7 +72,9 @@ function buildUnsignedOfframpTx(
 
   const tx = new TransactionBuilder(account, {
     fee: BASE_FEE,
-    networkPassphrase: Networks.PUBLIC,
+    // Was hardcoded to Networks.PUBLIC, so a testnet deployment still handed
+    // callers mainnet transactions to sign (#941).
+    networkPassphrase: NETWORK_PASSPHRASE,
   })
     .addOperation(Operation.payment({ destination: anchorAccount, asset, amount }))
     .addMemo(Memo.hash(Buffer.from(quoteId, 'hex')))
@@ -108,14 +97,22 @@ export type OfframpResult =
  */
 export async function createOfframpIntent(intent: Intent): Promise<OfframpResult> {
   const route = resolveRoute(intent.sourceAsset, intent.destinationAsset);
-  const anchorEntry = route ? ANCHOR_ROUTING[route.corridorId] : undefined;
+  const corridorId = `${intent.sourceAsset.toLowerCase()}-${intent.destinationAsset.toLowerCase()}`;
+  const anchorEntry = route
+    ? routingTargetsForCorridor(corridorId).find((t) => t.anchorId === route.anchorId)
+    : undefined;
+
   if (!route || !anchorEntry) {
-    return {
-      ok: false,
-      code: 'NO_ROUTE',
-      message: `No route found for ${intent.sourceAsset} → ${intent.destinationAsset}`,
-      status: 400,
-    };
+    // Distinguish "we do not serve this corridor" from "we serve it but have no
+    // verified payment account". The second is a configuration gap on our side,
+    // and it used to be papered over with an address that did not exist (#941).
+    const registered = registeredAnchorsForCorridor(corridorId);
+    const message =
+      registered.length > 0
+        ? `No payment account configured for ${corridorId}. Registered anchors: ${registered.join(', ')}. Set ANCHOR_PAYMENT_ACCOUNTS.`
+        : `No route found for ${intent.sourceAsset} → ${intent.destinationAsset}`;
+
+    return { ok: false, code: 'NO_ROUTE', message, status: 400 };
   }
 
   const quoteId = await hashIntent(intent);

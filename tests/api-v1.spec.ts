@@ -1,4 +1,4 @@
-import { describe, it, expect, beforeEach } from 'vitest';
+import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest';
 import { NextRequest } from 'next/server';
 import { POST } from '@/app/api/v1/intent/offramp/route';
 import { GET } from '@/app/api/v1/health/route';
@@ -26,6 +26,16 @@ function postV1(body: unknown, headers?: HeadersInit): NextRequest {
 beforeEach(() => {
   clearRateLimitStore();
   clearIdempotencyStore();
+  // Routing requires configured payment accounts (#941); without one, every
+  // corridor correctly returns NO_ROUTE.
+  vi.stubEnv(
+    'ANCHOR_PAYMENT_ACCOUNTS',
+    JSON.stringify({ moneygram: 'GA5ZSEJYB37JRC5AVCIA5MOP4RHTM335X2KGX3IHOJAPP5RE34K4KZVN' })
+  );
+});
+
+afterEach(() => {
+  vi.unstubAllEnvs();
 });
 
 describe('rateLimitHeaders (#805)', () => {
