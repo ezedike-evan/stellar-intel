@@ -9,6 +9,7 @@ on:
 permissions:
   contents: write
   issues: write
+  pull-requests: write
 
 jobs:
   recrawl:
@@ -54,9 +55,15 @@ jobs:
               '',
               `- Workflow run: ${context.serverUrl}/${context.repo.owner}/${context.repo.repo}/actions/runs/${context.runId}`,
               '',
-              'The updated snapshot has been committed by this workflow. Review new',
-              'transfer-capable domains as onboarding candidates via',
-              '[`docs/ANCHOR_ONBOARDING.md`](../blob/main/docs/ANCHOR_ONBOARDING.md).',
+              'A companion PR refreshing `scripts/anchor-survey.snapshot.json` is opened',
+              'by the next step — check the PR list rather than assuming it merged.',
+              '',
+              'Review new transfer-capable domains as onboarding candidates via',
+              '[`docs/ANCHOR_ONBOARDING.md`](../blob/main/docs/ANCHOR_ONBOARDING.md),',
+              'and read the caveats in',
+              '[`docs/ANCHOR_FLEET_RECHECK.md`](../blob/main/docs/ANCHOR_FLEET_RECHECK.md)',
+              'first — home domain is not service domain, and strict TLS produces false',
+              'negatives, so confirm each row with `curl` before acting on it.',
             ].join('\n');
 
             await github.rest.issues.create({
@@ -67,20 +74,48 @@ jobs:
               labels: ['anchor-fleet'],
             });
 
-      - name: Commit refreshed snapshot
+      # Opens a PR rather than pushing to main. A ruleset on main requires the
+      # `closing-keywords` status check, and a direct push can never satisfy a
+      # required check, so every attempt was rejected:
+      #
+      #   remote: error: GH013: Repository rule violations found for refs/heads/main.
+      #   remote: - Required status check "closing-keywords" is expected.
+      #   ! [remote rejected] main -> main
+      #
+      # That is why this file had exactly one commit despite the job running for
+      # months, and why the whole run was marked failed even when the survey,
+      # the diff and the tracking issue all succeeded (#915).
+      - name: Propose refreshed snapshot
         if: steps.diff.outputs.changed == '2'
+        shell: bash
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: |
           set -euo pipefail
           cp /tmp/anchor-survey.fresh.json scripts/anchor-survey.snapshot.json
 
-          git config user.name "github-actions[bot]"
-          git config user.email "github-actions[bot]@users.noreply.github.com"
-
           if git diff --quiet -- scripts/anchor-survey.snapshot.json; then
-            echo "Snapshot unchanged after copy; skipping commit"
+            echo "Snapshot unchanged after copy; nothing to propose"
             exit 0
           fi
 
+          TODAY="$(date -u +%F)"
+          BRANCH="bot/anchor-fleet-snapshot-${TODAY}"
+
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+
+          git checkout -b "$BRANCH"
           git add scripts/anchor-survey.snapshot.json
-          git commit -m "chore(anchors): refresh fleet survey snapshot $(date -u +%F)"
-          git push
+          git commit -m "chore(anchors): refresh fleet survey snapshot ${TODAY}"
+          git push --force-with-lease -u origin "$BRANCH"
+
+          if gh pr view "$BRANCH" --json number >/dev/null 2>&1; then
+            echo "PR already open for ${BRANCH}"
+          else
+            gh pr create \
+              --base main \
+              --head "$BRANCH" \
+              --title "chore(anchors): refresh fleet survey snapshot ${TODAY}" \
+              --body "Monthly fleet re-crawl found changes against the committed snapshot. Companion to the \`anchor-fleet\` tracking issue for ${TODAY}; review new transfer-capable domains there before merging."
+          fi
