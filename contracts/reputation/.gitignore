@@ -1,4 +1,8 @@
 /target
-Cargo.lock
+# Cargo.lock is deliberately tracked, not ignored. The usual "a library does not
+# commit a lockfile" rule does not apply: this crate compiles to a WASM artifact
+# that is deployed and audited, so its dependency set has to be reproducible.
+# Ignoring it meant a clean checkout resolved soroban-sdk 22's transitive deps to
+# ed25519-dalek 3.0.0 and failed to build at all (#908).
 # Soroban test snapshots are regenerated on every `cargo test` run.
 /test_snapshots

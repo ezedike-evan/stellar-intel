@@ -7,13 +7,8 @@ const NORM_SETTLE_SECONDS: i128 = 300;
 const MIN_SETTLE_SECONDS: u64 = 1;
 
 fn clamp_bps(value: i128) -> i128 {
-    if value < 0 {
-        0
-    } else if value > MAX_BPS {
-        MAX_BPS
-    } else {
-        value
-    }
+    // MAX_BPS is a positive constant, so the panic-if-max-lt-min case cannot arise.
+    value.clamp(0, MAX_BPS)
 }
 
 fn normalize_settle_seconds(settle_seconds_p50: u64) -> i128 {

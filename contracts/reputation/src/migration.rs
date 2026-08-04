@@ -1,4 +1,4 @@
-use soroban_sdk::{Env, String, Vec};
+use soroban_sdk::{Env, String};
 
 use crate::storage::DataKey;
 use crate::score;

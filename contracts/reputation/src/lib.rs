@@ -1,8 +1,6 @@
 #![no_std]
 use soroban_sdk::{contract, contracterror, contractimpl, Address, BytesN, Env, String, Vec};
 
-use crate::storage;
-
 pub mod admin;
 pub mod aggregate;
 pub mod anchors;
