@@ -19,11 +19,8 @@ pub fn submit_outcome(
     }
 
     let head_key = DataKey::OutcomeHead(anchor_id.clone());
-    let (page_num, page_len): (u32, u32) = env
-        .storage()
-        .persistent()
-        .get(&head_key)
-        .unwrap_or((0, 0));
+    let (page_num, page_len): (u32, u32) =
+        env.storage().persistent().get(&head_key).unwrap_or((0, 0));
 
     let (page_num, page_len) = if page_len >= PAGE_SIZE {
         (page_num + 1, 0)

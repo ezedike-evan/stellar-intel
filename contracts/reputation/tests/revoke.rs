@@ -25,11 +25,25 @@ fn revoked_publisher_cannot_submit_outcome() {
     let corridor = String::from_str(&env, "NGN-USD");
     let outcome_hash = String::from_str(&env, "hash-1");
 
-    client.submit_outcome(&publisher, &anchor_id, &corridor, &outcome_hash, &1u64, &true);
+    client.submit_outcome(
+        &publisher,
+        &anchor_id,
+        &corridor,
+        &outcome_hash,
+        &1u64,
+        &true,
+    );
 
     client.revoke_publisher(&admin, &publisher);
 
     let outcome_hash2 = String::from_str(&env, "hash-2");
-    let res = client.try_submit_outcome(&publisher, &anchor_id, &corridor, &outcome_hash2, &1u64, &true);
+    let res = client.try_submit_outcome(
+        &publisher,
+        &anchor_id,
+        &corridor,
+        &outcome_hash2,
+        &1u64,
+        &true,
+    );
     assert_eq!(res, Err(Ok(Error::PublisherUnauthorized)));
 }

@@ -4,27 +4,27 @@ use soroban_sdk::{contract, contracterror, contractimpl, Address, BytesN, Env, S
 pub mod admin;
 pub mod aggregate;
 pub mod anchors;
-pub mod storage;
+pub mod corridor_rate;
+pub mod history;
+pub mod migration;
 pub mod outcome;
 pub mod publishers;
-pub mod history;
 pub mod score;
+pub mod storage;
 pub mod upgrade;
-pub mod corridor_rate;
-pub mod migration;
 pub mod volume_savings;
 
 #[contracterror]
 #[derive(Clone, Debug, Eq, PartialEq)]
 pub enum Error {
-    AlreadyInitialized    = 1,
-    NotInitialized        = 2,
-    Unauthorized          = 3,
-    AnchorExists          = 4,
-    PublisherExists       = 5,
-    PublisherNotFound     = 6,
+    AlreadyInitialized = 1,
+    NotInitialized = 2,
+    Unauthorized = 3,
+    AnchorExists = 4,
+    PublisherExists = 5,
+    PublisherNotFound = 6,
     PublisherUnauthorized = 7,
-    InvalidCorridorRate   = 8,
+    InvalidCorridorRate = 8,
 }
 
 #[contract]
@@ -36,14 +36,10 @@ impl ReputationContract {
         admin::set_admin(&env, &admin)
     }
 
-
-
     pub fn register_anchor(env: Env, caller: Address, anchor_id: String) -> Result<(), Error> {
         admin::require_admin(&env, &caller)?;
         anchors::register(&env, anchor_id)
     }
-
-
 
     pub fn list_anchors(env: Env) -> Vec<String> {
         anchors::list(&env)
@@ -76,20 +72,12 @@ impl ReputationContract {
         admin::get_pending_admin(&env)
     }
 
-    pub fn add_publisher(
-        env: Env,
-        caller: Address,
-        publisher: Address,
-    ) -> Result<(), Error> {
+    pub fn add_publisher(env: Env, caller: Address, publisher: Address) -> Result<(), Error> {
         admin::require_admin(&env, &caller)?;
         publishers::add(&env, publisher)
     }
 
-    pub fn revoke_publisher(
-        env: Env,
-        caller: Address,
-        publisher: Address,
-    ) -> Result<(), Error> {
+    pub fn revoke_publisher(env: Env, caller: Address, publisher: Address) -> Result<(), Error> {
         admin::require_admin(&env, &caller)?;
         publishers::revoke(&env, publisher)
     }
@@ -107,7 +95,15 @@ impl ReputationContract {
         settle_seconds: u64,
         success: bool,
     ) -> Result<(), Error> {
-        outcome::submit_outcome(&env, &publisher, anchor_id, corridor, outcome_hash, settle_seconds, success)
+        outcome::submit_outcome(
+            &env,
+            &publisher,
+            anchor_id,
+            corridor,
+            outcome_hash,
+            settle_seconds,
+            success,
+        )
     }
 
     /// Return the rolling aggregate for an (anchor, corridor) pair:
@@ -162,7 +158,15 @@ impl ReputationContract {
         settle_seconds_p50: u64,
         n: u32,
     ) {
-        score::set_corridor_metrics(&env, anchor_id, corridor, fill_rate_bps, slippage_bps, settle_seconds_p50, n);
+        score::set_corridor_metrics(
+            &env,
+            anchor_id,
+            corridor,
+            fill_rate_bps,
+            slippage_bps,
+            settle_seconds_p50,
+            n,
+        );
     }
 
     /// Publish (or overwrite) the block-level rate for a corridor (issue #810).
@@ -232,13 +236,25 @@ impl ReputationContract {
             .unwrap_or(default_v2);
 
         if composite_bps != 0 || n != 0 {
-            return (composite_bps, fill_rate_bps, slippage_bps, settle_seconds_p50, n);
+            return (
+                composite_bps,
+                fill_rate_bps,
+                slippage_bps,
+                settle_seconds_p50,
+                n,
+            );
         }
 
         let (old_composite_bps, old_fill_rate_bps, old_settle_seconds_p50, old_n) =
             score::get_score_for_corridor(&env, anchor_id, corridor);
         let old_slippage_bps = 0i128;
-        (old_composite_bps, old_fill_rate_bps, old_slippage_bps, old_settle_seconds_p50, old_n)
+        (
+            old_composite_bps,
+            old_fill_rate_bps,
+            old_slippage_bps,
+            old_settle_seconds_p50,
+            old_n,
+        )
     }
 
     // ── Volume + savings oracle (issue #826) ─────────────────────────────
@@ -258,10 +274,7 @@ impl ReputationContract {
 
     /// Read the cumulative volume + savings for `corridor`, or `None` if
     /// no data has been published yet.
-    pub fn get_volume_savings(
-        env: Env,
-        corridor: String,
-    ) -> Option<volume_savings::VolumeSavings> {
+    pub fn get_volume_savings(env: Env, corridor: String) -> Option<volume_savings::VolumeSavings> {
         volume_savings::get(&env, corridor)
     }
 }

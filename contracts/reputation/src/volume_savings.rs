@@ -68,9 +68,7 @@ pub fn add_volume_savings(
     record.updated_at = env.ledger().timestamp();
     record.publisher = publisher.clone();
 
-    env.storage()
-        .persistent()
-        .set(&key, &record);
+    env.storage().persistent().set(&key, &record);
     Ok(())
 }
 

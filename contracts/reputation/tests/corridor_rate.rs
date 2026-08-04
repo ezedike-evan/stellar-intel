@@ -87,5 +87,8 @@ fn unknown_corridor_reads_none() {
     env.mock_all_auths();
     let (client, _admin, _publisher) = setup(&env);
 
-    assert_eq!(client.get_corridor_rate(&String::from_str(&env, "usdc-xxx")), None);
+    assert_eq!(
+        client.get_corridor_rate(&String::from_str(&env, "usdc-xxx")),
+        None
+    );
 }

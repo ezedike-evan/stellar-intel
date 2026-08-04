@@ -43,12 +43,42 @@ struct Case {
 }
 
 const MATRIX: &[Case] = &[
-    Case { caller: Caller::Admin,      entrypoint: Entrypoint::SubmitOutcome,  authorized: true,  expect_ok: true },
-    Case { caller: Caller::Publisher,  entrypoint: Entrypoint::SubmitOutcome,  authorized: true,  expect_ok: true },
-    Case { caller: Caller::ThirdParty, entrypoint: Entrypoint::SubmitOutcome,  authorized: false, expect_ok: false },
-    Case { caller: Caller::Admin,      entrypoint: Entrypoint::RecentOutcomes, authorized: true,  expect_ok: true },
-    Case { caller: Caller::Publisher,  entrypoint: Entrypoint::RecentOutcomes, authorized: true,  expect_ok: true },
-    Case { caller: Caller::ThirdParty, entrypoint: Entrypoint::RecentOutcomes, authorized: false, expect_ok: true },
+    Case {
+        caller: Caller::Admin,
+        entrypoint: Entrypoint::SubmitOutcome,
+        authorized: true,
+        expect_ok: true,
+    },
+    Case {
+        caller: Caller::Publisher,
+        entrypoint: Entrypoint::SubmitOutcome,
+        authorized: true,
+        expect_ok: true,
+    },
+    Case {
+        caller: Caller::ThirdParty,
+        entrypoint: Entrypoint::SubmitOutcome,
+        authorized: false,
+        expect_ok: false,
+    },
+    Case {
+        caller: Caller::Admin,
+        entrypoint: Entrypoint::RecentOutcomes,
+        authorized: true,
+        expect_ok: true,
+    },
+    Case {
+        caller: Caller::Publisher,
+        entrypoint: Entrypoint::RecentOutcomes,
+        authorized: true,
+        expect_ok: true,
+    },
+    Case {
+        caller: Caller::ThirdParty,
+        entrypoint: Entrypoint::RecentOutcomes,
+        authorized: false,
+        expect_ok: true,
+    },
 ];
 
 #[test]

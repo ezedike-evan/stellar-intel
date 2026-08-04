@@ -16,11 +16,8 @@ pub fn recent_outcomes(env: &Env, anchor_id: String, n: u32) -> Vec<(String, u64
     }
 
     let head_key = DataKey::OutcomeHead(anchor_id.clone());
-    let (current_page, current_len): (u32, u32) = env
-        .storage()
-        .persistent()
-        .get(&head_key)
-        .unwrap_or((0, 0));
+    let (current_page, current_len): (u32, u32) =
+        env.storage().persistent().get(&head_key).unwrap_or((0, 0));
 
     if current_len == 0 && current_page == 0 {
         return Vec::new(env);

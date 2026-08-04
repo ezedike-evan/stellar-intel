@@ -12,7 +12,11 @@ fn setup(env: &Env) -> (ReputationContractClient<'_>, Address) {
     (client, admin)
 }
 
-fn expected_composite_bps(fill_rate_bps: i128, slippage_bps: i128, settle_seconds_p50: u64) -> i128 {
+fn expected_composite_bps(
+    fill_rate_bps: i128,
+    slippage_bps: i128,
+    settle_seconds_p50: u64,
+) -> i128 {
     let fill_rate_bps = fill_rate_bps.clamp(0, MAX_BPS);
     let slippage_bps = slippage_bps.clamp(0, MAX_BPS);
     let settle_seconds = settle_seconds_p50.max(1) as i128;

@@ -37,7 +37,9 @@ pub fn add(env: &Env, publisher: Address) -> Result<(), Error> {
 
     let mut publishers = list(env);
     publishers.push_back(publisher);
-    env.storage().instance().set(&DataKey::Publishers, &publishers);
+    env.storage()
+        .instance()
+        .set(&DataKey::Publishers, &publishers);
     Ok(())
 }
 
@@ -58,7 +60,9 @@ pub fn revoke(env: &Env, publisher: Address) -> Result<(), Error> {
             remaining.push_back(existing);
         }
     }
-    env.storage().instance().set(&DataKey::Publishers, &remaining);
+    env.storage()
+        .instance()
+        .set(&DataKey::Publishers, &remaining);
     Ok(())
 }
 

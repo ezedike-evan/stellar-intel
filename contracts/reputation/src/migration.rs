@@ -1,7 +1,7 @@
 use soroban_sdk::{Env, String};
 
-use crate::storage::DataKey;
 use crate::score;
+use crate::storage::DataKey;
 
 /// Migrate a single (anchor_id, corridor) pair from the v1 Corridor data key
 /// to the v2 CorridorV2 data key, preserving all computed metrics.
@@ -28,23 +28,23 @@ pub fn migrate_corridor(env: &Env, anchor_id: String, corridor: String) {
         .get(&old_key)
         .unwrap_or(default_metrics);
 
-    let composite_bps = score::compute_composite_bps(fill_rate_bps, slippage_bps, settle_seconds_p50);
+    let composite_bps =
+        score::compute_composite_bps(fill_rate_bps, slippage_bps, settle_seconds_p50);
 
-    let v2_metrics = (fill_rate_bps, slippage_bps, composite_bps, settle_seconds_p50, n);
-    env.storage()
-        .persistent()
-        .set(&v2_key, &v2_metrics);
+    let v2_metrics = (
+        fill_rate_bps,
+        slippage_bps,
+        composite_bps,
+        settle_seconds_p50,
+        n,
+    );
+    env.storage().persistent().set(&v2_key, &v2_metrics);
 }
 
 /// Default corridor list for v2 migration. Expand this list as new corridors
 /// are added (issue #825).
 const V2_CORRIDORS: &[&str] = &[
-    "usdc-ngn",
-    "usdc-kes",
-    "usdc-mxn",
-    "usdc-php",
-    "usdc-brl",
-    "usdc-ars",
+    "usdc-ngn", "usdc-kes", "usdc-mxn", "usdc-php", "usdc-brl", "usdc-ars",
 ];
 
 /// Migrate all known (anchor, corridor) pairs that have v1 metrics stored.

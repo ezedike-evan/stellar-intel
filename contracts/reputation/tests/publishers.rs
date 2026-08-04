@@ -56,7 +56,8 @@ fn unauthorized_submission_is_rejected() {
     let corridor = String::from_str(&env, "NGN-USD");
     let outcome_hash = String::from_str(&env, "hash1");
 
-    let res = client.try_submit_outcome(&stranger, &anchor_id, &corridor, &outcome_hash, &60, &true);
+    let res =
+        client.try_submit_outcome(&stranger, &anchor_id, &corridor, &outcome_hash, &60, &true);
     assert_eq!(res, Err(Ok(Error::PublisherUnauthorized)));
 }
 
