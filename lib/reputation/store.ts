@@ -6,6 +6,7 @@ import type {
 } from '@/types/reputation';
 import { SqliteReputationStore } from './sqlite';
 import { PostgresReputationStore, type SqlExecutor } from './postgres';
+import { getSqlExecutor } from './pool';
 
 export const PROBE_RETENTION_DAYS = 90;
 
@@ -169,7 +170,10 @@ export interface StoreFactoryOptions {
   backend?: StoreBackend;
   /** SQLite file path (defaults to in-process `:memory:`). */
   sqlitePath?: string;
-  /** Required for the `postgres` backend: a pg-compatible query executor. */
+  /**
+   * Optional override for the `postgres` backend. Defaults to the shared pool
+   * from `./pool`; pass one only to inject a fake in tests.
+   */
   executor?: SqlExecutor;
 }
 
@@ -182,8 +186,9 @@ function resolveBackend(explicit?: StoreBackend): StoreBackend {
 }
 
 /**
- * Builds a store for the configured backend. Concrete drivers are required
- * lazily so the in-memory/SQLite paths never load the Postgres adapter.
+ * Builds a store for the configured backend. The `postgres` branch defaults to
+ * the shared pool (`./pool`) when no executor is supplied, so callers only pass
+ * one to inject a fake in tests.
  */
 export function createReputationStore(options: StoreFactoryOptions = {}): ReputationStore {
   const backend = resolveBackend(options.backend);
@@ -194,10 +199,10 @@ export function createReputationStore(options: StoreFactoryOptions = {}): Reputa
     case 'sqlite':
       return new SqliteReputationStore(options.sqlitePath);
     case 'postgres':
-      if (!options.executor) {
-        throw new Error('The postgres backend requires a SqlExecutor (options.executor).');
-      }
-      return new PostgresReputationStore(options.executor);
+      // Falls back to the shared pool rather than throwing (Issue #906). Before
+      // this, every caller that did not hand-build an executor — including
+      // `getReputationStore()`, which is all of them — threw here in production.
+      return new PostgresReputationStore(options.executor ?? getSqlExecutor());
     default:
       throw new Error(`Unknown reputation store backend: ${backend as string}`);
   }

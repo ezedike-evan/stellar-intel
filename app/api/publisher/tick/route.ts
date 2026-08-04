@@ -1,5 +1,4 @@
 import { NextRequest, NextResponse } from 'next/server';
-import { Pool } from 'pg';
 import {
   runBatch,
   DEFAULT_BATCH_SIZE,
@@ -8,6 +7,7 @@ import {
 } from '@stellarintel/publisher';
 import { withLoggerContext } from '@/lib/logger';
 import { acquireLock, releaseLock } from '@/lib/reputation/lock';
+import { getPool } from '@/lib/reputation/pool';
 
 export const runtime = 'nodejs';
 // Fluid Compute: allow the function to run for up to 5 minutes per tick so a
@@ -25,17 +25,12 @@ const DEFAULT_NETWORK_PASSPHRASE = 'Test SDF Network ; September 2015';
 const DEFAULT_HORIZON_URL = 'https://horizon-testnet.stellar.org';
 const DEFAULT_RPC_URL = 'https://soroban-testnet.stellar.org';
 
-// Reused across invocations within the same warm Fluid Compute instance,
-// mirroring the pooling pattern lib/reputation/postgres.ts documents.
-let pool: Pool | null = null;
-
+// Shares the one process-wide pool with the reputation store rather than
+// opening a second one (Issue #906). The publisher's `QueryExecutor` is a
+// function while the store's `SqlExecutor` is an object, so this adapts shape
+// only — the underlying connections are the same.
 function getExecutor(): QueryExecutor {
-  if (!pool) {
-    const databaseUrl = process.env.DATABASE_URL;
-    if (!databaseUrl) throw new Error('DATABASE_URL is required for the publisher tick');
-    pool = new Pool({ connectionString: databaseUrl });
-  }
-  const activePool = pool;
+  const activePool = getPool();
   return (sql, params) => activePool.query(sql, params as unknown[]);
 }
 

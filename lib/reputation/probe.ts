@@ -944,11 +944,27 @@ export interface ProbeLedgerSink {
  */
 export class DurableProbeStore implements ProbeSampleStore {
   private readonly pending: Promise<void>[] = [];
+  private persistedCount = 0;
+  private failedCount = 0;
 
   constructor(
     private readonly sink: ProbeLedgerSink,
     private readonly kind: ProbeKind
   ) {}
+
+  /** Samples this adapter has successfully written, as of the last `drain()`. */
+  get persisted(): number {
+    return this.persistedCount;
+  }
+
+  /**
+   * Samples whose write rejected. Non-zero means the run produced samples that
+   * never reached the ledger — a caller reporting success without checking this
+   * is reporting a probe run that accumulated nothing (Issue #906).
+   */
+  get failed(): number {
+    return this.failedCount;
+  }
 
   record(sample: ProbeSample): void {
     const row: ProbeLedgerRow = {
@@ -962,12 +978,18 @@ export class DurableProbeStore implements ProbeSampleStore {
       probedAt: new Date(sample.at).toISOString(),
     };
     this.pending.push(
-      this.sink.recordProbeSample(row).catch((err) => {
-        logger.error(
-          { event: 'probe.persist.error', domain: row.domain, kind: row.kind, err },
-          'failed to persist probe sample to the durable store'
-        );
-      })
+      this.sink.recordProbeSample(row).then(
+        () => {
+          this.persistedCount += 1;
+        },
+        (err: unknown) => {
+          this.failedCount += 1;
+          logger.error(
+            { event: 'probe.persist.error', domain: row.domain, kind: row.kind, err },
+            'failed to persist probe sample to the durable store'
+          );
+        }
+      )
     );
   }
 
