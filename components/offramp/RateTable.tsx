@@ -2,7 +2,16 @@
 import { Fragment, useState, useCallback, useMemo, useRef, useEffect } from 'react';
 import Link from 'next/link';
 import { formatCurrency, formatRate } from '@/lib/utils';
-import { nextSortState, sortRates, type SortState } from '@/lib/sort';
+import {
+  ariaSortFor,
+  nextSortState,
+  parseSort,
+  serializeSort,
+  sortRates,
+  SORT_PARAM,
+  type RateSortKey,
+  type SortState,
+} from '@/lib/sort';
 import { FUNNEL_EVENTS, trackFunnelEvent } from '@/lib/analytics';
 import {
   isIndicativeRateSource,
@@ -43,7 +52,34 @@ export function RateTable({
   onRefresh,
 }: RateTableProps) {
   const [expiredAnchorIds, setExpiredAnchorIds] = useState<Set<string>>(new Set());
-  const [sort, setSort] = useState<SortState | null>(null);
+  // Initialised from the URL so a sorted view can be linked and survives a
+  // reload (#731). Read lazily rather than in an effect to avoid rendering the
+  // default order first and then snapping.
+  const [sort, setSort] = useState<SortState | null>(() =>
+    typeof window === 'undefined'
+      ? null
+      : parseSort(new URLSearchParams(window.location.search).get(SORT_PARAM))
+  );
+
+  // replaceState rather than push: sorting a table is not a navigation, and
+  // filling the back stack with sort states would make Back unusable.
+  const applySort = useCallback((key: RateSortKey) => {
+    setSort((prev) => {
+      const next = nextSortState(prev, key);
+
+      if (typeof window !== 'undefined') {
+        const params = new URLSearchParams(window.location.search);
+        const encoded = serializeSort(next);
+        if (encoded) params.set(SORT_PARAM, encoded);
+        else params.delete(SORT_PARAM);
+
+        const query = params.toString();
+        window.history.replaceState(null, '', query ? `?${query}` : window.location.pathname);
+      }
+
+      return next;
+    });
+  }, []);
   const [expandedAnchorId, setExpandedAnchorId] = useState<string | null>(null);
 
   const handleExpire = useCallback((anchorId: string) => {
@@ -161,42 +197,46 @@ export function RateTable({
             </th>
             <th
               scope="col"
+              aria-sort={ariaSortFor(sort, 'reputation')}
               className="px-4 py-3 text-right font-medium text-gray-600 dark:text-gray-400"
             >
               <SortToggle
                 label="Reputation"
                 direction={sort?.key === 'reputation' ? sort.direction : null}
-                onClick={() => setSort((prev) => nextSortState(prev, 'reputation'))}
+                onClick={() => applySort('reputation')}
               />
             </th>
             <th
               scope="col"
+              aria-sort={ariaSortFor(sort, 'fee')}
               className="px-4 py-3 text-right font-medium text-gray-600 dark:text-gray-400"
             >
               <SortToggle
                 label="Fee"
                 direction={sort?.key === 'fee' ? sort.direction : null}
-                onClick={() => setSort((prev) => nextSortState(prev, 'fee'))}
+                onClick={() => applySort('fee')}
               />
             </th>
             <th
               scope="col"
+              aria-sort={ariaSortFor(sort, 'rate')}
               className="px-4 py-3 text-right font-medium text-gray-600 dark:text-gray-400"
             >
               <SortToggle
                 label="Rate"
                 direction={sort?.key === 'rate' ? sort.direction : null}
-                onClick={() => setSort((prev) => nextSortState(prev, 'rate'))}
+                onClick={() => applySort('rate')}
               />
             </th>
             <th
               scope="col"
+              aria-sort={ariaSortFor(sort, 'receive')}
               className="px-4 py-3 text-right font-medium text-gray-600 dark:text-gray-400"
             >
               <SortToggle
                 label="You Receive"
                 direction={sort?.key === 'receive' ? sort.direction : null}
-                onClick={() => setSort((prev) => nextSortState(prev, 'receive'))}
+                onClick={() => applySort('receive')}
               />
             </th>
             <th

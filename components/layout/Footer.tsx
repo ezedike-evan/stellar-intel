@@ -33,6 +33,10 @@ const FOOTER_COLUMNS = [
   {
     title: 'Legal',
     links: [
+      // First in the column, and an internal link: app/terms/page.tsx existed
+      // but nothing pointed at it, so the only way to reach the Terms was to
+      // type the URL (#740).
+      { href: '/terms', label: 'Terms' },
       { href: `${REPO_URL}/blob/main/LICENSE`, label: 'License', external: true },
       { href: `${REPO_URL}/blob/main/docs/NON_CUSTODY.md`, label: 'Non-custody', external: true },
       {
