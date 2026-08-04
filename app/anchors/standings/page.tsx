@@ -13,6 +13,7 @@ import type { Metadata } from 'next';
 import Link from 'next/link';
 import { ANCHORS } from '@/constants';
 import { AnchorLogo } from '@/components/ui/AnchorLogo';
+import { weightedComposite } from '@/lib/reputation/composite';
 
 export const metadata: Metadata = {
   title: 'Anchor Standings — Stellar Intel',
@@ -44,14 +45,6 @@ interface StandingsEntry {
  *             + 0.3 × (1 − slippage_p50 / 0.05)
  *             + 0.3 × (1 − settle_p50 / 300)
  */
-function computeComposite(fillRate: number, settleP50: number, slippageP50: number): number {
-  const fillScore = Math.min(1, Math.max(0, fillRate));
-  const slippageScore = Math.min(1, Math.max(0, 1 - slippageP50 / 0.05));
-  const settleScore = Math.min(1, Math.max(0, 1 - settleP50 / 300));
-  const raw = 0.4 * fillScore + 0.3 * slippageScore + 0.3 * settleScore;
-  return Math.round(raw * 10_000) / 10_000;
-}
-
 function scoreLabel(score: number): { label: string; className: string } {
   if (score >= 0.8)
     return { label: 'Excellent', className: 'text-emerald-700 dark:text-emerald-400' };
@@ -96,7 +89,7 @@ async function loadStandings(): Promise<StandingsEntry[]> {
         return {
           anchorId: anchor.id,
           anchorName: anchor.name,
-          composite: computeComposite(fillRate, settleP50, slippageP50),
+          composite: weightedComposite(fillRate, settleP50, slippageP50),
           fillRate,
           settleP50,
           slippageP50,

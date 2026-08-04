@@ -7,6 +7,7 @@ import { tryGetReputationStore } from '@/lib/reputation/store';
 import { getScoreForCorridor, type CorridorScore } from '@/lib/oracle/read';
 import type { ApiError } from '@/types';
 import { enforceRateLimit } from '@/lib/api/response';
+import { weightedComposite } from '@/lib/reputation/composite';
 
 // ─── Query param schema ────────────────────────────────────────────────────────
 
@@ -48,16 +49,6 @@ export interface LeaderboardResponse {
  *
  * All terms are clamped to [0, 1] before weighting.
  */
-function computeComposite(fill_rate: number, settle_p50: number, slippage_p50: number): number {
-  const fillScore = Math.min(1, Math.max(0, fill_rate));
-  const slippageScore = Math.min(1, Math.max(0, 1 - slippage_p50 / 0.05));
-  const settleScore = Math.min(1, Math.max(0, 1 - settle_p50 / 300));
-
-  const raw = 0.4 * fillScore + 0.3 * slippageScore + 0.3 * settleScore;
-  // Round to 4 decimal places to keep the payload compact
-  return Math.round(raw * 10_000) / 10_000;
-}
-
 async function buildLeaderboard(corridorFilter: string | undefined): Promise<LeaderboardEntry[]> {
   const anchors =
     corridorFilter !== undefined
@@ -84,7 +75,7 @@ async function buildLeaderboard(corridorFilter: string | undefined): Promise<Lea
       // honestly at the bottom rather than let zeroed inputs read as "perfect"
       // through the composite formula.
       const composite =
-        scorecard.state === 'ok' ? computeComposite(fill_rate, settle_p50, slippage_p50) : 0;
+        scorecard.state === 'ok' ? weightedComposite(fill_rate, settle_p50, slippage_p50) : 0;
 
       let onChain: CorridorScore | null = null;
       if (corridorFilter !== undefined) {

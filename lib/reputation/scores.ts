@@ -11,6 +11,7 @@
 import { ANCHORS } from '@/constants';
 import { buildScorecards, mapOutcomeRows } from '@/lib/reputation/aggregate';
 import { tryGetReputationStore } from '@/lib/reputation/store';
+import { weightedComposite } from '@/lib/reputation/composite';
 
 export interface AnchorReputationEntry {
   /** Composite reputation score in [0, 1]. */
@@ -27,15 +28,6 @@ export interface AnchorReputationEntry {
  *             + 0.3 × (1 − slippage_p50 / 0.05)
  *             + 0.3 × (1 − settle_p50 / 300)
  */
-function computeComposite(fill_rate: number, settle_p50: number, slippage_p50: number): number {
-  const fillScore = Math.min(1, Math.max(0, fill_rate));
-  const slippageScore = Math.min(1, Math.max(0, 1 - slippage_p50 / 0.05));
-  const settleScore = Math.min(1, Math.max(0, 1 - settle_p50 / 300));
-
-  const raw = 0.4 * fillScore + 0.3 * slippageScore + 0.3 * settleScore;
-  return Math.round(raw * 10_000) / 10_000;
-}
-
 /**
  * Fetches reputation scores for all registered anchors and returns a lookup map.
  *
@@ -67,7 +59,7 @@ export async function fetchReputationScores(): Promise<Map<string, AnchorReputat
 
           return {
             anchorId: anchor.id,
-            score: computeComposite(fill_rate, settle_p50, slippage_p50),
+            score: weightedComposite(fill_rate, settle_p50, slippage_p50),
           };
         } catch {
           // Store unavailable (e.g. no DATABASE_URL in dev) — return 0, not an error.
