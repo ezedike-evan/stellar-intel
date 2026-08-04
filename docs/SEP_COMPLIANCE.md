@@ -40,9 +40,25 @@ Registered anchors ([`constants/anchors.ts`](../constants/anchors.ts)). Capabili
 | MoneyGram (`stellar.moneygram.com`) |  ✅   |  ❌   |   ✅   |   ❌   |   ✅   |   ❌   |   ❌   | NGN, KES, GHS, MXN, BRL |
 | Cowrie Exchange (`cowrie.exchange`) |  ✅   |  ✅   |   ✅   |   ❌   |   ❌   |   ❌   |   ❌   | NGN                     |
 | Anclap (`anclap.com`)               |  ✅   |  ✅   |   ✅   |   ❌   |   ✅   |   ❌   |   ❌   | ARS, PEN                |
+| NGNC (`ngnc.online`)                |  ✅   |  ❌   |   ✅   |   ❌   |   ✅   |   ❌   |   ❌   | NGN                     |
+| MyKobo (`mykobo.co`)                |  ✅   |  ✅   |   ✅   |   ❌   |   ✅   |   ✅   |   ❌   | EUR                     |
 | nTokens (`ntokens.com`)             |  ✅   |  ✅   |   ✅   |   ❌   |   ✅   |   ✅   |   ❌   | BRL                     |
+| **Zeam Money** (`zeam.money`)       |  ✅   |  ❌   |   ✅   |   ❌   |   ✅   |   ✅   | **✅** | ZAR (see note)          |
 
 > Snapshot — keep current via `node scripts/anchor-survey.mjs`. Capability legend: ✅ advertised · ❌ not advertised. SEP-38 column reflects `ANCHOR_QUOTE_SERVER` presence in the anchor's `stellar.toml`.
+>
+> **Live-probed 2026-08-04** (#720) with `npx tsx scripts/probe-sep38.mts`; capture committed at
+> [`tests/fixtures/sep38/capability-capture.json`](../tests/fixtures/sep38/capability-capture.json).
+> The previous version of this table listed four of the seven registered anchors and recorded no
+> SEP-38 support anywhere, which was wrong.
+
+### SEP-38 availability, in one line
+
+**Zeam Money is the only registered anchor advertising a quote server** — and its `/info` offers
+USDC and BRL only. No anchor serves a firm quote for **NGN**, so the USDC→NGN flow is indicative
+pricing plus SEP-24 execution, and is labelled as such in the UI. Zeam's SEP-38 also offers no
+**ZAR**, despite the registry listing it on the `usdc-zar` corridor; SEP-24 may serve ZAR
+independently, so that is flagged in `constants/anchors.ts` rather than resolved by guesswork.
 
 ## Notes
 
