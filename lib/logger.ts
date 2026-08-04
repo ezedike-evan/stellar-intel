@@ -2,7 +2,7 @@ import pino from 'pino';
 import { AsyncLocalStorage } from 'async_hooks';
 import { NextResponse } from 'next/server';
 import type { NextRequest } from 'next/server';
-import { API_VERSION } from './api/api-version';
+import { API_VERSION, negotiateApiVersion, SUPPORTED_API_VERSIONS } from './api/api-version';
 
 type LoggerContext = { correlationId: string };
 
@@ -67,6 +67,27 @@ export async function withRequestLogger(
   return runWithCorrelationId(correlationId, async () => {
     const logger = getLogger(moduleName);
     logger.info({ event: 'request.start', method: request.method, url: request.url });
+
+    // Version pinning, per docs/VERSIONING.md: a client may send API-Version to
+    // pin, and an unsupported value is rejected rather than silently served the
+    // latest surface. Omitting it still means "latest", so this cannot break an
+    // existing client (#888).
+    const negotiated = negotiateApiVersion(request.headers);
+    if (!negotiated.ok) {
+      logger.warn({ event: 'unsupported_api_version', requested: negotiated.requested });
+      const response = NextResponse.json(
+        {
+          code: 'UNSUPPORTED_API_VERSION',
+          message: `Unsupported API-Version: ${negotiated.requested}`,
+          supportedVersions: SUPPORTED_API_VERSIONS,
+        },
+        { status: 400 }
+      );
+      response.headers.set('x-correlation-id', correlationId);
+      setApiVersionHeader(response);
+      return response;
+    }
+
     try {
       const response = await fn(logger);
       response.headers.set('x-correlation-id', correlationId);

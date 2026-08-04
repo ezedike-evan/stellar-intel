@@ -128,28 +128,42 @@ Deprecations and breaking changes are announced on:
 
 ```http
 Accept: application/json
-API-Version: v2026-07-01
+API-Version: 1.3.0
 ```
 
 The `API-Version` request header selects the API version for the request.
 Omit it to receive the latest version (subject to change).
 
-| Behaviour                             | Version sent               | Response                                         |
-| ------------------------------------- | -------------------------- | ------------------------------------------------ |
-| Consumer targets a known version      | `API-Version: v2026-07-01` | Stable surface for that date                     |
-| Consumer omits the header             | (none)                     | Latest version — may change                      |
-| Consumer sends an unsupported version | `API-Version: v2025-01-01` | `400 Bad Request` with supported versions listed |
+| Behaviour                             | Version sent         | Response                                         |
+| ------------------------------------- | -------------------- | ------------------------------------------------ |
+| Consumer targets a known version      | `API-Version: 1.3.0` | That version's surface                           |
+| Consumer omits the header             | (none)               | Latest version — may change                      |
+| Consumer sends an unsupported version | `API-Version: 0.9.0` | `400 Bad Request` with supported versions listed |
 
 **Migration.** To move from one version to the next, update the `API-Version`
 header and adjust for any breaking changes listed in the changelog.
 
-**Current status.** Request-side version selection is not implemented yet — the
-table above describes the target contract. Today the header travels in the
-other direction only: responses are stamped with `API-Version` carrying the
-OpenAPI spec version from `lib/api/response.ts` (kept in sync with
-`info.version` in `public/openapi.json`), so a client can detect that the
-surface changed. Sending `API-Version` on a request is currently ignored rather
-than rejected.
+**Current status.** Implemented in both directions (#888).
+
+Responses are stamped with `API-Version` by the request wrappers in
+`lib/logger.ts`, so it is present on every response — including error responses
+— rather than on the handful of routes that used to set it by hand. The value
+comes from `lib/api/api-version.ts`, and a test asserts it matches
+`info.version` in `public/openapi.json`.
+
+Requests may pin a version with the same header. An unsupported value returns
+`400` with a `supportedVersions` list; omitting the header still means "latest",
+so pinning is opt-in and no existing client is broken by the check.
+
+**Known mismatch with the scheme above.** The _Versioning scheme_ section
+declares date-based versions (`vYYYY-MM-DD`), but nothing has ever emitted one.
+`API-Version` carries the semver spec version (`1.3.0`), kept in step with
+`info.version` in `public/openapi.json`, and that is what the negotiation
+accepts. Adopting date versions is a live decision, not an oversight in the
+implementation: it means changing `API_VERSION` in `lib/api/api-version.ts` and
+adding the old value to `SUPPORTED_API_VERSIONS` so pinned clients keep working
+across the switch. Documented here rather than resolved silently in either
+direction.
 
 ---
 
