@@ -106,6 +106,17 @@ export const ANCHORS: Anchor[] = [
   // zeam.money: ZAR fiat corridor — SEP-24 withdraw/deposit enabled.
   // Verified 2026-06-28. TOML: TRANSFER_SERVER_SEP0024 = https://anchor.zeam.money/sep24
   // /info: deposit/withdraw for USDC enabled.
+  //
+  // Re-probed 2026-08-04 (#720): also declares
+  // ANCHOR_QUOTE_SERVER = https://anchor.zeam.money/sep38, which the `seps`
+  // array omitted. It is the ONLY registered anchor advertising SEP-38.
+  //
+  // Note the corridor mismatch: this entry claims `usdc-zar`, but the SEP-38
+  // /info offers USDC and BRL only — no ZAR asset at all. The ZAR corridor may
+  // still be served over SEP-24; the two rails are not required to cover the
+  // same currencies. Flagged rather than silently "corrected", because dropping
+  // usdc-zar would change corridor routing on the strength of one rail's
+  // capability list. See tests/fixtures/sep38/capability-capture.json.
   {
     id: 'zeam',
     name: 'Zeam Money',
@@ -114,7 +125,7 @@ export const ANCHORS: Anchor[] = [
     corridors: ['usdc-zar'],
     assetCode: 'USDC',
     assetIssuer: USDC_ISSUER,
-    seps: ['sep24', 'sep31'],
+    seps: ['sep24', 'sep31', 'sep38'],
   },
 ];
 
