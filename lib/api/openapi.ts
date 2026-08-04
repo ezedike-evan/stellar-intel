@@ -812,6 +812,283 @@ registry.registerPath({
   },
 });
 
+// ─── Previously undocumented routes (#918) ───────────────────────────────────
+//
+// Thirteen of twenty-nine route files were absent from this registry while the
+// description above claimed the hardening contract applied to "every response".
+// A generated SDK built from the old spec would have covered just over half the
+// API.
+
+const RATE_LIMITED_429 = {
+  description: 'Rate limited',
+  content: { 'application/json': { schema: ApiErrorSchema } },
+} as const;
+
+const UNAUTHORIZED_401 = {
+  description: 'Missing or invalid credentials',
+  content: { 'application/json': { schema: ApiErrorSchema } },
+} as const;
+
+registry.registerPath({
+  method: 'post',
+  path: '/api/graphql',
+  summary: 'GraphQL endpoint',
+  description:
+    'Additive GraphQL surface over the same data the REST API serves (see docs/GRAPHQL_API.md). ' +
+    'REST remains the source of truth documented here; the GraphQL schema is published separately.',
+  tags: ['System'],
+  responses: {
+    200: {
+      description: 'GraphQL result envelope',
+      content: {
+        'application/json': {
+          schema: z.object({ data: z.any().optional(), errors: z.any().optional() }),
+        },
+      },
+    },
+    429: RATE_LIMITED_429,
+  },
+});
+
+registry.registerPath({
+  method: 'post',
+  path: '/api/intent',
+  summary: 'Submit an intent (unversioned)',
+  description:
+    'Internal, unversioned intent endpoint. Prefer `POST /api/v1/intent/offramp`, which carries the ' +
+    'v1 hardening contract and idempotency guarantees.',
+  tags: ['Intent'],
+  responses: {
+    200: {
+      description: 'Intent accepted',
+      content: { 'application/json': { schema: OfframpIntentResponseSchema } },
+    },
+    400: {
+      description: 'Validation error',
+      content: { 'application/json': { schema: ApiErrorSchema } },
+    },
+    429: RATE_LIMITED_429,
+  },
+});
+
+registry.registerPath({
+  method: 'post',
+  path: '/api/v1/intent/offramp',
+  summary: 'Submit an off-ramp intent (v1)',
+  description:
+    'The public v1 intent endpoint. Honours `Idempotency-Key`: a retried request replays the ' +
+    'original response with `Idempotency-Replayed: true` rather than creating a second intent.',
+  tags: ['Intent'],
+  responses: {
+    200: {
+      description: 'Intent accepted',
+      content: { 'application/json': { schema: OfframpIntentResponseSchema } },
+    },
+    400: {
+      description: 'Validation error',
+      content: { 'application/json': { schema: ApiErrorSchema } },
+    },
+    429: RATE_LIMITED_429,
+  },
+});
+
+registry.registerPath({
+  method: 'get',
+  path: '/api/v1/health',
+  summary: 'Service health (v1)',
+  description: 'Liveness and dependency status for the public v1 surface.',
+  tags: ['System'],
+  responses: {
+    200: {
+      description: 'Health snapshot',
+      content: { 'application/json': { schema: z.object({ status: z.string() }).passthrough() } },
+    },
+    429: RATE_LIMITED_429,
+  },
+});
+
+registry.registerPath({
+  method: 'get',
+  path: '/api/reputation/actuarial',
+  summary: 'Actuarial progress report',
+  description:
+    'Progress toward statistically meaningful anchor scoring, combining settled outcomes with probe observations.',
+  tags: ['Reputation'],
+  responses: {
+    200: {
+      description: 'Actuarial progress report',
+      content: { 'application/json': { schema: z.object({}).passthrough() } },
+    },
+    429: RATE_LIMITED_429,
+  },
+});
+
+registry.registerPath({
+  method: 'get',
+  path: '/api/reputation/probe-coverage',
+  summary: 'Probe coverage report',
+  description:
+    'How much probe history has accumulated per anchor, and how that compares with the 90-day ' +
+    'mainnet-readiness window.',
+  tags: ['Reputation'],
+  responses: {
+    200: {
+      description: 'Probe coverage report',
+      content: { 'application/json': { schema: z.object({}).passthrough() } },
+    },
+    429: RATE_LIMITED_429,
+  },
+});
+
+registry.registerPath({
+  method: 'get',
+  path: '/api/reputation/sdf-export',
+  summary: 'Anchor health export for the SDF Anchor Directory',
+  description: 'Anchor health data in the shape SDF’s Anchor Directory consumes.',
+  tags: ['Reputation'],
+  responses: {
+    200: {
+      description: 'Export payload',
+      content: { 'application/json': { schema: z.object({}).passthrough() } },
+    },
+    429: RATE_LIMITED_429,
+  },
+});
+
+registry.registerPath({
+  method: 'post',
+  path: '/api/reputation/refresh',
+  summary: 'Run the probe sweep',
+  description:
+    'Cron-triggered. Probes every registered anchor across all four dimensions and persists the ' +
+    'samples. Returns 500 when a sweep probes anchors but persists nothing. Protected by CRON_SECRET.',
+  tags: ['System'],
+  security: [{ bearerAuth: [] }],
+  responses: {
+    200: {
+      description: 'Sweep completed',
+      content: {
+        'application/json': {
+          schema: z.object({
+            ok: z.boolean(),
+            refreshedAt: z.string(),
+            probed: z.object({}).passthrough(),
+          }),
+        },
+      },
+    },
+    401: UNAUTHORIZED_401,
+    409: { description: 'A refresh is already in progress' },
+    500: {
+      description: 'Sweep persisted no samples',
+      content: { 'application/json': { schema: ApiErrorSchema } },
+    },
+  },
+});
+
+registry.registerPath({
+  method: 'get',
+  path: '/api/reputation/reconcile',
+  summary: 'Reconcile settled outcomes against Horizon',
+  description: 'Cron-triggered reconciliation of pending outcome rows. Protected by CRON_SECRET.',
+  tags: ['System'],
+  security: [{ bearerAuth: [] }],
+  responses: {
+    200: {
+      description: 'Reconciliation completed',
+      content: { 'application/json': { schema: z.object({}).passthrough() } },
+    },
+    401: UNAUTHORIZED_401,
+  },
+});
+
+registry.registerPath({
+  method: 'post',
+  path: '/api/admin/cache/invalidate',
+  summary: 'Invalidate cached rates',
+  description: 'Drops cached rate comparisons for one anchor or all of them. Admin only.',
+  tags: ['System'],
+  responses: {
+    200: {
+      description: 'Cache invalidated',
+      content: { 'application/json': { schema: z.object({}).passthrough() } },
+    },
+    401: UNAUTHORIZED_401,
+    429: RATE_LIMITED_429,
+  },
+});
+
+registry.registerPath({
+  method: 'get',
+  path: '/api/webhooks/subscriptions',
+  summary: 'List webhook subscriptions',
+  description: 'Admin only. See docs/WEBHOOKS.md for the delivery and signing contract.',
+  tags: ['System'],
+  responses: {
+    200: {
+      description: 'Subscriptions',
+      content: { 'application/json': { schema: z.array(z.object({}).passthrough()) } },
+    },
+    401: UNAUTHORIZED_401,
+    429: RATE_LIMITED_429,
+  },
+});
+
+registry.registerPath({
+  method: 'post',
+  path: '/api/webhooks/subscriptions',
+  summary: 'Create a webhook subscription',
+  description:
+    'Admin only. Returns the per-subscription HMAC signing secret once, at creation time.',
+  tags: ['System'],
+  responses: {
+    201: {
+      description: 'Subscription created',
+      content: { 'application/json': { schema: z.object({}).passthrough() } },
+    },
+    400: {
+      description: 'Validation error',
+      content: { 'application/json': { schema: ApiErrorSchema } },
+    },
+    401: UNAUTHORIZED_401,
+    429: RATE_LIMITED_429,
+  },
+});
+
+registry.registerPath({
+  method: 'delete',
+  path: '/api/webhooks/subscriptions/{id}',
+  summary: 'Delete a webhook subscription',
+  description: 'Admin only.',
+  tags: ['System'],
+  responses: {
+    204: { description: 'Deleted' },
+    401: UNAUTHORIZED_401,
+    404: {
+      description: 'Unknown subscription',
+      content: { 'application/json': { schema: ApiErrorSchema } },
+    },
+    429: RATE_LIMITED_429,
+  },
+});
+
+registry.registerPath({
+  method: 'get',
+  path: '/api/webhooks/failures',
+  summary: 'List dead-lettered webhook deliveries',
+  description:
+    'Admin only. Deliveries that exhausted their retries and were dead-lettered (see docs/WEBHOOKS.md).',
+  tags: ['System'],
+  responses: {
+    200: {
+      description: 'Dead-lettered deliveries',
+      content: { 'application/json': { schema: z.array(z.object({}).passthrough()) } },
+    },
+    401: UNAUTHORIZED_401,
+    429: RATE_LIMITED_429,
+  },
+});
+
 // ─── Spec builder ────────────────────────────────────────────────────────────
 
 export function buildOpenApiSpec() {

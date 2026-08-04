@@ -48,6 +48,15 @@ jobs:
       - name: TypeScript
         run: npm run typecheck
 
+      # public/openapi.json is generated from lib/api/openapi.ts but committed,
+      # so without this gate the two drift silently and the published spec stops
+      # describing the API (#918).
+      - name: OpenAPI spec is in sync
+        run: |
+          npm run emit-openapi
+          git diff --exit-code -- public/openapi.json \
+            || { echo "::error::public/openapi.json is stale — run 'npm run emit-openapi' and commit the result"; exit 1; }
+
       - name: Unit tests (vitest)
         run: npm run test -- --reporter=default --coverage
 
