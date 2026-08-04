@@ -71,9 +71,15 @@ A domain climbs this ladder; each step is gated on the previous one:
    is recorded.
 3. **Candidate** — `stellar.toml` resolves and parses with SEP-1 currencies
    and a signing key, **and** advertises a transfer rail (`TRANSFER_SERVER`
-   or `TRANSFER_SERVER_SEP0024`). Open an
-   [anchor onboarding issue](../.github/ISSUE_TEMPLATE/anchor-onboard.yml) and
-   remove the row from this file.
+   or `TRANSFER_SERVER_SEP0024`), **and** that rail actually serves at least one
+   fiat currency. Confirm the last part before opening anything: fetch the
+   transfer server's `/info` (or SEP-38 `/info`) and check for a fiat
+   deposit/withdraw asset. A transfer rail carrying only crypto assets is a
+   crypto gateway, not an off-ramp, and cannot back a corridor — record it under
+   [_Other exclusions_](anchors/exclusions.md#other-exclusions) instead. Only a
+   domain that clears all three opens an
+   [anchor onboarding issue](../.github/ISSUE_TEMPLATE/anchor-onboard.yml) and is
+   removed from this file.
 4. **Listed** — the candidate clears the
    [onboarding checklist](ANCHOR_ONBOARDING.md) (SEP-1 + SEP-10 + a transfer
    rail, asset issuer verified, corridors documented) and is added to

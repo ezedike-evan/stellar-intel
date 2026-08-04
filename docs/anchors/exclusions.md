@@ -71,3 +71,21 @@ Domains excluded for reasons other than missing transfer rails.
 - **Status:** Excluded
 - **Reason:** naobtc.com is a BTC anchor with no fiat off-ramp or on-ramp corridor. Verification of its SEP-38 `/info` endpoint reveals no fiat `sell_asset` or `buy_asset` pairs — all assets are crypto-only. There is no evidence of fiat settlement or fiat corridor services. It must not be added to any corridor list and requires no further SEP-24/SEP-38 integration work. Exclusion is permanent unless the operator adds a verifiable fiat corridor and re-submits via the anchor onboarding flow described in [`docs/ANCHOR_ONBOARDING.md`](../ANCHOR_ONBOARDING.md).
 - **Linked tracking:** #B065 (issuer-only / non-fiat register)
+
+### fchain.io
+
+- **Domain:** fchain.io
+- **Issue:** #897 (monthly re-crawl, 2026-08-01)
+- **Triaged:** 2026-08-04
+- **Status:** Excluded
+- **Reason:** The August re-crawl promoted `fchain.io` from _unreachable_ to
+  _transfer-capable_, so it surfaced as an onboarding candidate. Curl-confirmed:
+  `https://fchain.io/.well-known/stellar.toml` returns HTTP 200 and advertises
+  `TRANSFER_SERVER = "https://api.fchain.io"`, and that server's `/info` responds
+  HTTP 200. But every asset it lists is crypto — deposit and withdraw both offer
+  exactly `BCH`, `ETH`, `STM`, `USDT`, `WICC`, `XRP`, and **no fiat currency at
+  all**. It is a crypto-to-crypto gateway, not a fiat off-ramp, so it cannot back
+  a corridor. Same disposition as `naobtc.com` and `stellarport.io` above:
+  transfer rail present, fiat rail absent. Exclusion is permanent unless the
+  operator adds a verifiable fiat corridor and re-submits via
+  [`docs/ANCHOR_ONBOARDING.md`](../ANCHOR_ONBOARDING.md).
