@@ -28,6 +28,14 @@ const SCHEMA_SQL = `
     lock_key   TEXT   PRIMARY KEY,
     expires_at BIGINT NOT NULL
   );
+
+  CREATE TABLE IF NOT EXISTS idempotency_keys (
+    idempotency_key TEXT   PRIMARY KEY,
+    status          INTEGER NOT NULL,
+    body            TEXT   NOT NULL,
+    headers         TEXT   NOT NULL DEFAULT '{}',
+    expires_at      BIGINT NOT NULL
+  );
 `;
 
 let schemaReady: Promise<void> | null = null;
@@ -142,4 +150,68 @@ export async function isSharedLockHeld(key: string, now: number): Promise<boolea
     [key, now]
   );
   return rows.length > 0;
+}
+
+// ─── Idempotency ───────────────────────────────────────────────────────────────
+
+export interface SharedIdempotentRecord {
+  status: number;
+  body: unknown;
+  headers: Record<string, string>;
+}
+
+/** Returns the stored response for `key`, or null when absent or expired. */
+export async function getSharedIdempotent(
+  key: string,
+  now: number
+): Promise<SharedIdempotentRecord | null | undefined> {
+  if (!hasSharedBackend()) return undefined;
+
+  await ensureSchema();
+  const { rows } = await getSqlExecutor().query(
+    `SELECT status, body, headers
+       FROM idempotency_keys
+      WHERE idempotency_key = $1 AND expires_at > $2`,
+    [key, now]
+  );
+
+  const row = rows[0];
+  if (!row) return null;
+
+  return {
+    status: Number(row['status']),
+    body: JSON.parse(String(row['body'])) as unknown,
+    headers: JSON.parse(String(row['headers'] ?? '{}')) as Record<string, string>,
+  };
+}
+
+/**
+ * Stores a response under `key` until `expiresAt`.
+ *
+ * `DO NOTHING` on conflict, not `DO UPDATE`: the first response for a key is
+ * the one every retry must replay. Overwriting would let a later, different
+ * response leak out under a key a client believes is pinned.
+ */
+export async function storeSharedIdempotent(
+  key: string,
+  record: SharedIdempotentRecord,
+  expiresAt: number
+): Promise<boolean | undefined> {
+  if (!hasSharedBackend()) return undefined;
+
+  await ensureSchema();
+  await getSqlExecutor().query(
+    `INSERT INTO idempotency_keys (idempotency_key, status, body, headers, expires_at)
+          VALUES ($1, $2, $3, $4, $5)
+     ON CONFLICT (idempotency_key) DO NOTHING`,
+    [key, record.status, JSON.stringify(record.body), JSON.stringify(record.headers), expiresAt]
+  );
+  return true;
+}
+
+/** Drops keys whose TTL has passed. Safe to call opportunistically. */
+export async function pruneSharedIdempotent(now: number): Promise<void> {
+  if (!hasSharedBackend()) return;
+  await ensureSchema();
+  await getSqlExecutor().query(`DELETE FROM idempotency_keys WHERE expires_at <= $1`, [now]);
 }

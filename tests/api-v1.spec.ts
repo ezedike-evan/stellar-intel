@@ -3,6 +3,7 @@ import { NextRequest } from 'next/server';
 import { POST } from '@/app/api/v1/intent/offramp/route';
 import { GET } from '@/app/api/v1/health/route';
 import { rateLimitHeaders, clearIdempotencyStore } from '@/lib/api/v1';
+import { API_VERSION } from '@/lib/api/response';
 import { clearRateLimitStore } from '@/lib/api/rate-limit';
 
 const VALID_INTENT = {
@@ -29,29 +30,35 @@ beforeEach(() => {
 
 describe('rateLimitHeaders (#805)', () => {
   it('emits X-RateLimit-* headers, plus Retry-After only when throttled', () => {
+    // X-RateLimit-Reset is epoch seconds, matching lib/api/response.ts. It was
+    // seconds-until-reset here until #914, so the same header name meant two
+    // different things depending on which route answered.
     expect(
       rateLimitHeaders(20, {
         allowed: true,
         remaining: 19,
         retryAfter: 0,
         limit: 20,
-        resetAt: 0,
+        resetAt: 1_800_000_000_000,
         shared: false,
       })
     ).toEqual({
+      'API-Version': API_VERSION,
       'X-RateLimit-Limit': '20',
       'X-RateLimit-Remaining': '19',
-      'X-RateLimit-Reset': '0',
+      'X-RateLimit-Reset': '1800000000',
     });
     const throttled = rateLimitHeaders(20, {
       allowed: false,
       remaining: 0,
       retryAfter: 42,
       limit: 20,
-      resetAt: 0,
+      resetAt: 1_800_000_000_000,
       shared: false,
     });
+    // Retry-After carries the delta; Reset stays absolute.
     expect(throttled['Retry-After']).toBe('42');
+    expect(throttled['X-RateLimit-Reset']).toBe('1800000000');
   });
 });
 

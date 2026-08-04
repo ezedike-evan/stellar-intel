@@ -38,7 +38,7 @@ export async function POST(request: NextRequest): Promise<NextResponse> {
     const idempotencyKey = request.headers.get('idempotency-key');
 
     if (idempotencyKey) {
-      const cached = getIdempotentResponse(idempotencyKey);
+      const cached = await getIdempotentResponse(idempotencyKey);
       if (cached) {
         logger.info({ event: 'idempotent_replay', idempotencyKey });
         const response = NextResponse.json(cached.body, {
@@ -57,14 +57,17 @@ export async function POST(request: NextRequest): Promise<NextResponse> {
       return rateLimitedResponse(rl);
     }
 
-    const respond = <T>(payload: T, status: number): NextResponse => {
+    // Async because the idempotency write has to land before the response is
+    // returned — on serverless the instance can be frozen the moment the
+    // handler resolves, and a floating write would simply be lost.
+    const respond = async <T>(payload: T, status: number): Promise<NextResponse> => {
       const response =
         status >= 400
           ? apiErrorResponse(payload as ApiError, status)
           : apiSuccessResponse(payload, { status });
       withRateLimitHeaders(response, rl);
       if (idempotencyKey && isIdempotentCacheable(status)) {
-        storeIdempotentResponse(idempotencyKey, status, payload);
+        await storeIdempotentResponse(idempotencyKey, status, payload);
       }
       return response;
     };
@@ -75,7 +78,7 @@ export async function POST(request: NextRequest): Promise<NextResponse> {
     } catch {
       logger.warn({ event: 'invalid_json', message: 'Request body must be valid JSON' });
       recordIntentError('INVALID_JSON');
-      return respond<ApiError>(
+      return await respond<ApiError>(
         { code: 'INVALID_JSON', message: 'Request body must be valid JSON' },
         400
       );
@@ -86,7 +89,7 @@ export async function POST(request: NextRequest): Promise<NextResponse> {
       const first = parsed.error.issues[0];
       logger.warn({ event: 'validation_failed', issues: parsed.error.issues });
       recordIntentError('VALIDATION_ERROR');
-      return respond<ApiError>(
+      return await respond<ApiError>(
         { code: 'VALIDATION_ERROR', message: first?.message ?? 'Invalid intent payload' },
         400
       );
@@ -109,7 +112,7 @@ export async function POST(request: NextRequest): Promise<NextResponse> {
       // A 500 (TX_BUILD_FAILED) is deliberately not cached under the
       // idempotency key -- isIdempotentCacheable excludes it, so a retry with
       // the same key tries building again.
-      return respond<ApiError>({ code: result.code, message: result.message }, result.status);
+      return await respond<ApiError>({ code: result.code, message: result.message }, result.status);
     }
 
     logger.info({
@@ -118,6 +121,6 @@ export async function POST(request: NextRequest): Promise<NextResponse> {
       quoteId: result.response.quoteId,
     });
     recordIntentSuccess();
-    return respond<OfframpIntentResponse>(result.response, 200);
+    return await respond<OfframpIntentResponse>(result.response, 200);
   });
 }

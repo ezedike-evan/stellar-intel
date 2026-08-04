@@ -2,8 +2,22 @@ import pino from 'pino';
 import { AsyncLocalStorage } from 'async_hooks';
 import { NextResponse } from 'next/server';
 import type { NextRequest } from 'next/server';
+import { API_VERSION } from './api/response';
 
 type LoggerContext = { correlationId: string };
+
+/**
+ * Stamps `API-Version` unless the route already set it.
+ *
+ * Applied in the request wrappers rather than per route: they cover 23 of 29
+ * route files, whereas the header previously reached three — while
+ * `lib/api/openapi.ts` documented it as present on every response (#914).
+ */
+function setApiVersionHeader(response: NextResponse): void {
+  if (!response.headers.has('API-Version')) {
+    response.headers.set('API-Version', API_VERSION);
+  }
+}
 
 const asyncLocalStorage = new AsyncLocalStorage<LoggerContext>();
 
@@ -56,6 +70,10 @@ export async function withRequestLogger(
     try {
       const response = await fn(logger);
       response.headers.set('x-correlation-id', correlationId);
+      // Stamped here rather than per route: this wrapper covers 23 of 29 route
+      // files, whereas API-Version previously reached three of them even though
+      // the OpenAPI spec documents it as universal (#914).
+      setApiVersionHeader(response);
       logger.info({ event: 'request.end', status: response.status });
       return response;
     } catch (err) {
@@ -68,6 +86,7 @@ export async function withRequestLogger(
         { status: 500 }
       );
       response.headers.set('x-correlation-id', correlationId);
+      setApiVersionHeader(response);
       return response;
     }
   });
@@ -84,6 +103,10 @@ export async function withLoggerContext(
     try {
       const response = await fn(logger);
       response.headers.set('x-correlation-id', correlationId);
+      // Stamped here rather than per route: this wrapper covers 23 of 29 route
+      // files, whereas API-Version previously reached three of them even though
+      // the OpenAPI spec documents it as universal (#914).
+      setApiVersionHeader(response);
       logger.info({ event: 'request.end', status: response.status });
       return response;
     } catch (err) {
@@ -96,6 +119,7 @@ export async function withLoggerContext(
         { status: 500 }
       );
       response.headers.set('x-correlation-id', correlationId);
+      setApiVersionHeader(response);
       return response;
     }
   });

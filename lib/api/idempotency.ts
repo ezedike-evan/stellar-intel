@@ -1,19 +1,27 @@
 /**
  * lib/api/idempotency.ts
  *
- * In-memory idempotency-key store for the public v1 API (#805): a client
- * that retries a POST with the same `Idempotency-Key` header gets back the
- * exact response the original request produced, instead of re-executing
- * the request (e.g. building a second, different unsigned transaction for
- * the same intent).
+ * The single idempotency-key store for the public API: a client that retries a
+ * POST with the same `Idempotency-Key` gets back the exact response the original
+ * request produced, instead of re-executing it (e.g. building a second,
+ * different unsigned transaction for the same intent).
  *
- * Same storage model as lib/api/rate-limit.ts: an in-memory Map, per
- * process. That means it does not survive a process restart and is not
- * shared across serverless instances/regions -- acceptable for a single
- * long-lived server, but a production deployment that scales horizontally
- * needs a shared store (Redis, a database table) behind this same
- * interface. Documented here rather than silently assumed.
+ * There used to be two of these — this one and a private `Map` inside
+ * `lib/api/v1.ts` — so whether a retry replayed depended on which wrapper the
+ * route happened to use (#914). `v1.ts` now delegates here.
+ *
+ * Backed by shared state when a database is configured, falling back to an
+ * in-process Map otherwise. The fallback is not correct across serverless
+ * instances: a retry landing on a different instance re-executes. That was
+ * previously the only behaviour; it is now the degraded one.
  */
+
+import {
+  getSharedIdempotent,
+  hasSharedBackend,
+  pruneSharedIdempotent,
+  storeSharedIdempotent,
+} from './shared-state';
 
 export interface StoredIdempotentResponse {
   status: number;
@@ -27,11 +35,34 @@ const store = new Map<string, StoredIdempotentResponse>();
 /** How long a stored response is replayed before the key can be reused. */
 export const IDEMPOTENCY_TTL_MS = 24 * 60 * 60 * 1000;
 
-export function getIdempotentResponse(key: string): StoredIdempotentResponse | null {
+/** Prune roughly once every this many stores, rather than on a timer. */
+const PRUNE_EVERY = 200;
+let storesSincePrune = 0;
+
+/** The client-supplied key, trimmed, or null when absent or blank. */
+export function readIdempotencyKey(headers: Headers): string | null {
+  const key = headers.get('Idempotency-Key');
+  return key && key.trim() ? key.trim() : null;
+}
+
+export async function getIdempotentResponse(key: string): Promise<StoredIdempotentResponse | null> {
+  const now = Date.now();
+
+  if (hasSharedBackend()) {
+    try {
+      const shared = await getSharedIdempotent(key, now);
+      if (shared !== undefined) {
+        return shared === null ? null : { ...shared, storedAt: now };
+      }
+    } catch {
+      // fall through to the in-process map
+    }
+  }
+
   const entry = store.get(key);
   if (!entry) return null;
 
-  if (Date.now() - entry.storedAt > IDEMPOTENCY_TTL_MS) {
+  if (now - entry.storedAt > IDEMPOTENCY_TTL_MS) {
     store.delete(key);
     return null;
   }
@@ -39,15 +70,31 @@ export function getIdempotentResponse(key: string): StoredIdempotentResponse | n
   return entry;
 }
 
-export function storeIdempotentResponse(
+export async function storeIdempotentResponse(
   key: string,
   status: number,
   body: unknown,
   headers: Record<string, string> = {}
-): void {
-  store.set(key, { status, body, headers, storedAt: Date.now() });
+): Promise<void> {
+  const now = Date.now();
+  store.set(key, { status, body, headers, storedAt: now });
+
+  if (!hasSharedBackend()) return;
+
+  try {
+    await storeSharedIdempotent(key, { status, body, headers }, now + IDEMPOTENCY_TTL_MS);
+
+    storesSincePrune += 1;
+    if (storesSincePrune >= PRUNE_EVERY) {
+      storesSincePrune = 0;
+      void pruneSharedIdempotent(now).catch(() => {});
+    }
+  } catch {
+    // The in-process copy above still covers same-instance retries.
+  }
 }
 
 export function clearIdempotencyStore(): void {
   store.clear();
+  storesSincePrune = 0;
 }
