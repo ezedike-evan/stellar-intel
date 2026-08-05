@@ -170,6 +170,7 @@ The full doc surface lives under [`docs/`](docs/). Start with:
 | ------------------------------------------------------ | ------------------------------------------------------------------------------------------------- |
 | [docs/POSITIONING.md](docs/POSITIONING.md)             | What this is and is not; ROZO and SDF Anchor Directory, with checkable evidence.                  |
 | [docs/PROPOSAL.md](docs/PROPOSAL.md)                   | Longer-form project thesis: what this is for, what it stopped claiming, and how it is sequenced.  |
+| [docs/PRODUCTION_AUDIT.md](docs/PRODUCTION_AUDIT.md)   | Claim-by-claim: what is enforced in CI, what is only documented, and what is not true yet.        |
 | [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md)           | System diagram, intent router, Soroban oracle, MCP/agent surface, SEP-10/24/38 flow.              |
 | [docs/ROADMAP.md](docs/ROADMAP.md)                     | Milestone waves v1.0 → v5, with tickable per-wave scope.                                          |
 | [docs/INTENT_API.md](docs/INTENT_API.md)               | Intent schema, signing rules, replay protection, `curl` + TS snippets.                            |

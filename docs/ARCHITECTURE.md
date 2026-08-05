@@ -576,6 +576,7 @@ stellar-intel/
 ├── tests/                         # ✅ vitest — anchors, SEP-1, SEP-10, status
 ├── docs/
 │   ├── PROPOSAL.md                # project thesis
+│   ├── PRODUCTION_AUDIT.md        # what is enforced vs only documented
 │   ├── ARCHITECTURE.md            # this document
 │   ├── ROADMAP.md                 # wave-by-wave scope
 │   ├── INTENT_API.md              # intent schema + signing
