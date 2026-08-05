@@ -18,6 +18,7 @@ import { RateTable } from '@/components/offramp/RateTable';
 import { RateTableHeader } from '@/components/offramp/RateTableHeader';
 import { StatusTracker } from '@/components/offramp/StatusTracker';
 import { DisclaimerBanner } from '@/components/offramp/DisclaimerBanner';
+import { TrustBar } from '@/components/offramp/TrustBar';
 import { ErrorBoundary } from '@/components/ui/ErrorBoundary';
 import { useAnchorRates, RATES_REFRESH_INTERVAL_MS } from '@/hooks/useAnchorRates';
 import { useCountdown } from '@/hooks/useCountdown';
@@ -254,6 +255,8 @@ function OfframpContent() {
           Connect your Freighter wallet to execute an off-ramp.
         </div>
       )}
+
+      <TrustBar lastFetchedAt={lastFetchedAt} />
 
       <div ref={rateTableRef}>
         <RateTableHeader
