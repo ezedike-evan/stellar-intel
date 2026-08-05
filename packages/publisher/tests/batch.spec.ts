@@ -330,3 +330,124 @@ describe('runBatch crash safety (#909)', () => {
     expect(updates).toEqual([]);
   });
 });
+
+// ─── Publish gate (#786) ──────────────────────────────────────────────────────
+
+describe('runBatch — publish gate', () => {
+  const GATED_ROWS: OutcomeRow[] = [
+    { ...SAMPLE_ROW, intentHash: 'gate-1' },
+    { ...SAMPLE_ROW, intentHash: 'gate-2' },
+  ];
+
+  const SHORT_COVERAGE = {
+    fleetThresholdMet: false,
+    thresholdDays: 90,
+    anchors: [{ anchorId: 'cowrie', continuousDays: 4, thresholdMet: false }],
+  };
+
+  const MET_COVERAGE = {
+    fleetThresholdMet: true,
+    thresholdDays: 90,
+    anchors: [{ anchorId: 'cowrie', continuousDays: 91, thresholdMet: true }],
+  };
+
+  it('withholds every row and writes nothing when the gate blocks', async () => {
+    const executor = makeExecutor(GATED_ROWS.map(dbRow));
+
+    const result = await runBatch({
+      ...BASE_CONFIG,
+      executor,
+      gate: {
+        network: 'mainnet',
+        loadCoverage: async () => SHORT_COVERAGE,
+        overrideEnabled: false,
+      },
+    });
+
+    expect(result.submitted).toBe(0);
+    expect(result.skipped).toBe(2);
+    expect(result.txHash).toBeNull();
+    expect(result.gate?.allowed).toBe(false);
+    // The rows keep published_at NULL, so a later tick picks them up unchanged.
+    expect(sdkMocks.submitOutcome).not.toHaveBeenCalled();
+  });
+
+  it('alerts on a blocked publish', async () => {
+    const onAlert = vi.fn();
+
+    await runBatch({
+      ...BASE_CONFIG,
+      executor: makeExecutor(GATED_ROWS.map(dbRow)),
+      onAlert,
+      gate: {
+        network: 'mainnet',
+        loadCoverage: async () => null,
+        overrideEnabled: false,
+      },
+    });
+
+    expect(onAlert).toHaveBeenCalledWith(
+      expect.objectContaining({ reason: 'publish_gate_blocked', attempts: 0 })
+    );
+  });
+
+  it('publishes when coverage is met', async () => {
+    const { executor, updates } = makeTrackingExecutorForGate(GATED_ROWS);
+    sdkMocks.signAndSend
+      .mockResolvedValueOnce({ sendTransactionResponse: { hash: 'tx-a' } })
+      .mockResolvedValueOnce({ sendTransactionResponse: { hash: 'tx-b' } });
+
+    const result = await runBatch({
+      ...BASE_CONFIG,
+      executor,
+      gate: {
+        network: 'mainnet',
+        loadCoverage: async () => MET_COVERAGE,
+        overrideEnabled: false,
+      },
+    });
+
+    expect(result.submitted).toBe(2);
+    expect(result.gate?.allowed).toBe(true);
+    expect(updates).toHaveLength(2);
+  });
+
+  it('never consults coverage when there is nothing to publish', async () => {
+    const loadCoverage = vi.fn(async () => MET_COVERAGE);
+
+    const result = await runBatch({
+      ...BASE_CONFIG,
+      executor: makeExecutor([]),
+      gate: { network: 'mainnet', loadCoverage, overrideEnabled: false },
+    });
+
+    expect(result.submitted).toBe(0);
+    // An empty queue is not a publish, so it should not pay for a coverage query.
+    expect(loadCoverage).not.toHaveBeenCalled();
+    expect(result.gate).toBeUndefined();
+  });
+
+  it('behaves exactly as before when no gate is configured', async () => {
+    const { executor, updates } = makeTrackingExecutorForGate([GATED_ROWS[0]!]);
+    sdkMocks.signAndSend.mockResolvedValueOnce({ sendTransactionResponse: { hash: 'tx-z' } });
+
+    const result = await runBatch({ ...BASE_CONFIG, executor });
+
+    expect(result.submitted).toBe(1);
+    expect(result.gate).toBeUndefined();
+    expect(updates).toHaveLength(1);
+  });
+
+  function makeTrackingExecutorForGate(rows: OutcomeRow[]) {
+    const updates: Array<{ intentHash: string; txHash: string }> = [];
+    const executor = vi.fn(async (sql: string, params?: unknown[]) => {
+      if (sql.includes('UPDATE outcome_log')) {
+        const [txHash, intentHash] = params as [string, string];
+        updates.push({ intentHash, txHash });
+        return { rows: [] };
+      }
+      return { rows: rows.map(dbRow) };
+    }) as unknown as QueryExecutor;
+    return { executor, updates };
+  }
+});

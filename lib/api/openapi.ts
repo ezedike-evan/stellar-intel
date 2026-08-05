@@ -670,12 +670,15 @@ registry.registerPath({
   path: '/api/publisher/tick',
   summary: 'Trigger publisher tick',
   description:
-    'Triggers a batch of reputation outcome submissions to the Soroban oracle contract. Protected by CRON_SECRET.',
+    'Triggers a batch of reputation outcome submissions to the Soroban oracle contract. Protected by CRON_SECRET. ' +
+    'A mainnet tick is gated on 90 days of continuous probe coverage (#786); when the gate blocks, this still returns ' +
+    '200 with `submitted: 0` and a `gate` object explaining the refusal, because a withheld batch is the gate working ' +
+    'rather than an incident.',
   tags: ['System'],
   security: [{ bearerAuth: [] }],
   responses: {
     200: {
-      description: 'Tick completed',
+      description: 'Tick completed, or withheld by the publish gate',
       content: {
         'application/json': {
           schema: z.object({
@@ -683,6 +686,17 @@ registry.registerPath({
             submitted: z.number(),
             skipped: z.number(),
             txHash: z.string().nullable(),
+            gate: z
+              .object({
+                allowed: z.boolean(),
+                reason: z.string(),
+                thresholdDays: z.number().optional(),
+                message: z.string().optional(),
+                shortfall: z
+                  .array(z.object({ anchorId: z.string(), continuousDays: z.number() }))
+                  .optional(),
+              })
+              .optional(),
             tickedAt: z.string(),
           }),
         },

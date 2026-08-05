@@ -1,4 +1,6 @@
 import { createHash } from 'crypto';
+import { evaluatePublishGate, type GateDecision, type ProbeCoverageSummary } from './gate';
+import type { StellarNetwork } from './network';
 
 export type QueryExecutor = (
   sql: string,
@@ -29,7 +31,7 @@ export const DEFAULT_RETRY_OPTIONS: RetryOptions = {
 };
 
 /** Why a publish attempt ultimately failed, for the alert sink. */
-export type PublishFailureReason = 'non_retryable' | 'retries_exhausted';
+export type PublishFailureReason = 'non_retryable' | 'retries_exhausted' | 'publish_gate_blocked';
 
 export interface PublishAlert {
   reason: PublishFailureReason;
@@ -60,6 +62,22 @@ export interface BatchConfig {
   retry?: Partial<RetryOptions>;
   /** Alert sink invoked on non-retryable failures and exhausted retries (#D014). */
   onAlert?: AlertHook;
+  /**
+   * Pre-publish probe-coverage gate (#786). Optional: omitting it publishes
+   * exactly as before, so existing callers and their fixtures are unaffected.
+   *
+   * `loadCoverage` is a thunk rather than a value so an empty queue never pays
+   * for a coverage query — it is only called once there is something to publish.
+   * Returning `null` from it means "could not determine", which the gate treats
+   * as a refusal on mainnet.
+   */
+  gate?: {
+    network: StellarNetwork;
+    loadCoverage: () => Promise<ProbeCoverageSummary | null>;
+    overrideEnabled: boolean;
+    contractId?: string | undefined;
+    testnetContractId?: string | undefined;
+  };
 }
 
 export const DEFAULT_BATCH_SIZE = 100;
@@ -78,6 +96,11 @@ export interface BatchResult {
   submitted: number;
   skipped: number;
   txHash: string | null;
+  /**
+   * The gate's verdict, present only when a gate was configured. When
+   * `allowed` is false, `skipped` carries the number of rows withheld.
+   */
+  gate?: GateDecision;
 }
 
 export async function fetchPendingOutcomes(
@@ -371,6 +394,42 @@ export async function runBatch(config: BatchConfig): Promise<BatchResult> {
     return { submitted: 0, skipped: 0, txHash: null };
   }
 
+  // Gate after the fetch, not before: an empty queue is not a publish, so it
+  // should not spend a coverage query or produce a gate verdict. Withheld rows
+  // keep published_at NULL and are simply picked up by a later tick.
+  let gateDecision: GateDecision | undefined;
+  if (config.gate) {
+    const coverage = await config.gate.loadCoverage();
+    const decision = evaluatePublishGate({
+      network: config.gate.network,
+      coverage,
+      overrideEnabled: config.gate.overrideEnabled,
+      contractId: config.gate.contractId,
+      testnetContractId: config.gate.testnetContractId,
+    });
+
+    if (!decision.allowed) {
+      await config.onAlert?.({
+        reason: 'publish_gate_blocked',
+        error: new Error(decision.message),
+        attempts: 0,
+      });
+      return { submitted: 0, skipped: rows.length, txHash: null, gate: decision };
+    }
+
+    gateDecision = decision;
+
+    if (decision.reason === 'override') {
+      // error, not warn: an override is a human deciding to publish against an
+      // unverified probe history, and it should reach whatever watches errors.
+      // eslint-disable-next-line no-console
+      console.error(
+        '[publisher] publish_gate_overridden — PUBLISH_GATE_OVERRIDE=true bypassed the ' +
+          `${config.gate.network} probe-coverage gate for ${rows.length} row(s)`
+      );
+    }
+  }
+
   let submitted = 0;
   const txHash = await submitToOracle(rows, config, async (intentHash, rowTxHash) => {
     await markPublished(config.executor, intentHash, rowTxHash);
@@ -380,5 +439,10 @@ export async function runBatch(config: BatchConfig): Promise<BatchResult> {
   // `submitted` counts rows actually marked, not rows attempted. If this throws
   // partway the count never reaches rows.length, and the rows that did land stay
   // marked — the next tick picks up only the remainder.
-  return { submitted, skipped: 0, txHash };
+  return {
+    submitted,
+    skipped: rows.length - submitted,
+    txHash,
+    ...(gateDecision ? { gate: gateDecision } : {}),
+  };
 }

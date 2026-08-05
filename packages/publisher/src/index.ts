@@ -2,17 +2,27 @@ import { Pool } from 'pg';
 import { runBatch, DEFAULT_BATCH_SIZE, type BatchConfig, type QueryExecutor } from './batch';
 import { acquireLock, releaseLock } from './lock';
 import { resolveNetwork } from './network';
+import { isOverrideEnabled } from './gate';
 
 // Re-exported so consumers can `import { runBatch } from '@stellarintel/publisher'`
 // and build their own BatchConfig (e.g. the main app's /api/publisher/tick route,
 // which already has its own DB pool + lock) instead of shelling out to this CLI.
 export { runBatch, DEFAULT_BATCH_SIZE, type BatchConfig, type QueryExecutor };
+export type { BatchResult } from './batch';
 export {
   resolveNetwork,
   isStellarNetwork,
   type NetworkConfig,
   type StellarNetwork,
 } from './network';
+export {
+  evaluatePublishGate,
+  isOverrideEnabled,
+  PROBE_MAINNET_READINESS_DAYS,
+  type GateDecision,
+  type GateInput,
+  type ProbeCoverageSummary,
+} from './gate';
 
 const LOCK_KEY = 'publisher-batch';
 const LOCK_TTL_MS = 5 * 60 * 1_000;
@@ -53,6 +63,15 @@ async function main(): Promise<void> {
       publisherSecret: requireEnv('PUBLISHER_SECRET'),
       horizonUrl: network.horizonUrl,
       rpcUrl: network.rpcUrl,
+      // The CLI holds a QueryExecutor, not a ReputationStore, so it cannot read
+      // probe coverage. It passes null rather than omitting the gate: null is a
+      // refusal on mainnet, so the CLI is safe by construction instead of by
+      // whoever runs it remembering to check. Testnet is unaffected.
+      gate: {
+        network: network.network,
+        loadCoverage: async () => null,
+        overrideEnabled: isOverrideEnabled(),
+      },
     };
 
     // Say which network out loud before signing anything, so an operator sees
@@ -63,6 +82,15 @@ async function main(): Promise<void> {
     const result = await runBatch(config);
     // eslint-disable-next-line no-console
     console.log('[publisher] Batch complete:', result);
+
+    // A closed gate is not an error condition for the cron, but it is for an
+    // operator who ran this by hand expecting a publish. Exit non-zero so the
+    // shell says so (#786).
+    if (result.gate && !result.gate.allowed) {
+      // eslint-disable-next-line no-console
+      console.error(`[publisher] ${result.gate.message}`);
+      process.exitCode = 1;
+    }
   } finally {
     releaseLock(LOCK_KEY);
   }

@@ -1402,7 +1402,7 @@
     "/api/publisher/tick": {
       "get": {
         "summary": "Trigger publisher tick",
-        "description": "Triggers a batch of reputation outcome submissions to the Soroban oracle contract. Protected by CRON_SECRET.",
+        "description": "Triggers a batch of reputation outcome submissions to the Soroban oracle contract. Protected by CRON_SECRET. A mainnet tick is gated on 90 days of continuous probe coverage (#786); when the gate blocks, this still returns 200 with `submitted: 0` and a `gate` object explaining the refusal, because a withheld batch is the gate working rather than an incident.",
         "tags": [
           "System"
         ],
@@ -1413,7 +1413,7 @@
         ],
         "responses": {
           "200": {
-            "description": "Tick completed",
+            "description": "Tick completed, or withheld by the publish gate",
             "content": {
               "application/json": {
                 "schema": {
@@ -1432,6 +1432,45 @@
                       "type": [
                         "string",
                         "null"
+                      ]
+                    },
+                    "gate": {
+                      "type": "object",
+                      "properties": {
+                        "allowed": {
+                          "type": "boolean"
+                        },
+                        "reason": {
+                          "type": "string"
+                        },
+                        "thresholdDays": {
+                          "type": "number"
+                        },
+                        "message": {
+                          "type": "string"
+                        },
+                        "shortfall": {
+                          "type": "array",
+                          "items": {
+                            "type": "object",
+                            "properties": {
+                              "anchorId": {
+                                "type": "string"
+                              },
+                              "continuousDays": {
+                                "type": "number"
+                              }
+                            },
+                            "required": [
+                              "anchorId",
+                              "continuousDays"
+                            ]
+                          }
+                        }
+                      },
+                      "required": [
+                        "allowed",
+                        "reason"
                       ]
                     },
                     "tickedAt": {
