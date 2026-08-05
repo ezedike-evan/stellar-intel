@@ -143,17 +143,17 @@ describe('resolveAnchor', () => {
     );
   });
 
-  it('returns a cache hit in under 1ms', async () => {
+  it('serves a cached TOML without re-resolving', async () => {
     const spy = vi.spyOn(StellarToml.Resolver, 'resolve').mockResolvedValue(VALID_TOML as never);
 
     await resolveAnchor('cowrie.exchange');
-
-    const startedAt = performance.now();
     const cached = await resolveAnchor('cowrie.exchange');
-    const elapsedMs = performance.now() - startedAt;
 
     expect(cached.WEB_AUTH_ENDPOINT).toBe('https://cowrie.exchange/auth');
-    expect(elapsedMs).toBeLessThan(1);
+    // This used to also assert the second call returned in under 1ms. The call
+    // count proves the same thing and proves it better: a sub-1ms budget around
+    // an `await` fails on a single GC pause or macrotask delay, and it would
+    // still pass if the cache were bypassed by something merely fast (#947).
     expect(spy).toHaveBeenCalledTimes(1);
   });
 

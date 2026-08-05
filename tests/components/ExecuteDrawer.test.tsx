@@ -406,7 +406,18 @@ describe('ExecuteDrawer', () => {
     );
 
     fireEvent.click(screen.getByText('Start Off-ramp'));
-    await waitFor(() => expect(screen.getByText('Auth failed')).toBeInTheDocument());
+    await screen.findByText('Auth failed');
+
+    // The Escape handler closes over `step`, so it is torn down and
+    // re-registered on every transition. `findByText` resolves at commit, but
+    // that re-registration is a passive effect that runs after paint — so a
+    // synchronous keyDown on the next line can reach the listener still built
+    // for `step === 'authenticating'`, whose guard rejects it. That is the
+    // node-22 flake in #947. Draining effects first removes the race.
+    //
+    // Not wrapped in `waitFor`: that retries its callback, so a slow first
+    // attempt would fire Escape twice and break toHaveBeenCalledOnce().
+    await act(async () => {});
 
     fireEvent.keyDown(window, { key: 'Escape' });
     expect(onClose).toHaveBeenCalledOnce();
