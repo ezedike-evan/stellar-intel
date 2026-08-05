@@ -7,9 +7,11 @@ to tell in one read which tool answers which question.
 
 ## The short version
 
-- **ROZO** abstracts **chains**. It answers "how do I pay or bridge this
-  asset from A to B" — intents that route payments and bridge value across
-  chains (e.g. via CCTP).
+- **ROZO** abstracts **chains**. It answers "how do I pay or settle this
+  asset from A to B" — intents that move value across chains. Their own
+  IntentPay documentation describes ROZO-owned prefunded inventory rather than
+  a named bridge; see [`POSITIONING.md`](POSITIONING.md) for sources, and do
+  not differentiate on the rail, which is an implementation detail.
 - **Stellar Intel** abstracts **anchors**. It answers "what will I actually
   receive if I exit this asset to fiat, and which anchor should I trust to
   do it" — quote comparison, execution, and trust scoring across Stellar
@@ -33,12 +35,12 @@ without needing this document as context.
 
 ## Side by side
 
-|                      | ROZO                                          | Stellar Intel                                                         |
-| -------------------- | --------------------------------------------- | --------------------------------------------------------------------- |
-| Abstracts            | Chains                                        | Anchors                                                               |
-| Core question        | "Pay/bridge this across chains"               | "Best fiat exit price + anchor trust"                                 |
-| Primitive            | Cross-chain payment/bridge intent (e.g. CCTP) | Off-ramp quote + intent, scored against anchor reputation             |
-| Output an agent gets | A route/bridge execution across chains        | `netReceived`, `anchor`, trust/reputation signal, unsigned tx to sign |
+|                      | ROZO                                  | Stellar Intel                                                         |
+| -------------------- | ------------------------------------- | --------------------------------------------------------------------- |
+| Abstracts            | Chains                                | Anchors                                                               |
+| Core question        | "Pay/bridge this across chains"       | "Best fiat exit price + anchor trust"                                 |
+| Primitive            | Cross-chain payment/settlement intent | Off-ramp quote + intent, scored against anchor reputation             |
+| Output an agent gets | A cross-chain settlement              | `netReceived`, `anchor`, trust/reputation signal, unsigned tx to sign |
 
 ## Where this shows up in this repo
 

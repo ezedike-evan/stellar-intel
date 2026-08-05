@@ -7,18 +7,20 @@
 [![Deployed on Vercel](https://img.shields.io/badge/deploy-vercel-000?style=flat-square&logo=vercel)](https://stellar-intel.vercel.app)
 [![Conventional Commits](https://img.shields.io/badge/commits-conventional-fe5196?style=flat-square&logo=conventionalcommits)](https://www.conventionalcommits.org)
 
-**The execution layer for stablecoin off-ramps on Stellar — with accountability
-built in.**
+**A public health and reputation record for Stellar off-ramp anchors — with a
+non-custodial execution path built on it.**
 
-Stellar Intel compares live SEP-38 quotes across every integrated anchor,
-ranked by net landed value rather than headline rate, and lets you settle a
-non-custodial off-ramp as a signed intent from the same interface. Every
-quote, fill, failure, and settlement is written to a public reputation oracle,
-so you can see which anchors actually honor their quotes before you commit
-funds — not just which one is cheapest today.
+Stellar Intel probes every registered anchor on a five-minute clock and writes
+down what it finds: whether the endpoint answered, whether its `stellar.toml`
+still parses, whether the issuer still matches the asset on-chain, and whether
+a quote was available. Those observations accumulate into a published,
+method-documented reputation score, and the same interface lets you settle an
+off-ramp as a signed intent without this project ever holding your funds.
 
-Built for users sending money home across Africa, Latin America, and Southeast
-Asia via Stellar anchors.
+The record comes first because it is the part that works without anyone's
+cooperation. Built for users sending money home across Africa, Latin America
+and Southeast Asia via Stellar anchors — and for anyone who has to choose an
+anchor and would rather not do it on faith.
 
 <p align="center">
   <em>Live demo → <a href="https://stellar-intel.vercel.app">stellar-intel.vercel.app</a></em>
@@ -48,27 +50,37 @@ later when nothing lands. Every serious stablecoin corridor has the same three
 unsolved problems: **which anchor is actually cheapest right now**, **will it
 honour the quote**, and **is it up**.
 
-Stellar Intel is the **execution layer for stablecoin value on Stellar**. We
-treat an off-ramp as a signed **intent** — _"withdraw $100 USDC to this NGN
-account, at or better than this rate, before this deadline"_ — and route it to
-the anchor that can satisfy it. Three primitives, one product:
+Nobody publishes the answers. An anchor's `stellar.toml` says what it supports;
+it does not say whether that was true this morning. Stellar Intel answers the
+third question directly and the first two as the data allows.
 
-1. **Intent router.** Live SEP-38 quotes across every integrated anchor,
-   ranked by net landed value (gross rate − fees − slippage − historical
-   fill-rate penalty), not headline rate.
-2. **Reputation oracle.** Every quote, fill, failure, and settlement latency
-   is written to an on-chain Soroban contract. Anchors earn a public,
-   user-verifiable track record; consumers read it without our permission.
-3. **Agent surface.** An MCP server exposes the router and oracle to AI
-   agents, so an agent can price, compare, and execute an off-ramp in five
-   lines — the same primitives used by the web UI.
+1. **The record.** Seven registered anchors, probed every five minutes across
+   four signals — uptime, quote availability, issuer mismatch, TOML integrity.
+   Samples accumulate; the scoring method is published in
+   [`docs/ANCHOR_REPUTATION.md`](docs/ANCHOR_REPUTATION.md), and small samples
+   are labelled as small rather than averaged into confidence they have not
+   earned.
+2. **The execution path.** An off-ramp expressed as a signed **intent** —
+   _"withdraw $100 USDC to this NGN account, at or better than this rate,
+   before this deadline"_ — routed to an anchor that can satisfy it and ranked
+   on landed value rather than headline rate.
+3. **The agent surface.** An MCP server exposes the same primitives the web UI
+   uses, so an agent can read the record and execute against it.
 
 Non-custodial by construction: every leg is signed by the user, the anchor
 takes custody under SEP-24, Stellar enforces atomicity. We never touch funds.
 
-The deeper thesis and the grant resubmission case live in
-[**docs/PROPOSAL.md**](docs/PROPOSAL.md); the request/quote/sign/settle flow
-and the Soroban oracle wiring live in
+**One honest caveat, because it changes what (2) means today.** Firm SEP-38
+quotes are scarce on the live network: as of 2026-08-05, one of the seven
+registered anchors advertises a quote server at all, and it does not quote the
+corridor it is registered for. Ranking across firm quotes is a capability that
+becomes real as anchors adopt SEP-38, not one that is real today. The evidence,
+and what is measured in the meantime, is in
+[`docs/POSITIONING.md`](docs/POSITIONING.md).
+
+What this is and is not lives in
+[**docs/POSITIONING.md**](docs/POSITIONING.md); the request/quote/sign/settle
+flow and the Soroban oracle wiring live in
 [**docs/ARCHITECTURE.md**](docs/ARCHITECTURE.md).
 
 ---
@@ -156,7 +168,8 @@ The full doc surface lives under [`docs/`](docs/). Start with:
 
 | Document                                               | What it covers                                                                                    |
 | ------------------------------------------------------ | ------------------------------------------------------------------------------------------------- |
-| [docs/PROPOSAL.md](docs/PROPOSAL.md)                   | Grant thesis: execution-layer framing, intent primitive, reputation oracle moat.                  |
+| [docs/POSITIONING.md](docs/POSITIONING.md)             | What this is and is not; ROZO and SDF Anchor Directory, with checkable evidence.                  |
+| [docs/PROPOSAL.md](docs/PROPOSAL.md)                   | Longer-form thesis. Predates the narrowing — see POSITIONING.md first (#787 rewrites it).         |
 | [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md)           | System diagram, intent router, Soroban oracle, MCP/agent surface, SEP-10/24/38 flow.              |
 | [docs/ROADMAP.md](docs/ROADMAP.md)                     | Milestone waves v1.0 → v5, with tickable per-wave scope.                                          |
 | [docs/INTENT_API.md](docs/INTENT_API.md)               | Intent schema, signing rules, replay protection, `curl` + TS snippets.                            |
