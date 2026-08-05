@@ -240,7 +240,7 @@ Implemented in `lib/stellar/sep10.ts`. Key invariants:
 | `signing`        | Freighter            | User signs the payment XDR.                                                                                     | User-reject returns to idle; signature-required errors surface.         |
 | `done`           | —                    | Drawer closes; `onSuccess` hoists `{ transactionId, transferServer, jwt }` to the page; `StatusTracker` mounts. | Terminal.                                                               |
 
-**The `done` hoist is the fix for credibility bug #2** (see `PROPOSAL.md § 5`).
+**The `done` hoist is the fix for the tracker-never-mounts bug (#002).**
 Before `commit 45a82eb` the drawer completed the withdrawal but never told the
 page; after, the drawer closes on success and the tracker owns the viewport
 with a live `transactionId`.
@@ -575,7 +575,7 @@ stellar-intel/
 ├── types/index.ts                 # ✅ Anchor, Corridor, AnchorRate, WithdrawStatus, …
 ├── tests/                         # ✅ vitest — anchors, SEP-1, SEP-10, status
 ├── docs/
-│   ├── PROPOSAL.md                # grant thesis
+│   ├── PROPOSAL.md                # project thesis
 │   ├── ARCHITECTURE.md            # this document
 │   ├── ROADMAP.md                 # wave-by-wave scope
 │   ├── INTENT_API.md              # intent schema + signing

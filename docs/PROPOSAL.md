@@ -1,319 +1,277 @@
-# Stellar Intel — Grant Proposal (Resubmission)
+# Stellar Intel — Project Thesis
 
-> **Execution layer for stablecoin value on Stellar.**
-> Signed intents, reputation-ranked routing, and an agent-ready surface —
-> so a dollar reaches a bank account in Lagos, Buenos Aires, or Manila with
-> the certainty of a tracked parcel, not the hope of a carrier pigeon.
+> **A public health and reputation record for Stellar off-ramp anchors — with a
+> non-custodial execution path built on it.**
+>
+> Monitoring comes first because it is the half that works without anyone's
+> cooperation. Execution is real, it is in the repository, and its quality is
+> set by anchors this project does not control.
 
-|                       |                                                                                                            |
-| --------------------- | ---------------------------------------------------------------------------------------------------------- |
-| **Submitted by**      | Evan Ezedike &nbsp;·&nbsp; `@Ezedike-Evan` &nbsp;·&nbsp; egwomevan323@gmail.com                            |
-| **Repository**        | [github.com/Ezedike-Evan/stellar-intel](https://github.com/Ezedike-Evan/stellar-intel)                     |
-| **Live demo**         | [stellar-intel.vercel.app](https://stellar-intel.vercel.app)                                               |
-| **License**           | MIT                                                                                                        |
-| **Resubmission date** | 2026-04-30 (target)                                                                                        |
-| **Supersedes**        | First submission, declined on the two bugs documented in [§ 5 Credibility-fix log](#5-credibility-fix-log) |
+**Last updated:** 2026-08-05
+
+|                |                                                                                        |
+| -------------- | -------------------------------------------------------------------------------------- |
+| **Maintainer** | Evan Ezedike &nbsp;·&nbsp; `@ezedike-evan`                                             |
+| **Repository** | [github.com/ezedike-evan/stellar-intel](https://github.com/ezedike-evan/stellar-intel) |
+| **Live**       | [stellar-intel.vercel.app](https://stellar-intel.vercel.app)                           |
+| **License**    | MIT                                                                                    |
+
+This document states what the project is for and how it is sequenced. It is
+**not** a funding application. An earlier revision was written as a grant
+resubmission and led with "execution layer for stablecoin value on Stellar" and
+a "universal intent layer" thesis; both are retired, and the reasoning is in
+[`POSITIONING.md`](POSITIONING.md), which is the source of truth for every claim
+made here.
 
 ---
 
 ## Table of contents
 
-1. [Executive summary](#1-executive-summary)
-2. [The problem we are solving](#2-the-problem-we-are-solving)
-3. [The thesis — four load-bearing primitives](#3-the-thesis--four-load-bearing-primitives)
-   - 3.1 [Execution-layer framing](#31-execution-layer-framing)
-   - 3.2 [The intent primitive](#32-the-intent-primitive)
-   - 3.3 [The reputation oracle — our moat](#33-the-reputation-oracle--our-moat)
-   - 3.4 [The agent surface](#34-the-agent-surface)
-4. [What has shipped since the last submission](#4-what-has-shipped-since-the-last-submission)
-5. [Credibility-fix log](#5-credibility-fix-log)
-6. [Roadmap — v1 Executable → v5 Institutional](#6-roadmap--v1-executable--v5-institutional)
-7. [Why us, why now](#7-why-us-why-now)
-8. [Ask and use of funds](#8-ask-and-use-of-funds)
-9. [Risks and mitigations](#9-risks-and-mitigations)
-10. [References](#10-references)
+1. [What this is](#1-what-this-is)
+2. [The problem](#2-the-problem)
+3. [The thesis](#3-the-thesis)
+   - 3.1 [The observation record](#31-the-observation-record)
+   - 3.2 [The execution path](#32-the-execution-path)
+   - 3.3 [The agent surface](#33-the-agent-surface)
+4. [What is actually true today](#4-what-is-actually-true-today)
+5. [What this project stopped claiming](#5-what-this-project-stopped-claiming)
+6. [Sequencing](#6-sequencing)
+7. [Why this, on Stellar](#7-why-this-on-stellar)
+8. [Risks and mitigations](#8-risks-and-mitigations)
+9. [References](#9-references)
 
 ---
 
-## 1. Executive summary
+## 1. What this is
 
-Stellar has the best stablecoin-to-fiat coverage of any public chain. It has
-world-class SEPs — SEP-10, SEP-24, SEP-38 — specifying exactly how an anchor
-should authenticate a user, hold a withdrawal, and quote a firm price. What it
-does **not** have is an **execution layer**: a neutral surface that takes those
-specs and turns them into the kind of behaviour users actually expect from a
-payment — "I pressed send, my money is arriving, I can watch it land."
+**An anchor health and reputation record for Stellar off-ramps, with an
+execution path built on top of it.**
 
-Stellar Intel is that layer. It is a single product that does four things the
-ecosystem has been doing piecewise:
+The order matters and it is not modesty. Compare what each half needs in order
+to be true:
 
-1. **Aggregates SEP-38 quotes** from every integrated anchor in parallel and
-   ranks them by **net landed value**, not headline rate.
-2. **Executes** the user's choice non-custodially via SEP-24, with a visible
-   status tracker that does not lose the transaction mid-flight.
-3. **Writes every outcome** — quote, fill, failure, settlement latency — to an
-   on-chain Soroban **reputation oracle** any third party can read.
-4. **Exposes the whole thing** to AI agents through an MCP server, so the same
-   five-line off-ramp works from a wallet, a terminal, or Claude.
+|                     | needs                                 | status                       |
+| ------------------- | ------------------------------------- | ---------------------------- |
+| Health + reputation | public endpoints, a clock             | works today                  |
+| Execution           | anchors, corridors, liquidity, quotes | constrained by third parties |
 
-The v1 product is live in the repository linked above. This proposal requests
-funding to complete the v1.1–v1.3 hardening waves, publish the Soroban oracle
-on mainnet, and ship the MCP agent surface.
+A probe needs no partnership, no listing, and no permission: it asks an anchor's
+public endpoints what they do and writes down the answer. Leading with the
+execution half means claiming a capability whose quality is set by parties who
+never agreed to anything.
+
+The distinguishing claim is narrow and checkable: **this project writes down what
+anchors did, on a clock, and publishes both the record and the method.**
 
 ---
 
-## 2. The problem we are solving
+## 2. The problem
 
-Moving a dollar from a wallet in San Francisco to a bank account in Lagos,
-Buenos Aires, or Manila is still a small act of faith. From the user's side,
-three things go wrong in every corridor we have profiled:
+Moving a dollar from a wallet to a bank account in Lagos, Nairobi, or Manila is
+still an act of faith. Three things go wrong, and all three are the same
+problem wearing different clothes — **there is no public record of what anchors
+actually do.**
 
-1. **The cheapest anchor is invisible.** A user comparing MoneyGram and Cowrie
-   for USDC→NGN sees two headline rates. Neither is comparable: one bundles a
-   withdrawal fee, the other bakes it into the spread. Without a neutral
-   aggregator that **subtracts every fee, slippage, and historical fill-rate
-   penalty**, the user picks on branding, not economics.
-2. **Quotes do not survive signature.** SEP-38 allows a firm quote, but the
-   user has no way to know if the anchor will honour it forty minutes later
-   when settlement actually runs. There is no public track record.
-3. **Anchors fail silently.** An anchor that is down, rate-limiting, or
-   regionally blocked looks identical to one that is up until the user has
-   already signed. The cost of discovery is paid in failed transfers.
+1. **An anchor that is degraded looks identical to one that is healthy** until
+   the user has already signed. The cost of discovery is paid in failed
+   transfers, by the user.
+2. **Quotes have no track record.** Whether an anchor honours a price at
+   settlement forty minutes later is unknowable, because nobody is writing down
+   whether it did last time.
+3. **Comparison is not possible on declared data alone.** A directory entry says
+   what an anchor supports. It cannot say whether the endpoint answered this
+   morning.
 
-None of this is a Stellar-specific problem — it is the generic shape of any
-oracle-free market. But on Stellar it is solvable with the SEPs that already
-exist, plus one missing piece: a **reputation layer** that every market
-participant can read without asking permission.
+None of this is Stellar-specific — it is the generic shape of a market without
+an observation record. But on Stellar it is tractable, because the SEPs already
+specify exactly which public endpoints an anchor must expose. That makes an
+honest monitor possible without anyone's cooperation.
 
-### Market anchoring
+### What this deliberately is not
 
-- **$900B / year** in remittances flow into the corridors Stellar anchors
-  serve (World Bank 2024 estimate, low-to-middle-income receiving regions).
-- Stellar already indexes **over 30 SEP-24 anchors** across 40+ currencies.
-- The seven corridors Stellar Intel ships today (NGN, KES, GHS, MXN, BRL, ARS,
-  PEN) collectively represent **~$280B / year** in formal remittance inflows.
-- The fee wedge between the best and worst anchor on the same corridor on a
-  given day is typically **1.5–4% of notional** — the value an execution layer
-  captures for the user by picking correctly.
+**Not "universal".** This is a Stellar project about fiat off-ramps through SEP
+anchors. Not chain-agnostic, not a general payments product, not a routing layer
+for value in general.
 
----
-
-## 3. The thesis — four load-bearing primitives
-
-### 3.1 Execution-layer framing
-
-Aggregators alone do not win. Skyscanner lost to Google Flights the moment
-Google started **booking** flights from the results page. Rate pages that
-dead-end at a "go to anchor" button externalize every remaining point of
-failure — KYC drift, quote expiry, client-side wallet mismatch — onto the
-user. That is why we do not ship a rate page. We ship an **execution layer**:
-every rate in the table is executable in-place, signed by the user's wallet,
-settled by the anchor under SEP-24, with a status tracker the user can't lose.
-
-Concretely: the same `<RateTable />` that shows the quote owns the flow
-through SEP-10 authentication, SEP-24 interactive withdrawal, and the
-post-submit polling loop that shows _"queued → pending anchor → pending
-external → completed"_ with the transaction hash on Stellar Expert.
-
-> This framing is what sank the first submission as much as the two bugs: a
-> rate aggregator without an execute button is a feature, not a layer. The
-> `ExecuteDrawer` component — the code-path that upgrades the product from
-> comparison to execution — landed in commit `45a82eb`.
-
-### 3.2 The intent primitive
-
-An **intent** is the user's signed statement of purpose:
-
-> _"Withdraw $100 USDC to NGN bank account XYZ, at or better than ₦1,510 per
-> USDC, before 2026-04-23T19:00Z."_
-
-The intent is the unit of work Stellar Intel routes. It is canonicalized,
-hashed, and signed by the user before any anchor sees it. Three properties fall
-out immediately:
-
-- **Replay-safe.** The hash commits to the deadline; no anchor can reuse it.
-- **Routable.** The solver can shop the intent across every SEP-38-capable
-  anchor in parallel, because the user has already committed to the _outcome_,
-  not to any single anchor.
-- **Splittable.** A single $10,000 USDC→MXN intent can be filled as $6,000 on
-  Anchor A and $4,000 on Anchor B if that maximizes net landed value — a
-  property no rate page can express.
-
-Intents are the product's vocabulary. Every downstream feature (reputation,
-dispute, agent surface) is built on them.
-
-### 3.3 The reputation oracle — our moat
-
-Every intent produces a tuple we write to a Soroban contract on settlement:
-
-```text
-(intent_hash, anchor_id, corridor, quoted_rate, delivered_rate,
- quoted_amount, delivered_amount, settle_seconds, outcome, timestamp)
-```
-
-This is the moat. It compounds in three directions:
-
-1. **Permissionless to read.** Any Soroban consumer, any off-chain indexer,
-   any rival aggregator can rank anchors from our data. We make no claim to
-   own the data — we claim to be the best publisher of it.
-2. **Anchor-aligned, not anchor-hostile.** Anchors that honour their quotes
-   rank up. This is a carrot, not a stick — a public track record is a
-   distribution advantage for honest operators. Several anchors we've spoken
-   to would **prefer** a neutral third party publish this over publishing it
-   themselves.
-3. **Hard to fake.** Every outcome is signed by the user's wallet on the
-   Stellar ledger. You can dispute an outcome, but you cannot invent one.
-   Synthetic probes (scheduled `$1` off-ramps we run nightly) bootstrap
-   coverage of corridors before organic volume arrives.
-
-We call this data layer the **price layer** for emerging-market stablecoin
-FX — Chainlink for the corridors Chainlink will never cover.
-
-### 3.4 The agent surface
-
-The MCP server exposes the same primitives — `discover_corridors`,
-`quote_corridor`, `execute_intent`, `read_reputation` — to AI agents. A user
-in Claude, Cursor, or a custom wallet agent can off-ramp in five lines:
-
-```ts
-const quote = await mcp.quote_corridor({ corridor: 'usdc-ngn', amount: '100' });
-const intent = await mcp.sign_intent(quote, { deadline: Date.now() + 300_000 });
-const result = await mcp.execute_intent(intent);
-```
-
-This is not a demo — the same primitives power the web UI. Agents are
-treated as first-class clients, because in a three-year window a material
-share of retail off-ramps will be initiated by one.
-
-The MCP surface is the wedge that makes Stellar Intel the default execution
-layer for any AI that needs to move money through a stablecoin corridor.
+**Not a replacement for [SDF's Anchor Directory](https://anchors.stellar.org/).**
+The directory is the register — which anchors exist and what they say they do.
+This is the observation record — what they actually did this week. A register
+and a monitor are different artifacts with different refresh semantics, and
+neither substitutes for the other. The worked comparison is in
+[`POSITIONING.md`](POSITIONING.md).
 
 ---
 
-## 4. What has shipped since the last submission
+## 3. The thesis
 
-All live in the repository today, on `main`, under MIT license.
+### 3.1 The observation record
 
-| Area                     | Shipped                                                                                                                               | Evidence                                                 |
-| ------------------------ | ------------------------------------------------------------------------------------------------------------------------------------- | -------------------------------------------------------- |
-| **Anchors integrated**   | MoneyGram (SEP-24 confirmed), Cowrie (NGN), Anclap (ARS, PEN)                                                                         | `lib/stellar/anchors.ts`, commits `be007c7`, `45a82eb`   |
-| **Corridors live**       | 7: NGN, KES, GHS, MXN, BRL, ARS, PEN                                                                                                  | `CORRIDORS` registry, `lib/stellar/anchors.ts`           |
-| **SEP-10 auth**          | Full challenge-sign-verify flow via Freighter                                                                                         | `lib/stellar/sep10.ts`, `ExecuteDrawer` step 2           |
-| **SEP-24 flow**          | 6-step interactive withdrawal with error recovery                                                                                     | `components/offramp/ExecuteDrawer.tsx`, commit `45a82eb` |
-| **Rate aggregation**     | Parallel SEP-38 quote solicitor, net-landed-value ranking                                                                             | `hooks/useRates.ts`, `components/offramp/RateTable.tsx`  |
-| **Status tracking**      | Polling tracker wired to a live `transactionId`, with refund & terminal states                                                        | `components/offramp/StatusTracker.tsx`, commit `548a09b` |
-| **Offramp page**         | Full off-ramp assembly — corridor → quote → sign → execute → track                                                                    | `app/offramp/page.tsx`, commit `548a09b`                 |
-| **Env hardening**        | Browser-safe env validation, graceful offline fallback                                                                                | commit `5d40936`                                         |
-| **Tests**                | Vitest unit suites for anchor registry, SEP-1 TOML parsing, horizon helpers                                                           | `tests/`                                                 |
-| **CI**                   | 11 workflows: ci, bundle-size, codeql, data-health, deploy, dependency-review, lighthouse, pr-title, release, stale, api-availability | `.github/workflows/`                                     |
-| **License & governance** | MIT, CONTRIBUTING, Changelog, issue + PR templates                                                                                    | repo root                                                |
+Seven registered anchors, probed every five minutes across four signals:
+**uptime, quote availability, issuer mismatch, TOML integrity**. Samples land in
+a durable store, age out on a retention policy, and roll up into a per-anchor
+score by a **published method** — [`ANCHOR_REPUTATION.md`](ANCHOR_REPUTATION.md),
+rendered at [`/methodology`](https://stellar-intel.vercel.app/methodology).
 
-The v1 product compares rates across three anchors and seven corridors in real
-time, executes an off-ramp end-to-end, and tracks it to completion without
-losing state. That is the floor the reputation oracle and agent surface build
-on.
+Two properties are load-bearing:
 
----
+- **Small samples are labelled as small.** A score computed from four
+  observations is reported with `n`, not laundered into a confident number.
+- **The method is published before the score is used.** A reputation system
+  whose scoring rule is private is an opinion with a number attached.
 
-## 5. Credibility-fix log
+The record is written on-chain to a Soroban contract so a third party can read
+it without trusting this project's backend. That is the point of the oracle: not
+that it is on a blockchain, but that the claim becomes checkable by someone who
+does not trust the claimant.
 
-Two bugs sank the first submission. Both are fixed on `main`; both have
-regression tests.
+### 3.2 The execution path
 
-| #   | Bug                                                      | Symptom (before)                                                                                                                | Root cause                                                                                                                                                                       | Fix                                                                                                                                  | Evidence (after)                                                                                                    |
-| --- | -------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------ | ------------------------------------------------------------------------------------------------------------------- |
-| 1   | **`exchangeRate` returns `0` on Cowrie USDC→NGN** (#001) | Cowrie rows rendered `₦0` per USDC, making the whole rate table unusable for the headline corridor.                             | Decimal parse treated `sell_amount` as integer atomic units, but Cowrie's SEP-38 response delivers it as a decimal string. Fee was also being subtracted twice.                  | Rewrote the rate adapter to branch on `sell_amount` type, asserted the invariant in a unit test.                                     | `tests/anchors.cowrie.exchangeRate.spec.ts` — `exchangeRate > 0` for every sampled quote.                           |
-| 2   | **`StatusTracker` never mounts** (#002)                  | After a successful withdrawal, the page still showed the "connect wallet" card — the user had no way to know anything happened. | `ExecuteDrawer` completed the withdrawal but never propagated `{ transactionId, transferServer, jwt }` back to the page, so the tracker's mount condition was permanently false. | Added an `onSuccess` prop that lifts the tracking tuple to the page; drawer closes on success and `StatusTracker` owns the viewport. | Commit `45a82eb`; e2e test `tests/offramp-e2e.spec.ts` — successful execute renders `StatusTracker` with a live id. |
+A non-custodial off-ramp: corridor → compare → sign → execute → track. SEP-10 for
+authentication, SEP-24 for the interactive withdrawal, SEP-38 where an anchor
+actually offers firm quotes.
 
-Both fixes are covered by CI on every PR. The `data-health` workflow runs
-nightly against production anchors to ensure the Cowrie rate path stays
-non-zero in the wild.
+**Every leg is signed by the user.** The anchor takes custody under SEP-24;
+this project never holds funds and has no code path that could. That is an
+architectural property, not a policy promise — see
+[`NON_CUSTODY.md`](NON_CUSTODY.md).
 
----
+This half is real and it works. It is second in this document because its
+quality is bounded by anchor behaviour, and the honest version of that sentence
+is in §5.
 
-## 6. Roadmap — v1 Executable → v5 Institutional
+### 3.3 The agent surface
 
-Each wave is a ship-stop with merge-ready PRs, not a wish list. Full ticket
-expansion lives in the [GitHub issue tracker](https://github.com/Ezedike-Evan/stellar-intel/issues) and
-[`docs/ROADMAP.md`](ROADMAP.md).
+An MCP server exposing the same primitives the web UI uses, plus a versioned
+REST API with an error envelope, rate-limit headers, and idempotency keys.
 
-| Wave                             | Theme                                          | Key deliverables                                                                              | Gate               |
-| -------------------------------- | ---------------------------------------------- | --------------------------------------------------------------------------------------------- | ------------------ |
-| **v1.0 Executable** (✅ shipped) | A correct, demonstrable off-ramp               | 3 anchors, 7 corridors, SEP-10/24 complete, StatusTracker live                                | This submission    |
-| **v1.1 Hardening**               | Reliability & coverage                         | Retry/backoff on anchor timeouts; refund UX; dispute modal; 80%+ coverage on `lib/stellar/*`  | 30 days post-grant |
-| **v1.2 Router + Seeds**          | Multi-anchor split routing                     | Solver v1 picks the minimum-cost combination; nightly synthetic probes seed corridor coverage | 60 days            |
-| **v1.3 Polish**                  | Grant-reviewer UX                              | Cookbook, benchmarks, live oracle explorer, anchor onboarding kit                             | 90 days            |
-| **v2 Observable**                | Public reputation API + Soroban oracle mainnet | `GET /v1/public/scores`; on-chain reads from Soroban; per-corridor leaderboard UI             | 120 days           |
-| **v3 Guaranteed**                | Intent-level guarantees                        | Deadline enforcement, slippage bounds, partial-fill handling                                  | 180 days           |
-| **v4 Universal**                 | MCP agent surface GA + SDK                     | `@stellarintel/sdk` on npm, `@stellarintel/mcp` on npm, embeddable widget                     | 240 days           |
-| **v5 Institutional**             | Compliance-grade primitives                    | Jurisdictional memo, SBOM, non-custody attestation, institutional reporting                   | 365 days           |
+The surface is **advisory and user-signed**. There is no held key and no
+autonomous spend: an agent can compare, quote, and prepare, but a human wallet
+signs. An agent surface over a custodial product would be a different risk
+posture entirely; this one inherits §3.2's.
 
 ---
 
-## 7. Why us, why now
+## 4. What is actually true today
 
-- **Why this team.** Solo maintainer today, grant funding unlocks a community
-  contributor funnel — see [§ 8](#8-ask-and-use-of-funds). Every architectural
-  decision in the repo is traceable to a commit, tagged conventionally, with a
-  failing-test-first history. The two bugs that sank the first submission are
-  not evidence of inattention; they are evidence of what happens when a solo
-  maintainer ships a demo without CI gates. The CI gates are now in place.
-- **Why now.** Three trends converge this quarter: (1) SEP-38 has quietly
-  become the ecosystem default, unlocking firm-quote aggregation; (2) Soroban
-  mainnet is mature enough to host the reputation oracle; (3) MCP has become
-  the de-facto interface for agents to call external tools, and no Stellar
-  product ships one. The execution-layer slot on Stellar is open for
-  twelve months, maybe less.
-- **Why Stellar, not a bridge.** The SEPs are the whole story. No other chain
-  has an on-ramp/off-ramp specification of this rigour. Stellar Intel is a
-  product that could only exist on Stellar.
+- **Seven registered anchors**, probed every five minutes across four signals.
+- **A published scoring methodology**, with small samples labelled as small.
+- **A non-custodial execution path**: every leg user-signed, anchor custody
+  under SEP-24, no funds held at any point.
+- **An MCP surface** exposing the same primitives as the web UI.
+- **A Soroban reputation contract**, deployed to testnet.
+- **CI that gates on it**: formatting, lint at zero warnings, typecheck, unit
+  suite with coverage, an OpenAPI drift gate, a WCAG AA contrast guard, a
+  registry guard, and both Rust jobs.
+
+Anything not in that list should be read as not yet true.
 
 ---
 
-## 8. Ask and use of funds
+## 5. What this project stopped claiming
 
-We are requesting the standard Stellar Community Fund Tier-2 grant. A detailed
-budget breakdown lives in the companion document submitted to the committee.
-Headline allocation:
+Three statements in earlier copy do not survive contact with the live network.
+They are listed rather than quietly deleted, because the whole point of
+narrowing is to stop making them. The full evidence is in
+[`POSITIONING.md`](POSITIONING.md).
 
-| Bucket             | Share | Purpose                                                                         |
-| ------------------ | ----- | ------------------------------------------------------------------------------- |
-| Core engineering   | ~55%  | v1.1–v1.3 waves, Soroban oracle publisher, MCP server                           |
-| Contributor funnel | ~15%  | Good-first-issue triage, office hours, contributor swag, bounty pool            |
-| Anchor outreach    | ~10%  | Travel to one Stellar Meridian event; in-person integration work with 2 anchors |
-| Audit & security   | ~15%  | Soroban contract audit (one firm), SEP-24 flow review, SBOM tooling             |
-| Infra & ops        | ~5%   | Vercel production, monitoring, status page, log drains                          |
+1. **"Live SEP-38 quotes across every integrated anchor."** On 2026-08-05, **one
+   of seven** registered anchors advertises `ANCHOR_QUOTE_SERVER` at all — and
+   that one does not quote the corridor it is registered for. Ranking across
+   firm quotes is not something that can be done today, because the quotes do
+   not exist. It becomes true as anchors adopt SEP-38, and not before.
+2. **"Every quote, fill, failure and settlement is written to a public
+   reputation oracle."** The publisher and the contract both exist. Whether a
+   given deployment has published anything is a question about data, not code;
+   `GET /api/reputation/probe-coverage` is the honest answer to it.
+3. **"Ranked by net landed value."** The ranking code is real, but a fill-rate
+   penalty computed from an empty sample ranks on priors. It becomes true when
+   the probe window is non-empty.
 
-Every deliverable is gated on a merged PR with CI green and a dated release
-tag. Fund release against milestones, not dates.
-
----
-
-## 9. Risks and mitigations
-
-| Risk                                      | Likelihood | Impact | Mitigation                                                                                                                                                                                                     |
-| ----------------------------------------- | ---------- | ------ | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| An anchor disputes a reputation outcome   | Medium     | Medium | Dispute modal (#166); every outcome is user-signed and replayable from the ledger, so the dispute resolves on evidence, not opinion.                                                                           |
-| MSB / VASP classification risk            | Low        | High   | [`docs/NON_CUSTODY.md`](NON_CUSTODY.md) + [`docs/JURISDICTIONAL.md`](JURISDICTIONAL.md): every leg is signed by the user, anchor takes custody under SEP-24, Stellar enforces atomicity. We never touch funds. |
-| Anchor churn (one of the three goes dark) | Medium     | Low    | Registry design already handles dynamic anchor add/remove; synthetic probes surface outages within 30 minutes.                                                                                                 |
-| Soroban oracle consumer ergonomics        | Medium     | Medium | Ship a Rust + TS consumer library alongside the contract; seed three reference integrations in the cookbook.                                                                                                   |
-| Solo-maintainer bus factor                | High       | High   | This grant funds the contributor ladder: `docs/CONTRIBUTOR_LADDER.md` defines Triager → Reviewer → Maintainer with merge-count criteria. Target: two additional reviewers by end of v1.3.                      |
-| Agent misuse (agent drains a wallet)      | Low        | High   | MCP surface is **advisory + user-signed** — every `execute_intent` call must be signed by the user's wallet. No held keys, no autonomous spend.                                                                |
+Two of the three are fixed by the clock running long enough. That is precisely
+why the roadmap gates a mainnet oracle publish on 90 days of accumulated probe
+coverage rather than on a date — see §6.
 
 ---
 
-## 10. References
+## 6. Sequencing
 
-- **Repository** — [github.com/Ezedike-Evan/stellar-intel](https://github.com/Ezedike-Evan/stellar-intel)
-- **Architecture** — [`docs/ARCHITECTURE.md`](ARCHITECTURE.md)
-- **Roadmap** — [`docs/ROADMAP.md`](ROADMAP.md)
-- **Intent API** — [`docs/INTENT_API.md`](INTENT_API.md)
-- **Oracle spec** — [`docs/ORACLE_SPEC.md`](ORACLE_SPEC.md)
-- **MCP spec** — [`docs/MCP.md`](MCP.md)
-- **Anchor reputation** — [`docs/ANCHOR_REPUTATION.md`](ANCHOR_REPUTATION.md)
-- **Non-custody manifesto** — [`docs/NON_CUSTODY.md`](NON_CUSTODY.md)
-- **Jurisdictional memo** — [`docs/JURISDICTIONAL.md`](JURISDICTIONAL.md)
-- **Issue tracker** — [GitHub Issues](https://github.com/Ezedike-Evan/stellar-intel/issues)
+Waves, not dates. Full ticket-level expansion is in
+[`ROADMAP.md`](ROADMAP.md), which is the authoritative version; this table is
+the shape of it.
+
+The axis is the one from §1 — what works without anyone's cooperation, versus
+what is third-party constrained.
+
+| Wave                    | Theme                              | Depends on                            |
+| ----------------------- | ---------------------------------- | ------------------------------------- |
+| **v1 Executable** ✅    | A correct, demonstrable off-ramp   | nothing external                      |
+| **v2 Observable** ✅    | Reputation as a product surface    | nothing external — probes and a clock |
+| **v3 Guaranteed**       | Intent-level SLAs                  | settlement history to price against   |
+| **v4 Universal**        | SDK + MCP GA, embeddable widget    | consumers, not anchors                |
+| **v5 Institutional**    | Compliance-grade primitives        | counterparties who ask for them       |
+| **v6 Ecosystem Infra.** | Multi-language SDKs, decentralized | third-party readers of the oracle     |
+
+The first two waves needed nobody's permission, which is why they are done. The
+later ones are gated on parties outside this repository, which is why they are
+sequenced behind rather than promised alongside.
+
+**The gate that matters most is not on this table.** A mainnet oracle publish is
+blocked in code on **90 days of continuous probe coverage** — never launch an
+empty credit bureau. The enforcement is a refusal in the publish path, not a
+convention.
+
+---
+
+## 7. Why this, on Stellar
+
+**Why this is possible here.** The SEPs are the whole story. SEP-1 pins a
+discoverable manifest at a known path, SEP-10 specifies authentication, SEP-24
+specifies interactive withdrawal, SEP-38 specifies firm quotes. That is enough
+public surface to build an honest monitor without asking a single anchor for
+access. No other ecosystem has an on/off-ramp specification of this rigour, so
+this project could not be ported — it is not that it would be hard, it is that
+there would be nothing to probe.
+
+**Why the monitoring half is the durable one.** Anchors come and go; the
+observation record accumulates regardless. Its value is a function of how long
+it has been running, which is the one property a competitor cannot acquire by
+writing code faster.
+
+**Why it stays open.** MIT, with the methodology published and the on-chain
+record readable by anyone. A reputation system that only its author can audit is
+not a reputation system.
+
+---
+
+## 8. Risks and mitigations
+
+| Risk                                      | Likelihood | Impact | Mitigation                                                                                                                                                                   |
+| ----------------------------------------- | ---------- | ------ | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| Scoring on too few samples                | High       | High   | Sample counts are reported alongside every score; the mainnet oracle publish is gated in code on 90 days of continuous coverage.                                             |
+| An anchor disputes a reputation outcome   | Medium     | Medium | Every outcome is user-signed and replayable from the ledger, so a dispute resolves on evidence. Escalation ladder in [`GOVERNANCE.md`](GOVERNANCE.md).                       |
+| MSB / VASP classification                 | Low        | High   | [`NON_CUSTODY.md`](NON_CUSTODY.md) + [`JURISDICTIONAL.md`](JURISDICTIONAL.md): every leg user-signed, anchor custody under SEP-24. There is no code path that takes custody. |
+| Anchor churn                              | Medium     | Low    | The registry handles dynamic add/remove; nightly validation flags degraded anchors and opens a tracking issue automatically.                                                 |
+| SEP-38 adoption stays thin                | Medium     | Medium | Stated plainly rather than papered over (§5). The monitoring half does not depend on it; only firm-quote ranking does.                                                       |
+| Single-key control of the oracle contract | High       | High   | Two-step admin transfer is implemented and tested; migration to an M-of-N multisig is a tracked operational task, not a code change.                                         |
+| Solo-maintainer bus factor                | High       | High   | [`CONTRIBUTOR_LADDER.md`](CONTRIBUTOR_LADDER.md) defines Triager → Reviewer → Maintainer; [`SDK_HANDOFF.md`](SDK_HANDOFF.md) defines community SDK maintainership.           |
+| Agent misuse                              | Low        | High   | The MCP surface is advisory and user-signed. No held keys, no autonomous spend.                                                                                              |
+
+---
+
+## 9. References
+
+- **Positioning** (source of truth for claims) — [`POSITIONING.md`](POSITIONING.md)
+- **Roadmap** — [`ROADMAP.md`](ROADMAP.md)
+- **Architecture** — [`ARCHITECTURE.md`](ARCHITECTURE.md)
+- **Anchor reputation methodology** — [`ANCHOR_REPUTATION.md`](ANCHOR_REPUTATION.md)
+- **Oracle spec** — [`ORACLE_SPEC.md`](ORACLE_SPEC.md)
+- **Non-custody manifesto** — [`NON_CUSTODY.md`](NON_CUSTODY.md)
+- **Jurisdictional memo** — [`JURISDICTIONAL.md`](JURISDICTIONAL.md)
+- **Intent API** — [`INTENT_API.md`](INTENT_API.md)
+- **MCP spec** — [`MCP.md`](MCP.md)
+- **Agent positioning vs. ROZO** — [`AGENT_POSITIONING.md`](AGENT_POSITIONING.md)
+- **Issue tracker** — [GitHub Issues](https://github.com/ezedike-evan/stellar-intel/issues)
+- **Stellar SEP-1** — [stellar.org/protocol/sep-1](https://stellar.org/protocol/sep-1)
 - **Stellar SEP-10** — [stellar.org/protocol/sep-10](https://stellar.org/protocol/sep-10)
 - **Stellar SEP-24** — [stellar.org/protocol/sep-24](https://stellar.org/protocol/sep-24)
 - **Stellar SEP-38** — [stellar.org/protocol/sep-38](https://stellar.org/protocol/sep-38)
@@ -321,5 +279,5 @@ tag. Fund release against milestones, not dates.
 
 ---
 
-_This proposal is a living document. Changes are tracked in git; the
-canonical version is whatever is on `main` at the time of submission._
+_This document is a living document. Changes are tracked in git; the version on
+`main` is the current one._

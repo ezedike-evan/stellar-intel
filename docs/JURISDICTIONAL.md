@@ -327,9 +327,8 @@ To avoid any ambiguity:
   credit layer will proceed until counsel has confirmed a licensing path for
   at least one pilot jurisdiction.
 - **Any lending feature is blocked by sufficient capital availability.** The
-  project's current funding (Stellar Community Fund grant, see
-  [`docs/PROPOSAL.md`](PROPOSAL.md)) is allocated entirely to the execution
-  layer. A lending facility requires a separate capital raise.
+  project has no capital allocated to lending, and a lending facility would
+  require a separate raise on top of whatever funds the rest of the roadmap.
 - **This is a Year 2+ roadmap initiative.** The current roadmap (v1
   Executable → v5 Institutional) must ship before credit feasibility is
   re-evaluated.
@@ -343,8 +342,8 @@ To avoid any ambiguity:
   informs the proposed threshold criteria.
 - [`docs/NON_CUSTODY.md`](NON_CUSTODY.md) — why the product cannot be a lender without
   a fundamental architectural change (or a separate legal entity).
-- [`docs/PROPOSAL.md`](PROPOSAL.md) — the grant thesis; ask is for execution layer, not
-  lending.
+- [`docs/PROPOSAL.md`](PROPOSAL.md) — the project thesis; the scope is an observation
+  record plus a non-custodial execution path, not lending.
 - [`types/reputation.ts`](../types/reputation.ts) — the outcome log schema that would
   feed any future credit scoring.
 - [`lib/reputation/thresholds.ts`](../lib/reputation/thresholds.ts) — the existing
