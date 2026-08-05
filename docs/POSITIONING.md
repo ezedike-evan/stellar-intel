@@ -6,6 +6,80 @@ document that cannot be falsified is marketing.
 
 ---
 
+## What this is
+
+**An anchor health and reputation record for Stellar off-ramps, with an
+execution path built on top of it.**
+
+Monitoring is the load-bearing half and it comes first, because it is the half
+that works without anyone's cooperation. A probe needs no partnership, no
+listing, and no permission: it asks an anchor's public endpoints what they do
+and writes down the answer. Execution is real and is in the repository, but it
+depends on anchors, corridors and liquidity that this project does not control.
+
+Stating it in that order is not modesty. Getting it backwards is how a project
+ends up claiming an execution capability whose quality is set by third parties
+who never agreed to anything.
+
+### What this is not
+
+The earlier framing was "the execution layer for stablecoin value on Stellar"
+and a "universal intent layer". Both are retired, for two separate reasons.
+
+**"Universal" was never true of the scope.** This is a Stellar project about
+fiat off-ramps through SEP anchors. It is not chain-agnostic, not a general
+payments product, and not a routing layer for value in general. The vocabulary
+also now belongs to other projects in the ecosystem — see the ROZO section
+below — so using it invited a comparison on ground this project does not
+occupy.
+
+**"Execution layer" led with the dependent half.** Compare what each half needs
+to be true:
+
+|                     | needs                                 | status                       |
+| ------------------- | ------------------------------------- | ---------------------------- |
+| Health + reputation | public endpoints, a clock             | works today                  |
+| Execution           | anchors, corridors, liquidity, quotes | constrained by third parties |
+
+### The claims this replaces, and why
+
+Three statements in earlier copy do not survive contact with the live network.
+They are listed rather than quietly deleted, because the point of narrowing is
+to stop making them.
+
+1. **"Live SEP-38 quotes across every integrated anchor."** On 2026-08-05,
+   **one of seven registered anchors advertises `ANCHOR_QUOTE_SERVER` at all**,
+   and that one does not quote the corridor it is registered for. Comparing
+   firm quotes across anchors is not a thing that can be done today, because
+   the quotes do not exist. The worked evidence is in the Anchor Directory
+   section below.
+2. **"Every quote, fill, failure and settlement is written to a public
+   reputation oracle."** The publisher and the Soroban contract exist. Whether
+   a given deployment has published anything is a question about data, not
+   code, and `GET /api/reputation/probe-coverage` is the honest answer to it.
+3. **"Ranked by net landed value."** The ranking code is real, but a fill-rate
+   penalty computed from an empty sample ranks on priors. It becomes true when
+   the probe window is non-empty, and not before.
+
+None of those is a hard problem to fix. Two of the three are fixed by the clock
+running for long enough. The narrowing exists so the copy stops running ahead
+of the data.
+
+### What is actually true today
+
+- Seven registered anchors, probed every five minutes across four signals:
+  uptime, quote availability, issuer mismatch, TOML integrity.
+- A published methodology for turning those samples into a score, with small
+  samples labelled as small.
+- A non-custodial execution path: every leg is signed by the user, the anchor
+  takes custody under SEP-24, and this project never holds funds.
+- An MCP surface exposing the same primitives the web UI uses.
+
+The distinguishing claim is narrow and checkable: **this project writes down
+what anchors did, on a clock, and publishes both the record and the method.**
+
+---
+
 ## The live-data complement to SDF's Anchor Directory
 
 [SDF's Anchor Directory](https://anchors.stellar.org/) is the canonical answer to
