@@ -6,8 +6,9 @@ export default function ApiDocsPage() {
       <div>
         <h1 className="text-3xl font-bold text-primary-text">Interactive API Reference</h1>
         <p className="mt-2 text-lg text-secondary-text">
-          Explore every endpoint with live try-it panels. Requests go directly to the production
-          API.
+          Explore every endpoint with live try-it panels. Requests default to{' '}
+          <strong>this deployment</strong> — production is available from the environment selector
+          below, and write requests against it carry a warning.
         </p>
       </div>
 

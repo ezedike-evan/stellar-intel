@@ -2,33 +2,9 @@
 import Link from 'next/link';
 import { usePathname } from 'next/navigation';
 import { clsx } from 'clsx';
-import { BookOpen, Shield, Code, Zap, Puzzle, Globe, ChevronRight } from 'lucide-react';
+import { BookOpen, ChevronRight } from 'lucide-react';
+import { DOCS_SECTIONS } from './nav';
 import { useState } from 'react';
-
-const SIDEBAR_SECTIONS = [
-  {
-    title: 'Getting Started',
-    links: [
-      { href: '/docs', label: 'Overview', icon: BookOpen },
-      { href: '/docs/quickstart', label: 'Quickstart', icon: Zap },
-    ],
-  },
-  {
-    title: 'API Reference',
-    links: [
-      { href: '/docs/api', label: 'Interactive API', icon: Globe },
-      { href: '/docs/auth', label: 'Auth & Rate Limits', icon: Shield },
-    ],
-  },
-  {
-    title: 'Integration Guides',
-    links: [
-      { href: '/docs/webhooks', label: 'Webhooks', icon: Puzzle },
-      { href: '/docs/sdks', label: 'SDKs & Libraries', icon: Code },
-      { href: '/docs/mcp', label: 'MCP Tool Docs', icon: Code },
-    ],
-  },
-];
 
 export default function DocsLayout({ children }: { children: React.ReactNode }) {
   const pathname = usePathname();
@@ -62,7 +38,7 @@ export default function DocsLayout({ children }: { children: React.ReactNode }) 
         )}
       >
         <nav className="space-y-6 p-4">
-          {SIDEBAR_SECTIONS.map((section) => (
+          {DOCS_SECTIONS.map((section) => (
             <div key={section.title}>
               <h3 className="mb-2 px-3 text-xs font-semibold uppercase tracking-wider text-secondary-text">
                 {section.title}

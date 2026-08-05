@@ -27,7 +27,44 @@ interface EndpointSpec {
   responses: Record<string, { description: string; content?: Record<string, unknown> }>;
 }
 
-const BASE_URL = 'https://stellar-intel.vercel.app';
+// ─── Where "Try it" sends the request (#871) ──────────────────────────────────
+//
+// This used to be a single const pointing at production, and every Send button
+// on the docs page fired a live request at it — including
+// POST /api/intent/offramp, which prepares a real off-ramp. #871 asks for the
+// opposite: a console against a sandboxed environment, not production.
+//
+// So the target is a choice, it defaults to the safe one, and picking
+// production is a deliberate act that carries a warning on write methods.
+
+const PRODUCTION_ORIGIN = 'https://stellar-intel.vercel.app';
+
+interface PlaygroundEnvironment {
+  id: 'sandbox' | 'production';
+  label: string;
+  /** Empty string means "this page's own origin" — a preview or localhost. */
+  origin: string;
+  description: string;
+}
+
+const ENVIRONMENTS: readonly PlaygroundEnvironment[] = [
+  {
+    id: 'sandbox',
+    label: 'This deployment',
+    origin: '',
+    description:
+      'Same-origin: whichever deployment is serving this page. On a preview or localhost that is a sandbox; nothing here reaches production data.',
+  },
+  {
+    id: 'production',
+    label: 'Production',
+    origin: PRODUCTION_ORIGIN,
+    description: 'Live production API. Write requests have real effects.',
+  },
+] as const;
+
+/** Methods that change state, and therefore warrant a warning on production. */
+const WRITE_METHODS = new Set(['post', 'put', 'patch', 'delete']);
 
 function getDefaultBody(schema: Record<string, unknown>): Record<string, string> {
   if (schema.properties) {
@@ -56,14 +93,22 @@ function getDefaultBody(schema: Record<string, unknown>): Record<string, string>
   return {};
 }
 
+function defaultPathParam(name: string): string {
+  if (name === 'corridor') return 'usdc-ngn';
+  if (name === 'anchor' || name === 'anchorId' || name === 'id') return 'cowrie';
+  return '';
+}
+
 function EndpointCard({
   method,
   path,
   spec,
+  environment,
 }: {
   method: string;
   path: string;
   spec: EndpointSpec;
+  environment: PlaygroundEnvironment;
 }) {
   const [expanded, setExpanded] = useState(false);
   const [showTryIt, setShowTryIt] = useState(false);
@@ -71,6 +116,19 @@ function EndpointCard({
   const [response, setResponse] = useState<{ status: number; data: string } | null>(null);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
+
+  // Path params were collected with window.prompt(), which is blocked inside a
+  // cross-origin iframe and effectively unusable on mobile. They are inputs now.
+  const pathParamNames = (path.match(/\{(\w+)\}/g) ?? []).map((p) => p.slice(1, -1));
+  const [pathParams, setPathParams] = useState<Record<string, string>>(() =>
+    Object.fromEntries(pathParamNames.map((name) => [name, defaultPathParam(name)]))
+  );
+
+  // #805 shipped API-Version negotiation and idempotency keys. The console
+  // exercised neither, so it could not demonstrate the contract the spec's own
+  // description advertises.
+  const [apiVersion, setApiVersion] = useState('');
+  const [idempotencyKey, setIdempotencyKey] = useState('');
 
   const methodColors: Record<string, string> = {
     get: 'bg-green-600',
@@ -105,21 +163,24 @@ function EndpointCard({
         parsedBody = JSON.parse(body);
       }
 
-      const pathParams = path.match(/\{(\w+)\}/g) || [];
       let resolvedPath = path;
-      for (const param of pathParams) {
-        const paramName = param.slice(1, -1);
-        const val = prompt(
-          `Enter ${paramName}:`,
-          paramName === 'corridor' ? 'usdc-ngn' : paramName === 'anchor' ? 'cowrie' : ''
-        );
-        if (val) resolvedPath = resolvedPath.replace(param, val);
+      for (const name of pathParamNames) {
+        const value = pathParams[name]?.trim();
+        if (!value) {
+          setError(`Fill in the "${name}" path parameter before sending.`);
+          return;
+        }
+        resolvedPath = resolvedPath.replace(`{${name}}`, encodeURIComponent(value));
       }
 
-      const url = `${BASE_URL}${resolvedPath}`;
-      const init: RequestInit = { method: method.toUpperCase() };
+      const url = `${environment.origin}${resolvedPath}`;
+      const headers: Record<string, string> = {};
+      if (hasBody) headers['content-type'] = 'application/json';
+      if (apiVersion.trim()) headers['API-Version'] = apiVersion.trim();
+      if (idempotencyKey.trim()) headers['Idempotency-Key'] = idempotencyKey.trim();
+
+      const init: RequestInit = { method: method.toUpperCase(), headers };
       if (hasBody) {
-        init.headers = { 'content-type': 'application/json' };
         init.body = JSON.stringify(parsedBody);
       }
       const res = await fetch(url, init);
@@ -198,12 +259,83 @@ function EndpointCard({
                 {showTryIt ? 'Hide' : 'Try it'}
               </button>
               <span className="text-xs text-secondary-text">
-                Requests go to <code className="text-accent">{BASE_URL}</code>
+                Requests go to{' '}
+                <code className="text-accent">{environment.origin || 'this origin'}</code>
               </span>
             </div>
 
             {showTryIt && (
               <div className="mt-4 space-y-3">
+                {environment.id === 'production' && WRITE_METHODS.has(method) && (
+                  <div
+                    role="alert"
+                    className="rounded-lg border border-amber-400 bg-amber-50 p-3 text-xs text-amber-900 dark:border-amber-700 dark:bg-amber-950/40 dark:text-amber-200"
+                  >
+                    <strong>This is a live {method.toUpperCase()} against production.</strong> It is
+                    not a dry run — the effects are real. Switch the environment above to send it
+                    against this deployment instead.
+                  </div>
+                )}
+
+                {pathParamNames.length > 0 && (
+                  <div className="space-y-2">
+                    {pathParamNames.map((name) => (
+                      <div key={name}>
+                        <label
+                          htmlFor={`${method}-${path}-${name}`}
+                          className="mb-1 block text-xs font-medium text-secondary-text"
+                        >
+                          Path parameter: <code>{name}</code>
+                        </label>
+                        <input
+                          id={`${method}-${path}-${name}`}
+                          value={pathParams[name] ?? ''}
+                          onChange={(e) =>
+                            setPathParams((prev) => ({ ...prev, [name]: e.target.value }))
+                          }
+                          className="w-full rounded-lg border border-control-border bg-background px-3 py-1.5 font-mono text-xs text-primary-text"
+                          placeholder={name}
+                        />
+                      </div>
+                    ))}
+                  </div>
+                )}
+
+                <div className="grid gap-2 sm:grid-cols-2">
+                  <div>
+                    <label
+                      htmlFor={`${method}-${path}-api-version`}
+                      className="mb-1 block text-xs font-medium text-secondary-text"
+                    >
+                      <code>API-Version</code> <span className="font-normal">(optional)</span>
+                    </label>
+                    <input
+                      id={`${method}-${path}-api-version`}
+                      value={apiVersion}
+                      onChange={(e) => setApiVersion(e.target.value)}
+                      className="w-full rounded-lg border border-control-border bg-background px-3 py-1.5 font-mono text-xs text-primary-text"
+                      placeholder="unset — server picks latest"
+                    />
+                  </div>
+                  {hasBody && (
+                    <div>
+                      <label
+                        htmlFor={`${method}-${path}-idempotency`}
+                        className="mb-1 block text-xs font-medium text-secondary-text"
+                      >
+                        <code>Idempotency-Key</code> <span className="font-normal">(optional)</span>
+                      </label>
+                      <input
+                        id={`${method}-${path}-idempotency`}
+                        value={idempotencyKey}
+                        onChange={(e) => setIdempotencyKey(e.target.value)}
+                        className="w-full rounded-lg border border-control-border bg-background px-3 py-1.5 font-mono text-xs text-primary-text"
+                        placeholder="resend the same key to dedupe"
+                      />
+                    </div>
+                  )}
+                </div>
+
                 {hasBody && (
                   <div>
                     <label className="mb-1 block text-xs font-medium text-secondary-text">
@@ -282,6 +414,10 @@ export default function ApiPlayground() {
   const [spec, setSpec] = useState<OpenApiSpec | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
+  // Defaults to same-origin, so opening this page on a preview deployment
+  // exercises that preview rather than production (#871).
+  const [environmentId, setEnvironmentId] = useState<PlaygroundEnvironment['id']>('sandbox');
+  const environment = ENVIRONMENTS.find((e) => e.id === environmentId) ?? ENVIRONMENTS[0]!;
 
   useEffect(() => {
     fetch('/openapi.json')
@@ -319,12 +455,40 @@ export default function ApiPlayground() {
 
   return (
     <div className="space-y-8">
+      <div className="rounded-xl border border-border bg-bg-subtle p-4">
+        <label
+          htmlFor="playground-environment"
+          className="mb-1 block text-xs font-semibold uppercase text-secondary-text"
+        >
+          Environment
+        </label>
+        <select
+          id="playground-environment"
+          value={environmentId}
+          onChange={(e) => setEnvironmentId(e.target.value as PlaygroundEnvironment['id'])}
+          className="w-full rounded-lg border border-control-border bg-background px-3 py-2 text-sm text-primary-text sm:w-auto"
+        >
+          {ENVIRONMENTS.map((env) => (
+            <option key={env.id} value={env.id}>
+              {env.label}
+            </option>
+          ))}
+        </select>
+        <p className="mt-2 text-xs text-secondary-text">{environment.description}</p>
+      </div>
+
       {Object.entries(grouped).map(([tag, endpoints]) => (
         <section key={tag}>
           <h2 className="mb-4 text-xl font-semibold text-primary-text">{tag}</h2>
           <div className="space-y-2">
             {endpoints.map(({ method, path, spec: endpoint }) => (
-              <EndpointCard key={`${method}-${path}`} method={method} path={path} spec={endpoint} />
+              <EndpointCard
+                key={`${method}-${path}`}
+                method={method}
+                path={path}
+                spec={endpoint}
+                environment={environment}
+              />
             ))}
           </div>
         </section>

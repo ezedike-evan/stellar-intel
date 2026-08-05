@@ -1,56 +1,62 @@
 import Link from 'next/link';
-import { ArrowRight, BookOpen, Globe, Shield, Code, Zap, Puzzle } from 'lucide-react';
+import { ArrowRight } from 'lucide-react';
+import { DOCS_CARD_ROUTES } from './nav';
 
-const DOCS_CARDS = [
-  {
+const CARD_DETAIL: Record<
+  string,
+  { title: string; description: string; color: string; bg: string }
+> = {
+  '/docs/quickstart': {
     title: 'Quickstart',
     description: 'Make your first API call in under 5 minutes.',
-    href: '/docs/quickstart',
-    icon: Zap,
     color: 'text-blue-600 dark:text-blue-400',
     bg: 'bg-blue-50 dark:bg-blue-900/30',
   },
-  {
+  '/docs/api': {
     title: 'Interactive API Reference',
     description: 'Explore every endpoint with live try-it panels.',
-    href: '/docs/api',
-    icon: Globe,
     color: 'text-green-600 dark:text-green-400',
     bg: 'bg-green-50 dark:bg-green-900/30',
   },
-  {
+  '/docs/auth': {
     title: 'Auth & Rate Limits',
     description: 'Authentication methods, API keys, and rate-limit tiers.',
-    href: '/docs/auth',
-    icon: Shield,
     color: 'text-purple-600 dark:text-purple-400',
     bg: 'bg-purple-50 dark:bg-purple-900/30',
   },
-  {
+  '/docs/webhooks': {
     title: 'Webhooks',
     description: 'Receive real-time event notifications from the platform.',
-    href: '/docs/webhooks',
-    icon: Puzzle,
     color: 'text-orange-600 dark:text-orange-400',
     bg: 'bg-orange-50 dark:bg-orange-900/30',
   },
-  {
+  '/docs/sdks': {
     title: 'SDKs & Libraries',
     description: 'TypeScript, Python, and Rust client libraries.',
-    href: '/docs/sdks',
-    icon: Code,
     color: 'text-cyan-600 dark:text-cyan-400',
     bg: 'bg-cyan-50 dark:bg-cyan-900/30',
   },
-  {
+  '/docs/mcp': {
     title: 'MCP Tool Docs',
     description: 'Use Stellar Intel through AI agents via the MCP server.',
-    href: '/docs/mcp',
-    icon: BookOpen,
     color: 'text-rose-600 dark:text-rose-400',
     bg: 'bg-rose-50 dark:bg-rose-900/30',
   },
-];
+};
+
+// Derived from the shared route list, so a new /docs page cannot appear in the
+// sidebar and silently miss the index grid (#871).
+const DOCS_CARDS = DOCS_CARD_ROUTES.map((route) => {
+  const detail = CARD_DETAIL[route.href];
+  return {
+    href: route.href,
+    icon: route.icon,
+    title: detail?.title ?? route.label,
+    description: detail?.description ?? '',
+    color: detail?.color ?? 'text-accent',
+    bg: detail?.bg ?? 'bg-accent-subtle',
+  };
+});
 
 export default function DocsHome() {
   return (
