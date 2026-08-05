@@ -273,7 +273,7 @@ export default async function StandingsPage() {
         </table>
       </div>
 
-      <p className="mt-4 text-xs text-gray-400 dark:text-gray-500">
+      <p className="mt-4 text-xs text-secondary-text">
         Rankings are based on a 30-day rolling window. Scores reflect only on-chain settled
         transactions recorded in the Stellar Intel reputation store. Anchors with 0 samples have not
         yet had transactions recorded and default to rank-bottom, not disqualified.

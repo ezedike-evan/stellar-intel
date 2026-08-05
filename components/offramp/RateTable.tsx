@@ -384,7 +384,7 @@ export function RateTable({
                           #{rate.reputationRank}
                         </span>
                       ) : (
-                        <span className="text-gray-400 dark:text-gray-500">—</span>
+                        <span className="text-secondary-text">—</span>
                       )}
                     </td>
                     <td className="px-4 py-3 text-right text-gray-700 dark:text-gray-300">
@@ -406,7 +406,7 @@ export function RateTable({
                           onClick={() => setExpandedAnchorId(isExpanded ? null : rate.anchorId)}
                           aria-label={isExpanded ? 'Hide details' : 'Show details'}
                           aria-expanded={isExpanded}
-                          className="rounded p-1 text-gray-400 hover:text-gray-600 dark:hover:text-gray-200"
+                          className="rounded p-1 text-secondary-text hover:text-gray-600 dark:hover:text-gray-200"
                         >
                           <svg
                             className={`h-4 w-4 transition-transform ${isExpanded ? 'rotate-180' : ''}`}
@@ -449,17 +449,20 @@ export function RateTable({
                       anchorId={anchorError.anchorId}
                       anchorName={anchorError.anchorName}
                     />
-                    <span className="font-medium text-gray-400 dark:text-gray-500">
+                    <span className="font-medium text-secondary-text">
                       {anchorError.anchorName}
                     </span>
                     <QuotePill source="unavailable" />
                   </div>
                 </td>
-                <td className="px-4 py-3 text-right text-gray-400 dark:text-gray-500">—</td>
-                <td className="px-4 py-3 text-right text-gray-400 dark:text-gray-500">—</td>
-                <td className="px-4 py-3 text-right text-gray-400 dark:text-gray-500">—</td>
-                <td className="px-4 py-3 text-right text-gray-400 dark:text-gray-500">—</td>
+                <td className="px-4 py-3 text-right text-secondary-text">—</td>
+                <td className="px-4 py-3 text-right text-secondary-text">—</td>
+                <td className="px-4 py-3 text-right text-secondary-text">—</td>
+                <td className="px-4 py-3 text-right text-secondary-text">—</td>
                 <td className="px-4 py-3 text-right">
+                  {/* Greyed on purpose: disabled controls are exempt from the 4.5:1
+                      requirement (WCAG 1.4.3), and meeting it here would make an
+                      unavailable action look actionable (#755). */}
                   <button
                     disabled
                     aria-disabled="true"

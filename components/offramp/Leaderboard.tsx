@@ -121,7 +121,7 @@ export function Leaderboard({ corridor, limit }: LeaderboardProps) {
                         #{rate.reputationRank}
                       </span>
                     ) : (
-                      <span className="text-gray-400 dark:text-gray-500">—</span>
+                      <span className="text-secondary-text">—</span>
                     )}
                   </td>
                 )}

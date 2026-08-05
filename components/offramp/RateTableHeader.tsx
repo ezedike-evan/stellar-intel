@@ -52,7 +52,7 @@ export function RateTableHeader({
         <AnchorCountBadge responding={respondingCount} total={totalCount} />
 
         {lastFetchedAt !== null && (
-          <span className="text-xs text-gray-400 dark:text-gray-500">
+          <span className="text-xs text-secondary-text">
             {prefersReducedMotion ? (
               <span aria-live="polite">Last updated {elapsedSeconds}s ago</span>
             ) : (
@@ -106,7 +106,7 @@ export function RateTableHeader({
         Refresh
         <kbd
           aria-hidden="true"
-          className="rounded border border-gray-300 px-1 font-mono text-[10px] font-normal text-gray-400 dark:border-gray-600 dark:text-gray-500"
+          className="rounded border border-gray-300 px-1 font-mono text-[10px] font-normal text-secondary-text dark:border-gray-600"
         >
           R
         </kbd>

@@ -80,7 +80,7 @@ export function Timeline({ status }: TimelineProps) {
                       ? 'text-gray-900 dark:text-white'
                       : isCompleted
                         ? 'text-gray-700 dark:text-gray-300'
-                        : 'text-gray-400 dark:text-gray-500'
+                        : 'text-secondary-text'
                   }`}
                 >
                   {stage.label}

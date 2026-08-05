@@ -67,7 +67,7 @@ export function ConsentModal({ open, onAccept, onCancel }: ConsentModalProps) {
             type="checkbox"
             checked={checked}
             onChange={(event) => setChecked(event.target.checked)}
-            className="mt-0.5 h-4 w-4 rounded border-gray-300 dark:border-gray-600"
+            className="mt-0.5 h-4 w-4 rounded border-control-border"
           />
           <span>
             I have read and accept the{' '}

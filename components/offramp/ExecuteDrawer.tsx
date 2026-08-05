@@ -555,7 +555,7 @@ function ExecuteDrawerContent({
               onClick={onClose}
               disabled={isRunning}
               aria-label="Close"
-              className="rounded-lg p-1 text-gray-400 hover:text-gray-600 disabled:opacity-40 dark:hover:text-gray-200"
+              className="rounded-lg p-1 text-secondary-text hover:text-gray-600 disabled:opacity-40 dark:hover:text-gray-200"
             >
               <svg className="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
                 <path
@@ -827,6 +827,8 @@ function StepIndicator({ step }: { step: ExecuteDrawerStep }) {
 
         return (
           <li key={s} className="flex items-center gap-2 text-xs">
+            {/* Pending steps stay low-contrast on purpose — inactive controls are
+                exempt from WCAG 1.4.3, and the active step has to stand out (#755). */}
             <span
               className={`flex h-5 w-5 flex-shrink-0 items-center justify-center rounded-full text-[10px] font-bold
                 ${isComplete ? 'bg-green-500 text-white' : ''}
@@ -843,12 +845,12 @@ function StepIndicator({ step }: { step: ExecuteDrawerStep }) {
                   ? 'font-medium text-blue-600 dark:text-blue-400'
                   : isComplete || step === 'done'
                     ? 'text-gray-500 line-through dark:text-gray-400'
-                    : 'text-gray-400 dark:text-gray-500'
+                    : 'text-secondary-text'
               }
             >
               {STEP_LABELS[s]}
               {stepTimeEstimate(s) && (
-                <span className="text-gray-400 dark:text-gray-500"> ({stepTimeEstimate(s)})</span>
+                <span className="text-secondary-text"> ({stepTimeEstimate(s)})</span>
               )}
             </span>
           </li>

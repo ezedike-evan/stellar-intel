@@ -23,6 +23,8 @@ export function Sparkline({
         width={width}
         height={height}
         viewBox={`0 0 ${width} ${height}`}
+        /* Decorative empty-state baseline: aria-hidden and carrying no
+           information, so exempt from the contrast requirement (#755). */
         className={`text-gray-300 dark:text-gray-700 ${className}`}
         aria-hidden="true"
         data-testid="sparkline-empty"

@@ -469,7 +469,7 @@ export function ScorecardCard({
               target="_blank"
               rel="noopener noreferrer"
               aria-label="View latest oracle transaction on stellar.expert"
-              className="text-gray-400 hover:text-blue-500 dark:text-gray-500 dark:hover:text-blue-400 transition-colors"
+              className="text-secondary-text hover:text-blue-500 dark:hover:text-blue-400 transition-colors"
             >
               <ExternalLink className="h-3.5 w-3.5" />
             </a>
@@ -534,7 +534,7 @@ export function ScorecardCard({
                   }
                 >
                   <Info
-                    className="h-3.5 w-3.5 text-gray-400 dark:text-gray-500"
+                    className="h-3.5 w-3.5 text-secondary-text"
                     aria-label="How the composite score is calculated"
                   />
                 </Tooltip>

@@ -70,7 +70,7 @@ export function DisputeModal({ transactionId, status, onClose, onSubmit }: Dispu
           </h2>
           <button
             onClick={onClose}
-            className="rounded-lg p-1 text-gray-400 hover:bg-gray-100 hover:text-gray-600 dark:hover:bg-gray-800"
+            className="rounded-lg p-1 text-secondary-text hover:bg-gray-100 hover:text-gray-600 dark:hover:bg-gray-800"
             aria-label="Close"
           >
             <svg
@@ -128,7 +128,7 @@ export function DisputeModal({ transactionId, status, onClose, onSubmit }: Dispu
                   value={reason}
                   onChange={(e) => setReason(e.target.value as DisputeReason)}
                   required
-                  className="w-full rounded-lg border border-gray-300 bg-white px-3 py-2 text-sm text-gray-900 focus:border-blue-500 focus:outline-none focus:ring-1 focus:ring-blue-500 dark:border-gray-600 dark:bg-gray-800 dark:text-white"
+                  className="w-full rounded-lg border border-control-border bg-white px-3 py-2 text-sm text-gray-900 focus:border-blue-500 focus:outline-none focus:ring-1 focus:ring-blue-500 dark:bg-gray-800 dark:text-white"
                 >
                   <option value="">Select a reason…</option>
                   {DISPUTE_REASONS.map((r) => (
@@ -148,7 +148,7 @@ export function DisputeModal({ transactionId, status, onClose, onSubmit }: Dispu
                   onChange={(e) => setNotes(e.target.value)}
                   rows={3}
                   placeholder="Describe what happened…"
-                  className="w-full rounded-lg border border-gray-300 bg-white px-3 py-2 text-sm text-gray-900 placeholder-gray-400 focus:border-blue-500 focus:outline-none focus:ring-1 focus:ring-blue-500 dark:border-gray-600 dark:bg-gray-800 dark:text-white dark:placeholder-gray-500"
+                  className="w-full rounded-lg border border-control-border bg-white px-3 py-2 text-sm text-gray-900 placeholder:text-secondary-text focus:border-blue-500 focus:outline-none focus:ring-1 focus:ring-blue-500 dark:bg-gray-800 dark:text-white"
                 />
               </div>
 

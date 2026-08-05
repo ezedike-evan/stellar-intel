@@ -20,7 +20,7 @@ export function SortToggle({ label, direction, onClick }: SortToggleProps) {
     >
       {label}
       <span
-        className={`text-[10px] leading-none ${direction ? 'text-gray-700 dark:text-gray-200' : 'text-gray-400 dark:text-gray-600'}`}
+        className={`text-[10px] leading-none ${direction ? 'text-gray-700 dark:text-gray-200' : 'text-secondary-text'}`}
         aria-hidden="true"
       >
         {direction === 'asc' ? '▲' : direction === 'desc' ? '▼' : '↕'}

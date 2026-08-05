@@ -129,10 +129,10 @@ export function AmountInput({
           } ${
             error || insufficient
               ? 'border-red-400 bg-red-50 focus:border-red-500 focus:ring-red-500/20 dark:border-red-700 dark:bg-red-950/20'
-              : 'border-gray-300 bg-white focus:border-blue-500 focus:ring-blue-500/20 dark:border-gray-600 dark:bg-gray-800'
+              : 'border-control-border bg-white focus:border-blue-500 focus:ring-blue-500/20 dark:bg-gray-800'
           }`}
         />
-        <span className="pointer-events-none absolute inset-y-0 right-3 flex items-center gap-1.5 text-sm font-medium text-gray-400">
+        <span className="pointer-events-none absolute inset-y-0 right-3 flex items-center gap-1.5 text-sm font-medium text-secondary-text">
           {balance != null && balance > 0 && (
             <button
               type="button"

@@ -178,12 +178,12 @@ export function StatusTracker({
             Transaction Status
           </h3>
           <div className="mt-0.5 flex items-center gap-2">
-            <p className="font-mono text-xs text-gray-400">{transactionId}</p>
+            <p className="font-mono text-xs text-secondary-text">{transactionId}</p>
             <CopyButton text={transactionId} />
           </div>
         </div>
         {!isTerminal && (
-          <span className="flex items-center gap-1 text-xs text-gray-400">
+          <span className="flex items-center gap-1 text-xs text-secondary-text">
             <span className="h-1.5 w-1.5 rounded-full bg-blue-500 animate-pulse" />
             Live
           </span>
@@ -212,10 +212,7 @@ export function StatusTracker({
         <p className="-mt-3 mb-4 text-xs text-gray-500 dark:text-gray-400">
           {statusExplainer(status)}
           {statusTimeEstimate(status) && (
-            <span className="text-gray-400 dark:text-gray-500">
-              {' '}
-              (usually {statusTimeEstimate(status)})
-            </span>
+            <span className="text-secondary-text"> (usually {statusTimeEstimate(status)})</span>
           )}
         </p>
       )}
@@ -226,7 +223,7 @@ export function StatusTracker({
         </p>
       )}
       {!isTerminal && attemptCount >= 5 && attemptCount < 20 && (
-        <p className="mb-4 text-xs text-gray-400 dark:text-gray-500">
+        <p className="mb-4 text-xs text-secondary-text">
           (checked {attemptCount} times, still waiting...)
         </p>
       )}
@@ -435,7 +432,7 @@ export function StatusTracker({
         <div className="mt-4 pt-4 border-t border-gray-100 dark:border-gray-800">
           <button
             onClick={() => onDisputeOpen(transactionId)}
-            className="text-xs font-medium text-gray-400 hover:text-red-500 dark:hover:text-red-400 underline transition-colors"
+            className="text-xs font-medium text-secondary-text hover:text-red-500 dark:hover:text-red-400 underline transition-colors"
           >
             Flag incorrect outcome
           </button>

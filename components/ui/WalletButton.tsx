@@ -107,7 +107,7 @@ export function WalletButton() {
           Mainnet
         </span>
         <svg
-          className={`h-3.5 w-3.5 text-gray-400 transition-transform ${menuOpen ? 'rotate-180' : ''}`}
+          className={`h-3.5 w-3.5 text-secondary-text transition-transform ${menuOpen ? 'rotate-180' : ''}`}
           viewBox="0 0 24 24"
           fill="none"
           stroke="currentColor"

@@ -46,7 +46,7 @@ export function DisclaimerBanner() {
       <button
         onClick={handleDismiss}
         aria-label="Dismiss disclaimer"
-        className="flex-shrink-0 rounded p-0.5 text-gray-400 hover:text-gray-600 dark:hover:text-gray-200"
+        className="flex-shrink-0 rounded p-0.5 text-secondary-text hover:text-gray-600 dark:hover:text-gray-200"
       >
         <svg className="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
           <path
