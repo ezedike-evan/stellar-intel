@@ -103,3 +103,112 @@ if SDF opened a channel.
 If `probe-coverage` reports an empty window, the claim in this section is not
 true yet, and the honest reading is that the clock has not been running. That is
 the falsification test.
+
+### Worked examples
+
+**Captured 2026-08-05.** Anchor listings and TOML files both change, so treat
+every row below as a dated observation rather than a standing fact — and re-run
+the commands before reusing any of it.
+
+Two different things get conflated as "gaps", and they deserve separating:
+
+- **Type A — the listing disagrees with the file it links to.** A real
+  discrepancy, checkable by anyone in one command.
+- **Type B — the directory does not carry that kind of data at all.** Not an
+  error. A register is not supposed to.
+
+#### A1. Zeam's listing both over- and under-states its standards
+
+The directory lists Zeam's `supported_standards` as **SEP-6, SEP-31, SEP-24**,
+and gives `toml_file` as `https://mint.zeam.money/.well-known/stellar.toml`.
+
+That TOML — the file the directory itself points at — contains:
+
+```
+WEB_AUTH_ENDPOINT       = "https://anchor.zeam.money/auth"
+ANCHOR_QUOTE_SERVER     = "https://anchor.zeam.money/sep38"
+DIRECT_PAYMENT_SERVER   = "https://anchor.zeam.money/sep31"
+TRANSFER_SERVER_SEP0024 = "https://anchor.zeam.money/sep24"
+```
+
+There is **no `TRANSFER_SERVER`**, so SEP-6 is listed but not advertised. And
+`ANCHOR_QUOTE_SERVER` is present, so **SEP-38 is advertised but not listed**.
+The listing is wrong in both directions against its own cited source.
+
+The SEP-38 omission is the more consequential one: Zeam is the only anchor in
+our registry that advertises a quote server at all, and the directory is the
+place a reader would look to discover that.
+
+```bash
+curl -s https://mint.zeam.money/.well-known/stellar.toml | grep -E 'TRANSFER_SERVER|ANCHOR_QUOTE_SERVER|DIRECT_PAYMENT'
+```
+
+#### A2. Anclap is listed with SEP-31 and no TOML link
+
+The directory lists `supported_standards` as **SEP-6, SEP-24, SEP-31** with
+`toml_file: null`. The live file at `anclap.com` advertises `TRANSFER_SERVER`
+(SEP-6) and `TRANSFER_SERVER_SEP0024` (SEP-24), and has **no
+`DIRECT_PAYMENT_SERVER`** — SEP-31 is listed but not advertised.
+
+Because `toml_file` is null, the listing carries nothing to check itself
+against. The discrepancy is only visible if you already know where to look.
+
+```bash
+curl -s https://anclap.com/.well-known/stellar.toml | grep -E 'TRANSFER_SERVER|DIRECT_PAYMENT_SERVER'
+```
+
+#### A3. The control case — MoneyGram is correct
+
+The directory lists MoneyGram as **SEP-24 only**. Its TOML advertises
+`TRANSFER_SERVER_SEP0024` and nothing else. **The listing is exactly right.**
+
+Recorded deliberately: a check that only ever reports discrepancies is not a
+check. Two of the three listings we could verify were wrong; the third was
+right.
+
+#### B1. Two anchors we track are not listed at all
+
+`cowrie.exchange` and `ngnc.online` both serve a valid `stellar.toml` and both
+serve the USDC→NGN corridor. Neither appears in the directory. This is the
+directory's documented incompleteness rather than a defect — but it means the
+NGN corridor cannot be researched from the directory alone.
+
+#### B2. "Supported" does not mean "quotable in your corridor"
+
+Zeam is registered here for `usdc-zar`. Its live SEP-38 `/info` at
+`https://anchor.zeam.money/sep38/info` returns exactly three assets:
+
+```
+stellar:USDC:GA5ZSEJYB37JRC5AVCIA5MOP4RHTM335X2KGX3IHOJAPP5RE34K4KZVN
+stellar:BRL:GDVKY2GU2DRXWTBEYJJWSFXIGBZV6AZNBVVSUHEPZI54LIS6BA7DVVSP
+iso4217:BRL
+```
+
+**No ZAR.** The anchor supports SEP-38; it just does not quote the corridor it
+is registered for. No `supported_standards` field can express that, because the
+answer is per-corridor and changes without the listing changing.
+
+Relatedly, none of the three anchors serving USDC→NGN advertises an
+`ANCHOR_QUOTE_SERVER` at all, so **no firm quote exists for that corridor from
+any registered anchor** — the finding behind #720, re-confirmed on this date.
+
+#### B3. Attestation of Reserves is present but empty
+
+The field exists on every entry and currently carries `"N/A"` for Zeam and
+MoneyGram and `"No"` for Anclap. Consistent with the launch post's future tense.
+Nothing here fills that gap either — see the third caveat above.
+
+#### Reproducing the listing side
+
+The directory is a client-rendered app with no public API, so the listings above
+were read out of the server-rendered payload:
+
+```bash
+curl -s https://anchors.stellar.org/ > directory.html
+grep -o 'supported_standards[^}]*' directory.html
+```
+
+One caveat on method, since it changes how much weight A1–A3 carry: this was a
+one-shot read of five listings, not a systematic diff of the whole directory. It
+establishes that listing-vs-TOML drift is real and easy to find. It does **not**
+establish a rate, and this document should not be read as claiming one.
