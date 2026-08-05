@@ -40,6 +40,7 @@ opens. A wave does not open early. A wave does not ship partial.
 - [v4 Universal](#v4-universal) — SDK + MCP GA + embeddable widget
 - [v5 Institutional](#v5-institutional) — compliance-grade primitives
 - [v6 Ecosystem Infrastructure](#v6-ecosystem-infrastructure) — webhooks, GraphQL, multi-language SDKs, decentralization
+- [Deliberately deferred](#deliberately-deferred) — the three modules that are not on this roadmap, and why
 - [Cross-cutting tracks](#cross-cutting-tracks)
 
 ---
@@ -598,6 +599,35 @@ the wave structure above.
 - [ ] The "ripped out" test passes: if this app's backend disappeared
       entirely, the on-chain data it publishes remains independently
       readable and meaningful
+
+---
+
+## Deliberately deferred
+
+Three modules are **not** on this roadmap, at any wave. They are omitted on
+purpose, and the omission is the product decision — not a gap waiting to be
+filled.
+
+- **On-ramp module** — fiat → stablecoin entry
+- **Yield module** — parking stablecoin balances in a rate-bearing venue
+- **Swap module** — a standalone asset-exchange surface
+
+**Why.** Shipping four modules at once is the exact failure mode that got the
+first grant submission rejected. Width without depth loses. The unoccupied
+lane is anchor intelligence — the health, reputation, and execution record of
+the last mile — and it is unoccupied precisely because it is unglamorous and
+slow to accumulate. Every module added before that lane is genuinely held
+splits the effort that holds it.
+
+This is not a permanent ban. Two of the three already have a re-entry path
+that does not reopen them as tabs: v3's chained atomic execution treats the
+deferred modules as **solver hops inside the existing intent router**, a
+routing concern rather than new surface area. Anything that cannot arrive
+that way waits until execution volume exists to justify it.
+
+_Previously tracked as the anti-goals section of epic
+[#795](https://github.com/ezedike-evan/stellar-intel/issues/795), which this
+document supersedes._
 
 ---
 
