@@ -217,14 +217,12 @@ jobs:
           cache: 'npm'
       - run: npm ci
 
+      # No `if [ -f ]` guard, deliberately. It used to be wrapped in one, and
+      # since the script did not exist the job took the else branch every night
+      # and reported integrity as healthy without checking anything (#962). A
+      # missing or renamed script should fail loudly.
       - name: Run reputation integrity check
-        run: |
-          if [ -f "scripts/reputation-integrity.mjs" ]; then
-            node scripts/reputation-integrity.mjs
-          else
-            echo "No reputation integrity script yet — placeholder for v2."
-            echo "Tracked in the GitHub issue tracker (composite score test vectors)."
-          fi
+        run: npx tsx scripts/reputation-integrity.mts
 
   open-issue-on-failure:
     name: Open tracking issue on failure
