@@ -48,7 +48,7 @@ exports[`HomePage > matches snapshot 1`] = `
           class="hidden sm:block"
         />
         <span
-          class="text-accent dark:text-accent"
+          class="bg-gradient-to-r from-accent to-accent-2 bg-clip-text text-transparent"
         >
           for every Stellar anchor.
         </span>
@@ -76,7 +76,7 @@ exports[`HomePage > matches snapshot 1`] = `
         class="grid w-full max-w-4xl gap-4 pt-4 text-left sm:grid-cols-2"
       >
         <div
-          class="rounded-2xl border border-gray-200 p-6 dark:border-gray-700"
+          class="rounded-2xl border border-border p-6"
         >
           <div
             class="flex min-h-[184px] flex-col justify-between"
@@ -161,7 +161,7 @@ exports[`HomePage > matches snapshot 1`] = `
           </div>
         </div>
         <div
-          class="rounded-2xl border border-gray-200 p-6 dark:border-gray-700"
+          class="rounded-2xl border border-border p-6"
         >
           <div
             class="flex min-h-[184px] flex-col justify-between"
