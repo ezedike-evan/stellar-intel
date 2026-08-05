@@ -1,8 +1,14 @@
 /**
- * 90-day probe-accumulation progress report (mainnet-readiness tracker).
+ * Anchor health monitor — 90-day probe-accumulation report (mainnet-readiness
+ * tracker).
  *
- * Reads uptime probe samples from the configured reputation store and prints
+ * Reads uptime probe samples from the configured anchor health store and prints
  * per-anchor continuous coverage, gaps, and fleet-wide days until threshold.
+ *
+ * Framing note (#703): this reports anchor health, not reputation. A reputation
+ * score is derived from these samples; the samples themselves are observations
+ * of whether an anchor was up. Leading with 'reputation' named the derived thing
+ * first and made the report sound more opinionated than it is.
  *
  * Usage:
  *   tsx --tsconfig tsconfig.scripts.json scripts/probe-coverage-report.ts

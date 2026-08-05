@@ -634,9 +634,12 @@ export function buildProbeCoverageReport(
 
 /** Human-readable CLI report for internal ops use. */
 export function formatProbeCoverageReport(report: ProbeCoverageReport): string {
+  // Leads with anchor health rather than reputation or intent (#703). What this
+  // report measures is how long each anchor has been observed; the reputation
+  // score is downstream of that, and naming it here put the derived thing first.
   const lines: string[] = [
-    `Probe coverage progress (as of ${report.asOfDay} UTC)`,
-    `Mainnet-readiness threshold: ${report.thresholdDays} continuous days`,
+    `Anchor health monitor — probe coverage (as of ${report.asOfDay} UTC)`,
+    `Mainnet-readiness threshold: ${report.thresholdDays} continuous days of anchor health probes`,
     `Fleet days until threshold: ${report.daysUntilFleetThreshold}${
       report.fleetThresholdMet ? ' — threshold met' : ''
     }`,
