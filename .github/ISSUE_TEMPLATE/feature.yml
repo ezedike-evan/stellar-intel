@@ -71,6 +71,7 @@ body:
         - v3 — Guaranteed
         - v4 — Universal (SDK + MCP + widget)
         - v5 — Institutional
+        - v6 — Ecosystem Infrastructure (SDKs, webhooks, GraphQL, decentralization)
         - cross-cutting (docs, ops, observability, security)
         - unscoped — discuss wave placement
     validations:
@@ -96,7 +97,10 @@ body:
         - reputation
         - oracle
         - mcp
-        - sdk
+        - sdk-ts
+        - sdk-py
+        - sdk-rs
+        - contracts
         - api
         - ui
         - types
@@ -124,6 +128,9 @@ body:
         - React UI / components
         - Hooks / data fetching
         - API routes (`app/api/*`)
+        - TypeScript SDK (`packages/sdk`)
+        - Python SDK (`packages/python-sdk`)
+        - Rust consumer crate (`crates/stellar-intel-reputation`)
         - CI / workflows
         - Docs only
         - None — additive on top of existing

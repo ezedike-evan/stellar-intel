@@ -38,7 +38,13 @@ const config = {
         'reputation',
         'oracle',
         'mcp',
+        // 'sdk' is kept for history; new SDK work names its language, because
+        // "sdk" alone stopped identifying anything once there were three (#874).
         'sdk',
+        'sdk-ts',
+        'sdk-py',
+        'sdk-rs',
+        'contracts',
         'api',
         'ui',
         'brand',

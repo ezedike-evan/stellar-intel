@@ -32,12 +32,27 @@ See [README.md](README.md) for full setup instructions and environment variable 
 1. Fork the repository and create a branch from `main`.
 2. Name branches descriptively: `feat/sep24-fee-fetching`, `fix/anchor-rate-display`, `docs/readme-update`.
 3. Make your changes. Keep commits focused — one logical change per commit.
-4. Run checks before pushing:
+4. Run checks before pushing. The one-liner is:
+
    ```bash
-   npm run typecheck
-   npm run lint
-   npm run build
+   npm run test:release   # format:check + lint + typecheck + test + build
    ```
+
+   That covers the whole `check` CI job **except the OpenAPI drift gate**, which
+   is separate and catches people out:
+
+   ```bash
+   npm run emit-openapi && git diff --exit-code -- public/openapi.json
+   ```
+
+   `public/openapi.json` is committed, and CI regenerates it and fails on any
+   diff. If you changed an API route or a schema, regenerate and commit the spec
+   **in the same commit**.
+
+   If your change touches Rust, Python or a workspace package, see
+   [Per-surface checks](#per-surface-checks) below — the root commands do not
+   cover them.
+
 5. Open a pull request against `main`. Fill in the PR description template.
 
 ---
@@ -94,13 +109,105 @@ Anchors are defined in `constants/anchors.ts` (re-exported via `constants/index.
 
 ---
 
+## Per-surface checks
+
+This repository is no longer a single Next.js app. It spans a TypeScript app, a
+Soroban contract, a `no_std` Rust consumer crate, a Python SDK, and three npm
+workspaces — and the root `npm` scripts cover **only the first**. Run the block
+for whatever you touched.
+
+### Root — the Next.js app, `lib/`, `components/`, `app/`
+
+```bash
+npm run format:check   # prettier, and it covers **/*.md too
+npm run lint           # eslint --max-warnings 0
+npm run typecheck      # tsc --noEmit
+npm run test           # vitest
+npm run build
+npm run check:registry # anchor registry ⊆ transfer-capable set
+npm run emit-openapi && git diff --exit-code -- public/openapi.json
+```
+
+### `contracts/reputation` — the Soroban contract
+
+Mirrors the `soroban contract (reputation)` CI job exactly:
+
+```bash
+cargo fmt   --manifest-path contracts/reputation/Cargo.toml --check
+cargo clippy --manifest-path contracts/reputation/Cargo.toml --all-targets -- -D warnings
+cargo test  --manifest-path contracts/reputation/Cargo.toml --locked
+cargo build --manifest-path contracts/reputation/Cargo.toml \
+  --target wasm32-unknown-unknown --release
+```
+
+`clippy` runs with `-D warnings`, so a warning is a build failure.
+
+### `crates/stellar-intel-reputation` — the read-only consumer crate
+
+```bash
+cargo test --manifest-path crates/stellar-intel-reputation/Cargo.toml --locked
+cargo doc  --manifest-path crates/stellar-intel-reputation/Cargo.toml --no-deps
+cargo publish --manifest-path crates/stellar-intel-reputation/Cargo.toml --dry-run --locked
+```
+
+The `--dry-run` publish is in CI, so bumping the crate version means committing
+the regenerated `Cargo.lock` alongside it.
+
+This crate is `#![no_std]` and is linked into wasm32 contracts. **Do not add a
+dependency that needs `std`** — `reqwest`, `tokio` and friends will not compile
+here, and feature-gating them poisons the dependency graph for the contract
+authors this crate exists for.
+
+### `packages/python-sdk`
+
+```bash
+cd packages/python-sdk
+pip install -e ".[dev]"
+pytest
+mypy src
+```
+
+**Most of this package is generated.** `src/stellarintel/api/`,
+`models/`, `client.py` and `types.py` come from `openapi-python-client generate`
+against `public/openapi.json`. Only `wrapper.py` is hand-written. Editing a
+generated file means your change disappears on the next regeneration — change
+the spec, or change the wrapper.
+
+### `packages/publisher`, `packages/mcp`
+
+npm workspaces. Root `npm run test` picks up `packages/*/tests/**` automatically
+(`vitest.config.mts` excludes only `tests/e2e/**`), so their unit tests run with
+the root suite. Building the publisher is a prerequisite of the root typecheck
+and is wired into `pretypecheck`/`prebuild`, so you rarely invoke it directly:
+
+```bash
+npm run build --workspace=@stellarintel/publisher
+```
+
+### Which surface does my change touch?
+
+| You changed…                            | Run                                           |
+| --------------------------------------- | --------------------------------------------- |
+| `app/`, `components/`, `lib/`, `hooks/` | Root block                                    |
+| An API route or a zod schema            | Root block **including the OpenAPI gate**     |
+| `constants/anchors.ts`                  | Root block **including `check:registry`**     |
+| `contracts/reputation/`                 | Root block + contract block                   |
+| `crates/stellar-intel-reputation/`      | Consumer crate block                          |
+| `packages/publisher/`, `packages/mcp/`  | Root block (their tests run with it)          |
+| `packages/python-sdk/`                  | Python block                                  |
+| Any `*.md`                              | `npm run format:check` — prettier covers docs |
+
+---
+
 ## Pull Request Checklist
 
-- [ ] `npm run typecheck` passes
-- [ ] `npm run lint` passes
-- [ ] `npm run build` passes
+- [ ] `npm run test:release` passes (format, lint, typecheck, test, build)
+- [ ] `npm run emit-openapi` produces no diff, **or** the regenerated spec is committed
+- [ ] Rust: `cargo fmt --check`, `cargo clippy -- -D warnings`, `cargo test` pass for every crate touched
+- [ ] Python: `pytest` and `mypy` pass, and no generated file was hand-edited
 - [ ] No `isMock`, `// MOCK`, or hardcoded rate values added
 - [ ] New anchor entries include a verified `stellar.toml` domain
+- [ ] Exactly one `Closes #N` keyword — reference other issues without one
 - [ ] PR description explains what changed and why
 
 ---

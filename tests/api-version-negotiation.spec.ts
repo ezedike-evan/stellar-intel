@@ -1,4 +1,6 @@
 import { describe, it, expect } from 'vitest';
+import { readFileSync, existsSync } from 'node:fs';
+import { join } from 'node:path';
 import { NextRequest, NextResponse } from 'next/server';
 import { withRequestLogger } from '@/lib/logger';
 import { API_VERSION, SUPPORTED_API_VERSIONS, negotiateApiVersion } from '@/lib/api/api-version';
@@ -80,5 +82,53 @@ describe('version pinning through withRequestLogger (#888)', () => {
     );
     // A client that pinned wrongly still needs to learn what it is talking to.
     expect(response.headers.get('API-Version')).toBe(API_VERSION);
+  });
+});
+
+// ─── Doc/code drift guard (#874) ──────────────────────────────────────────────
+//
+// docs/VERSIONING.md's "Version support window" table claimed "current + 1
+// previous, 180 days" while SUPPORTED_API_VERSIONS held exactly one element and
+// negotiateApiVersion 400'd everything else. Nobody noticed because nothing
+// compared the two. This does.
+//
+// Same philosophy as tests/openapi-coverage.spec.ts: a document that makes a
+// checkable claim about code should be checked against it.
+
+describe('docs/VERSIONING.md matches the enforced support window (#874)', () => {
+  const versioningDoc = readFileSync(join(process.cwd(), 'docs/VERSIONING.md'), 'utf8');
+
+  it('marks the REST row "current only" while exactly one version is supported', () => {
+    const restRow = versioningDoc.split('\n').find((line) => line.startsWith('| HTTP REST API'));
+
+    expect(restRow, 'the Version support window table lost its HTTP REST API row').toBeDefined();
+
+    if (SUPPORTED_API_VERSIONS.length === 1) {
+      // Adding a version to the array without updating the doc fails here.
+      expect(restRow).toMatch(/Current only/i);
+    } else {
+      expect(
+        restRow,
+        `SUPPORTED_API_VERSIONS now has ${SUPPORTED_API_VERSIONS.length} entries — ` +
+          'update the "Version support window" row in docs/VERSIONING.md to match.'
+      ).not.toMatch(/Current only/i);
+    }
+  });
+
+  it('keeps the footnote explaining the gap for as long as the gap exists', () => {
+    if (SUPPORTED_API_VERSIONS.length > 1) return;
+    expect(versioningDoc).toContain('The stated window is not yet what the code enforces');
+  });
+
+  it('does not claim a deprecation header that no code emits', () => {
+    // If someone implements Sunset/Warning, this fails and the "Not yet
+    // implemented" callout should come out of the doc in the same PR.
+    const emitsSunset =
+      existsSync(join(process.cwd(), 'lib/api/deprecation.ts')) ||
+      existsSync(join(process.cwd(), 'app/api/status/route.ts'));
+
+    if (!emitsSunset) {
+      expect(versioningDoc).toContain('Not yet implemented');
+    }
   });
 });
