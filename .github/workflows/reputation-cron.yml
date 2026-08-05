@@ -22,26 +22,83 @@ jobs:
     runs-on: ubuntu-latest
     outputs:
       failure_step: ${{ steps.refresh.outcome != 'success' && 'refresh' || steps.reconcile.outcome != 'success' && 'reconcile' || steps.tick.outcome != 'success' && 'publisher tick' || steps.health.outcome != 'success' && 'publisher health' || 'unknown' }}
+    env:
+      CRON_SECRET: ${{ secrets.CRON_SECRET }}
     steps:
-      # -f makes curl exit non-zero on a 4xx/5xx, so a failing endpoint reds the
-      # job rather than passing silently.
+      # ─── Why this job is shaped the way it is (#948, #930) ───────────────────
+      #
+      # Every step used to be `curl -fsS "${{ secrets.APP_URL }}/api/..."`, and
+      # every step printed `Redirecting...`. `-f` only fails at >= 400, and
+      # there was no `-L`, so a 3xx made curl print the redirect body and exit
+      # 0. The publisher tick was green and doing nothing, every five minutes,
+      # for at least a day. Nobody noticed because nothing failed — the only
+      # symptom was `jq` choking on HTML in the health step below.
+      #
+      # Three defences, in order of how likely each is to be the actual fix:
+      #   1. strip a trailing slash off APP_URL, so `//api/...` cannot 308
+      #   2. follow redirects, so a platform-level one is survivable
+      #   3. assert the status code, so a non-2xx can never read as success
+      - name: Resolve the app origin
+        run: |
+          set -euo pipefail
+          APP="${{ secrets.APP_URL }}"
+          # A trailing slash yields https://host//api/... which Next.js
+          # normalises with a 308. Cheap to rule out, and the leading suspect.
+          echo "APP=${APP%/}" >> "$GITHUB_ENV"
+
       - name: Refresh
         id: refresh
         run: |
-          curl -fsS -X POST "${{ secrets.APP_URL }}/api/reputation/refresh" \
-            -H "Authorization: Bearer ${{ secrets.CRON_SECRET }}"
+          set -euo pipefail
+          # --fail-with-body so a 500 body reaches the log instead of vanishing.
+          # -L to follow a redirect; curl forwards Authorization across a
+          # same-host hop and strips it cross-host, which is what we want.
+          # --proto '=https' so a downgrade can never leak CRON_SECRET.
+          CODE=$(curl -sS -L --proto '=https' --fail-with-body \
+            -o /tmp/refresh.out -w '%{http_code}' \
+            -X POST "$APP/api/reputation/refresh" \
+            -H "Authorization: Bearer $CRON_SECRET") || true
+          cat /tmp/refresh.out
+          case "$CODE" in
+            2*) ;;
+            *) echo "::error::refresh returned HTTP $CODE"; exit 1 ;;
+          esac
 
       - name: Reconcile
         id: reconcile
         run: |
-          curl -fsS -X GET "${{ secrets.APP_URL }}/api/reputation/reconcile" \
-            -H "Authorization: Bearer ${{ secrets.CRON_SECRET }}"
+          set -euo pipefail
+          CODE=$(curl -sS -L --proto '=https' --fail-with-body \
+            -o /tmp/reconcile.out -w '%{http_code}' \
+            "$APP/api/reputation/reconcile" \
+            -H "Authorization: Bearer $CRON_SECRET") || true
+          cat /tmp/reconcile.out
+          case "$CODE" in
+            2*) ;;
+            *) echo "::error::reconcile returned HTTP $CODE"; exit 1 ;;
+          esac
 
       - name: Publisher tick
         id: tick
         run: |
-          curl -fsS -X GET "${{ secrets.APP_URL }}/api/publisher/tick" \
-            -H "Authorization: Bearer ${{ secrets.CRON_SECRET }}"
+          set -euo pipefail
+          CODE=$(curl -sS -L --proto '=https' --fail-with-body \
+            -o /tmp/tick.out -w '%{http_code}' \
+            "$APP/api/publisher/tick" \
+            -H "Authorization: Bearer $CRON_SECRET") || true
+          cat /tmp/tick.out
+          case "$CODE" in
+            2*) ;;
+            *) echo "::error::publisher tick returned HTTP $CODE"; exit 1 ;;
+          esac
+
+          # A gate refusal is a 200 by design (#786) — the publisher declining
+          # to write during the 90-day accumulation window is the system
+          # working, not an incident. Surface it so a reader of a green run
+          # knows why nothing was published.
+          if jq -e '.gate.allowed == false' /tmp/tick.out >/dev/null 2>&1; then
+            echo "::notice::Publish gate closed: $(jq -r '.gate.reason' /tmp/tick.out) — $(jq -r '.skipped' /tmp/tick.out) row(s) withheld"
+          fi
 
       # A green tick is not the same as a healthy publisher: the tick can
       # succeed while publishing nothing. This asserts the durable signal
@@ -51,8 +108,24 @@ jobs:
         id: health
         run: |
           set -euo pipefail
-          BODY=$(curl -fsS "${{ secrets.APP_URL }}/api/publisher/health")
+          CODE=$(curl -sS -L --proto '=https' --fail-with-body \
+            -o /tmp/health.out -w '%{http_code}' \
+            "$APP/api/publisher/health") || true
+          BODY=$(cat /tmp/health.out)
           echo "$BODY"
+
+          case "$CODE" in
+            2*) ;;
+            *) echo "::error::publisher health returned HTTP $CODE"; exit 1 ;;
+          esac
+
+          # Diagnose a non-JSON body directly rather than letting jq's parse
+          # error be the only clue. That error is what #948 actually reported,
+          # and it said nothing about the redirect that caused it.
+          if ! echo "$BODY" | jq -e . >/dev/null 2>&1; then
+            echo "::error::/api/publisher/health did not return JSON. First 200 bytes: $(echo "$BODY" | head -c 200)"
+            exit 1
+          fi
 
           DURABLE=$(echo "$BODY" | jq -r '.durable')
           if [ "$DURABLE" != "true" ]; then
@@ -124,6 +197,10 @@ jobs:
                 'configured, `pendingCount > 0` alongside a large `publishedStaleMs`',
                 'means rows are stuck, and `lastError` carries the last in-process',
                 'error (best effort — it resets on a cold start).',
+                '',
+                'If a step log shows `Redirecting...` or a non-2xx status, the',
+                '`APP_URL` secret points somewhere that redirects — check for a',
+                'trailing slash, an `http://` scheme, or an apex/www mismatch.',
               ].join('\n'),
               labels: ['publisher-alert', 'module/ops', 'needs-triage'],
             });
