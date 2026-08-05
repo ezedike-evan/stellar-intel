@@ -1,0 +1,37 @@
+{
+  "name": "@stellarintel/sdk",
+  "version": "0.1.0",
+  "description": "TypeScript client for the Stellar Intel API — retries and idempotency keys on by default",
+  "license": "MIT",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/ezedike-evan/stellar-intel.git",
+    "directory": "packages/sdk"
+  },
+  "publishConfig": {
+    "access": "public"
+  },
+  "type": "module",
+  "main": "dist/packages/sdk/src/index.js",
+  "types": "dist/packages/sdk/src/index.d.ts",
+  "exports": {
+    ".": {
+      "types": "./dist/packages/sdk/src/index.d.ts",
+      "default": "./dist/packages/sdk/src/index.js"
+    }
+  },
+  "scripts": {
+    "prebuild": "rm -rf dist",
+    "build": "tsc"
+  },
+  "devDependencies": {
+    "typescript": "^6",
+    "@types/node": "^26"
+  },
+  "files": [
+    "dist"
+  ],
+  "engines": {
+    "node": ">=20"
+  }
+}
