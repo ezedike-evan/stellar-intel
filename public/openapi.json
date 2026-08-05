@@ -1434,6 +1434,9 @@
                         "null"
                       ]
                     },
+                    "corridorRatesPublished": {
+                      "type": "number"
+                    },
                     "gate": {
                       "type": "object",
                       "properties": {

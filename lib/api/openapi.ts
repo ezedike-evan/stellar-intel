@@ -686,6 +686,7 @@ registry.registerPath({
             submitted: z.number(),
             skipped: z.number(),
             txHash: z.string().nullable(),
+            corridorRatesPublished: z.number().optional(),
             gate: z
               .object({
                 allowed: z.boolean(),

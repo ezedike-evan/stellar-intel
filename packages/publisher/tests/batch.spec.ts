@@ -52,6 +52,7 @@ const BASE_CONFIG: BatchConfig = {
 // to reject once and then succeed) while the default keeps the happy path.
 const sdkMocks = vi.hoisted(() => ({
   submitOutcome: vi.fn(),
+  publishCorridorRate: vi.fn(),
   signAndSend: vi.fn(),
 }));
 
@@ -61,7 +62,12 @@ vi.mock('@stellar/stellar-sdk', () => ({
   },
   contract: {
     basicNodeSigner: vi.fn().mockReturnValue({ signTransaction: vi.fn() }),
-    Client: { from: vi.fn().mockResolvedValue({ submit_outcome: sdkMocks.submitOutcome }) },
+    Client: {
+      from: vi.fn().mockResolvedValue({
+        submit_outcome: sdkMocks.submitOutcome,
+        publish_corridor_rate: sdkMocks.publishCorridorRate,
+      }),
+    },
   },
 }));
 
@@ -70,6 +76,7 @@ beforeEach(() => {
     sendTransactionResponse: { hash: 'mock-tx-hash' },
   });
   sdkMocks.submitOutcome.mockReset().mockResolvedValue({ signAndSend: sdkMocks.signAndSend });
+  sdkMocks.publishCorridorRate.mockReset().mockResolvedValue({ signAndSend: sdkMocks.signAndSend });
 });
 
 describe('buildOutcomeHash', () => {
@@ -450,4 +457,91 @@ describe('runBatch — publish gate', () => {
     }) as unknown as QueryExecutor;
     return { executor, updates };
   }
+});
+
+// ─── Corridor rates (#961) ────────────────────────────────────────────────────
+
+describe('runBatch — corridor rates', () => {
+  const RATE_ROWS: OutcomeRow[] = [{ ...SAMPLE_ROW, intentHash: 'rate-1' }];
+
+  const RATES = [
+    { corridor: 'usdc-ngn', rate: 15_800_000_000n, decimals: 7, sampleCount: 12 },
+    { corridor: 'usdc-kes', rate: 1_290_000_000n, decimals: 7, sampleCount: 4 },
+  ];
+
+  function trackingExecutor(rows: OutcomeRow[]) {
+    const executor = vi.fn(async (sql: string) => {
+      if (sql.includes('UPDATE outcome_log')) return { rows: [] };
+      return { rows: rows.map(dbRow) };
+    }) as unknown as QueryExecutor;
+    return executor;
+  }
+
+  it('publishes a rate per corridor after the outcomes land', async () => {
+    sdkMocks.signAndSend.mockResolvedValue({ sendTransactionResponse: { hash: 'tx-r' } });
+
+    const result = await runBatch({
+      ...BASE_CONFIG,
+      executor: trackingExecutor(RATE_ROWS),
+      loadCorridorRates: async () => RATES,
+    });
+
+    expect(result.submitted).toBe(1);
+    expect(result.corridorRatesPublished).toBe(2);
+    expect(sdkMocks.publishCorridorRate).toHaveBeenCalledTimes(2);
+    expect(sdkMocks.publishCorridorRate).toHaveBeenCalledWith(
+      expect.objectContaining({ corridor: 'usdc-ngn', rate: 15_800_000_000n, decimals: 7 })
+    );
+  });
+
+  it('skips a corridor with no settled outcomes rather than publishing zero', async () => {
+    sdkMocks.signAndSend.mockResolvedValue({ sendTransactionResponse: { hash: 'tx-r' } });
+
+    const result = await runBatch({
+      ...BASE_CONFIG,
+      executor: trackingExecutor(RATE_ROWS),
+      loadCorridorRates: async () => [
+        { corridor: 'usdc-ngn', rate: 15_800_000_000n, decimals: 7, sampleCount: 3 },
+        // A zero here would read on-chain as "the rate is zero", not "unknown".
+        { corridor: 'usdc-mxn', rate: 0n, decimals: 7, sampleCount: 0 },
+      ],
+    });
+
+    expect(result.corridorRatesPublished).toBe(1);
+    expect(sdkMocks.publishCorridorRate).toHaveBeenCalledTimes(1);
+  });
+
+  it('does not roll back published outcomes when a rate write fails', async () => {
+    const updates: string[] = [];
+    const executor = vi.fn(async (sql: string, params?: unknown[]) => {
+      if (sql.includes('UPDATE outcome_log')) {
+        updates.push((params as [string, string])[1]);
+        return { rows: [] };
+      }
+      return { rows: RATE_ROWS.map(dbRow) };
+    }) as unknown as QueryExecutor;
+
+    sdkMocks.signAndSend.mockResolvedValue({ sendTransactionResponse: { hash: 'tx-r' } });
+    sdkMocks.publishCorridorRate.mockRejectedValue(new Error('HostError: contract logic rejected'));
+
+    const result = await runBatch({
+      ...BASE_CONFIG,
+      executor,
+      loadCorridorRates: async () => RATES,
+    });
+
+    // The outcome is the durable thing; a rate is overwritten next tick.
+    expect(updates).toEqual(['rate-1']);
+    expect(result.submitted).toBe(1);
+    expect(result.corridorRatesPublished).toBe(0);
+  });
+
+  it('behaves exactly as before with no loadCorridorRates', async () => {
+    sdkMocks.signAndSend.mockResolvedValue({ sendTransactionResponse: { hash: 'tx-r' } });
+
+    const result = await runBatch({ ...BASE_CONFIG, executor: trackingExecutor(RATE_ROWS) });
+
+    expect(result.corridorRatesPublished).toBeUndefined();
+    expect(sdkMocks.publishCorridorRate).not.toHaveBeenCalled();
+  });
 });

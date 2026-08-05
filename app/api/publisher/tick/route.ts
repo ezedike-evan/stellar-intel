@@ -16,6 +16,8 @@ import { getPool } from '@/lib/reputation/pool';
 import { getReputationStore } from '@/lib/reputation/store';
 import { loadProbeCoverageReport } from '@/lib/reputation/probeCoverage';
 import { resolveOracleContractId, TESTNET_ORACLE_CONTRACT_ID } from '@/lib/oracle/deployment';
+import { deriveAllCorridorRates } from '@/lib/oracle/corridor-rate';
+import type { OutcomeLogRow } from '@/types/reputation';
 
 export const runtime = 'nodejs';
 // Fluid Compute: allow the function to run for up to 5 minutes per tick so a
@@ -49,6 +51,35 @@ async function loadCoverage(): Promise<ProbeCoverageSummary | null> {
   }
 }
 
+/**
+ * Corridor rates derived from settled outcomes (#961).
+ *
+ * `deriveAllCorridorRates` and the contract's `publish_corridor_rate` both
+ * shipped under #810 and were connected by nothing, so no rate has ever
+ * reached the chain. This is the wire.
+ *
+ * Reads the whole reconciled log rather than just this tick's rows: a rate is a
+ * block-level aggregate, not a per-row fact, and a tick that publishes two
+ * outcomes should still derive its rate from every settlement available.
+ */
+async function loadCorridorRates() {
+  try {
+    const { rows } = await getExecutor()(
+      `SELECT anchor_id, corridor, outcome, quoted_rate, delivered_rate, quoted_amount,
+              delivered_amount, settle_seconds, reconciled_at
+         FROM outcome_log
+        WHERE reconciled_at IS NOT NULL
+        ORDER BY reconciled_at DESC
+        LIMIT 5000`
+    );
+    return deriveAllCorridorRates(rows as unknown as OutcomeLogRow[]);
+  } catch {
+    // A rate is a best-effort refresh of a value the next tick overwrites.
+    // Failing the whole tick over it would strand outcomes that did publish.
+    return [];
+  }
+}
+
 async function tick(): Promise<BatchResult> {
   const publisherSecret = process.env.PUBLISHER_SECRET;
   if (!publisherSecret) {
@@ -76,6 +107,7 @@ async function tick(): Promise<BatchResult> {
       contractId: resolveOracleContractId(),
       testnetContractId: TESTNET_ORACLE_CONTRACT_ID,
     },
+    loadCorridorRates,
   };
 
   return runBatch(config);

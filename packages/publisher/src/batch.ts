@@ -78,6 +78,14 @@ export interface BatchConfig {
     contractId?: string | undefined;
     testnetContractId?: string | undefined;
   };
+  /**
+   * Corridor rates to publish after the outcome loop (#961). Optional: omit it
+   * and the batch behaves exactly as before.
+   *
+   * A thunk, so the derivation is not computed for a tick that publishes
+   * nothing — and so it can read the same rows the batch just wrote.
+   */
+  loadCorridorRates?: () => Promise<readonly CorridorRateInput[]>;
 }
 
 export const DEFAULT_BATCH_SIZE = 100;
@@ -101,6 +109,8 @@ export interface BatchResult {
    * `allowed` is false, `skipped` carries the number of rows withheld.
    */
   gate?: GateDecision;
+  /** Corridor rates written on-chain this tick (#961). */
+  corridorRatesPublished?: number;
 }
 
 export async function fetchPendingOutcomes(
@@ -309,6 +319,10 @@ export async function withRetry<T>(fn: () => Promise<T>, ctx: RetryContext = {})
   throw lastError;
 }
 
+type AssembledTx = Promise<{
+  signAndSend(): Promise<{ sendTransactionResponse?: { hash?: string } }>;
+}>;
+
 interface OracleSubmitClient {
   submit_outcome(args: {
     publisher: string;
@@ -317,7 +331,36 @@ interface OracleSubmitClient {
     outcome_hash: string;
     settle_seconds: bigint;
     success: boolean;
-  }): Promise<{ signAndSend(): Promise<{ sendTransactionResponse?: { hash?: string } }> }>;
+  }): AssembledTx;
+
+  /**
+   * Block-level corridor rate (#810, wired in #961).
+   *
+   * The contract entrypoint and `deriveAllCorridorRates` both shipped and were
+   * connected by nothing — the only caller of the derivation was its own test,
+   * so no rate has ever reached the chain.
+   */
+  publish_corridor_rate(args: {
+    publisher: string;
+    corridor: string;
+    rate: bigint;
+    decimals: number;
+  }): AssembledTx;
+}
+
+/**
+ * One corridor rate ready to publish.
+ *
+ * Structural, matching `CorridorRatePublish` from `lib/oracle/corridor-rate.ts`,
+ * for the same reason `ProbeCoverageSummary` is: this package is consumed by
+ * the app, so importing app types back into it would invert the dependency.
+ */
+export interface CorridorRateInput {
+  corridor: string;
+  /** Scaled by 10^`decimals`, fiat units per 1 USDC. */
+  rate: bigint;
+  decimals: number;
+  sampleCount: number;
 }
 
 /**
@@ -387,6 +430,68 @@ export async function submitToOracle(
   return txHash;
 }
 
+/**
+ * Publishes block-level corridor rates (#961).
+ *
+ * A **second phase**, run after the outcome loop rather than interleaved with
+ * it: `submitToOracle` marks each row the moment its write confirms, and that
+ * crash-safety contract must not be disturbed by another write sharing the
+ * loop. A failure here therefore cannot un-mark an outcome that already landed.
+ *
+ * Returns the number of corridors written. Never throws — a rate is a
+ * best-effort refresh of a value that is overwritten on the next tick, and
+ * failing the whole batch over one would strand outcomes that did publish.
+ */
+export async function publishCorridorRates(
+  rates: readonly CorridorRateInput[],
+  config: Pick<
+    BatchConfig,
+    'oracleContractId' | 'networkPassphrase' | 'publisherSecret' | 'rpcUrl' | 'retry' | 'onAlert'
+  >
+): Promise<number> {
+  if (rates.length === 0) return 0;
+
+  const { contract, Keypair } = await import('@stellar/stellar-sdk');
+  const publisherKeypair = Keypair.fromSecret(config.publisherSecret);
+  const { signTransaction } = contract.basicNodeSigner(publisherKeypair, config.networkPassphrase);
+
+  const client = (await contract.Client.from({
+    contractId: config.oracleContractId,
+    rpcUrl: config.rpcUrl,
+    networkPassphrase: config.networkPassphrase,
+    publicKey: publisherKeypair.publicKey(),
+    signTransaction,
+  })) as unknown as OracleSubmitClient;
+
+  let published = 0;
+  for (const rate of rates) {
+    // A corridor with no settled outcomes has no derivable rate. Skipping is
+    // right; publishing a zero would read as "the rate is zero".
+    if (rate.sampleCount === 0) continue;
+
+    try {
+      const assembled = await withRetry(
+        async () => {
+          const tx = await client.publish_corridor_rate({
+            publisher: publisherKeypair.publicKey(),
+            corridor: rate.corridor,
+            rate: rate.rate,
+            decimals: rate.decimals,
+          });
+          return tx.signAndSend();
+        },
+        { onAlert: config.onAlert, options: config.retry }
+      );
+      if (assembled.sendTransactionResponse?.hash) published += 1;
+    } catch {
+      // withRetry has already alerted. Keep going: one unwritable corridor
+      // should not stop the others.
+    }
+  }
+
+  return published;
+}
+
 export async function runBatch(config: BatchConfig): Promise<BatchResult> {
   const rows = await fetchPendingOutcomes(config.executor, config.batchSize);
 
@@ -439,10 +544,19 @@ export async function runBatch(config: BatchConfig): Promise<BatchResult> {
   // `submitted` counts rows actually marked, not rows attempted. If this throws
   // partway the count never reaches rows.length, and the rows that did land stay
   // marked — the next tick picks up only the remainder.
+  // Second phase, after every outcome is marked. See publishCorridorRates for
+  // why it is not interleaved with the loop above.
+  let corridorRatesPublished: number | undefined;
+  if (config.loadCorridorRates) {
+    const rates = await config.loadCorridorRates();
+    corridorRatesPublished = await publishCorridorRates(rates, config);
+  }
+
   return {
     submitted,
     skipped: rows.length - submitted,
     txHash,
     ...(gateDecision ? { gate: gateDecision } : {}),
+    ...(corridorRatesPublished !== undefined ? { corridorRatesPublished } : {}),
   };
 }

@@ -8,7 +8,8 @@ import { isOverrideEnabled } from './gate';
 // and build their own BatchConfig (e.g. the main app's /api/publisher/tick route,
 // which already has its own DB pool + lock) instead of shelling out to this CLI.
 export { runBatch, DEFAULT_BATCH_SIZE, type BatchConfig, type QueryExecutor };
-export type { BatchResult } from './batch';
+export type { BatchResult, CorridorRateInput } from './batch';
+export { publishCorridorRates } from './batch';
 export {
   resolveNetwork,
   isStellarNetwork,
