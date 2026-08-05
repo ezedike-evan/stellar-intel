@@ -1,0 +1,28 @@
+[package]
+name = "stellar-intel-client"
+version = "0.1.0"
+edition = "2021"
+description = "REST client for the Stellar Intel API — retries and idempotency keys on by default"
+license = "MIT"
+repository = "https://github.com/ezedike-evan/stellar-intel"
+homepage = "https://stellar-intel.vercel.app"
+documentation = "https://docs.rs/stellar-intel-client"
+readme = "README.md"
+keywords = ["stellar", "anchors", "offramp", "api-client"]
+categories = ["api-bindings", "web-programming::http-client"]
+publish = true
+
+[lib]
+name = "stellar_intel_client"
+path = "src/lib.rs"
+
+[dependencies]
+reqwest = { version = "0.12", default-features = false, features = ["json", "rustls-tls"] }
+serde = { version = "1", features = ["derive"] }
+serde_json = "1"
+thiserror = "2"
+uuid = { version = "1", features = ["v4"] }
+tokio = { version = "1", features = ["time"] }
+
+[dev-dependencies]
+tokio = { version = "1", features = ["macros", "rt-multi-thread", "time"] }

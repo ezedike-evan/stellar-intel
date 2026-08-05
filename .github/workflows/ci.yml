@@ -119,6 +119,31 @@ jobs:
       - name: cargo publish --dry-run
         run: cargo publish --manifest-path crates/stellar-intel-reputation/Cargo.toml --dry-run --locked
 
+  # The REST half of the Rust SDK (#868). A separate crate rather than a feature
+  # of stellar-intel-reputation: that one is #![no_std] and is linked into
+  # wasm32 contracts, where reqwest and tokio cannot compile at all.
+  rust-client:
+    name: rust (stellar-intel-client)
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+      - uses: dtolnay/rust-toolchain@stable
+        with:
+          components: clippy, rustfmt
+      - uses: Swatinem/rust-cache@v2
+        with:
+          workspaces: crates/stellar-intel-client
+      - name: cargo fmt
+        run: cargo fmt --manifest-path crates/stellar-intel-client/Cargo.toml --check
+      - name: cargo clippy
+        run: cargo clippy --manifest-path crates/stellar-intel-client/Cargo.toml --all-targets --locked -- -D warnings
+      - name: cargo test
+        run: cargo test --manifest-path crates/stellar-intel-client/Cargo.toml --locked
+      - name: cargo doc
+        run: cargo doc --manifest-path crates/stellar-intel-client/Cargo.toml --no-deps --locked
+      - name: cargo publish --dry-run
+        run: cargo publish --manifest-path crates/stellar-intel-client/Cargo.toml --dry-run --locked
+
   # The Soroban contract itself. Distinct from the `rust` job above, which only
   # covers the read-only client SDK crate — contracts/reputation was never
   # compiled or tested by any workflow, and had in fact been failing to build
