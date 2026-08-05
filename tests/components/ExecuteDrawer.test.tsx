@@ -2,6 +2,7 @@ import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
 import { render, screen, fireEvent, waitFor, act } from '@testing-library/react';
 import { ExecuteDrawer } from '@/components/offramp/ExecuteDrawer';
 import type { AnchorRate } from '@/types';
+import { acceptTerms, clearAcceptance } from '@/lib/consent';
 
 // ─── Module mocks ─────────────────────────────────────────────────────────────
 
@@ -164,6 +165,10 @@ const AUTH = {
 
 beforeEach(() => {
   vi.clearAllMocks();
+  // These tests exercise execution, not consent. Pre-accept the Terms for the
+  // test wallet so the one-time acknowledgment gate (#741) does not stand in
+  // front of every assertion — the gate itself is covered in tests/consent.spec.tsx.
+  acceptTerms(PUBLIC_KEY);
   vi.stubGlobal(
     'fetch',
     vi.fn(async () => ({
@@ -548,5 +553,47 @@ describe('ExecuteDrawer', () => {
     );
     expect(mockBuildWithdrawPayment).not.toHaveBeenCalled();
     expect(screen.getByRole('button', { name: 'Retry' })).toBeInTheDocument();
+  });
+});
+
+describe('ExecuteDrawer — Terms gate (#741)', () => {
+  it('prompts for consent instead of executing on a wallet that has not accepted', async () => {
+    clearAcceptance(PUBLIC_KEY);
+    const { authenticate } = await import('@/lib/stellar/sep10');
+
+    render(
+      <ExecuteDrawer
+        rate={RATE}
+        amount="100"
+        publicKey={PUBLIC_KEY}
+        onClose={vi.fn()}
+        onExecuteStarted={vi.fn()}
+      />
+    );
+
+    fireEvent.click(screen.getByRole('button', { name: /start off-ramp|sign intent/i }));
+
+    // The consent dialog appears and execution has not begun — no SEP-10 auth,
+    // which is the first thing handleExecute does.
+    expect(await screen.findByRole('dialog', { name: /before you continue/i })).toBeVisible();
+    expect(authenticate).not.toHaveBeenCalled();
+  });
+
+  it('does not prompt a wallet that has already accepted', () => {
+    acceptTerms(PUBLIC_KEY);
+
+    render(
+      <ExecuteDrawer
+        rate={RATE}
+        amount="100"
+        publicKey={PUBLIC_KEY}
+        onClose={vi.fn()}
+        onExecuteStarted={vi.fn()}
+      />
+    );
+
+    fireEvent.click(screen.getByRole('button', { name: /start off-ramp|sign intent/i }));
+
+    expect(screen.queryByRole('dialog', { name: /before you continue/i })).toBeNull();
   });
 });

@@ -6,6 +6,7 @@
  */
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
 import { render, screen, fireEvent, waitFor } from '@testing-library/react';
+import { acceptTerms } from '@/lib/consent';
 import { createElement, useState } from 'react';
 import { ExecuteDrawer } from '@/components/offramp/ExecuteDrawer';
 import { StatusTracker } from '@/components/offramp/StatusTracker';
@@ -152,6 +153,10 @@ function OfframpHarness({
 
 beforeEach(() => {
   vi.clearAllMocks();
+  // This suite exercises anchor failure mid-flow, not consent. Pre-accept so
+  // the one-time Terms gate (#741) does not stand in front of the flow — the
+  // gate itself is covered in tests/consent.spec.tsx.
+  acceptTerms(PUBLIC_KEY);
   mockGetResolvedAnchorById.mockResolvedValue(RESOLVED_ANCHOR);
   mockAuthenticate.mockResolvedValue(AUTH);
   mockInitiateWithdraw.mockRejectedValue(WITHDRAW_500_ERROR);

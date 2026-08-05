@@ -18,6 +18,8 @@ import type { AnchorRate, ExecuteDrawerStep, Sep38Quote } from '@/types';
 import { ErrorBoundary } from '@/components/ui/ErrorBoundary';
 import { QuotePill } from '@/components/ui/QuotePill';
 import { KycIframe } from './KycIframe';
+import { ConsentModal } from './ConsentModal';
+import { acceptTerms, hasAcceptedTerms } from '@/lib/consent';
 import { FLAGS } from '@/lib/flags';
 
 // ─── Step definitions ─────────────────────────────────────────────────────────
@@ -105,6 +107,7 @@ function ExecuteDrawerContent({
   const [kycUrl, setKycUrl] = useState<string | null>(null);
   const [kycOrigin, setKycOrigin] = useState<string | null>(null);
   const [showConfirmDialog, setShowConfirmDialog] = useState(false);
+  const [showConsent, setShowConsent] = useState(false);
 
   // The firm SEP-38 quote locked in for this execution, when the anchor
   // supports one — drives the expiry countdown shown in the summary panel.
@@ -253,6 +256,14 @@ function ExecuteDrawerContent({
 
   async function handleExecute() {
     if (!rate) return;
+
+    // First execution for this wallet requires acknowledging the Terms (#741).
+    // Placed here rather than on the button so any other caller of
+    // handleExecute — the error-state Retry, for one — is gated too.
+    if (!hasAcceptedTerms(publicKey)) {
+      setShowConsent(true);
+      return;
+    }
 
     abortRef.current?.abort();
     abortRef.current = new AbortController();
@@ -475,6 +486,13 @@ function ExecuteDrawerContent({
     kycRejectRef.current?.(error);
   };
 
+  const handleConsentAccept = () => {
+    acceptTerms(publicKey);
+    setShowConsent(false);
+    // Re-enter execution now that consent is recorded.
+    void handleExecute();
+  };
+
   const handleConfirmClose = () => {
     setShowConfirmDialog(false);
     kycRejectRef.current?.(new Error('User cancelled the transaction'));
@@ -683,6 +701,11 @@ function ExecuteDrawerContent({
       </div>
 
       {/* Confirmation Dialog */}
+      <ConsentModal
+        open={showConsent}
+        onAccept={handleConsentAccept}
+        onCancel={() => setShowConsent(false)}
+      />
       {showConfirmDialog && (
         <div className="fixed inset-0 z-50 flex items-center justify-center">
           <div className="fixed inset-0 bg-black/50" onClick={handleCancelClose} />
