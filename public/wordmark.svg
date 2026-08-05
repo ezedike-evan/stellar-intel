@@ -3,8 +3,10 @@
   fill="none">
   <defs>
     <!--
-      Accent gradient matches the brand palette from public/brand/social-preview.svg
-      and complements the app accent tokens (#2563eb light / #93c5fd dark).
+      Purple → teal, the brand gradient (#749). Deliberately mid-tone at both
+      ends rather than reusing --accent directly: this mark renders over both
+      themes from a single <img>, and the light-theme accent (#6d28d9) is too
+      dark to read on the dark background.
     -->
     <linearGradient id="wm-accent" x1="0" y1="0" x2="0" y2="1">
       <stop offset="0"   stop-color="#7c5cff"/>
@@ -14,19 +16,19 @@
     <style>
       /*
        * Light mode (default)
-       * Tokens mirror globals.css: primary-text #000000, accent #2563eb
+       * Mirrors globals.css: primary-text #160d2b, accent #6d28d9
        */
-      .wm-text { fill: #000000; }
-      .wm-sep  { fill: #2563eb; }
+      .wm-text { fill: #160d2b; }
+      .wm-sep  { fill: #6d28d9; }
 
       /*
        * Dark mode — OS-level preference (covers <img> embedding where the
        * parent DOM .dark class is not accessible to the SVG).
-       * Tokens mirror globals.css: primary-text #ffffff, accent #93c5fd
+       * Mirrors globals.css: primary-text #ffffff, accent #c4b5fd
        */
       @media (prefers-color-scheme: dark) {
         .wm-text { fill: #ffffff; }
-        .wm-sep  { fill: #93c5fd; }
+        .wm-sep  { fill: #c4b5fd; }
       }
 
       /*
@@ -36,7 +38,7 @@
       :root.dark .wm-text,
       .dark .wm-text { fill: #ffffff; }
       :root.dark .wm-sep,
-      .dark .wm-sep  { fill: #93c5fd; }
+      .dark .wm-sep  { fill: #c4b5fd; }
     </style>
   </defs>
 

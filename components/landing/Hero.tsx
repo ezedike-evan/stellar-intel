@@ -32,7 +32,9 @@ export function Hero() {
       >
         Health and reputation monitoring
         <br className="hidden sm:block" />
-        <span className="text-accent dark:text-accent">for every Stellar anchor.</span>
+        <span className="bg-gradient-to-r from-accent to-accent-2 bg-clip-text text-transparent">
+          for every Stellar anchor.
+        </span>
       </h1>
       <p className="mx-auto max-w-2xl text-lg text-secondary-text dark:text-secondary-text sm:text-xl">
         Continuous uptime, quote-latency, and rate-drift probes across every integrated Stellar
@@ -42,22 +44,22 @@ export function Hero() {
       <div className="flex flex-wrap items-center justify-center gap-4 pt-2">
         <Link
           href="/anchors"
-          className="inline-flex h-12 items-center justify-center rounded-lg bg-blue-600 px-6 text-base font-medium text-white transition-colors hover:bg-blue-700 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-blue-500 dark:bg-blue-600 dark:text-white dark:hover:bg-blue-700 dark:focus-visible:ring-blue-500"
+          className="inline-flex h-12 items-center justify-center rounded-lg bg-accent px-6 text-base font-medium text-background transition-opacity hover:opacity-90 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent focus-visible:ring-offset-2 focus-visible:ring-offset-background"
         >
           View anchors
         </Link>
         <Link
           href="/offramp"
-          className="inline-flex h-12 items-center justify-center rounded-lg bg-gray-100 px-6 text-base font-medium text-gray-900 transition-colors hover:bg-gray-200 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-blue-500 dark:bg-gray-800 dark:text-gray-100 dark:hover:bg-gray-700"
+          className="inline-flex h-12 items-center justify-center rounded-lg border border-border bg-bg-subtle px-6 text-base font-medium text-primary-text transition-opacity hover:opacity-90 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent focus-visible:ring-offset-2 focus-visible:ring-offset-background"
         >
           Off-ramp now
         </Link>
       </div>
       <div className="grid w-full max-w-4xl gap-4 pt-4 text-left sm:grid-cols-2">
-        <div className="rounded-2xl border border-gray-200 p-6 dark:border-gray-700">
+        <div className="rounded-2xl border border-border p-6">
           {loading ? <RatePreviewSkeleton /> : <RatePreviewCard bestRate={bestRate} />}
         </div>
-        <div className="rounded-2xl border border-gray-200 p-6 dark:border-gray-700">
+        <div className="rounded-2xl border border-border p-6">
           {loading ? (
             <LeaderboardTeaserSkeleton />
           ) : (

@@ -6,16 +6,30 @@
 /* Theme tokens ---------------------------------------------------------------
    All landing components MUST use these tokens instead of ad-hoc color values.
 
+   Stellar purple → teal (#749). Neutrals carry a purple cast rather than being
+   pure grey, so the palette reads as one family instead of a blue accent on a
+   grey page. `accent-2` is the teal terminus of the brand gradient; it exists
+   for the wordmark and CTA sweeps, and is a real token rather than an inline
+   hex so a future palette change reaches it.
+
+   Every fg/bg pair below is asserted at >= 4.5:1 in both themes by
+   tests/contrast.spec.ts, which parses THIS FILE at runtime — so these values
+   are the source of truth, not a copy of it. Keep :root and .dark as flat
+   single-brace blocks with six-digit hex and trailing semicolons; the spec's
+   parser is anchored on `^:root {` / `^.dark {` and returns nothing if the
+   shape changes.
+
    Token              Light       Dark        Usage
    ─────────────────  ──────────  ──────────  ─────────────────────────────
-   primary-text       #000000     #ffffff     Primary body/heading text
-   secondary-text     #6b7280     #9ca3af     Muted/secondary body text
-   background         #ffffff     #000000     Page background
-   bg-subtle          #f9fafb     #111827     Subtle card/section bg
-   border             #e2e8f0     #1e293b     Card/section borders (decorative)
-   control-border     #6b7280     #9ca3af     Input/select/checkbox boundaries
-   accent             #2563eb     #93c5fd     Links, icons, highlights
-   accent-subtle      #eff6ff     #172554     Accent badge/pill bg
+   primary-text       #160d2b     #ffffff     Primary body/heading text
+   secondary-text     #5d5470     #a79bbd     Muted/secondary body text
+   background         #ffffff     #0a0616     Page background
+   bg-subtle          #faf8fd     #171029     Subtle card/section bg
+   border             #e5dff2     #2b2142     Card/section borders (decorative)
+   control-border     #6b6280     #a196b8     Input/select/checkbox boundaries
+   accent             #6d28d9     #c4b5fd     Links, icons, highlights
+   accent-subtle      #f1ecfd     #241a42     Accent badge/pill bg
+   accent-2           #0f766e     #5eead4     Gradient terminus (wordmark, CTAs)
    ──────────────────────────────────────────────────────────────────────── */
 @theme {
   --color-primary-text: var(--primary-text);
@@ -26,28 +40,31 @@
   --color-control-border: var(--control-border);
   --color-accent: var(--accent);
   --color-accent-subtle: var(--accent-subtle);
+  --color-accent-2: var(--accent-2);
 }
 
 :root {
-  --primary-text: #000000;
-  --secondary-text: #6b7280;
+  --primary-text: #160d2b;
+  --secondary-text: #5d5470;
   --background: #ffffff;
-  --bg-subtle: #f9fafb;
-  --border: #e2e8f0;
-  --control-border: #6b7280;
-  --accent: #2563eb;
-  --accent-subtle: #eff6ff;
+  --bg-subtle: #faf8fd;
+  --border: #e5dff2;
+  --control-border: #6b6280;
+  --accent: #6d28d9;
+  --accent-subtle: #f1ecfd;
+  --accent-2: #0f766e;
 }
 
 .dark {
   --primary-text: #ffffff;
-  --secondary-text: #9ca3af;
-  --background: #000000;
-  --bg-subtle: #111827;
-  --border: #1e293b;
-  --control-border: #9ca3af;
-  --accent: #93c5fd;
-  --accent-subtle: #172554;
+  --secondary-text: #a79bbd;
+  --background: #0a0616;
+  --bg-subtle: #171029;
+  --border: #2b2142;
+  --control-border: #a196b8;
+  --accent: #c4b5fd;
+  --accent-subtle: #241a42;
+  --accent-2: #5eead4;
 }
 
 /* Mobile bottom sheet -------------------------------------------------------- */
