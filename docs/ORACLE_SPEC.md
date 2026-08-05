@@ -116,14 +116,34 @@ cargo test                                          # runs tests/basic.rs
 npx tsx scripts/deploy-oracle-testnet.ts             # build + deploy to testnet
 ```
 
+## Storage versions
+
+The corridor aggregate exists in two shapes. Both are readable; **v1 keys are
+never deleted**, so an existing reader keeps working across a migration with no
+cutover window.
+
+| Version | Read entrypoints                                         | Tuple                                                                 |
+| ------- | -------------------------------------------------------- | --------------------------------------------------------------------- |
+| v1      | `get_corridor_aggregate`, `get_score_for_corridor`       | `(fill_rate_bps, slippage_bps, settle_seconds_p50, n)`                |
+| v2      | `get_corridor_aggregate_v2`, `get_score_for_corridor_v2` | `(fill_rate_bps, slippage_bps, composite_bps, settle_seconds_p50, n)` |
+
+Migration is admin-gated and idempotent, via `migrate_corridor_v2` (one pair) or
+`migrate_all_v2` (registered anchors × the compiled-in corridor list). The
+runbook, including the corridor-list caveat and what a partial migration means,
+is in [`ORACLE_MIGRATION.md`](ORACLE_MIGRATION.md).
+
 ## Upgrade & governance
 
-Publisher whitelist management and a time-locked upgrade path are specified in the
-roadmap (Wave 2.1). Until those land, treat the deployed contract (testnet) as
-admin-controlled and not yet production-governed.
+Publisher whitelist management and a two-step admin transfer are implemented;
+see [`GOVERNANCE.md`](GOVERNANCE.md) for the custody runbook. The upgrade path
+exists (`init_upgrade` / `upgrade`) but has **no rotation** — once the upgrade
+admin is bound it cannot be changed (#963). Treat the deployed contract
+(testnet) as admin-controlled and not yet production-governed.
 
 ## Related
 
+- [`docs/ORACLE_MIGRATION.md`](ORACLE_MIGRATION.md) — the v1 → v2 storage
+  migration runbook and compatibility guarantee.
 - [`docs/ANCHOR_REPUTATION.md`](ANCHOR_REPUTATION.md) — the scoring methodology fed
   into outcomes.
 - [`docs/ARCHITECTURE.md`](ARCHITECTURE.md) — where the oracle sits in the system.

@@ -177,6 +177,7 @@ The full doc surface lives under [`docs/`](docs/). Start with:
 | [docs/GRAPHQL_API.md](docs/GRAPHQL_API.md)             | Additive GraphQL surface over the same REST v1 resources — schema, example queries, error shape.  |
 | [docs/ANCHOR_REPUTATION.md](docs/ANCHOR_REPUTATION.md) | Scoring methodology, composite formula, dispute process.                                          |
 | [docs/ORACLE_SPEC.md](docs/ORACLE_SPEC.md)             | Soroban contract interface, consumer examples, publisher whitelist policy.                        |
+| [docs/ORACLE_MIGRATION.md](docs/ORACLE_MIGRATION.md)   | v1 → v2 corridor storage migration: runbook, idempotency, and the v1 compatibility guarantee.     |
 | [docs/MCP.md](docs/MCP.md)                             | Tool list, `npx tsx scripts/mcp/server.ts` run instructions, example prompts, agent-safety notes. |
 | [docs/AGENT_POSITIONING.md](docs/AGENT_POSITIONING.md) | How agent builders should route between Stellar Intel (anchors/fiat exit) and ROZO (chains).      |
 | [docs/SECURITY.md](docs/SECURITY.md)                   | Non-custodial guarantee, key handling, disclosure email, supply-chain policy.                     |

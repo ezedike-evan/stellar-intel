@@ -66,6 +66,18 @@ async function main(): Promise<void> {
           'One compromised key can both forge data and replace the contract code.'
       );
     }
+    // contract_version() returns 0 when init_upgrade was never called, which
+    // means upgrade::apply would panic — there is no in-place upgrade path from
+    // what is deployed, only a fresh deploy. Worth calling out separately from
+    // the missing-entrypoint warning above: a contract can carry every
+    // entrypoint and still be unupgradeable (#872, #785).
+    if (gov.contractVersion === 0) {
+      console.log(
+        '::warning::contract_version() is 0 — init_upgrade was never called, so ' +
+          'upgrade() would panic. Any new entrypoint requires a fresh deploy, not ' +
+          'an in-place upgrade. See docs/ORACLE_MIGRATION.md.'
+      );
+    }
   } catch (err) {
     fail(`governance read failed: ${err instanceof Error ? err.message : String(err)}`);
   }
