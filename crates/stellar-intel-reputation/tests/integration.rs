@@ -1,7 +1,7 @@
 use soroban_sdk::{
     contract, contractimpl, contracttype, testutils::Address as _, Address, Env, String, Vec,
 };
-use stellar_intel_reputation::ReputationReader;
+use stellar_intel_reputation::{CorridorRate, ReputationReader, VolumeSavings};
 
 /// Storage keys for the extra mock entrypoints below (`list_anchors`,
 /// `get_corridor_aggregate`, `get_score_for_corridor`). Mirrors the
@@ -13,6 +13,8 @@ enum MockKey {
     Anchors,
     Aggregate(String, String),
     Score(String, String),
+    Rate(String),
+    Volume(String),
 }
 
 #[contract]
@@ -90,7 +92,11 @@ impl MockReputationContract {
             .set(&key, &(total, successes, settle_seconds_sum));
     }
 
-    pub fn get_corridor_aggregate(env: Env, anchor_id: String, corridor: String) -> (u32, u32, u64) {
+    pub fn get_corridor_aggregate(
+        env: Env,
+        anchor_id: String,
+        corridor: String,
+    ) -> (u32, u32, u64) {
         let key = MockKey::Aggregate(anchor_id, corridor);
         env.storage()
             .persistent()
@@ -123,6 +129,60 @@ impl MockReputationContract {
             .persistent()
             .get(&key)
             .unwrap_or((0i128, 0i128, 0u64, 0u32))
+    }
+
+    pub fn publish_corridor_rate(
+        env: Env,
+        publisher: Address,
+        corridor: String,
+        rate: i128,
+        decimals: u32,
+    ) {
+        let value = CorridorRate {
+            rate,
+            decimals,
+            updated_at: env.ledger().timestamp(),
+            publisher,
+        };
+        env.storage()
+            .persistent()
+            .set(&MockKey::Rate(corridor), &value);
+    }
+
+    pub fn get_corridor_rate(env: Env, corridor: String) -> Option<CorridorRate> {
+        env.storage().persistent().get(&MockKey::Rate(corridor))
+    }
+
+    pub fn add_volume_savings(
+        env: Env,
+        publisher: Address,
+        corridor: String,
+        volume_delta: i128,
+        savings_delta: i128,
+    ) {
+        let key = MockKey::Volume(corridor);
+        let current: Option<VolumeSavings> = env.storage().persistent().get(&key);
+        let value = match current {
+            Some(v) => VolumeSavings {
+                volume_usdc: v.volume_usdc + volume_delta,
+                savings_usdc: v.savings_usdc + savings_delta,
+                settlement_count: v.settlement_count + 1,
+                updated_at: env.ledger().timestamp(),
+                publisher,
+            },
+            None => VolumeSavings {
+                volume_usdc: volume_delta,
+                savings_usdc: savings_delta,
+                settlement_count: 1,
+                updated_at: env.ledger().timestamp(),
+                publisher,
+            },
+        };
+        env.storage().persistent().set(&key, &value);
+    }
+
+    pub fn get_volume_savings(env: Env, corridor: String) -> Option<VolumeSavings> {
+        env.storage().persistent().get(&MockKey::Volume(corridor))
     }
 }
 
@@ -226,10 +286,7 @@ fn lists_registered_anchors() {
     let anchors = reader.list_anchors();
     assert_eq!(anchors.len(), 2);
     assert_eq!(anchors.get(0).unwrap(), String::from_str(&env, "cowrie"));
-    assert_eq!(
-        anchors.get(1).unwrap(),
-        String::from_str(&env, "moneygram")
-    );
+    assert_eq!(anchors.get(1).unwrap(), String::from_str(&env, "moneygram"));
 }
 
 #[test]
@@ -282,4 +339,74 @@ fn reads_corridor_score() {
     assert_eq!(score.fill_rate_bps, 9_800);
     assert_eq!(score.settle_seconds_p50, 45);
     assert_eq!(score.sample_size, 50);
+}
+
+// ─── Corridor rate + volume/savings reads (#965) ──────────────────────────────
+//
+// ReputationReader exposed four of the contract's read entrypoints. A consumer
+// could not read the corridor rate oracle or the volume/savings aggregate at
+// all — which is most of what makes those oracles useful to a third party.
+
+#[test]
+fn reads_a_published_corridor_rate() {
+    let env = Env::default();
+    env.mock_all_auths();
+    let (contract_id, publisher) = setup(&env);
+    let client = MockReputationContractClient::new(&env, &contract_id);
+    let reader = ReputationReader::new(&env, contract_id.clone());
+
+    let corridor = String::from_str(&env, "usdc-ngn");
+    client.publish_corridor_rate(&publisher, &corridor, &15_800_000_000i128, &7u32);
+
+    let rate = reader.corridor_rate(corridor).expect("rate should be set");
+
+    assert_eq!(rate.rate, 15_800_000_000i128);
+    assert_eq!(rate.decimals, 7);
+    assert_eq!(rate.publisher, publisher);
+}
+
+#[test]
+fn unpublished_corridor_rate_is_none_not_zero() {
+    let env = Env::default();
+    let (contract_id, _) = setup(&env);
+    let reader = ReputationReader::new(&env, contract_id);
+
+    // The distinction a consumer contract depends on: "never published" is not
+    // "the rate is zero". A zeroed struct would price an off-ramp at nothing.
+    assert!(reader
+        .corridor_rate(String::from_str(&env, "usdc-kes"))
+        .is_none());
+}
+
+#[test]
+fn reads_cumulative_volume_savings() {
+    let env = Env::default();
+    env.mock_all_auths();
+    let (contract_id, publisher) = setup(&env);
+    let client = MockReputationContractClient::new(&env, &contract_id);
+    let reader = ReputationReader::new(&env, contract_id.clone());
+
+    let corridor = String::from_str(&env, "usdc-ngn");
+    client.add_volume_savings(&publisher, &corridor, &100_000_000i128, &2_500_000i128);
+    client.add_volume_savings(&publisher, &corridor, &50_000_000i128, &1_000_000i128);
+
+    let totals = reader
+        .volume_savings(corridor)
+        .expect("totals should be set");
+
+    // Cumulative, so the second call adds rather than replaces.
+    assert_eq!(totals.volume_usdc, 150_000_000i128);
+    assert_eq!(totals.savings_usdc, 3_500_000i128);
+    assert_eq!(totals.settlement_count, 2);
+}
+
+#[test]
+fn unrecorded_volume_savings_is_none() {
+    let env = Env::default();
+    let (contract_id, _) = setup(&env);
+    let reader = ReputationReader::new(&env, contract_id);
+
+    assert!(reader
+        .volume_savings(String::from_str(&env, "usdc-brl"))
+        .is_none());
 }

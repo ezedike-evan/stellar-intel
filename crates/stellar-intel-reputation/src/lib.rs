@@ -28,7 +28,7 @@
 //! }
 //! ```
 
-use soroban_sdk::{contractclient, Address, Env, String, Vec};
+use soroban_sdk::{contractclient, contracttype, Address, Env, String, Vec};
 
 /// Read entrypoints on the deployed reputation oracle contract, as declared
 /// in `contracts/reputation/src/lib.rs`. `#[contractclient]` generates
@@ -57,6 +57,46 @@ pub trait ReputationOracle {
         anchor_id: String,
         corridor: String,
     ) -> (i128, i128, u64, u32);
+
+    /// The latest published block-level rate for a corridor, or `None` when
+    /// none has been published. `rate` is scaled by 10^`decimals` fiat units
+    /// per 1 USDC.
+    fn get_corridor_rate(env: Env, corridor: String) -> Option<CorridorRate>;
+
+    /// Cumulative volume and estimated savings for a corridor, or `None` when
+    /// nothing has been recorded. Both figures are in microUSDC.
+    fn get_volume_savings(env: Env, corridor: String) -> Option<VolumeSavings>;
+}
+
+/// A published corridor rate, mirroring `contracts/reputation/src/corridor_rate.rs`.
+///
+/// Declared here rather than imported: the contract crate is a `cdylib` and is
+/// not a dependency of this one — that separation is the point of a thin read
+/// SDK. The `#[contracttype]` layout must match the contract's, and the
+/// integration tests deploy the real contract to check that it does.
+#[contracttype]
+#[derive(Clone, Debug, Eq, PartialEq)]
+pub struct CorridorRate {
+    /// Scaled by 10^`decimals`, fiat units per 1 USDC.
+    pub rate: i128,
+    pub decimals: u32,
+    /// Ledger timestamp of the publish.
+    pub updated_at: u64,
+    pub publisher: Address,
+}
+
+/// Cumulative volume and savings for a corridor, mirroring
+/// `contracts/reputation/src/volume_savings.rs`.
+#[contracttype]
+#[derive(Clone, Debug, Eq, PartialEq)]
+pub struct VolumeSavings {
+    /// Cumulative USDC volume settled, in microUSDC (1 USDC = 1_000_000).
+    pub volume_usdc: i128,
+    /// Cumulative estimated savings vs baseline, in microUSDC.
+    pub savings_usdc: i128,
+    pub settlement_count: u32,
+    pub updated_at: u64,
+    pub publisher: Address,
 }
 
 /// Summary of a reputation slice derived client-side from `recent_outcomes`.
@@ -155,6 +195,22 @@ impl<'a> ReputationReader<'a> {
             settle_seconds_p50,
             sample_size,
         }
+    }
+
+    /// Read the latest published rate for a corridor.
+    ///
+    /// `None` means no rate has ever been published for it — distinct from a
+    /// rate of zero, which would be a real (and alarming) published value.
+    pub fn corridor_rate(&self, corridor: String) -> Option<CorridorRate> {
+        self.client.get_corridor_rate(&corridor)
+    }
+
+    /// Read cumulative volume and estimated savings for a corridor.
+    ///
+    /// `None` means nothing has been recorded yet. Both figures are in
+    /// microUSDC: divide by 1_000_000 for USDC.
+    pub fn volume_savings(&self, corridor: String) -> Option<VolumeSavings> {
+        self.client.get_volume_savings(&corridor)
     }
 
     /// Read a compact aggregate over the last `window` outcomes.
