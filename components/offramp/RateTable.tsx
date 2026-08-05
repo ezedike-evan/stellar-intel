@@ -23,6 +23,8 @@ import { Skeleton } from '@/components/ui/Skeleton';
 import { QuotePill } from '@/components/ui/QuotePill';
 import { AnchorLogo } from '@/components/ui/AnchorLogo';
 import { CopyButton } from '@/components/ui/CopyButton';
+import { Sparkline } from '@/components/ui/Sparkline';
+import { useRateHistory, describeRateTrend } from '@/hooks/useRateHistory';
 import { SortToggle } from './SortToggle';
 import { RateRowDetail } from './RateRowDetail';
 
@@ -52,6 +54,8 @@ export function RateTable({
   onRefresh,
 }: RateTableProps) {
   const [expiredAnchorIds, setExpiredAnchorIds] = useState<Set<string>>(new Set());
+  // Rolling per-anchor rate history, appended once per SWR revalidation (#792).
+  const rateHistory = useRateHistory(rates);
   // Initialised from the URL so a sorted view can be linked and survives a
   // reload (#731). Read lazily rather than in an effect to avoid rendering the
   // default order first and then snapping.
@@ -394,6 +398,31 @@ export function RateTable({
                       {rate.exchangeRate !== null && rate.exchangeRate > 0
                         ? formatRate(rate.exchangeRate, 'USDC', currency)
                         : '—'}
+                      {(() => {
+                        const series = rateHistory[`${rate.corridorId}:${rate.anchorId}`];
+                        const trend = describeRateTrend(series);
+                        // The wrapper holds its height whether or not a chart is
+                        // inside it, so rows do not jump when the second data
+                        // point arrives a refresh later.
+                        return (
+                          <div
+                            className="mt-1 flex h-4 justify-end"
+                            data-testid={`rate-sparkline-${rate.anchorId}`}
+                          >
+                            {trend && (
+                              <>
+                                <Sparkline
+                                  data={series!}
+                                  width={64}
+                                  height={16}
+                                  className="text-accent"
+                                />
+                                <span className="sr-only">{trend}</span>
+                              </>
+                            )}
+                          </div>
+                        );
+                      })()}
                     </td>
                     <td className="px-4 py-3 text-right font-medium text-gray-900 dark:text-white">
                       {rate.totalReceived !== null
