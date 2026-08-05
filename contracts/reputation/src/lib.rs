@@ -150,6 +150,37 @@ impl ReputationContract {
         upgrade::get_upgrade_admin(&env)
     }
 
+    /// Nominate a new upgrade administrator (step 1 of 2, issue #963).
+    ///
+    /// `init_upgrade` is one-shot, so before this the role could never be
+    /// changed once bound — a lost key meant the contract could never be
+    /// upgraded again, and a compromised one could not be revoked.
+    pub fn propose_upgrade_admin(
+        env: Env,
+        caller: Address,
+        candidate: Address,
+    ) -> Result<(), Error> {
+        upgrade::propose_upgrade_admin(&env, &caller, &candidate)
+    }
+
+    /// Accept a pending upgrade-admin proposal (step 2 of 2).
+    ///
+    /// The candidate must call this itself, so a mistyped address fails to
+    /// complete rather than bricking the role.
+    pub fn accept_upgrade_admin(env: Env, candidate: Address) -> Result<(), Error> {
+        upgrade::accept_upgrade_admin(&env, &candidate)
+    }
+
+    /// Withdraw a pending upgrade-admin proposal. Current upgrade admin only.
+    pub fn cancel_upgrade_proposal(env: Env, caller: Address) -> Result<(), Error> {
+        upgrade::cancel_upgrade_proposal(&env, &caller)
+    }
+
+    /// The address nominated to become upgrade admin, if any.
+    pub fn pending_upgrade_admin(env: Env) -> Option<Address> {
+        upgrade::get_pending_upgrade_admin(&env)
+    }
+
     pub fn get_score_for_corridor(
         env: Env,
         anchor_id: String,

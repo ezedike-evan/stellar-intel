@@ -146,9 +146,33 @@ removed urgently:
 The contract upgrade authority (`init_upgrade` / `upgrade` entrypoints in
 `src/upgrade.rs`) uses a separate `UpgradeAdmin` key. The same multisig
 migration path applies: set `UpgradeAdmin` to the multisig account using the
-same propose/accept flow as for the main admin (the `upgrade.rs` module does
-not yet implement propose/accept — that is a follow-up tracked in the issue
-backlog).
+same propose/accept flow as for the main admin:
+
+```bash
+stellar contract invoke \
+  --id <CONTRACT_ID> \
+  --source <CURRENT_UPGRADE_ADMIN_KEY> \
+  -- propose_upgrade_admin \
+  --caller <CURRENT_UPGRADE_ADMIN_ADDRESS> \
+  --candidate <MULTISIG_ACCOUNT_ADDRESS>
+```
+
+Then, co-signed by at least M signers of the multisig account:
+
+```bash
+stellar contract invoke \
+  --id <CONTRACT_ID> \
+  -- accept_upgrade_admin \
+  --candidate <MULTISIG_ACCOUNT_ADDRESS>
+```
+
+Verify with `pending_upgrade_admin` (should be empty afterwards) and
+`upgrade_admin` (should be the multisig). `cancel_upgrade_proposal` withdraws a
+proposal that has not been accepted.
+
+Two-step by design: the nominee must accept, so a mistyped address fails to
+complete rather than permanently binding the code-replacement authority to an
+account nobody controls.
 
 Until the upgrade admin is migrated, any WASM upgrade requires the core-team
 HSM key. This is documented in `docs/SECURITY.md`.
