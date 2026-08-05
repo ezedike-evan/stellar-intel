@@ -212,3 +212,64 @@ One caveat on method, since it changes how much weight A1–A3 carry: this was a
 one-shot read of five listings, not a systematic diff of the whole directory. It
 establishes that listing-vs-TOML drift is real and easy to find. It does **not**
 establish a rate, and this document should not be read as claiming one.
+
+---
+
+## ROZO — different layer, not a competitor
+
+**ROZO moves value between chains. This project measures whether a fiat anchor
+does what it says.** ROZO's own surfaces describe a settlement path that is
+crypto to crypto — Stellar USDC into a ROZO account, Base USDC out to the
+merchant, funded from ROZO-owned inventory — and mention neither anchors nor
+SEP-6/24/31/38 anywhere. This project holds no funds and moves nothing; it
+records what registered anchors did, so that whoever _is_ moving value can pick
+one on evidence. The two touch at exactly one point, and it is a join rather
+than an overlap: an intent that ends in fiat has to leave through an anchor, and
+which anchor that is decides the price and whether it arrives at all. That makes
+ROZO a plausible consumer of this data, not a rival for it.
+
+### Do not differentiate on the rail
+
+The obvious version of this paragraph — "ROZO bridges with CCTP, we don't" — is
+one this document deliberately does not make.
+
+CCTP appears in ROZO's marketing and in third-party coverage, but **their own
+IntentPay technical documentation does not mention it**; what it describes is
+prefunded ROZO-owned inventory plus an in-house Intent API for asynchronous
+rebalancing, built so the user never waits for bridge finality. Differentiating
+on the rail would mean arguing against a claim their engineers do not make,
+about an implementation detail they can change on any Tuesday without changing
+what the product is.
+
+Scope is the durable axis. Rails are not.
+
+|              | ROZO                       | Stellar Intel                  |
+| ------------ | -------------------------- | ------------------------------ |
+| Moves value  | yes, across chains         | no — non-custodial by design   |
+| Touches fiat | no, crypto settlement only | yes, that is the subject       |
+| Which anchor | not applicable             | the entire product             |
+| Unit of work | a payment intent           | an anchor's observed behaviour |
+
+Sources, retrieval dates and the full notes are in
+[`research/ROZO_POSITIONING.md`](research/ROZO_POSITIONING.md).
+
+### Integration conversation: not yet opened
+
+**Status as of 2026-08-05: no contact has been made.** #711 tracks the outreach
+and has not been actioned. Nothing in this section should be read as implying a
+relationship, a conversation in progress, or any awareness on ROZO's part that
+this project exists.
+
+That issue should open with the complement rather than the contrast — the useful
+opening question is which anchor their fiat-terminating intents exit through
+today and how they choose, not a comparison neither side asked for. Update this
+subsection with the outcome, including if the answer is that they were not
+interested.
+
+### When this stops being true
+
+The "Visa layer for stablecoins" framing on their marketing site is broader than
+IntentPay's documented scope. **If ROZO extends into fiat off-ramp, the scope
+distinction above narrows and this whole section needs rewriting** — that is the
+trigger to watch, recorded here so it is a scheduled re-check rather than
+something noticed late.
