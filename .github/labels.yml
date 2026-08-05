@@ -180,6 +180,9 @@
 - name: publisher-alert
   color: 'd93f0b'
   description: Opened by reputation-cron when the publisher fails or stalls.
+- name: nightly-alert
+  color: 'd93f0b'
+  description: Opened by the nightly integrity workflow when a job fails.
 
 # ─── Release / dependency meta ───────────────────────────────────────────────
 - name: release
