@@ -16,6 +16,15 @@ Ticket ranges point back to numbered issues in the
 > `packages/mcp` (basic MCP server), `contracts/reputation/*` (Soroban contract,
 > testnet), and the `/api/reputation/*`, `/api/intent/offramp`, and `/api/metrics`
 > routes. Treat the **code as authoritative** where a box below still reads `[ ]`.
+>
+> **Reconciliation, 2026-08-06.** Post–Wave-6 sweep flipped the boxes for capabilities now on
+> `main`: v6 Rust SDK (#868/#982), webhooks + HMAC (#869), GraphQL (#870), developer portal
+> (#871); v2.1 publisher whitelist, `read_outcome`/`read_aggregate`, testnet deploy (#194),
+> TS read SDK (#201), Python consumer (#203/#821); v2.0 leaderboard/history/composite/dispute
+> (#157–#159, #166). Marked in-flight (`[-]`): `@stellarintel/sdk` + `/mcp` (built, unpublished —
+> npm 404), multisig admin (two-step rotation shipped, 2-of-3 pending), decentralization (#875).
+> GraphQL is on `main` but the live endpoint currently 500s. The open security /
+> production-readiness / S-tier program lives in [`maintainer.md`](../maintainer.md).
 
 **Ship discipline.** Each wave has a **release gate** — a single named
 command plus a named condition — that must be green before the next wave
@@ -300,10 +309,10 @@ compounds.
 - [ ] `#154` Historical timeline chart per anchor
 - [ ] `#155` Public leaderboard page at `/anchors`
 - [ ] `#156` Per-corridor leaderboard view (`/anchors?corridor=usdc-ngn`)
-- [ ] `#157` `GET /api/reputation/leaderboard?corridor` endpoint
-- [ ] `#158` `GET /api/reputation/:anchor/history?window` endpoint
-- [ ] `#159` **Composite score formula** (blocks `#151`, `#155`, `#157`, `#172`, `#180`)
-- [ ] `#166` "Flag incorrect outcome" on terminal states → dispute
+- [x] `#157` `GET /api/reputation/leaderboard?corridor` endpoint
+- [x] `#158` `GET /api/reputation/:anchor/history?window` endpoint
+- [x] `#159` **Composite score formula** (blocks `#151`, `#155`, `#157`, `#172`, `#180`) — `lib/reputation/composite.ts`
+- [x] `#166` "Flag incorrect outcome" on terminal states → dispute — `app/api/reputation/dispute` + `DisputeModal`
 - [ ] `#171` Top-3 anchors summary bar above `RateTable`
 - [ ] `#172` Per-corridor aggregate partition
 - [ ] `#174` Materialized view refresh cadence (blocks freshness scenarios)
@@ -323,19 +332,21 @@ compounds.
 > Tickets: `#181–#205`. The contract goes to mainnet. The publisher goes
 > live. Third-party consumers can read.
 
-- [ ] `#181` Multi-signer admin (2-of-3) on the oracle contract
-- [ ] Publisher whitelist management (`add_publisher` / `remove_publisher`)
+- [-] `#181` Multi-signer admin (2-of-3) on the oracle contract — two-step
+  admin + upgrade-admin rotation shipped (`admin.rs`, `upgrade.rs`,
+  `tests/multisig.rs`); 2-of-3 threshold pending
+- [x] Publisher whitelist management (`add_publisher` / `remove_publisher`) — `publishers.rs`
 - [ ] `publish_outcome` — full signature verification + idempotency
-- [ ] `read_outcome` + `read_aggregate` public reads
+- [x] `read_outcome` + `read_aggregate` public reads — `lib/oracle/read.ts`
 - [ ] 7-day time-locked upgrade path
 - [ ] `#189` Publisher service (production key rotation, health endpoint)
 - [ ] `#190–#192` Publisher retries, dead-letter, Sentry wiring
-- [ ] `#194` Contract deployed to Soroban testnet, e2e green
+- [x] `#194` Contract deployed to Soroban testnet, e2e green — 2026-07-09, `.deployments/`
 - [ ] `#195` Contract deployed to Soroban **mainnet**
 - [ ] `#200` Publisher service e2e against testnet
-- [ ] `#201` Public TypeScript read SDK (`packages/sdk/oracle.ts`)
+- [x] `#201` Public TypeScript read SDK (`packages/sdk`)
 - [ ] `#202` JS example consumer
-- [ ] `#203` Python example consumer
+- [x] `#203` Python example consumer — `packages/python-sdk` (#821)
 - [ ] `#204` Publisher cron metrics dashboard
 - [ ] `#205` Full reputation chain e2e — outcome to oracle read
 
@@ -460,10 +471,11 @@ surface that moves value through a stablecoin corridor — wallets, agents,
 terminal UIs, embeddable widgets. The primitives are already there; v4 is
 the distribution wave.
 
-- [ ] **`@stellarintel/sdk` on npm** — typed TS client for the HTTP API +
-      MCP; React hooks; three reference integrations
-- [ ] **`@stellarintel/mcp` on npm** — GA MCP server, versioned, with a
-      signed CHANGELOG
+- [-] **`@stellarintel/sdk` on npm** — typed TS client for the HTTP API +
+  MCP; React hooks; three reference integrations. `packages/sdk` built
+  (#981); **not yet published (npm 404) — see `maintainer.md` Phase 0**
+- [-] **`@stellarintel/mcp` on npm** — GA MCP server, versioned, with a
+  signed CHANGELOG. `packages/mcp` built; not yet published
 - [ ] **Embeddable widget** — `<StellarIntelWidget />` React component +
       vanilla JS drop-in for non-React sites
 - [ ] **Agent-safety hardening** — per-caller rate limits, scoped JWTs,
@@ -527,23 +539,29 @@ from a single team's keys. Tracked as epic
 [#808](https://github.com/ezedike-evan/stellar-intel/issues/808); scope
 decomposed into the child issues below.
 
-- [ ] **Rust SDK with on-chain Soroban-native oracle reads** — generated
+- [x] **Rust SDK with on-chain Soroban-native oracle reads** — generated
       from the OpenAPI spec like the TS (`#806`) and Python (`#821`) SDKs,
       plus a read path that queries the corridor rate oracle contract
       directly over Soroban RPC, independent of the REST API being up
-      ([#868](https://github.com/ezedike-evan/stellar-intel/issues/868))
-- [ ] **Webhooks with HMAC signing** — subscribe to intent/settlement
+      ([#868](https://github.com/ezedike-evan/stellar-intel/issues/868)).
+      `crates/stellar-intel-client` (#982); not yet on crates.io
+- [x] **Webhooks with HMAC signing** — subscribe to intent/settlement
       lifecycle events instead of polling; signed deliveries, retry with
       backoff, dead-letter after repeated failures
-      ([#869](https://github.com/ezedike-evan/stellar-intel/issues/869))
-- [ ] **GraphQL layer (additive)** — query corridor rates, anchor
+      ([#869](https://github.com/ezedike-evan/stellar-intel/issues/869)).
+      `app/api/webhooks/*` + `lib/webhooks/sign.ts`
+- [x] **GraphQL layer (additive)** — query corridor rates, anchor
       reputation, and intent status in one round trip, alongside the REST
       API rather than replacing it
-      ([#870](https://github.com/ezedike-evan/stellar-intel/issues/870))
-- [ ] **Developer portal + interactive docs** — browsable API reference
+      ([#870](https://github.com/ezedike-evan/stellar-intel/issues/870)).
+      `app/api/graphql/route.ts` + `lib/graphql/*`. **Prod caveat: the live
+      endpoint currently 500s (durable store unconfigured) — see
+      `maintainer.md` Phase 0.**
+- [x] **Developer portal + interactive docs** — browsable API reference
       generated from `public/openapi.json`, an interactive console against
       a sandboxed environment, and SDK quickstarts in one place
-      ([#871](https://github.com/ezedike-evan/stellar-intel/issues/871))
+      ([#871](https://github.com/ezedike-evan/stellar-intel/issues/871)).
+      `/docs` console (#980, #235)
 - [x] **Multi-corridor oracle expansion (v2, with migration path)** — the
       rate oracle covers more than its launch corridor without breaking
       third-party contracts already reading v1
@@ -557,10 +575,12 @@ decomposed into the child issues below.
       guarantees, and a CONTRIBUTING.md that covers the multi-language
       reality once the Rust/Python SDKs exist
       ([#827](https://github.com/ezedike-evan/stellar-intel/issues/827))
-- [ ] **Fully decentralized architecture** — multisig-governed contracts,
-      community-maintained SDKs, on-chain as the source of truth rather
-      than this app's backend as a trust bottleneck
-      ([#875](https://github.com/ezedike-evan/stellar-intel/issues/875))
+- [-] **Fully decentralized architecture** — multisig-governed contracts,
+  community-maintained SDKs, on-chain as the source of truth rather
+  than this app's backend as a trust bottleneck
+  ([#875](https://github.com/ezedike-evan/stellar-intel/issues/875)).
+  In flight: two-step upgrade-admin rotation (`feat/963`, `tests/multisig.rs`);
+  2-of-3 admin still pending
 
 **Parked — unscoped primitives.** Four of the seven "surviving 1000x"
 primitives scoped under the original Horizon-3 structure have no child issue
