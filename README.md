@@ -3,7 +3,6 @@
 [![License: MIT](https://img.shields.io/github/license/Ezedike-Evan/stellar-intel?style=flat-square)](LICENSE)
 [![CI](https://img.shields.io/github/actions/workflow/status/Ezedike-Evan/stellar-intel/ci.yml?branch=main&style=flat-square&label=ci)](https://github.com/Ezedike-Evan/stellar-intel/actions/workflows/ci.yml)
 [![Coverage](https://img.shields.io/codecov/c/github/Ezedike-Evan/stellar-intel?style=flat-square)](https://codecov.io/gh/Ezedike-Evan/stellar-intel)
-[![npm (@stellarintel/sdk)](https://img.shields.io/npm/v/@stellarintel/sdk?style=flat-square&label=%40stellarintel%2Fsdk)](https://www.npmjs.com/package/@stellarintel/sdk)
 [![Deployed on Vercel](https://img.shields.io/badge/deploy-vercel-000?style=flat-square&logo=vercel)](https://stellar-intel.vercel.app)
 [![Conventional Commits](https://img.shields.io/badge/commits-conventional-fe5196?style=flat-square&logo=conventionalcommits)](https://www.conventionalcommits.org)
 

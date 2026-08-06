@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { withRequestLogger } from '@/lib/logger';
-import { getReputationStore } from '@/lib/reputation/store';
+import { tryGetReputationStore } from '@/lib/reputation/store';
 import {
   buildActuarialProgressReport,
   observationFromOutcome,
@@ -26,8 +26,13 @@ export async function GET(request: NextRequest): Promise<NextResponse> {
     });
     if (limited) return limited;
 
-    const store = getReputationStore();
-    const [outcomes, probes] = await Promise.all([store.query(), store.queryProbeSamples()]);
+    // Degrade to an empty report when no durable store is configured
+    // (local/dev or a prod without DATABASE_URL) rather than 500ing — mirrors
+    // the leaderboard route's `tryGetReputationStore` handling.
+    const store = tryGetReputationStore();
+    const [outcomes, probes] = store
+      ? await Promise.all([store.query(), store.queryProbeSamples()])
+      : [[], []];
 
     const observations: ActuarialObservation[] = [
       ...outcomes.map(observationFromOutcome),

@@ -6,7 +6,7 @@ import {
   type ProbeCoverageSample,
 } from '@/lib/reputation/aggregate';
 import { withRequestLogger } from '@/lib/logger';
-import { getReputationStore } from '@/lib/reputation/store';
+import { tryGetReputationStore } from '@/lib/reputation/store';
 import { enforceRateLimit } from '@/lib/api/response';
 
 export const runtime = 'nodejs';
@@ -20,8 +20,10 @@ export async function GET(request: NextRequest): Promise<NextResponse> {
     });
     if (limited) return limited;
 
-    const store = getReputationStore();
-    const rows = await store.queryProbeSamples(undefined, { kind: 'uptime' });
+    // Degrade to a zero-coverage report when no durable store is configured
+    // rather than 500ing — mirrors the leaderboard route.
+    const store = tryGetReputationStore();
+    const rows = store ? await store.queryProbeSamples(undefined, { kind: 'uptime' }) : [];
     const samplesByDomain = new Map<string, ProbeCoverageSample[]>();
     for (const row of rows) {
       const list = samplesByDomain.get(row.domain) ?? [];

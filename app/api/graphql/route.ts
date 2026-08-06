@@ -39,7 +39,20 @@ async function handler(request: NextRequest): Promise<Response> {
     );
   }
 
-  return handleRequest(request, {});
+  try {
+    return await handleRequest(request, {});
+  } catch (error) {
+    // Never let an unhandled throw surface as a bare empty 500 — return a
+    // structured GraphQL-shaped error and log the cause. (The live endpoint has
+    // been observed 500ing with an empty body in prod but not locally; the root
+    // cause is still unconfirmed and needs a prod-build repro — see maintainer.md
+    // Phase 0. This wrapper at least makes any throw observable.)
+    getLogger('api.graphql').error({
+      event: 'graphql_handler_error',
+      error: error instanceof Error ? error.message : String(error),
+    });
+    return NextResponse.json({ errors: [{ message: 'Internal server error' }] }, { status: 500 });
+  }
 }
 
 export { handler as GET, handler as POST };

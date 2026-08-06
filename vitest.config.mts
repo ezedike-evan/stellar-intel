@@ -20,7 +20,9 @@ export default defineConfig({
     teardownTimeout: 10000,
     // tests/e2e is Playwright's testDir (see playwright.config.ts); vitest must
     // not run those specs or they fail on Playwright's test.describe().
-    exclude: [...configDefaults.exclude, 'tests/e2e/**'],
+    // `.claude/worktrees/**` holds other sessions' isolated checkouts — the root
+    // run must not sweep in their (independently-maintained) specs and snapshots.
+    exclude: [...configDefaults.exclude, 'tests/e2e/**', '**/.claude/worktrees/**'],
     env: {
       // Silence pino in tests — info-level logging floods stdout with thousands
       // of lines and was pushing the suite past CI timeouts (looked like a hang).
