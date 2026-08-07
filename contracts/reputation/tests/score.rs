@@ -6,9 +6,9 @@ use soroban_sdk::{testutils::Address as _, Address, Env, String};
 const MAX_BPS: i128 = 10000;
 
 fn setup(env: &Env) -> (ReputationContractClient<'_>, Address) {
-    let contract_id = env.register(ReputationContract, ());
-    let client = ReputationContractClient::new(env, &contract_id);
     let admin = Address::generate(env);
+    let contract_id = env.register(ReputationContract, (admin.clone(), admin.clone()));
+    let client = ReputationContractClient::new(env, &contract_id);
     (client, admin)
 }
 
@@ -35,8 +35,7 @@ fn expected_composite_bps(
 fn test_get_score_for_corridor_returns_default_for_missing_metrics() {
     let env = Env::default();
     env.mock_all_auths();
-    let (client, admin) = setup(&env);
-    client.init(&admin);
+    let (client, _admin) = setup(&env);
 
     let anchor = String::from_str(&env, "anchor-bitso");
     let corridor = String::from_str(&env, "usdc-ngn");
@@ -55,7 +54,6 @@ fn test_get_score_for_corridor_reads_stored_metrics_and_computes_composite() {
     let env = Env::default();
     env.mock_all_auths();
     let (client, admin) = setup(&env);
-    client.init(&admin);
 
     let publisher = Address::generate(&env);
     client.add_publisher(&admin, &publisher);
@@ -81,7 +79,6 @@ fn test_get_score_for_corridor_clamps_metrics() {
     let env = Env::default();
     env.mock_all_auths();
     let (client, admin) = setup(&env);
-    client.init(&admin);
 
     let publisher = Address::generate(&env);
     client.add_publisher(&admin, &publisher);

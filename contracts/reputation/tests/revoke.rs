@@ -4,9 +4,9 @@ use reputation::{Error, ReputationContract, ReputationContractClient};
 use soroban_sdk::{testutils::Address as _, Address, Env, String};
 
 fn setup(env: &Env) -> (ReputationContractClient<'_>, Address) {
-    let contract_id = env.register(ReputationContract, ());
-    let client = ReputationContractClient::new(env, &contract_id);
     let admin = Address::generate(env);
+    let contract_id = env.register(ReputationContract, (admin.clone(), admin.clone()));
+    let client = ReputationContractClient::new(env, &contract_id);
     (client, admin)
 }
 
@@ -16,7 +16,6 @@ fn revoked_publisher_cannot_submit_outcome() {
     env.mock_all_auths();
 
     let (client, admin) = setup(&env);
-    client.init(&admin);
 
     let publisher = Address::generate(&env);
     client.add_publisher(&admin, &publisher);

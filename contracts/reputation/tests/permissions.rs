@@ -85,10 +85,10 @@ const MATRIX: &[Case] = &[
 fn permission_matrix() {
     for case in MATRIX {
         let env = Env::default();
-        let contract_id = env.register(ReputationContract, ());
+        let admin = Address::generate(&env);
+        let contract_id = env.register(ReputationContract, (admin.clone(), admin.clone()));
         let client = ReputationContractClient::new(&env, &contract_id);
 
-        let admin = Address::generate(&env);
         let publisher = Address::generate(&env);
         let third_party = Address::generate(&env);
 
@@ -99,7 +99,6 @@ fn permission_matrix() {
         };
 
         env.mock_all_auths();
-        client.init(&admin);
         client.add_publisher(&admin, &admin);
         client.add_publisher(&admin, &publisher);
 

@@ -21,9 +21,9 @@ const MAX_MEMORY_BYTES: u64 = 5_000_000;
 const HISTORY_DEPTH: u32 = 60;
 
 fn setup(env: &Env) -> (ReputationContractClient<'_>, Address, String, String) {
-    let contract_id = env.register(ReputationContract, ());
-    let client = ReputationContractClient::new(env, &contract_id);
     let admin = Address::generate(env);
+    let contract_id = env.register(ReputationContract, (admin.clone(), admin.clone()));
+    let client = ReputationContractClient::new(env, &contract_id);
     let anchor = String::from_str(env, "moneygram");
     let corridor = String::from_str(env, "NGN-USD");
     (client, admin, anchor, corridor)
@@ -36,7 +36,6 @@ fn submit_outcome_cost_flat_across_page_boundaries() {
     let env = Env::default();
     env.mock_all_auths();
     let (client, admin, anchor, corridor) = setup(&env);
-    client.init(&admin);
     client.add_publisher(&admin, &admin);
 
     let hash = String::from_str(&env, "0xprior");
@@ -73,7 +72,6 @@ fn submit_outcome_cost_cold() {
     let env = Env::default();
     env.mock_all_auths();
     let (client, admin, anchor, corridor) = setup(&env);
-    client.init(&admin);
     client.add_publisher(&admin, &admin);
 
     let hash = String::from_str(&env, "0xcold");
@@ -103,7 +101,6 @@ fn recent_outcomes_correct_across_pages() {
     let env = Env::default();
     env.mock_all_auths();
     let (client, admin, anchor, corridor) = setup(&env);
-    client.init(&admin);
     client.add_publisher(&admin, &admin);
 
     // Submit 30 outcomes so history spans two pages (PAGE_SIZE = 25).
@@ -124,8 +121,7 @@ fn recent_outcomes_correct_across_pages() {
 fn recent_outcomes_empty_anchor() {
     let env = Env::default();
     env.mock_all_auths();
-    let (client, admin, anchor, _corridor) = setup(&env);
-    client.init(&admin);
+    let (client, _admin, anchor, _corridor) = setup(&env);
 
     let result = client.recent_outcomes(&anchor, &10u32);
     assert_eq!(result.len(), 0);
@@ -137,7 +133,6 @@ fn corridor_aggregate_accumulates() {
     let env = Env::default();
     env.mock_all_auths();
     let (client, admin, anchor, corridor) = setup(&env);
-    client.init(&admin);
     client.add_publisher(&admin, &admin);
 
     let hash = String::from_str(&env, "0xh");

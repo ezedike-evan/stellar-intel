@@ -4,11 +4,10 @@ use reputation::{ReputationContract, ReputationContractClient};
 use soroban_sdk::{testutils::Address as _, Address, Env, String};
 
 fn setup(env: &Env) -> (ReputationContractClient<'_>, Address, Address) {
-    let contract_id = env.register(ReputationContract, ());
-    let client = ReputationContractClient::new(env, &contract_id);
     let admin = Address::generate(env);
+    let contract_id = env.register(ReputationContract, (admin.clone(), admin.clone()));
+    let client = ReputationContractClient::new(env, &contract_id);
     let publisher = Address::generate(env);
-    client.init(&admin);
     client.add_publisher(&admin, &publisher);
     (client, admin, publisher)
 }

@@ -32,8 +32,21 @@ pub struct ReputationContract;
 
 #[contractimpl]
 impl ReputationContract {
-    pub fn init(env: Env, admin: Address) -> Result<(), Error> {
-        admin::set_admin(&env, &admin)
+    /// Contract constructor — binds the operational admin and the upgrade admin
+    /// atomically at deploy.
+    ///
+    /// Replaces the former callable `init` / `init_upgrade` entrypoints, which
+    /// were front-runnable: after deploy, the first caller could seize either
+    /// role before the legitimate operator's transaction landed. A constructor
+    /// runs exactly once, inside the deploy transaction, so there is no window
+    /// to race. The two roles remain distinct storage keys and may be the same
+    /// account or different accounts (observable via `upgrade_admin`, #913).
+    pub fn __constructor(env: Env, admin: Address, upgrade_admin: Address) {
+        // Instance storage is empty at construction, so `set_admin` cannot hit
+        // `AlreadyInitialized` here; the expect guards against a future refactor
+        // that changes that invariant rather than an expected runtime path.
+        admin::set_admin(&env, &admin).expect("admin must be unset at construction");
+        upgrade::init(&env, upgrade_admin);
     }
 
     pub fn register_anchor(env: Env, caller: Address, anchor_id: String) -> Result<(), Error> {
@@ -121,12 +134,6 @@ impl ReputationContract {
     /// `n` is capped at 100 to bound gas consumption.
     pub fn recent_outcomes(env: Env, anchor_id: String, n: u32) -> Vec<(String, u64, bool)> {
         history::recent_outcomes(&env, anchor_id, n)
-    }
-
-    /// Bind the upgrade administrator and stamp the initial contract version.
-    /// One-shot; reverts if the upgrade admin is already set.
-    pub fn init_upgrade(env: Env, admin: Address) {
-        upgrade::init(&env, admin);
     }
 
     /// Admin-signed contract upgrade. Replaces the contract WASM with the code

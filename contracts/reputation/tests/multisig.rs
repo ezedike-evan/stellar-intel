@@ -9,11 +9,12 @@ use reputation::{ReputationContract, ReputationContractClient};
 use soroban_sdk::{testutils::Address as _, Address, Env};
 
 fn setup(env: &Env) -> (ReputationContractClient<'_>, Address) {
-    let contract_id = env.register(ReputationContract, ());
-    let client = ReputationContractClient::new(env, &contract_id);
     let admin = Address::generate(env);
+    // Bind both the operational admin and the upgrade admin to `admin` at
+    // construction; tests that need a distinct upgrade admin register directly.
+    let contract_id = env.register(ReputationContract, (admin.clone(), admin.clone()));
+    let client = ReputationContractClient::new(env, &contract_id);
     env.mock_all_auths();
-    client.init(&admin);
     (client, admin)
 }
 
@@ -163,14 +164,11 @@ fn cancel_is_noop_with_no_pending_proposal() {
 #[test]
 fn upgrade_admin_is_readable() {
     let env = Env::default();
-    let (client, admin) = setup(&env);
-
-    // Unset until init_upgrade binds it.
-    assert_eq!(client.upgrade_admin(), None);
-
+    let admin = Address::generate(&env);
     let upgrade_admin = Address::generate(&env);
-    env.mock_all_auths();
-    client.init_upgrade(&upgrade_admin);
+    // Bind a distinct upgrade admin at construction.
+    let contract_id = env.register(ReputationContract, (admin.clone(), upgrade_admin.clone()));
+    let client = ReputationContractClient::new(&env, &contract_id);
 
     assert_eq!(client.upgrade_admin(), Some(upgrade_admin.clone()));
     // The point of the accessor: an auditor can see that the upgrade authority
@@ -182,10 +180,8 @@ fn upgrade_admin_is_readable() {
 #[test]
 fn upgrade_admin_and_admin_can_be_the_same_account_and_it_shows() {
     let env = Env::default();
-    let (client, admin) = setup(&env);
-
-    env.mock_all_auths();
-    client.init_upgrade(&admin);
+    // setup binds both roles to the same account.
+    let (client, _admin) = setup(&env);
 
     // The contract permits it; the accessor makes it visible rather than
     // silent, which is the whole point for a mainnet pre-flight check.

@@ -4,9 +4,9 @@ use reputation::{Error, ReputationContract, ReputationContractClient};
 use soroban_sdk::{testutils::Address as _, Address, Env, String};
 
 fn setup(env: &Env) -> (ReputationContractClient<'_>, Address) {
-    let contract_id = env.register(ReputationContract, ());
-    let client = ReputationContractClient::new(env, &contract_id);
     let admin = Address::generate(env);
+    let contract_id = env.register(ReputationContract, (admin.clone(), admin.clone()));
+    let client = ReputationContractClient::new(env, &contract_id);
     (client, admin)
 }
 
@@ -15,8 +15,6 @@ fn admin_can_add_and_revoke_publishers() {
     let env = Env::default();
     env.mock_all_auths();
     let (client, admin) = setup(&env);
-
-    client.init(&admin);
 
     let publisher = Address::generate(&env);
 
@@ -34,8 +32,7 @@ fn admin_can_add_and_revoke_publishers() {
 fn non_admin_cannot_add_publisher() {
     let env = Env::default();
     env.mock_all_auths();
-    let (client, admin) = setup(&env);
-    client.init(&admin);
+    let (client, _admin) = setup(&env);
 
     let stranger = Address::generate(&env);
     let publisher = Address::generate(&env);
@@ -48,8 +45,7 @@ fn non_admin_cannot_add_publisher() {
 fn unauthorized_submission_is_rejected() {
     let env = Env::default();
     env.mock_all_auths();
-    let (client, admin) = setup(&env);
-    client.init(&admin);
+    let (client, _admin) = setup(&env);
 
     let stranger = Address::generate(&env);
     let anchor_id = String::from_str(&env, "anchor1");
@@ -66,7 +62,6 @@ fn authorized_publisher_can_submit() {
     let env = Env::default();
     env.mock_all_auths();
     let (client, admin) = setup(&env);
-    client.init(&admin);
 
     let publisher = Address::generate(&env);
     let anchor_id = String::from_str(&env, "anchor1");
@@ -86,7 +81,6 @@ fn whitelisted_admin_can_submit() {
     let env = Env::default();
     env.mock_all_auths();
     let (client, admin) = setup(&env);
-    client.init(&admin);
     client.add_publisher(&admin, &admin);
 
     let anchor_id = String::from_str(&env, "anchor1");

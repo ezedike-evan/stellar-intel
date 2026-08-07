@@ -4,43 +4,37 @@ use reputation::{ReputationContract, ReputationContractClient};
 use soroban_sdk::{testutils::Address as _, Address, BytesN, Env, String};
 
 fn setup(env: &Env) -> (ReputationContractClient<'_>, Address) {
-    let contract_id = env.register(ReputationContract, ());
-    let client = ReputationContractClient::new(env, &contract_id);
     let admin = Address::generate(env);
+    // Constructor binds both the operational admin and the upgrade admin to
+    // `admin`; rotation tests then move the upgrade admin off it.
+    let contract_id = env.register(ReputationContract, (admin.clone(), admin.clone()));
+    let client = ReputationContractClient::new(env, &contract_id);
     (client, admin)
 }
 
 #[test]
-fn version_starts_at_one_after_init() {
+fn version_starts_at_one_after_construction() {
     let env = Env::default();
-    env.mock_all_auths();
-    let (client, admin) = setup(&env);
+    let (client, _admin) = setup(&env);
 
-    assert_eq!(client.contract_version(), 0);
-
-    client.init_upgrade(&admin);
+    // The constructor binds the upgrade admin and stamps the initial version, so
+    // a freshly deployed contract already reports version 1 — there is no
+    // separate `init_upgrade` step and thus no version-0 window.
     assert_eq!(client.contract_version(), 1);
 }
 
-#[test]
-fn init_upgrade_is_one_shot() {
-    let env = Env::default();
-    env.mock_all_auths();
-    let (client, admin) = setup(&env);
-
-    client.init_upgrade(&admin);
-
-    let res = client.try_init_upgrade(&admin);
-    assert!(res.is_err());
-}
+// The former `init_upgrade_is_one_shot` test is gone by construction:
+// `init_upgrade` is no longer a callable entrypoint. The upgrade admin is bound
+// exactly once, in the constructor, so the one-shot/front-run property it
+// guarded is now structural. Deliberate rotation still goes through
+// propose/accept (tested below).
 
 #[test]
 fn upgrade_requires_admin_authorization() {
     let env = Env::default();
-    let (client, admin) = setup(&env);
+    let (client, _admin) = setup(&env);
 
     env.mock_all_auths();
-    client.init_upgrade(&admin);
     env.set_auths(&[]);
 
     let wasm_hash = BytesN::from_array(&env, &[0u8; 32]);
@@ -54,8 +48,6 @@ fn contract_state_is_disjoint_from_upgrade_metadata() {
     env.mock_all_auths();
     let (client, admin) = setup(&env);
 
-    client.init(&admin);
-    client.init_upgrade(&admin);
     client.add_publisher(&admin, &admin);
 
     let anchor = String::from_str(&env, "moneygram");
@@ -87,7 +79,6 @@ fn rotates_the_upgrade_admin_in_two_steps() {
     let (client, admin) = setup(&env);
     let successor = Address::generate(&env);
 
-    client.init_upgrade(&admin);
     assert_eq!(client.upgrade_admin(), Some(admin.clone()));
     assert_eq!(client.pending_upgrade_admin(), None);
 
@@ -108,11 +99,9 @@ fn rotates_the_upgrade_admin_in_two_steps() {
 fn a_non_admin_cannot_propose() {
     let env = Env::default();
     env.mock_all_auths();
-    let (client, admin) = setup(&env);
+    let (client, _admin) = setup(&env);
     let stranger = Address::generate(&env);
     let target = Address::generate(&env);
-
-    client.init_upgrade(&admin);
 
     assert!(client
         .try_propose_upgrade_admin(&stranger, &target)
@@ -128,7 +117,6 @@ fn only_the_nominee_can_accept() {
     let successor = Address::generate(&env);
     let opportunist = Address::generate(&env);
 
-    client.init_upgrade(&admin);
     client.propose_upgrade_admin(&admin, &successor);
 
     // This is what makes a typo recoverable rather than fatal: an address
@@ -144,8 +132,6 @@ fn accepting_without_a_proposal_fails() {
     let (client, admin) = setup(&env);
     let stranger = Address::generate(&env);
 
-    client.init_upgrade(&admin);
-
     assert!(client.try_accept_upgrade_admin(&stranger).is_err());
     assert_eq!(client.upgrade_admin(), Some(admin));
 }
@@ -158,7 +144,6 @@ fn a_second_proposal_replaces_the_first() {
     let first = Address::generate(&env);
     let second = Address::generate(&env);
 
-    client.init_upgrade(&admin);
     client.propose_upgrade_admin(&admin, &first);
     client.propose_upgrade_admin(&admin, &second);
 
@@ -178,7 +163,6 @@ fn a_cancelled_proposal_cannot_be_accepted() {
     let (client, admin) = setup(&env);
     let successor = Address::generate(&env);
 
-    client.init_upgrade(&admin);
     client.propose_upgrade_admin(&admin, &successor);
     client.cancel_upgrade_proposal(&admin);
 
@@ -194,7 +178,6 @@ fn the_old_admin_cannot_upgrade_after_handover() {
     let (client, admin) = setup(&env);
     let successor = Address::generate(&env);
 
-    client.init_upgrade(&admin);
     client.propose_upgrade_admin(&admin, &successor);
     client.accept_upgrade_admin(&successor);
 
@@ -205,14 +188,7 @@ fn the_old_admin_cannot_upgrade_after_handover() {
     assert_ne!(client.upgrade_admin(), Some(admin));
 }
 
-#[test]
-fn rotation_before_init_fails() {
-    let env = Env::default();
-    env.mock_all_auths();
-    let (client, admin) = setup(&env);
-    let target = Address::generate(&env);
-
-    // No init_upgrade: there is no role to rotate yet, and inventing one here
-    // would let anyone claim it.
-    assert!(client.try_propose_upgrade_admin(&admin, &target).is_err());
-}
+// The former `rotation_before_init_fails` test is obsolete: the upgrade admin is
+// now bound at construction, so there is no "before init" window in which the
+// role is unset. The equivalent guard — a non-admin cannot propose — is covered
+// by `a_non_admin_cannot_propose`.

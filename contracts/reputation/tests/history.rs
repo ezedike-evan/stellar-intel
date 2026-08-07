@@ -4,9 +4,9 @@ use reputation::{ReputationContract, ReputationContractClient};
 use soroban_sdk::{testutils::Address as _, Address, Env, String};
 
 fn setup(env: &Env) -> (ReputationContractClient<'_>, Address) {
-    let contract_id = env.register(ReputationContract, ());
-    let client = ReputationContractClient::new(env, &contract_id);
     let admin = Address::generate(env);
+    let contract_id = env.register(ReputationContract, (admin.clone(), admin.clone()));
+    let client = ReputationContractClient::new(env, &contract_id);
     (client, admin)
 }
 
@@ -15,7 +15,6 @@ fn test_recent_outcomes() {
     let env = Env::default();
     env.mock_all_auths();
     let (client, admin) = setup(&env);
-    client.init(&admin);
     client.add_publisher(&admin, &admin);
 
     let anchor = String::from_str(&env, "testanchor");
