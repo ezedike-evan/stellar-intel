@@ -2,10 +2,10 @@ import { NextRequest, NextResponse } from 'next/server';
 import { withRequestLogger } from '@/lib/logger';
 import { STELLAR_PUBKEY_PATTERN as ACCOUNT_PATTERN, AMOUNT_PATTERN } from '@/lib/patterns';
 import { enforceRateLimit } from '@/lib/api/response';
+import { parseAllowedTransferServer } from '@/lib/api/anchor-allowlist';
 
 export const dynamic = 'force-dynamic';
 
-const TRANSFER_SERVER_PATTERN = /^https:\/\//;
 const ASSET_CODE_PATTERN = /^[A-Z]{1,12}$/;
 
 // ─── POST /api/sep6/withdraw ──────────────────────────────────────────────────
@@ -34,10 +34,10 @@ export async function POST(request: NextRequest): Promise<NextResponse> {
     const amount = body['amount'];
     const jwt = body['jwt']; // SEP-10 auth token — never logged
 
-    if (typeof transferServer !== 'string' || !TRANSFER_SERVER_PATTERN.test(transferServer)) {
+    if (typeof transferServer !== 'string' || parseAllowedTransferServer(transferServer) === null) {
       logger.warn({ event: 'invalid_transfer_server' });
       return NextResponse.json(
-        { error: 'transferServer must be an https:// URL' },
+        { error: 'transferServer must be an https:// URL of a registered anchor' },
         { status: 400 }
       );
     }
@@ -113,14 +113,20 @@ export async function POST(request: NextRequest): Promise<NextResponse> {
 // withdraw when the anchor requires identity verification.
 export async function GET(request: NextRequest): Promise<NextResponse> {
   return withRequestLogger(request, 'api.sep6.customer', async (logger) => {
+    const limited = await enforceRateLimit(request, {
+      bucket: 'api.sep6.customer',
+      maxRequests: 20,
+    });
+    if (limited) return limited;
+
     const { searchParams } = new URL(request.url);
     const transferServer = searchParams.get('transferServer');
     const jwt = request.headers.get('authorization'); // forwarded from client, never logged
 
-    if (!transferServer || !TRANSFER_SERVER_PATTERN.test(transferServer)) {
+    if (!transferServer || parseAllowedTransferServer(transferServer) === null) {
       logger.warn({ event: 'invalid_transfer_server' });
       return NextResponse.json(
-        { error: 'transferServer must be an https:// URL' },
+        { error: 'transferServer must be an https:// URL of a registered anchor' },
         { status: 400 }
       );
     }
