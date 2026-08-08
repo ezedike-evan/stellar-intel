@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { acquireLock, releaseLock } from '@/lib/reputation/lock';
 import { withLoggerContext } from '@/lib/logger';
+import { checkCronAuth } from '@/lib/api/cron-auth';
 import { getReputationStore } from '@/lib/reputation/store';
 import {
   DurableProbeStore,
@@ -61,10 +62,8 @@ async function runProbeSweep(): Promise<ProbeSweepCounts> {
 }
 
 export async function POST(request: NextRequest): Promise<NextResponse> {
-  const auth = request.headers.get('authorization');
-  if (auth !== `Bearer ${process.env.CRON_SECRET}`) {
-    return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
-  }
+  const unauthorized = checkCronAuth(request);
+  if (unauthorized) return unauthorized;
 
   return withLoggerContext('api.reputation.refresh', async (logger) => {
     if (!(await acquireLock(LOCK_KEY, LOCK_TTL_MS))) {

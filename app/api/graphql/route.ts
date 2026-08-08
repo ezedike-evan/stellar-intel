@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { createYoga } from 'graphql-yoga';
 import { schema } from '@/lib/graphql/schema';
+import { createGraphqlSecurityPlugin } from '@/lib/graphql/security';
 import { checkRateLimit, getClientIp } from '@/lib/api/rate-limit';
 import { getLogger } from '@/lib/logger';
 
@@ -16,6 +17,9 @@ const { handleRequest } = createYoga({
   // The interactive GraphiQL explorer is a local/staging convenience, not
   // part of the public product surface — off in production.
   landingPage: process.env.NODE_ENV !== 'production',
+  // Depth + field-count limits on every operation, and introspection disabled
+  // in production (see lib/graphql/security.ts).
+  plugins: [createGraphqlSecurityPlugin()],
 });
 
 async function handler(request: NextRequest): Promise<Response> {

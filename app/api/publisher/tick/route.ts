@@ -10,6 +10,7 @@ import {
   type ProbeCoverageSummary,
 } from '@stellarintel/publisher';
 import { withLoggerContext } from '@/lib/logger';
+import { checkCronAuth } from '@/lib/api/cron-auth';
 import { acquireLock, releaseLock } from '@/lib/reputation/lock';
 import { recordPublisherError, recordPublisherRun } from '@/lib/metrics';
 import { getPool } from '@/lib/reputation/pool';
@@ -114,10 +115,8 @@ async function tick(): Promise<BatchResult> {
 }
 
 export async function GET(request: NextRequest): Promise<NextResponse> {
-  const auth = request.headers.get('authorization');
-  if (auth !== `Bearer ${process.env.CRON_SECRET}`) {
-    return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
-  }
+  const unauthorized = checkCronAuth(request);
+  if (unauthorized) return unauthorized;
 
   return withLoggerContext('api.publisher.tick', async (logger) => {
     if (!(await acquireLock(LOCK_KEY, LOCK_TTL_MS))) {

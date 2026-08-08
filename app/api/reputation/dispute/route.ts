@@ -1,10 +1,10 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { z } from 'zod';
-import { Keypair } from '@stellar/stellar-sdk';
 import { withRequestLogger } from '@/lib/logger';
 import { STELLAR_PUBKEY_PATTERN } from '@/lib/patterns';
 import type { ApiError } from '@/types';
 import { checkRateLimit, clearRateLimitStore } from '@/lib/api/rate-limit';
+import { verifyIntentSignature } from '@/lib/intent/verify';
 
 const DisputeBodySchema = z.object({
   intentHash: z.string().regex(/^[0-9a-f]{64}$/, {
@@ -90,16 +90,8 @@ export async function POST(request: NextRequest): Promise<NextResponse> {
 
     logger.info({ event: 'dispute_submission', anchorId, publicKey, intentHash });
 
-    // Verify Ed25519 proof: signature over the raw intentHash bytes
-    let valid = false;
-    try {
-      const keypair = Keypair.fromPublicKey(publicKey);
-      const messageBytes = Buffer.from(intentHash, 'hex');
-      const sigBytes = Buffer.from(signature, 'base64');
-      valid = keypair.verify(messageBytes, sigBytes);
-    } catch {
-      valid = false;
-    }
+    // Verify Ed25519 proof: signature over the raw intentHash bytes.
+    const valid = verifyIntentSignature({ intentHash, publicKey, signature });
 
     if (!valid) {
       logger.warn({ event: 'signature_verification_failed', publicKey, intentHash });

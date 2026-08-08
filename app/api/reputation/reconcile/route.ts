@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from 'next/server';
 import { withRequestLogger } from '@/lib/logger';
 import { getReputationStore } from '@/lib/reputation/store';
 import { reconcileReputationOutcomes, type ReputationOutcomeRow } from '@/lib/reputation/reconcile';
+import { checkCronAuth } from '@/lib/api/cron-auth';
 
 export const runtime = 'nodejs';
 
@@ -42,10 +43,8 @@ async function runReconciler(): Promise<{ updated: number; scanned: number; resu
 }
 
 export async function GET(request: NextRequest): Promise<NextResponse> {
-  const auth = request.headers.get('authorization');
-  if (auth !== `Bearer ${process.env.CRON_SECRET}`) {
-    return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
-  }
+  const unauthorized = checkCronAuth(request);
+  if (unauthorized) return unauthorized;
 
   return withRequestLogger(request, 'api.reputation.reconcile', async (logger) => {
     const summary = await runReconciler();
