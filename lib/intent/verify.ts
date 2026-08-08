@@ -1,4 +1,5 @@
 import { Keypair } from '@stellar/stellar-sdk';
+import { hashIntent, type Intent } from './hash';
 
 /**
  * Verify an Ed25519 signature over an intent hash.
@@ -24,4 +25,43 @@ export function verifyIntentSignature(params: {
   } catch {
     return false;
   }
+}
+
+export type IntentAttestationResult =
+  | { ok: true; attested: boolean }
+  | { ok: false; status: 400 | 401; message: string };
+
+/**
+ * Optional intent attestation for the off-ramp submit path.
+ *
+ * The request body MAY carry `signature` + `publicKey` (a Freighter-signed
+ * envelope over the canonical intent hash). When present, the signature is
+ * recomputed against `hashIntent(intent)` and a bad one is rejected (401); when
+ * absent the intent is accepted unattested (`attested: false`) so unsigned
+ * clients keep working. The two fields must be supplied together.
+ *
+ * `body` is read loosely on purpose: the intent's own schema (`IntentSchema`)
+ * strips these fields, so they never contaminate the hashed intent — they are
+ * only ever read here, off the raw body.
+ */
+export async function verifyOptionalIntentAttestation(
+  body: unknown,
+  intent: Intent
+): Promise<IntentAttestationResult> {
+  const raw = (body ?? {}) as Record<string, unknown>;
+  const signature = typeof raw.signature === 'string' ? raw.signature : undefined;
+  const publicKey = typeof raw.publicKey === 'string' ? raw.publicKey : undefined;
+
+  if (signature === undefined && publicKey === undefined) {
+    return { ok: true, attested: false };
+  }
+  if (signature === undefined || publicKey === undefined) {
+    return { ok: false, status: 400, message: 'signature and publicKey must be provided together' };
+  }
+
+  const intentHash = await hashIntent(intent);
+  if (!verifyIntentSignature({ intentHash, publicKey, signature })) {
+    return { ok: false, status: 401, message: 'Intent signature verification failed' };
+  }
+  return { ok: true, attested: true };
 }

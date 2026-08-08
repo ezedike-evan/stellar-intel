@@ -1,9 +1,11 @@
 # Intent API
 
 The off-ramp intent is the core primitive of Stellar Intel. A user expresses
-_what_ they want — "withdraw this USDC to this corridor" — signs it with their
-Stellar key, and the server verifies the signature before routing it. The user
-never hands over a key; they sign a canonical payload.
+_what_ they want — "withdraw this USDC to this corridor" — and MAY sign it with
+their Stellar key. When a signature is supplied the server verifies it over the
+canonical payload before routing; unsigned intents are still accepted (the
+signature is an optional attestation, not a gate). The user never hands over a
+key; they sign a canonical payload.
 
 Source of truth: [`types/intent.ts`](../types/intent.ts),
 [`lib/intent/`](../lib/intent/), and the route
@@ -45,14 +47,20 @@ The wire format the server accepts (`SignedIntentEnvelopeSchema`). Construction:
 }
 ```
 
-The schema enforces `envelope.publicKey === intent.publicKey`. The server
-recomputes the canonical hash and verifies the Ed25519 signature before doing any
-routing — a forged or tampered intent is rejected at the boundary.
+When a `signature` + `publicKey` are supplied, the server recomputes the
+canonical hash and verifies the Ed25519 signature (`lib/intent/verify.ts`,
+`verifyOptionalIntentAttestation`) before routing — a forged or tampered signed
+intent is rejected at the boundary (401). Supplying only one of the two is a 400.
+Omitting both is allowed and routes the intent unattested.
 
 ## Replay protection
 
-`lib/intent/replay.ts` guards against a previously-signed envelope being
-re-submitted. Treat each signed envelope as single-use.
+`lib/intent/replay.ts` (`registerIntentReplay`) implements nonce + deadline
+replay protection and is available for callers that maintain a nonce. It is
+**not yet wired into `POST /api/intent/offramp`** — the off-ramp path is instead
+idempotent by construction (`quoteId = sha256(canonical intent)`, honoured by
+`Idempotency-Key`). Wiring replay into the signed path is tracked as follow-up
+work; until then, do not rely on the endpoint to reject a re-submitted envelope.
 
 ## Endpoint
 
@@ -63,9 +71,9 @@ Content-Type: application/json
 <SignedIntentEnvelope>
 ```
 
-- **200** — signature verified, intent accepted for routing.
-- **400** — schema validation failed (bad amount, key mismatch, malformed hash).
-- **401/422** — signature did not verify, or a replay was detected.
+- **200** — intent accepted for routing (signature verified when one was supplied).
+- **400** — schema validation failed, or only one of `signature`/`publicKey` was supplied.
+- **401** — a supplied signature did not verify.
 
 ```bash
 curl -sX POST https://stellar-intel.vercel.app/api/intent/offramp \

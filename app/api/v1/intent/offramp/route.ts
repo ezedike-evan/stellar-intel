@@ -1,6 +1,7 @@
 import type { NextRequest, NextResponse } from 'next/server';
 import { withV1 } from '@/lib/api/v1';
 import { IntentSchema, createOfframpIntent } from '@/lib/intent/offramp';
+import { verifyOptionalIntentAttestation } from '@/lib/intent/verify';
 import type { Intent } from '@/lib/intent/hash';
 
 export const runtime = 'nodejs';
@@ -28,7 +29,20 @@ export async function POST(request: NextRequest): Promise<NextResponse> {
         );
       }
 
-      const result = await createOfframpIntent(parsed.data as Intent);
+      const intent = parsed.data as Intent;
+
+      // Optional signature attestation — verified over the canonical intent hash
+      // when supplied, unsigned intents still accepted (lib/intent/verify.ts).
+      const attestation = await verifyOptionalIntentAttestation(body, intent);
+      if (!attestation.ok) {
+        return ctx.error(
+          attestation.status === 401 ? 'unauthorized' : 'validation_error',
+          attestation.message,
+          attestation.status
+        );
+      }
+
+      const result = await createOfframpIntent(intent);
       if (!result.ok) {
         return ctx.error(result.code.toLowerCase(), result.message, result.status);
       }

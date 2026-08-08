@@ -11,6 +11,7 @@ import {
 import { withRequestLogger } from '@/lib/logger';
 import { recordIntentError, recordIntentSuccess } from '@/lib/metrics';
 import { IntentSchema, createOfframpIntent } from '@/lib/intent/offramp';
+import { verifyOptionalIntentAttestation } from '@/lib/intent/verify';
 import type { Intent } from '@/lib/intent/hash';
 import type { ApiError } from '@/types';
 
@@ -96,10 +97,28 @@ export async function POST(request: NextRequest): Promise<NextResponse> {
     }
 
     const intent = parsed.data as Intent;
+
+    // Optional signature attestation: when the caller supplies a signed envelope
+    // it is verified over the canonical intent hash and a bad one is rejected;
+    // unsigned intents are still accepted (see lib/intent/verify.ts).
+    const attestation = await verifyOptionalIntentAttestation(body, intent);
+    if (!attestation.ok) {
+      logger.warn({ event: 'intent_attestation_rejected', status: attestation.status });
+      recordIntentError(attestation.status === 401 ? 'UNAUTHORIZED' : 'VALIDATION_ERROR');
+      return await respond<ApiError>(
+        {
+          code: attestation.status === 401 ? 'UNAUTHORIZED' : 'VALIDATION_ERROR',
+          message: attestation.message,
+        },
+        attestation.status
+      );
+    }
+
     logger.info({
       event: 'intent_parsed',
       sourceAsset: intent.sourceAsset,
       destinationAsset: intent.destinationAsset,
+      attested: attestation.attested,
     });
 
     const result = await createOfframpIntent(intent);
