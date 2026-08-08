@@ -1,7 +1,12 @@
 use soroban_sdk::{Address, Env, String, Vec};
 
-use crate::storage::{DataKey, PAGE_SIZE};
+use crate::storage::{self, DataKey, PAGE_SIZE};
 use crate::{aggregate, publishers, Error};
+
+/// Upper bound on a single outcome's settle time (~11.6 days). Rejects absurd
+/// values that would otherwise inflate the settle-seconds accumulator toward
+/// overflow; any real settlement is far below this.
+pub const MAX_SETTLE_SECONDS: u64 = 1_000_000;
 
 pub fn submit_outcome(
     env: &Env,
@@ -16,6 +21,10 @@ pub fn submit_outcome(
 
     if !publishers::is_authorized(env, publisher) {
         return Err(Error::PublisherUnauthorized);
+    }
+
+    if settle_seconds > MAX_SETTLE_SECONDS {
+        return Err(Error::OutOfRange);
     }
 
     let head_key = DataKey::OutcomeHead(anchor_id.clone());
@@ -40,7 +49,9 @@ pub fn submit_outcome(
     env.storage()
         .persistent()
         .set(&head_key, &(page_num, page_len + 1));
+    storage::extend_persistent(env, &page_key);
+    storage::extend_persistent(env, &head_key);
 
-    aggregate::record(env, &anchor_id, &corridor, settle_seconds, success);
+    aggregate::record(env, &anchor_id, &corridor, settle_seconds, success)?;
     Ok(())
 }

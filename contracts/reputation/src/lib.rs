@@ -25,6 +25,8 @@ pub enum Error {
     PublisherNotFound = 6,
     PublisherUnauthorized = 7,
     InvalidCorridorRate = 8,
+    ArithmeticOverflow = 9,
+    OutOfRange = 10,
 }
 
 #[contract]
@@ -47,11 +49,21 @@ impl ReputationContract {
         // that changes that invariant rather than an expected runtime path.
         admin::set_admin(&env, &admin).expect("admin must be unset at construction");
         upgrade::init(&env, upgrade_admin);
+        storage::extend_instance(&env);
+    }
+
+    /// Top up the contract instance's TTL. Callable by anyone — keeping the
+    /// oracle alive is permissionless — so a dormant contract cannot silently
+    /// archive between writes. Persistent entries are bumped on every write.
+    pub fn bump(env: Env) {
+        storage::extend_instance(&env);
     }
 
     pub fn register_anchor(env: Env, caller: Address, anchor_id: String) -> Result<(), Error> {
         admin::require_admin(&env, &caller)?;
-        anchors::register(&env, anchor_id)
+        anchors::register(&env, anchor_id)?;
+        storage::extend_instance(&env);
+        Ok(())
     }
 
     pub fn list_anchors(env: Env) -> Vec<String> {
@@ -87,12 +99,37 @@ impl ReputationContract {
 
     pub fn add_publisher(env: Env, caller: Address, publisher: Address) -> Result<(), Error> {
         admin::require_admin(&env, &caller)?;
-        publishers::add(&env, publisher)
+        publishers::add(&env, publisher)?;
+        storage::extend_instance(&env);
+        Ok(())
     }
 
     pub fn revoke_publisher(env: Env, caller: Address, publisher: Address) -> Result<(), Error> {
         admin::require_admin(&env, &caller)?;
-        publishers::revoke(&env, publisher)
+        publishers::revoke(&env, publisher)?;
+        storage::extend_instance(&env);
+        Ok(())
+    }
+
+    /// Admin-only. Clear a corridor's rolling outcome aggregate back to zero —
+    /// the recovery path for a corridor whose accumulators were polluted by a
+    /// since-revoked publisher.
+    pub fn reset_corridor_aggregate(
+        env: Env,
+        caller: Address,
+        anchor_id: String,
+        corridor: String,
+    ) -> Result<(), Error> {
+        admin::require_admin(&env, &caller)?;
+        aggregate::reset(&env, &anchor_id, &corridor);
+        Ok(())
+    }
+
+    /// Admin-only. Clear a corridor's cumulative volume/savings totals.
+    pub fn reset_volume_savings(env: Env, caller: Address, corridor: String) -> Result<(), Error> {
+        admin::require_admin(&env, &caller)?;
+        volume_savings::reset(&env, corridor);
+        Ok(())
     }
 
     pub fn list_publishers(env: Env) -> Vec<Address> {

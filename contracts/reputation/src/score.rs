@@ -1,6 +1,6 @@
 use soroban_sdk::{Address, Env, String};
 
-use crate::storage::DataKey;
+use crate::storage::{self, DataKey};
 use crate::{publishers, Error};
 
 const MAX_BPS: i128 = 10000;
@@ -69,10 +69,29 @@ pub fn set_corridor_metrics(
         return Err(Error::PublisherUnauthorized);
     }
 
+    // Write BOTH the v1 and v2 keys. Previously only the v1 `Corridor` key was
+    // written, so once a corridor had been migrated to v2, every subsequent
+    // publisher update landed in v1 while v2 readers (get_score_for_corridor_v2)
+    // kept serving the stale migrated snapshot. Writing both keeps the two views
+    // in lock-step. The v2 tuple is (fill, slippage, composite, settle, n).
+    let composite_bps = compute_composite_bps(fill_rate_bps, slippage_bps, settle_seconds_p50);
+
+    let v1_key = DataKey::Corridor(anchor_id.clone(), corridor.clone());
     let metrics = (fill_rate_bps, slippage_bps, settle_seconds_p50, n);
-    env.storage()
-        .persistent()
-        .set(&DataKey::Corridor(anchor_id, corridor), &metrics);
+    env.storage().persistent().set(&v1_key, &metrics);
+    storage::extend_persistent(env, &v1_key);
+
+    let v2_key = DataKey::CorridorV2(anchor_id, corridor);
+    let metrics_v2 = (
+        fill_rate_bps,
+        slippage_bps,
+        composite_bps,
+        settle_seconds_p50,
+        n,
+    );
+    env.storage().persistent().set(&v2_key, &metrics_v2);
+    storage::extend_persistent(env, &v2_key);
+
     Ok(())
 }
 

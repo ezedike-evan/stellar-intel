@@ -16,8 +16,13 @@
 
 use soroban_sdk::{contracttype, Address, Env, String};
 
-use crate::storage::DataKey;
+use crate::storage::{self, DataKey};
 use crate::{publishers, Error};
+
+/// Upper bound on a single volume/savings delta (in microUSDC): 1e18 µUSDC =
+/// 1e12 USDC. Any real settlement is far below this; the cap keeps the
+/// cumulative i128 accumulators away from overflow even over a long lifetime.
+pub const MAX_DELTA: i128 = 1_000_000_000_000_000_000;
 
 /// Per-corridor volume + savings snapshot.
 #[contracttype]
@@ -51,6 +56,9 @@ pub fn add_volume_savings(
     if volume_delta < 0 || savings_delta < 0 {
         return Err(Error::InvalidCorridorRate);
     }
+    if volume_delta > MAX_DELTA || savings_delta > MAX_DELTA {
+        return Err(Error::OutOfRange);
+    }
 
     let key = DataKey::VolumeSavings(corridor.clone());
     let current: Option<VolumeSavings> = env.storage().persistent().get(&key);
@@ -62,13 +70,25 @@ pub fn add_volume_savings(
         publisher: publisher.clone(),
     });
 
-    record.volume_usdc += volume_delta;
-    record.savings_usdc += savings_delta;
-    record.settlement_count += 1;
+    // checked_add so a rogue publisher cannot trap the corridor by driving a
+    // cumulative accumulator to overflow under `overflow-checks = true`.
+    record.volume_usdc = record
+        .volume_usdc
+        .checked_add(volume_delta)
+        .ok_or(Error::ArithmeticOverflow)?;
+    record.savings_usdc = record
+        .savings_usdc
+        .checked_add(savings_delta)
+        .ok_or(Error::ArithmeticOverflow)?;
+    record.settlement_count = record
+        .settlement_count
+        .checked_add(1)
+        .ok_or(Error::ArithmeticOverflow)?;
     record.updated_at = env.ledger().timestamp();
     record.publisher = publisher.clone();
 
     env.storage().persistent().set(&key, &record);
+    storage::extend_persistent(env, &key);
     Ok(())
 }
 
@@ -77,4 +97,13 @@ pub fn get(env: &Env, corridor: String) -> Option<VolumeSavings> {
     env.storage()
         .persistent()
         .get(&DataKey::VolumeSavings(corridor))
+}
+
+/// Clear the cumulative volume/savings for `corridor`. Admin-gated at the
+/// entrypoint — the escape hatch for a corridor polluted by a since-revoked
+/// publisher.
+pub fn reset(env: &Env, corridor: String) {
+    env.storage()
+        .persistent()
+        .remove(&DataKey::VolumeSavings(corridor));
 }

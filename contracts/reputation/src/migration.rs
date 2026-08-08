@@ -1,6 +1,6 @@
 use soroban_sdk::{Address, Env, String};
 
-use crate::storage::DataKey;
+use crate::storage::{self, DataKey};
 use crate::{admin, score, Error};
 
 /// Migrate a single (anchor_id, corridor) pair from the v1 Corridor data key
@@ -55,6 +55,7 @@ fn migrate_corridor_unchecked(env: &Env, anchor_id: String, corridor: String) {
         n,
     );
     env.storage().persistent().set(&v2_key, &v2_metrics);
+    storage::extend_persistent(env, &v2_key);
 }
 
 /// Default corridor list for v2 migration. Expand this list as new corridors

@@ -25,11 +25,43 @@
 //! `Anchors` and `Publishers` remain in instance storage solely to serve the
 //! admin list-view functions; they are never touched by the hot write paths.
 
-use soroban_sdk::{contracttype, Address, String};
+use soroban_sdk::{contracttype, Address, Env, String};
 
 /// Maximum entries per outcome page.  Tune this to balance page-read overhead
 /// against the number of pages `recent_outcomes` must fetch.
 pub const PAGE_SIZE: u32 = 25;
+
+// ── TTL management ─────────────────────────────────────────────────────────────
+//
+// Soroban archives instance and persistent entries whose TTL lapses. The
+// contract previously never bumped anything, so its state (the anchor registry,
+// publisher set, outcome pages, corridor metrics, rates) would eventually archive
+// and the oracle would go dark. Every mutating path now extends the entry it
+// touches, and the public `bump()` entrypoint lets anyone top up the instance
+// during dormant periods. Reads deliberately do NOT self-bump — that would turn
+// every read into a state write and blow the gas/footprint budgets — so liveness
+// comes from write activity plus `bump()`.
+//
+// Ledgers close ~every 5s, so ~17_280 ledgers ≈ 1 day. Extend well past the
+// bump threshold so a single write buys a long runway; both stay comfortably
+// under the network's max entry TTL.
+const LEDGERS_PER_DAY: u32 = 17_280;
+pub const TTL_THRESHOLD_LEDGERS: u32 = LEDGERS_PER_DAY; // bump when < ~1 day remains
+pub const TTL_EXTEND_LEDGERS: u32 = 31 * LEDGERS_PER_DAY; // extend to ~31 days
+
+/// Extend the TTL of a persistent entry (call right after writing it).
+pub fn extend_persistent(env: &Env, key: &DataKey) {
+    env.storage()
+        .persistent()
+        .extend_ttl(key, TTL_THRESHOLD_LEDGERS, TTL_EXTEND_LEDGERS);
+}
+
+/// Extend the TTL of the contract instance (Admin / Anchors / Publishers).
+pub fn extend_instance(env: &Env) {
+    env.storage()
+        .instance()
+        .extend_ttl(TTL_THRESHOLD_LEDGERS, TTL_EXTEND_LEDGERS);
+}
 
 /// All storage keys for the reputation contract.
 ///

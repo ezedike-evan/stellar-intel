@@ -8,7 +8,7 @@
 
 use soroban_sdk::{contracttype, Address, Env, String};
 
-use crate::storage::DataKey;
+use crate::storage::{self, DataKey};
 use crate::{publishers, Error};
 
 /// A published corridor rate. `rate` is scaled by 10^`decimals` fiat units per
@@ -44,9 +44,9 @@ pub fn publish(
         updated_at: env.ledger().timestamp(),
         publisher: publisher.clone(),
     };
-    env.storage()
-        .persistent()
-        .set(&DataKey::CorridorRate(corridor), &record);
+    let key = DataKey::CorridorRate(corridor);
+    env.storage().persistent().set(&key, &record);
+    storage::extend_persistent(env, &key);
     Ok(())
 }
 
