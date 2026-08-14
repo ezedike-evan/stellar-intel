@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from 'next/server';
 import { acquireLock, releaseLock } from '@/lib/reputation/lock';
 import { withLoggerContext } from '@/lib/logger';
 import { checkCronAuth } from '@/lib/api/cron-auth';
+import { checkDurableStore } from '@/lib/api/store-guard';
 import { getReputationStore } from '@/lib/reputation/store';
 import {
   DurableProbeStore,
@@ -66,6 +67,15 @@ export async function POST(request: NextRequest): Promise<NextResponse> {
   if (unauthorized) return unauthorized;
 
   return withLoggerContext('api.reputation.refresh', async (logger) => {
+    // Checked before the lock: a sweep with nowhere to persist is not work
+    // worth serialising, and `runProbeSweep` would otherwise throw out of
+    // `getReputationStore()` and surface as an opaque INTERNAL_ERROR 500.
+    const unavailable = checkDurableStore();
+    if (unavailable) {
+      logger.warn({ event: 'refresh_store_unavailable' });
+      return unavailable;
+    }
+
     if (!(await acquireLock(LOCK_KEY, LOCK_TTL_MS))) {
       logger.warn({ event: 'refresh_conflict' });
       return NextResponse.json({ error: 'Refresh already in progress' }, { status: 409 });

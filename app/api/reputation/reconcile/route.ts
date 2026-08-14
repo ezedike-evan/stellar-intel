@@ -3,6 +3,7 @@ import { withRequestLogger } from '@/lib/logger';
 import { getReputationStore } from '@/lib/reputation/store';
 import { reconcileReputationOutcomes, type ReputationOutcomeRow } from '@/lib/reputation/reconcile';
 import { checkCronAuth } from '@/lib/api/cron-auth';
+import { checkDurableStore } from '@/lib/api/store-guard';
 
 export const runtime = 'nodejs';
 
@@ -47,6 +48,14 @@ export async function GET(request: NextRequest): Promise<NextResponse> {
   if (unauthorized) return unauthorized;
 
   return withRequestLogger(request, 'api.reputation.reconcile', async (logger) => {
+    // `runReconciler` opens with `getReputationStore()`, so without this the
+    // unconfigured-backend case arrives as an opaque INTERNAL_ERROR 500.
+    const unavailable = checkDurableStore();
+    if (unavailable) {
+      logger.warn({ event: 'reconcile_store_unavailable' });
+      return unavailable;
+    }
+
     const summary = await runReconciler();
     logger.info({ event: 'reconcile_run', scanned: summary.scanned, updated: summary.updated });
     return NextResponse.json(summary);

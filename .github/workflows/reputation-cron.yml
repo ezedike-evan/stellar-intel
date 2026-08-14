@@ -21,7 +21,10 @@ jobs:
   run:
     runs-on: ubuntu-latest
     outputs:
-      failure_step: ${{ steps.refresh.outcome != 'success' && 'refresh' || steps.reconcile.outcome != 'success' && 'reconcile' || steps.tick.outcome != 'success' && 'publisher tick' || steps.health.outcome != 'success' && 'publisher health' || 'unknown' }}
+      # `== 'failure'` rather than `!= 'success'`: a step skipped by the
+      # STORE_UNAVAILABLE gate below reports `skipped`, and naming that as the
+      # failing step would misdirect whoever reads the alert.
+      failure_step: ${{ steps.refresh.outcome == 'failure' && 'refresh' || steps.reconcile.outcome == 'failure' && 'reconcile' || steps.tick.outcome == 'failure' && 'publisher tick' || steps.health.outcome == 'failure' && 'publisher health' || 'unknown' }}
     env:
       CRON_SECRET: ${{ secrets.CRON_SECRET }}
     steps:
@@ -59,6 +62,19 @@ jobs:
             -X POST "$APP/api/reputation/refresh" \
             -H "Authorization: Bearer $CRON_SECRET") || true
           cat /tmp/refresh.out
+
+          # A deployment with no DATABASE_URL has nowhere to persist, which the
+          # API reports as 503 STORE_UNAVAILABLE. That is a configuration state,
+          # not an incident — the health step below already treats the same
+          # condition (`durable: false`) as a warning, and this run has nothing
+          # to do either way. Flag it so the remaining steps skip instead of
+          # each re-reporting the one missing database.
+          if [ "$CODE" = "503" ] && jq -e '.code == "STORE_UNAVAILABLE"' /tmp/refresh.out >/dev/null 2>&1; then
+            echo "::warning::No durable reputation store configured (DATABASE_URL unset) — nothing to refresh, reconcile or publish"
+            echo "STORE_UNAVAILABLE=1" >> "$GITHUB_ENV"
+            exit 0
+          fi
+
           case "$CODE" in
             2*) ;;
             *) echo "::error::refresh returned HTTP $CODE"; exit 1 ;;
@@ -66,6 +82,7 @@ jobs:
 
       - name: Reconcile
         id: reconcile
+        if: env.STORE_UNAVAILABLE != '1'
         run: |
           set -euo pipefail
           CODE=$(curl -sS -L --proto '=https' --fail-with-body \
@@ -80,6 +97,7 @@ jobs:
 
       - name: Publisher tick
         id: tick
+        if: env.STORE_UNAVAILABLE != '1'
         run: |
           set -euo pipefail
           CODE=$(curl -sS -L --proto '=https' --fail-with-body \
