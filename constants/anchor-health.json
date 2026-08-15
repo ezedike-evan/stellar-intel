@@ -1,27 +1,55 @@
 {
   "thresholdNights": 3,
-  "updatedAt": null,
+  "updatedAt": "2026-08-15T10:07:07.525Z",
   "anchors": {
     "moneygram": {
       "consecutiveFailures": 0,
       "degraded": false,
-      "lastCheckedAt": null,
-      "lastStatus": "unknown",
+      "lastCheckedAt": "2026-08-15T10:07:07.525Z",
+      "lastStatus": "ok",
       "lastError": null
     },
     "cowrie": {
-      "consecutiveFailures": 0,
+      "consecutiveFailures": 1,
       "degraded": false,
-      "lastCheckedAt": null,
-      "lastStatus": "unknown",
-      "lastError": null
+      "lastCheckedAt": "2026-08-15T10:07:07.525Z",
+      "lastStatus": "fail",
+      "lastError": "missing TRANSFER_SERVER_SEP0024 (SEP-24)"
     },
     "anclap": {
       "consecutiveFailures": 0,
       "degraded": false,
-      "lastCheckedAt": null,
-      "lastStatus": "unknown",
+      "lastCheckedAt": "2026-08-15T10:07:07.525Z",
+      "lastStatus": "ok",
       "lastError": null
+    },
+    "ngnc": {
+      "consecutiveFailures": 0,
+      "degraded": false,
+      "lastCheckedAt": "2026-08-15T10:07:07.525Z",
+      "lastStatus": "ok",
+      "lastError": null
+    },
+    "mykobo": {
+      "consecutiveFailures": 1,
+      "degraded": false,
+      "lastCheckedAt": "2026-08-15T10:07:07.525Z",
+      "lastStatus": "fail",
+      "lastError": "TypeError:ENOTFOUND"
+    },
+    "ntokens": {
+      "consecutiveFailures": 0,
+      "degraded": false,
+      "lastCheckedAt": "2026-08-15T10:07:07.525Z",
+      "lastStatus": "ok",
+      "lastError": null
+    },
+    "zeam": {
+      "consecutiveFailures": 1,
+      "degraded": false,
+      "lastCheckedAt": "2026-08-15T10:07:07.525Z",
+      "lastStatus": "fail",
+      "lastError": "HTTP 404"
     }
   }
 }
