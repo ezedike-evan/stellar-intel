@@ -153,25 +153,30 @@ function checkMilestones(blocks) {
   }
 }
 
-function titleExists(title) {
+/**
+ * Fetch every existing title once. Searching per block turned a 60-block
+ * catalog into 60 API round trips, which took minutes and hit rate limits.
+ */
+function existingTitles() {
   const res = tryGh([
     'issue',
     'list',
     ...repoArgs,
     '--state',
     'all',
-    '--search',
-    `${JSON.stringify(title)} in:title`,
     '--json',
     'title',
     '--limit',
-    '100',
+    '1000',
   ]);
-  if (!res.ok) return false;
+  if (!res.ok) {
+    console.error(`  ! could not list issues: ${res.err.trim()}`);
+    process.exit(1);
+  }
   try {
-    return JSON.parse(res.out).some((i) => i.title === title);
+    return new Set(JSON.parse(res.out).map((i) => i.title));
   } catch {
-    return false;
+    return new Set();
   }
 }
 
@@ -191,12 +196,14 @@ console.log(
 checkLabels(blocks);
 checkMilestones(blocks);
 
+const taken = existingTitles();
+
 const tmp = mkdtempSync(join(tmpdir(), 'issue-batch-'));
 let created = 0;
 let skipped = 0;
 
 for (const b of blocks) {
-  if (titleExists(b.title)) {
+  if (taken.has(b.title)) {
     console.log(`  skip   ${b.id}  (title already exists)`);
     skipped += 1;
     continue;
