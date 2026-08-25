@@ -221,7 +221,10 @@ for (const b of blocks) {
   writeFileSync(bodyFile, b.body);
 
   const args = ['issue', 'create', ...repoArgs, '--title', b.title, '--body-file', bodyFile];
-  for (const l of b.labels) args.push('--label', l);
+  // One comma-joined --label, not a repeated flag. gh accepts the repeated
+  // form and then silently creates the issue with no labels at all, which is
+  // how 60 issues were filed unlabelled before this was caught.
+  if (b.labels.length) args.push('--label', b.labels.join(','));
   if (b.milestone) args.push('--milestone', b.milestone);
 
   const res = tryGh(args);
@@ -229,8 +232,37 @@ for (const b of blocks) {
     console.error(`  FAIL   ${b.id}: ${res.err.trim()}`);
     continue;
   }
-  console.log(`  ok     ${b.id}  ${res.out.trim().split('\n').pop()}`);
+  const url = res.out.trim().split('\n').pop();
+  console.log(`  ok     ${b.id}  ${url}`);
+  filed.push({ id: b.id, number: Number(url.split('/').pop()), wanted: b.labels.length });
   created += 1;
 }
 
 console.log(`\n${APPLY ? `${created} created` : 'dry run'}, ${skipped} skipped.`);
+
+/**
+ * A create that reports success is not proof the labels stuck: gh exits 0 on a
+ * `--label` form it does not honour. Read them back rather than trusting it.
+ */
+if (APPLY && filed.length) {
+  const res = tryGh([
+    'issue',
+    'list',
+    ...repoArgs,
+    '--state',
+    'all',
+    '--json',
+    'number,labels',
+    '--limit',
+    '1000',
+  ]);
+  if (res.ok) {
+    const counts = new Map(JSON.parse(res.out).map((i) => [i.number, i.labels.length]));
+    const bare = filed.filter((f) => f.wanted > 0 && !counts.get(f.number));
+    if (bare.length) {
+      console.error(`\n! ${bare.length} issue(s) were created without their labels:`);
+      for (const f of bare) console.error(`    ${f.id}  #${f.number}`);
+      process.exitCode = 1;
+    }
+  }
+}
