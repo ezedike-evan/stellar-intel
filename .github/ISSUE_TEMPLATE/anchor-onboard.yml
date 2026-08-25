@@ -2,9 +2,9 @@ name: 🔌 Anchor onboarding
 description: Apply to list a Stellar anchor on Stellar Intel. Anchor operators and community integrators both use this.
 title: '[ANCHOR] Onboard <anchor name>'
 labels:
-  - anchor
-  - onboarding
-  - triage
+  - module/anchors
+  - epic/anchor-integration
+  - needs-triage
 body:
   - type: markdown
     attributes:
