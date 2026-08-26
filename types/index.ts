@@ -525,6 +525,13 @@ export interface HopChainExecutionResult {
   /** Results in the order attempted; stops at the first failure. */
   completed: HopExecutionResult[];
   failedAt?: string;
+  /**
+   * User-facing summary of what happened, present whenever `ok` is false
+   * (#1090). States what completed (with any reference the user needs),
+   * what failed and why, and what the user should do next — never a bare
+   * error code, since a mid-route failure can mean real money already moved.
+   */
+  message?: string;
 }
 
 /** One leg of a multi-anchor split — the tranche of the order routed to a single anchor. */
