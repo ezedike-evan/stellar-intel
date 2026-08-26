@@ -591,12 +591,12 @@ export async function solveWithFallback(
 
 // ─── Hop chain abstraction (Issue #815) ──────────────────────────────────────
 //
-// Primitive II: on-ramp → swap → yield in one signature.
+// Primitive II: on-ramp → swap → yield → off-ramp in one signature.
 // Each module type implements HopExecutor; solveChain validates asset continuity
 // and delegates planning to registered executors — no connector implementations
 // live here.
 
-export type HopKind = 'on-ramp' | 'swap' | 'yield';
+export type HopKind = 'on-ramp' | 'swap' | 'yield' | 'off-ramp';
 
 /** Minimal asset identifier used for hop-to-hop continuity checks. */
 export interface HopAssetRef {
