@@ -65,6 +65,14 @@ export interface SoroswapBuildResult {
   xdr: string;
 }
 
+/**
+ * Reads SOROSWAP_API_KEY, throwing SoroswapConfigError (naming the missing
+ * variable) when it's unset (#1086). Deliberately fails loudly rather than
+ * letting the swap hop silently skip itself: a silent skip would look
+ * identical to "no liquidity" to the router, hiding a deployment
+ * misconfiguration behind a routing failure instead of surfacing it. Called
+ * before any request is built, so a missing key never reaches `fetch`.
+ */
 function apiKey(): string {
   const key = process.env.SOROSWAP_API_KEY;
   if (!key) {
