@@ -278,15 +278,20 @@ jobs:
               '| --- | --- |',
               ...Object.entries(results).map(([job, r]) => `| \`${job}\` | ${r} |`),
               '',
+              // The health ledger is the anchor verdict; the block below it
+              // only says whether a home domain still serves a TOML naming a
+              // SEP-24 endpoint, which is why the two can disagree (#1015).
               'Health ledger verdict (this run):',
               '```',
               process.env.LEDGER_DIGEST || '(anchor-health-ledger did not report)',
               '```',
               '',
-              'Anchor summary (last run):',
+              'home-domain TOML resolution (this run):',
               '```',
               process.env.ANCHOR_SUMMARY || '(anchor-domains did not report)',
               '```',
+              '',
+              'The block above checks the home domain only: HTTP status and the presence of a `TRANSFER_SERVER_SEP0024` line. It does not resolve the endpoint that line points at, so `HTTP 200 | SEP-24: yes` is not a statement that the anchor is up — read the ledger for that.',
             ].join('\n');
 
             // One issue per day, not one per run. workflow_dispatch plus the

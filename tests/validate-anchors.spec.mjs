@@ -267,6 +267,11 @@ describe('nightly alert wiring (#1015)', () => {
       "process.env.LEDGER_DIGEST || '(anchor-health-ledger did not report)'"
     );
   });
+
+  it('labels the home-domain probe for what it measures', () => {
+    expect(workflow).toContain('home-domain TOML resolution');
+    expect(workflow).not.toContain('Anchor summary');
+  });
 });
 
 // The runtime selectors read the committed health ledger, so mock it to prove a
