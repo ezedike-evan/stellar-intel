@@ -1,7 +1,7 @@
 {
   "name": "@stellarintel/mcp",
   "version": "0.1.0",
-  "description": "Stellar Intel MCP server — stdio transport",
+  "description": "Stellar Intel MCP server — stdio and streamable HTTP transports",
   "license": "MIT",
   "repository": {
     "type": "git",

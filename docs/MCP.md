@@ -1,8 +1,11 @@
 # Stellar Intel — MCP Server
 
 The MCP server exposes Stellar Intel's off-ramp routing to MCP-capable agents
-over stdio. It lives in [`scripts/mcp`](../scripts/mcp) and reuses the same
-routing + canonical-hashing logic as the web app (`lib/mcp/offramp.ts`).
+over stdio or streamable HTTP. It lives in
+[`scripts/mcp`](../scripts/mcp) (in-repo dev server) and
+[`packages/mcp`](../packages/mcp) (the published `@stellarintel/mcp` package),
+and both reuse the same routing + canonical-hashing logic as the web app
+(`lib/mcp/offramp.ts`).
 
 **Scope:** Stellar Intel abstracts anchors, not chains. These tools answer
 "what's my best fiat exit price, and which Stellar anchor should I trust to
@@ -12,9 +15,28 @@ intents, an agent should reach for ROZO instead. See
 
 ## Running
 
+### stdio (default)
+
 ```bash
 npx tsx scripts/mcp/server.ts
+# or the published package
+npx @stellarintel/mcp
 ```
+
+### Streamable HTTP
+
+The same tool set is served over streamable HTTP behind a flag; stdio stays
+the default. From the published package:
+
+```bash
+npx @stellarintel/mcp --transport http [--host 127.0.0.1] [--port 3000]
+```
+
+This binds `http://<host>:<port>/mcp`; point an MCP client at that URL — no
+local install required. Sessions are managed per agent (each initialization
+gets its own session ID), so multiple hosted agents can use the server
+concurrently. The in-repo dev server at
+[`scripts/mcp/server.ts`](../scripts/mcp/server.ts) is stdio-only.
 
 The server applies safe mainnet defaults for the `NEXT_PUBLIC_*` config values,
 so an agent does not need the web app's `.env` to invoke it.
