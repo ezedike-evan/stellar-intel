@@ -1,6 +1,6 @@
 import type { McpServer } from '@modelcontextprotocol/sdk/server/mcp.js';
 import { z } from 'zod';
-import { getQuote, OfframpToolError } from '@/lib/mcp/offramp';
+import { getQuote, OfframpToolError, QuoteOutputSchema } from '@/lib/mcp/offramp';
 
 export const QUOTE_TOOL_NAME = 'intel.offramp.quote';
 
@@ -18,6 +18,7 @@ export function registerQuoteTool(server: McpServer): void {
       description:
         'Returns the live net-received quote for a corridor + amount (anchor, quoteId, netReceived, expiresAt).',
       inputSchema: inputShape,
+      outputSchema: QuoteOutputSchema,
     },
     async (args) => {
       try {
