@@ -96,6 +96,13 @@ jobs:
     permissions:
       contents: write
       pull-requests: write
+    # The verdict comes from the run that just probed, not from a checkout.
+    # open-issue-on-failure has no checkout step, and adding one would read
+    # main's constants/anchor-health.json — which is only as fresh as the last
+    # ledger PR to land. Through #989–#1013 those PRs were not landing, so a
+    # checkout-based read would have quoted a ten-night-old ledger (#1015).
+    outputs:
+      ledger: ${{ steps.probe.outputs.ledger }}
     steps:
       - uses: actions/checkout@v7
       - uses: actions/setup-node@v7
@@ -105,10 +112,13 @@ jobs:
       - run: npm ci
 
       - name: Probe every registered anchor and write the ledger
+        id: probe
         shell: bash
         run: |
           set -euo pipefail
-          node scripts/validate-anchors.mjs
+          # --github-output also appends a per-anchor digest of the ledger to
+          # $GITHUB_OUTPUT as `ledger`, read below through `needs`.
+          node scripts/validate-anchors.mjs --github-output
 
       # Opens a PR rather than pushing to main. A ruleset on main requires the
       # `closing-keywords` status check, and a direct push can never satisfy a
@@ -233,6 +243,7 @@ jobs:
       - uses: actions/github-script@v9
         env:
           ANCHOR_SUMMARY: ${{ needs.anchor-domains.outputs.summary }}
+          LEDGER_DIGEST: ${{ needs.anchor-health-ledger.outputs.ledger }}
           RESULT_ANCHOR_DOMAINS: ${{ needs.anchor-domains.result }}
           RESULT_INTEGRITY: ${{ needs.reputation-integrity.result }}
           RESULT_SNAPSHOT: ${{ needs.anchor-survey-snapshot.result }}
@@ -267,10 +278,20 @@ jobs:
               '| --- | --- |',
               ...Object.entries(results).map(([job, r]) => `| \`${job}\` | ${r} |`),
               '',
-              'Anchor summary (last run):',
+              // The health ledger is the anchor verdict; the block below it
+              // only says whether a home domain still serves a TOML naming a
+              // SEP-24 endpoint, which is why the two can disagree (#1015).
+              'Health ledger verdict (this run):',
+              '```',
+              process.env.LEDGER_DIGEST || '(anchor-health-ledger did not report)',
+              '```',
+              '',
+              'home-domain TOML resolution (this run):',
               '```',
               process.env.ANCHOR_SUMMARY || '(anchor-domains did not report)',
               '```',
+              '',
+              'The block above checks the home domain only: HTTP status and the presence of a `TRANSFER_SERVER_SEP0024` line. It does not resolve the endpoint that line points at, so `HTTP 200 | SEP-24: yes` is not a statement that the anchor is up — read the ledger for that.',
             ].join('\n');
 
             // One issue per day, not one per run. workflow_dispatch plus the

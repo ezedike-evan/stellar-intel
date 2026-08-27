@@ -5,7 +5,7 @@
 An [MCP](https://modelcontextprotocol.io) server for
 [Stellar Intel](https://github.com/ezedike-evan/stellar-intel), built on
 [`@modelcontextprotocol/sdk`](https://www.npmjs.com/package/@modelcontextprotocol/sdk)
-and served over stdio.
+and served over stdio (the default) or streamable HTTP.
 
 ## Status
 
@@ -50,14 +50,39 @@ npm install @stellarintel/mcp
 
 ## Usage
 
+The same binary runs over either transport; stdio is the default. Both
+transports expose the exact same tool set.
+
+### stdio (default)
+
 ```bash
 npm run build   # tsc -> dist/
-npm start       # node dist/index.js, stdio transport
+npm start       # node dist/packages/mcp/src/index.js, stdio transport
 npm run dev     # same, via ts-node, no build step
 ```
 
 Point any MCP-capable client (Claude Desktop, an agent framework, etc.) at
-the built `dist/index.js` as a stdio command.
+the built `dist/packages/mcp/src/index.js` as a stdio command.
+
+### Streamable HTTP
+
+```bash
+node dist/packages/mcp/src/index.js --transport http [--host 127.0.0.1] [--port 3000]
+```
+
+The server binds to `http://<host>:<port>/mcp` and any MCP client can reach it
+with just that URL (no local install needed):
+
+```jsonc
+{
+  "mcpServers": {
+    "stellar-intel": { "url": "http://127.0.0.1:3000/mcp" },
+  },
+}
+```
+
+Sessions are managed per agent (each initialization gets its own session ID),
+so multiple hosted agents can use the server concurrently.
 
 ## Documentation
 

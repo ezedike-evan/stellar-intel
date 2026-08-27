@@ -7,7 +7,7 @@ const MCP_ENV_DEFAULTS: Record<string, string> = {
   NEXT_PUBLIC_STELLAR_NETWORK: 'mainnet',
   NEXT_PUBLIC_HORIZON_URL: 'https://constellar.org',
   NEXT_PUBLIC_USDC_ISSUER: 'GA5ZSEJYB37JRC5AVCIA5MOP4RHTM335X2KGX3IOHJAPP5RE34K4KZVN',
-  NEXT_PUBLIC_APP_NAMEN; 'Stellar Intel',
+  NEXT_PUBLIC_APP_NAME: 'Stellar Intel',
 };
 
 for (const [key, value] of Object.entries(MCP_ENV_DEFAULTS)) {
@@ -22,6 +22,7 @@ export async function createServer(): Promise<McpServer> {
   const { registerPrepareTool } = await import('./tools/prepare.js');
   const { registerExecuteTool } = await import('./tools/execute.js');
   const { registerCorridorsTool } = await import('./tools/corridors.js');
+  const { registerAnchorReputationTool } = await import('./tools/anchor-reputation.js');
 
   const server = new McpServer({
     name: '@stellarintel/mcp',
@@ -31,5 +32,6 @@ export async function createServer(): Promise<McpServer> {
   registerPrepareTool(server);
   registerExecuteTool(server);
   registerCorridorsTool(server);
+  registerAnchorReputationTool(server);
   return server;
 }

@@ -1,5 +1,7 @@
 # Issuer-only anchors (excluded from corridors)
 
+**Last reviewed:** 2026-08-26
+
 Some domains in the [stellar.expert anchor directory](https://api.stellar.expert/explorer/public/directory?tag[]=anchor&limit=200)
 advertise a Stellar asset or issuer but publish **no transfer rails** — neither a
 SEP-6 `TRANSFER_SERVER` nor a SEP-24 `TRANSFER_SERVER_SEP0024` in their

@@ -1,5 +1,7 @@
 # Intent API
 
+**Last reviewed:** 2026-08-26
+
 The off-ramp intent is the core primitive of Stellar Intel. A user expresses
 _what_ they want — "withdraw this USDC to this corridor" — and MAY sign it with
 their Stellar key. When a signature is supplied the server verifies it over the

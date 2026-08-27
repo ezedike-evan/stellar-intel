@@ -1,5 +1,7 @@
 # Rate-Limit Coverage Audit
 
+**Last reviewed:** 2026-08-26
+
 Audit step for `#732`. `docs/ROADMAP.md` and `docs/THREAT_MODEL.md` note rate
 limiting as "partially present" — this document enumerates every route under
 `app/api/*`, records whether request-rate middleware is actually applied, and

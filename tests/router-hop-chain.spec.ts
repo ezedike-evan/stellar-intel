@@ -186,4 +186,53 @@ describe('solveChain — hop chain architecture (#815)', () => {
     expect(result.error).toBe('asset_mismatch');
     // narrowed for type safety — hopIndex access confirmed above
   });
+
+  it('solves a 2-hop swap -> off-ramp chain and aggregates fees', async () => {
+    const hops: Hop[] = [
+      { kind: 'swap', sellAsset: USDC, buyAsset: XLM, minReceive: '400' },
+      { kind: 'off-ramp', sellAsset: XLM, buyAsset: NGN, minReceive: '60000' },
+    ];
+    const executors: HopExecutor[] = [
+      makeExecutor('swap', 'soroswap', '420', '1'),
+      makeExecutor('off-ramp', 'cowrie-out', '63000', '10'),
+    ];
+
+    const result = await solveChain(hops, executors);
+
+    expect(result.ok).toBe(true);
+    if (!result.ok) return;
+
+    const plan = result.plan as ChainedPlan;
+    expect(plan.type).toBe('chained');
+    expect(plan.hops).toHaveLength(2);
+
+    expect(plan.hops[0]!.executorId).toBe('soroswap');
+    expect(plan.hops[0]!.estimatedOut).toBe('420');
+    expect(plan.hops[0]!.fee).toBe('1');
+
+    expect(plan.hops[1]!.executorId).toBe('cowrie-out');
+    expect(plan.hops[1]!.estimatedOut).toBe('63000');
+    expect(plan.hops[1]!.fee).toBe('10');
+
+    expect(plan.totalEstimatedOut).toBe('63000');
+    const totalFee = plan.hops.reduce((sum, h) => sum + Number(h.fee), 0);
+    expect(totalFee).toBe(11);
+  });
+
+  it('reports no_route_for_hop when the off-ramp executor rejects', async () => {
+    const hops: Hop[] = [
+      { kind: 'swap', sellAsset: USDC, buyAsset: XLM, minReceive: '400' },
+      { kind: 'off-ramp', sellAsset: XLM, buyAsset: NGN, minReceive: '60000' },
+    ];
+
+    const result = await solveChain(hops, [
+      makeExecutor('swap', 'soroswap', '420', '1'),
+      rejectingExecutor('off-ramp'),
+    ]);
+
+    expect(result.ok).toBe(false);
+    if (result.ok || result.error !== 'no_route_for_hop') return;
+    expect(result.hopIndex).toBe(1);
+    expect(result.details).toMatch(/off-ramp/);
+  });
 });

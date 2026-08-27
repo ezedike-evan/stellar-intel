@@ -1,5 +1,7 @@
 # Settlement SLA ($100-capped)
 
+**Last reviewed:** 2026-08-26
+
 Primitive III of the execution layer (ROADMAP.md line 101, issue #814): a
 settlement-guarantee product. For a **covered** off-ramp, Stellar Intel promises
 the withdrawal settles within a guaranteed deadline; if it doesn't, the user is

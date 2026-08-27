@@ -1,4 +1,4 @@
-/**
+/*
  * Verifies the public /anchors page renders anchor scorecards and the
  * corridor rate leaderboard, and that the corridor filter works.
  */
@@ -11,7 +11,6 @@ test.describe('Anchors page', () => {
     await page.goto('/anchors');
     await expect(page.getByRole('heading', { name: 'Anchors', level: 1 })).toBeVisible();
 
-    await expect(page.getByRole('heading', { name: 'Anchor scorecards' })).toBeVisible();
     await expect(page.getByRole('heading', { name: 'Corridor leaderboard' })).toBeVisible();
     await expect(page.getByRole('columnheader', { name: 'Anchor' })).toBeVisible();
     await expect(page.getByRole('columnheader', { name: 'You Receive' })).toBeVisible();

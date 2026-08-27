@@ -3,7 +3,7 @@ description: Something in the docs is wrong, missing, confusing, or out of date.
 title: '[DOCS] <doc file or section> — <short description>'
 labels:
   - docs
-  - triage
+  - needs-triage
 body:
   - type: markdown
     attributes:

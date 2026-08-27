@@ -4,6 +4,8 @@
 > Intel's regulatory posture for reviewers and contributors. Operators must obtain
 > their own counsel for their jurisdiction.
 
+**Last reviewed:** 2026-08-26
+
 ## Thesis: not money transmission
 
 Money-transmitter / MSB / VASP classification generally attaches to a party that

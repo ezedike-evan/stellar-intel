@@ -1,5 +1,7 @@
 # SEP-38 USDC→NGN Rate Verification
 
+**Last reviewed:** 2026-08-26
+
 **Related issue**: #720\
 **Milestone**: H1 Rung 1 — Data Infra + Grant
 

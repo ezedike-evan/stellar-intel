@@ -3,7 +3,7 @@ description: Something that is supposed to work does not. Prefer this over Discu
 title: '[BUG] [SCOPE] <short description>'
 labels:
   - bug
-  - triage
+  - needs-triage
 body:
   - type: markdown
     attributes:

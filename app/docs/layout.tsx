@@ -2,13 +2,26 @@
 import Link from 'next/link';
 import { usePathname } from 'next/navigation';
 import { clsx } from 'clsx';
-import { BookOpen, ChevronRight } from 'lucide-react';
+import { BookOpen, ChevronRight, Search } from 'lucide-react';
 import { DOCS_SECTIONS } from './nav';
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
+import { DocsSearch } from '@/components/docs/DocsSearch';
 
 export default function DocsLayout({ children }: { children: React.ReactNode }) {
   const pathname = usePathname();
   const [sidebarOpen, setSidebarOpen] = useState(false);
+  const [searchOpen, setSearchOpen] = useState(false);
+
+  useEffect(() => {
+    function onKeyDown(e: KeyboardEvent) {
+      if ((e.metaKey || e.ctrlKey) && e.key === 'k') {
+        e.preventDefault();
+        setSearchOpen(true);
+      }
+    }
+    document.addEventListener('keydown', onKeyDown);
+    return () => document.removeEventListener('keydown', onKeyDown);
+  }, []);
 
   return (
     <div className="flex min-h-[calc(100vh-4rem)]">
@@ -38,6 +51,17 @@ export default function DocsLayout({ children }: { children: React.ReactNode }) 
         )}
       >
         <nav className="space-y-6 p-4">
+          <button
+            type="button"
+            onClick={() => setSearchOpen(true)}
+            className="flex w-full items-center gap-2 rounded-lg border border-border bg-bg-subtle px-3 py-2 text-sm text-secondary-text transition-colors hover:border-accent/50 hover:text-primary-text"
+          >
+            <Search className="h-4 w-4 shrink-0" />
+            <span className="flex-1 text-left">Search docs...</span>
+            <kbd className="rounded border border-border px-1.5 py-0.5 text-xs">
+              {typeof navigator !== 'undefined' && /Mac/.test(navigator.platform) ? '⌘K' : 'Ctrl+K'}
+            </kbd>
+          </button>
           {DOCS_SECTIONS.map((section) => (
             <div key={section.title}>
               <h3 className="mb-2 px-3 text-xs font-semibold uppercase tracking-wider text-secondary-text">
@@ -76,6 +100,8 @@ export default function DocsLayout({ children }: { children: React.ReactNode }) 
       <main className="min-w-0 flex-1 px-4 py-8 md:px-8 lg:px-12">
         <div className="mx-auto max-w-3xl">{children}</div>
       </main>
+
+      <DocsSearch open={searchOpen} onClose={() => setSearchOpen(false)} />
     </div>
   );
 }

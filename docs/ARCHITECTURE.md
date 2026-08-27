@@ -9,6 +9,8 @@
 > today it is marked ✅; where it is planned it is marked 🛠️ and the
 > milestone wave is named.
 
+**Last reviewed:** 2026-08-26
+
 ---
 
 ## Table of contents

@@ -25,12 +25,56 @@ import type {
   HopAsset,
   HopChainExecutionResult,
   HopChainPlan,
-  HopChainPlanResult,
   HopContext,
+  HopChainPlanResult,
+  HopExecutionResult,
   HopStep,
 } from '@/types';
 
 const log = getLogger('router/hops');
+
+/**
+ * Builds the user-facing message for a hop chain execution failure (#1090):
+ * what completed (with a reference if the connector gave one, since real
+ * funds may have already moved), what failed and why — the connector's own
+ * error code and details, never collapsed to a generic string — and what
+ * the user should do next. `completed` must include the failed result as
+ * its last entry.
+ */
+function describeExecutionFailure(
+  hopById: Map<string, Hop>,
+  completed: HopExecutionResult[]
+): string {
+  const failed = completed[completed.length - 1];
+  if (!failed || failed.ok) {
+    // Defensive only: executeHopChain never calls this without a trailing failure.
+    return 'The route failed for an unspecified reason.';
+  }
+
+  const succeeded = completed
+    .slice(0, -1)
+    .filter((r): r is Extract<HopExecutionResult, { ok: true }> => r.ok);
+
+  const completedLines = succeeded.map((r) => {
+    const kind = hopById.get(r.hopId)?.type ?? 'step';
+    const ref = r.txRef ? ` (reference ${r.txRef})` : '';
+    return `The ${kind} step "${r.hopId}" already completed: it produced ${r.output.amount} ${r.output.asset}${ref}.`;
+  });
+
+  const failedKind = hopById.get(failed.hopId)?.type;
+  const failedLabel = failedKind
+    ? `The ${failedKind} step "${failed.hopId}"`
+    : `Step "${failed.hopId}"`;
+  const reason = failed.details ? `${failed.error} (${failed.details})` : failed.error;
+  const failedLine = `${failedLabel} failed: ${reason}.`;
+
+  const guidance =
+    succeeded.length === 0
+      ? 'Nothing in this route executed yet, so it is safe to retry the whole route.'
+      : 'The completed step(s) above already moved funds and were not reversed — do not repeat them. Retry only from the failed step, or contact support with the reference(s) above if the funds do not show up.';
+
+  return [...completedLines, failedLine, guidance].join(' ');
+}
 
 /**
  * Plans every hop in `hops`, in order, feeding each hop's planned output as
@@ -110,7 +154,12 @@ export async function executeHopChain(
         error: 'hop_not_registered',
         details: `No hop implementation registered for id "${step.hopId}"`,
       });
-      return { ok: false, completed, failedAt: step.hopId };
+      return {
+        ok: false,
+        completed,
+        failedAt: step.hopId,
+        message: describeExecutionFailure(hopById, completed),
+      };
     }
 
     const result = await hop.execute(step, context);
@@ -118,7 +167,12 @@ export async function executeHopChain(
 
     if (!result.ok) {
       log.info({ hopId: step.hopId, error: result.error }, 'hop chain execution stopped');
-      return { ok: false, completed, failedAt: step.hopId };
+      return {
+        ok: false,
+        completed,
+        failedAt: step.hopId,
+        message: describeExecutionFailure(hopById, completed),
+      };
     }
   }
 

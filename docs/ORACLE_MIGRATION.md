@@ -1,6 +1,6 @@
 # Oracle storage migration — v1 → v2
 
-**Last updated:** 2026-08-05
+**Last reviewed:** 2026-08-26
 
 The corridor aggregate changed shape. This is the runbook for executing that
 migration against a deployed contract, and the compatibility guarantee for

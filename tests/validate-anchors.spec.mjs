@@ -1,7 +1,10 @@
+import { readFileSync } from 'node:fs';
+import { join } from 'node:path';
 import { describe, it, expect, vi } from 'vitest';
 import {
   nextHealth,
   applyProbes,
+  formatLedgerDigest,
   parseAnchors,
   parseCurrencies,
   resolveExpectedIssuer,
@@ -194,6 +197,80 @@ describe('validate-anchors: asset-issuer validation (#489)', () => {
         { code: 'USDC', issuer: CANONICAL },
       ])
     ).toEqual({ status: 'unverifiable', advertisedIssuer: CANONICAL });
+  });
+});
+
+describe('validate-anchors: ledger digest for the nightly alert (#1015)', () => {
+  const ledger = {
+    thresholdNights: 3,
+    updatedAt: NOW,
+    anchors: {
+      moneygram: {
+        consecutiveFailures: 0,
+        degraded: false,
+        lastCheckedAt: NOW,
+        lastStatus: 'ok',
+        lastError: null,
+      },
+      mykobo: {
+        consecutiveFailures: 1,
+        degraded: false,
+        lastCheckedAt: NOW,
+        lastStatus: 'fail',
+        lastError: 'TypeError:ENOTFOUND',
+      },
+      zeam: {
+        consecutiveFailures: 3,
+        degraded: true,
+        lastCheckedAt: NOW,
+        lastStatus: 'fail',
+        lastError: 'HTTP 404',
+      },
+    },
+  };
+
+  it('states status, streak and degraded flag for every anchor', () => {
+    const lines = formatLedgerDigest(ledger).split('\n');
+
+    expect(lines[0]).toBe('moneygram | ok   | fails 0 | degraded no');
+    expect(lines[1]).toBe('mykobo    | fail | fails 1 | degraded no — TypeError:ENOTFOUND');
+    expect(lines[2]).toBe('zeam      | fail | fails 3 | degraded yes — HTTP 404');
+  });
+
+  it('counts the failing and degraded anchors against the threshold', () => {
+    const digest = formatLedgerDigest(ledger);
+
+    expect(digest).toContain('2 of 3 anchor(s) failing, 1 degraded (threshold 3 night(s)).');
+    // The bug this replaces: a down anchor rendering as something a reader
+    // scanning the alert could take for an all-clear.
+    expect(digest).not.toMatch(/mykobo\s+\|\s+ok/);
+  });
+
+  it('says so plainly when nothing was probed', () => {
+    expect(formatLedgerDigest({ thresholdNights: 3, anchors: {} })).toBe(
+      'ledger is empty — no anchors were probed'
+    );
+    expect(formatLedgerDigest(undefined)).toBe('ledger is empty — no anchors were probed');
+  });
+});
+
+describe('nightly alert wiring (#1015)', () => {
+  const workflow = readFileSync(join(process.cwd(), '.github/workflows/nightly.yml'), 'utf8');
+
+  it('carries the digest from the probing job into the alert body', () => {
+    expect(workflow).toContain('node scripts/validate-anchors.mjs --github-output');
+    expect(workflow).toContain('ledger: ${{ steps.probe.outputs.ledger }}');
+    expect(workflow).toContain('LEDGER_DIGEST: ${{ needs.anchor-health-ledger.outputs.ledger }}');
+    // A failure in the ledger job itself leaves the output empty, so the block
+    // needs the same fallback shape the TOML block already has.
+    expect(workflow).toContain(
+      "process.env.LEDGER_DIGEST || '(anchor-health-ledger did not report)'"
+    );
+  });
+
+  it('labels the home-domain probe for what it measures', () => {
+    expect(workflow).toContain('home-domain TOML resolution');
+    expect(workflow).not.toContain('Anchor summary');
   });
 });
 

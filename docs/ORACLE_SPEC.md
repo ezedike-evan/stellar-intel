@@ -1,5 +1,7 @@
 # Reputation Oracle — Soroban Contract Spec
 
+**Last reviewed:** 2026-08-26
+
 The reputation oracle is a Soroban smart contract that stores anchor outcomes
 on-chain so any consumer can read an anchor's track record without Stellar Intel's
 permission.

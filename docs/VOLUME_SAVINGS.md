@@ -7,6 +7,8 @@
 > Source of truth: [`contracts/reputation/src/volume_savings.rs`](../contracts/reputation/src/volume_savings.rs)
 > (`VolumeSavings` struct, `add_volume_savings` / `get_volume_savings` entrypoints).
 
+**Last reviewed:** 2026-08-26
+
 ---
 
 ## Methodology

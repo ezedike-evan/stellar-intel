@@ -6,6 +6,8 @@
 > [`docs/SDK.md`](SDK.md)). This document defines the maintainer structure so
 > the SDKs do not depend solely on the core team once they ship.
 
+**Last reviewed:** 2026-08-26
+
 ## Motivation
 
 A community-maintained SDK is more trustworthy and longer-lived than one gated

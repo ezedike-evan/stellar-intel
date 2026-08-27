@@ -1,6 +1,6 @@
 import type { McpServer } from '@modelcontextprotocol/sdk/server/mcp.js';
 import { z } from 'zod';
-import { executeIntent, OfframpToolError } from '@/lib/mcp/offramp';
+import { executeIntent, OfframpToolError, ExecuteOutputSchema } from '@/lib/mcp/offramp';
 
 export const EXECUTE_TOOL_NAME = 'intel.execute';
 
@@ -42,6 +42,7 @@ export function registerExecuteTool(server: McpServer): void {
         'Horizon. Stellar Intel never signs anything — the agent signs the intent hash and the ' +
         'transaction itself with its own wallet before calling this tool.',
       inputSchema: inputShape,
+      outputSchema: ExecuteOutputSchema,
     },
     async (args) => {
       try {

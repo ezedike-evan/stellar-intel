@@ -1,7 +1,31 @@
 import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest';
 import { NextRequest } from 'next/server';
+
+vi.mock('@/lib/stellar/server-rates', () => ({
+  fetchCorridorRates: vi.fn().mockImplementation(async (corridorId: string) => ({
+    corridorId,
+    rates: [
+      {
+        anchorId: 'moneygram',
+        anchorName: 'MoneyGram',
+        corridorId,
+        fee: 0,
+        feeType: 'flat',
+        exchangeRate: 1550,
+        totalReceived: 155000,
+        source: 'sep38',
+        updatedAt: new Date('2026-08-25T12:00:00.000Z'),
+      },
+    ],
+    pending: [],
+    bestRateId: 'moneygram',
+    errors: [],
+  })),
+}));
+
 import { POST } from '@/app/api/graphql/route';
 import { checkRateLimit, clearRateLimitStore } from '@/lib/api/rate-limit';
+import { clearRateCache } from '@/lib/api/rate-cache';
 
 // A valid Stellar public key (USDC issuer on mainnet) — mirrors tests/api-intent.spec.ts.
 const VALID_SENDER = 'GA5ZSEJYB37JRC5AVCIA5MOP4RHTM335X2KGX3IHOJAPP5RE34K4KZVN';
@@ -34,6 +58,7 @@ async function run<T>(
 
 beforeEach(() => {
   clearRateLimitStore();
+  clearRateCache();
   // Routing requires configured payment accounts (#941); GraphQL shares the
   // same intent core, so it needs the same configuration to route.
   vi.stubEnv(
@@ -93,12 +118,28 @@ describe('POST /api/graphql — health', () => {
 
 describe('POST /api/graphql — rates', () => {
   it('resolves a corridor rate comparison, mirroring GET /api/rates/[corridor]', async () => {
-    const result = await run<{ rates: { corridorId: string; rates: unknown[] } }>(
+    const { GET: restGet } = await import('@/app/api/rates/[corridor]/route');
+    const restRes = await restGet(
+      new NextRequest('http://localhost/api/rates/usdc-ngn?amount=100'),
+      { params: { corridor: 'usdc-ngn' } }
+    );
+    const restData = (await restRes.json()) as {
+      corridorId: string;
+      rates: Array<{ anchorId: string; source: string }>;
+    };
+
+    const result = await run<{
+      rates: { corridorId: string; rates: Array<{ anchorId: string; source: string }> };
+    }>(
       'query($c: ID!) { rates(corridor: $c, amount: "100") { corridorId rates { anchorId source } } }',
       { c: 'usdc-ngn' }
     );
     expect(result.errors).toBeUndefined();
     expect(result.data?.rates.corridorId).toBe('usdc-ngn');
+    expect(result.data?.rates.corridorId).toBe(restData.corridorId);
+    expect(result.data?.rates.rates).toEqual(
+      restData.rates.map((r) => ({ anchorId: r.anchorId, source: r.source }))
+    );
   });
 
   it('returns a BAD_USER_INPUT GraphQL error for an unknown corridor', async () => {

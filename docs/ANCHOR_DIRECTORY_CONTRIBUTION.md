@@ -1,5 +1,7 @@
 # Contributing to SDF's Anchor Directory
 
+**Last reviewed:** 2026-08-26
+
 Tracks issue [#796](https://github.com/ezedike-evan/stellar-intel/issues/796),
 part of epic #794. Goal: contribute our live anchor health data (uptime, TOML
 integrity, quote latency) back to SDF's public [Anchor

@@ -19,10 +19,15 @@
 //   node scripts/validate-anchors.mjs            # probe, update the ledger, print a summary
 //   node scripts/validate-anchors.mjs --dry-run  # probe + print, do not write the ledger
 //
+// Flags:
+//   --github-output   Also append a compact per-anchor digest of the ledger to
+//                     $GITHUB_OUTPUT as `ledger`, so a downstream job can quote
+//                     this run's verdict without re-reading the committed file.
+//
 // Env:
 //   ANCHOR_DEGRADE_THRESHOLD   Override the consecutive-failure threshold (default 3).
 
-import { readFile, writeFile } from 'node:fs/promises';
+import { appendFile, readFile, writeFile } from 'node:fs/promises';
 import { pathToFileURL } from 'node:url';
 
 export const DEFAULT_THRESHOLD = 3;
@@ -290,8 +295,40 @@ function statusLabel(health) {
   return health.lastStatus === 'ok' ? 'ok' : 'fail';
 }
 
+/**
+ * Render a ledger as a compact per-anchor digest for the nightly alert (#1015).
+ * One line per anchor carrying the three fields the alert was missing —
+ * `lastStatus`, `consecutiveFailures`, `degraded` — plus the error that caused a
+ * failure, then a count line. Anchors keep ledger order, which is registry order.
+ *
+ * @param {Partial<HealthLedger> | undefined} ledger
+ * @returns {string}
+ */
+export function formatLedgerDigest(ledger) {
+  const entries = Object.entries(ledger?.anchors ?? {});
+  if (entries.length === 0) return 'ledger is empty — no anchors were probed';
+
+  const idWidth = Math.max(...entries.map(([id]) => id.length));
+  const lines = entries.map(([id, health]) => {
+    const detail = health.lastError ? ` — ${health.lastError}` : '';
+    return (
+      `${id.padEnd(idWidth)} | ${String(health.lastStatus).padEnd(4)} | ` +
+      `fails ${health.consecutiveFailures} | degraded ${health.degraded ? 'yes' : 'no'}${detail}`
+    );
+  });
+
+  const failing = entries.filter(([, h]) => h.lastStatus !== 'ok').length;
+  const degraded = entries.filter(([, h]) => h.degraded).length;
+  lines.push(
+    `${failing} of ${entries.length} anchor(s) failing, ${degraded} degraded ` +
+      `(threshold ${ledger?.thresholdNights ?? DEFAULT_THRESHOLD} night(s)).`
+  );
+  return lines.join('\n');
+}
+
 async function main() {
   const dryRun = process.argv.includes('--dry-run');
+  const emitGithubOutput = process.argv.includes('--github-output');
   const source = await readFile(ANCHORS_SOURCE, 'utf8');
   const anchors = parseAnchors(source);
 
@@ -353,6 +390,18 @@ async function main() {
       `::warning::${mismatches.length} anchor(s) advertise a look-alike issuer: ${mismatches
         .map((m) => `${m.id} (${m.advertisedIssuer} != ${m.expectedIssuer})`)
         .join(', ')}`
+    );
+  }
+
+  // Publish this run's verdict as a step output. It is written before the
+  // --dry-run return: the digest describes the probe, not the write, and a
+  // caller that skips the write still wants to know what was found.
+  if (emitGithubOutput && process.env.GITHUB_OUTPUT) {
+    const digest = formatLedgerDigest(ledger);
+    await appendFile(
+      process.env.GITHUB_OUTPUT,
+      `ledger<<LEDGER_EOF\n${digest}\nLEDGER_EOF\n`,
+      'utf8'
     );
   }
 

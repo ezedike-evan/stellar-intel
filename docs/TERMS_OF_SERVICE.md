@@ -5,7 +5,7 @@
 > behaves. It must be reviewed by a qualified lawyer before it is presented to
 > users as binding terms. See [Review status](#review-status).
 
-**Last updated:** 2026-08-04
+**Last reviewed:** 2026-08-26
 
 ---
 

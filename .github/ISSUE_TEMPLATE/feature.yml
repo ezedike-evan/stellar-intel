@@ -3,7 +3,7 @@ description: Propose something new — a capability, a refactor, a test you wish
 title: '[FEAT] [SCOPE] <short description>'
 labels:
   - feature
-  - triage
+  - needs-triage
 body:
   - type: markdown
     attributes:

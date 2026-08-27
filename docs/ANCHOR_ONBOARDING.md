@@ -1,5 +1,7 @@
 # Anchor Onboarding
 
+**Last reviewed:** 2026-08-26
+
 Listing on Stellar Intel is **carrot, not stick**: we aggregate your quotes,
 publish your track record to a public reputation oracle, and never custody user
 funds. There is no listing fee and no exclusivity ask.

@@ -4,6 +4,8 @@
 > defines the event taxonomy, funnel configuration, dashboard setup, and
 > cost-conscious access model for the team.
 
+**Last reviewed:** 2026-08-26
+
 **Status:** Implemented (Plausible integration + funnel events) · Milestone v1.3
 
 ---

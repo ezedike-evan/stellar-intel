@@ -1,6 +1,6 @@
 # Production Audit
 
-**Last updated:** 2026-08-05
+**Last reviewed:** 2026-08-26
 
 A claim-by-claim audit of what this repository actually enforces, what it only
 documents, and what is not true yet. It follows the method

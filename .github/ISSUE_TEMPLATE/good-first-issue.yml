@@ -4,7 +4,7 @@ title: '[GOOD-FIRST-ISSUE] [SCOPE] <short task>'
 labels:
   - good-first-issue
   - help-wanted
-  - triage
+  - needs-triage
 body:
   - type: markdown
     attributes:

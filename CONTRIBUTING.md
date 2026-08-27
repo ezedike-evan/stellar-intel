@@ -95,6 +95,11 @@ refactor: extract anchor TOML resolution into lib/sep1.ts
 
 Types: `feat`, `fix`, `docs`, `refactor`, `test`, `chore`, `ci`.
 
+### Documentation
+
+- All documentation files in `docs/` must carry a `**Last reviewed:** YYYY-MM-DD` line near the top of the file (immediately after the main heading or header block).
+- Maintainers and contributors should update this date whenever making non-trivial documentation updates or re-verifying accuracy.
+
 ---
 
 ## Adding a New Anchor
@@ -205,6 +210,7 @@ npm run build --workspace=@stellarintel/publisher
 - [ ] `npm run emit-openapi` produces no diff, **or** the regenerated spec is committed
 - [ ] Rust: `cargo fmt --check`, `cargo clippy -- -D warnings`, `cargo test` pass for every crate touched
 - [ ] Python: `pytest` and `mypy` pass, and no generated file was hand-edited
+- [ ] Documentation files in `docs/` carry an updated `**Last reviewed:** YYYY-MM-DD` date
 - [ ] No `isMock`, `// MOCK`, or hardcoded rate values added
 - [ ] New anchor entries include a verified `stellar.toml` domain
 - [ ] Exactly one `Closes #N` keyword — reference other issues without one

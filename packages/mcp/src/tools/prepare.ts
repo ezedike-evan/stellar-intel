@@ -1,6 +1,6 @@
 import type { McpServer } from '@modelcontextprotocol/sdk/server/mcp.js';
 import { z } from 'zod';
-import { prepareIntent, OfframpToolError } from '@/lib/mcp/offramp';
+import { prepareIntent, OfframpToolError, PrepareOutputSchema } from '@/lib/mcp/offramp';
 
 export const PREPARE_TOOL_NAME = 'intel.offramp.prepare';
 
@@ -21,6 +21,7 @@ export function registerPrepareTool(server: McpServer): void {
       description:
         'Returns an unsigned intent envelope (intent + hash) and an unsigned Stellar transaction for agent signing.',
       inputSchema: inputShape,
+      outputSchema: PrepareOutputSchema,
     },
     async (args) => {
       try {

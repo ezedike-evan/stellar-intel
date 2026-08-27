@@ -7,7 +7,7 @@
 > cooperation. Execution is real, it is in the repository, and its quality is
 > set by anchors this project does not control.
 
-**Last updated:** 2026-08-05
+**Last reviewed:** 2026-08-26
 
 |                |                                                                                        |
 | -------------- | -------------------------------------------------------------------------------------- |
