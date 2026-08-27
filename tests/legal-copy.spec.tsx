@@ -90,3 +90,19 @@ describe('DisclaimerBanner (#742)', () => {
     expect(screen.getByRole('button', { name: /dismiss disclaimer/i })).toBeInTheDocument();
   });
 });
+
+describe('Prose pages render markdown with PROSE_CLASSES (#968)', () => {
+  it('renders /terms page with PROSE_CLASSES container', async () => {
+    const { default: TermsPage } = await import('@/app/terms/page');
+    const { container } = render(<TermsPage />);
+    expect(container.querySelector('main')).toBeInTheDocument();
+    expect(container.textContent).toContain('Terms of Service');
+  });
+
+  it('renders /methodology page with PROSE_CLASSES container', async () => {
+    const { default: MethodologyPage } = await import('@/app/methodology/page');
+    const { container } = render(<MethodologyPage />);
+    expect(container.querySelector('main')).toBeInTheDocument();
+    expect(container.textContent).toContain('Anchor Reputation');
+  });
+});
