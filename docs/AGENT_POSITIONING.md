@@ -1,5 +1,7 @@
 # Agent Positioning: Stellar Intel vs. ROZO
 
+**Last reviewed:** 2026-08-26
+
 Both surfaces are consumed by AI agents over MCP, and both touch
 cross-border money movement — but they abstract different problems. An
 agent (or the person wiring one up) choosing between them should be able

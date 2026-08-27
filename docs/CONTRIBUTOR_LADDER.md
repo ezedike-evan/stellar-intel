@@ -1,5 +1,7 @@
 # Contributor Ladder
 
+**Last reviewed:** 2026-08-26
+
 A clear path from first PR to maintainer. Roles are earned by sustained, quality
 contribution — not tenure.
 

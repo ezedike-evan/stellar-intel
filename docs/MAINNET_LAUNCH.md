@@ -1,5 +1,7 @@
 # Mainnet Oracle Launch Runbook
 
+**Last reviewed:** 2026-08-26
+
 The deploy procedure for the reputation oracle, plus the gates that must hold
 before it runs. Tooling and runbook only — **the decision to launch is not made
 here**, and is blocked on the 90-day probe window (#786) and the Soroban

@@ -1,5 +1,7 @@
 # Positioning
 
+**Last reviewed:** 2026-08-26
+
 Where this project sits relative to the things it is most often confused with.
 Each section states a claim and then says how to check it, because a positioning
 document that cannot be falsified is marketing.

@@ -5,6 +5,8 @@
 > — this document is the product-level view a grant reviewer, contributor, or
 > anchor partner reads to know **what ships next** and **in what order**.
 
+**Last reviewed:** 2026-08-26
+
 **Legend.** `[x]` shipped on `main` today · `[-]` in flight · `[ ]` planned.
 Ticket ranges point back to numbered issues in the
 [GitHub issue tracker](https://github.com/Ezedike-Evan/stellar-intel/issues) where the line-level scope lives.

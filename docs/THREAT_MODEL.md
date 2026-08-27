@@ -1,5 +1,7 @@
 # Threat Model
 
+**Last reviewed:** 2026-08-26
+
 Scope: the Stellar Intel web app, its API, the intent flow, the reputation store,
 and the Soroban oracle. Out of scope by construction: theft of user funds or keys —
 the system is [non-custodial](NON_CUSTODY.md) and never holds either.

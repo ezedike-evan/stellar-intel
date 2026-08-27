@@ -1,5 +1,7 @@
 # Stellar Intel — MCP Server
 
+**Last reviewed:** 2026-08-26
+
 The MCP server exposes Stellar Intel's off-ramp routing to MCP-capable agents
 over stdio. It lives in [`scripts/mcp`](../scripts/mcp) and reuses the same
 routing + canonical-hashing logic as the web app (`lib/mcp/offramp.ts`).

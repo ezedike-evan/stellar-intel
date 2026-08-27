@@ -1,6 +1,6 @@
 # Production Audit
 
-**Last updated:** 2026-08-05
+**Last reviewed:** 2026-08-26
 
 A claim-by-claim audit of what this repository actually enforces, what it only
 documents, and what is not true yet. It follows the method
@@ -239,3 +239,4 @@ place, with the same status vocabulary, to a reader who has not read all of them
 
 _See also: [`POSITIONING.md`](POSITIONING.md) for the claims this project
 retired, and [`PROPOSAL.md`](PROPOSAL.md) for what it is for._
+

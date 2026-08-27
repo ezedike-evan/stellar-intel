@@ -5,7 +5,7 @@
 > behaves. It must be reviewed by a qualified lawyer before it is presented to
 > users as binding terms. See [Review status](#review-status).
 
-**Last updated:** 2026-08-04
+**Last reviewed:** 2026-08-26
 
 ---
 
@@ -168,3 +168,4 @@ served.
 - [`docs/THREAT_MODEL.md`](THREAT_MODEL.md) — what is in and out of scope
 - [`docs/ANCHOR_REPUTATION.md`](ANCHOR_REPUTATION.md) — how scores are computed
 - [`docs/SEP_COMPLIANCE.md`](SEP_COMPLIANCE.md) — which anchors support firm quotes
+

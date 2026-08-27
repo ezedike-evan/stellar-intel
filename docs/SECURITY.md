@@ -1,5 +1,7 @@
 # Security Policy
 
+**Last reviewed:** 2026-08-26
+
 ## Reporting a vulnerability
 
 Please **do not** open a public issue for security vulnerabilities. Email the

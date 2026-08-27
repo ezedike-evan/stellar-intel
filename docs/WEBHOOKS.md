@@ -1,5 +1,7 @@
 # Webhooks
 
+**Last reviewed:** 2026-08-26
+
 Stellar Intel can push real-time event notifications to your HTTPS endpoint instead of requiring you to poll the API. Each delivery is HMAC-SHA256 signed so you can verify authenticity before acting on the payload.
 
 ## Event types

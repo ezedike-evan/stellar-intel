@@ -1,5 +1,7 @@
 # SEP Compliance Matrix
 
+**Last reviewed:** 2026-08-26
+
 Stellar Intel integrates with Stellar anchors that implement various Stellar Ecosystem Proposals (SEPs). SEP-6 enables programmatic deposit/withdraw — the anchor exposes a machine-readable API rather than hosting an iframe — allowing Stellar Intel to collect KYC fields natively and surface indicative rates for SEP-6-only anchors. Anchors that advertise SEP-6 but not SEP-24 receive an **Indicative** badge in the comparison UI, since their rates are derived from the SEP-6 `/info` fee schedule rather than a live quote.
 
 ## What Stellar Intel implements

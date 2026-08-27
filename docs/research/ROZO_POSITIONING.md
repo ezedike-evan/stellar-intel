@@ -1,5 +1,7 @@
 # ROZO — current positioning
 
+**Last reviewed:** 2026-08-26
+
 **Researched**: 2026-08-05 · **Issue**: #709 · **Feeds**: #710 (differentiation paragraph)
 
 Notes on what ROZO actually says it does today, so the differentiation paragraph

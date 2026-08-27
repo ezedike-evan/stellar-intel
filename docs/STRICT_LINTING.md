@@ -4,6 +4,8 @@
 > turn this on locally?", the answer is yes — CI will catch it eventually,
 > and fixing it at write-time is cheaper than fixing it at review-time.
 
+**Last reviewed:** 2026-08-26
+
 ## Philosophy
 
 **Defects are cheapest at the keystroke.** Every gate below catches a class

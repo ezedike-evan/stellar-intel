@@ -1,5 +1,7 @@
 # Wallet Pre-Authorization Standards for Recurring Intents
 
+**Last reviewed:** 2026-08-26
+
 **Status:** Research / recommendation  
 **Context:** Primitive IV — Recurring intents (epic [#807](https://github.com/ezedike-evan/stellar-intel/issues/807))  
 **Date:** 2026-07-28

@@ -1,5 +1,7 @@
 # Anchor Fleet Recheck
 
+**Last reviewed:** 2026-08-26
+
 Tracking ledger for directory-tagged Stellar anchor domains whose
 `stellar.toml` did **not** resolve during the fleet survey, plus the
 obligation to re-check them on a fixed cadence and the criteria that promote

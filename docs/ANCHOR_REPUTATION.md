@@ -1,5 +1,7 @@
 # Anchor Reputation
 
+**Last reviewed:** 2026-08-26
+
 Every quote, fill, failure, and settlement latency an anchor produces is recorded
 as an **outcome**. Outcomes aggregate into a public, user-verifiable score. The
 goal is carrot, not stick: an anchor earns a track record it can point to.

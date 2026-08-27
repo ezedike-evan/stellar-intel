@@ -1,5 +1,7 @@
 # Governance: Multisig Contract Administration
 
+**Last reviewed:** 2026-08-26
+
 This document covers how the Stellar Intel reputation contract transitions from
 a single-key admin to community-governed multisig, the ongoing signer-change
 process, and the emergency procedures that protect the protocol during that

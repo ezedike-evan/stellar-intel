@@ -1,6 +1,6 @@
 # Soroban Security Audit Bank — Application Materials
 
-**Last updated:** 2026-08-05
+**Last reviewed:** 2026-08-26
 **Submission status: not submitted.** This document assembles the materials; the
 submission itself is tracked separately in
 [#717](https://github.com/ezedike-evan/stellar-intel/issues/717).
@@ -253,3 +253,4 @@ defines the path to additional reviewers, and
 - [ ] Separate the operational admin from the upgrade admin (§3.2)
 - [ ] Update `.deployments/testnet.json`
 - [ ] Submit, and record the confirmation reference here (#717)
+

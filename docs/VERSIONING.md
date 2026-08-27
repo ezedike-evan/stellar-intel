@@ -5,6 +5,8 @@
 > whether a web app, an MCP agent, or a third-party integration — should read
 > this document once.
 
+**Last reviewed:** 2026-08-26
+
 ---
 
 ## Table of contents

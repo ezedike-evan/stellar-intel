@@ -7,6 +7,8 @@
 > ([`packages/mcp/`](../packages/mcp/), `@stellarintel/mcp`) is the agent-facing
 > surface that exists today.
 
+**Last reviewed:** 2026-08-26
+
 ## `stellar-intel-reputation` (Rust, on-chain)
 
 Unlike the other SDKs on this page, `stellar-intel-reputation` is not an HTTP

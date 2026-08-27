@@ -1,5 +1,7 @@
 # Cookbook
 
+**Last reviewed:** 2026-08-26
+
 End-to-end recipes against the live API. Base URL in examples:
 `https://stellar-intel.vercel.app` (swap for `http://localhost:3000` in dev).
 
