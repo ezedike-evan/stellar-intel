@@ -23,6 +23,7 @@ export async function createServer(): Promise<McpServer> {
   const { registerExecuteTool } = await import('./tools/execute.js');
   const { registerAnchorReputationTool } = await import('./tools/anchor-reputation.js');
   const { registerAnchorHealthTool } = await import('./tools/anchor-health.js');
+  const { registerPrompts } = await import('./prompts.js');
 
   const server = new McpServer({
     name: '@stellarintel/mcp',
@@ -33,5 +34,6 @@ export async function createServer(): Promise<McpServer> {
   registerExecuteTool(server);
   registerAnchorReputationTool(server);
   registerAnchorHealthTool(server);
+  registerPrompts(server);
   return server;
 }
