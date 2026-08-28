@@ -98,6 +98,9 @@ export interface OutcomeRow {
   settleSeconds: number | null;
   quotedRate: string;
   deliveredRate: string | null;
+  quotedAmount: string;
+  deliveredAmount: string | null;
+  savingsUsdc?: number;
 }
 
 export interface BatchResult {
@@ -125,7 +128,9 @@ export async function fetchPendingOutcomes(
        outcome,
        settle_seconds,
        quoted_rate,
-       delivered_rate
+       delivered_rate,
+       quoted_amount,
+       delivered_amount
      FROM outcome_log
      WHERE published_at IS NULL
        AND reconciled_at IS NOT NULL
@@ -142,6 +147,8 @@ export async function fetchPendingOutcomes(
     settleSeconds: r['settle_seconds'] != null ? Number(r['settle_seconds'] as string) : null,
     quotedRate: r['quoted_rate'] as string,
     deliveredRate: (r['delivered_rate'] as string | null) ?? null,
+    quotedAmount: r['quoted_amount'] as string,
+    deliveredAmount: (r['delivered_amount'] as string | null) ?? null,
   }));
 }
 
@@ -346,6 +353,13 @@ interface OracleSubmitClient {
     rate: bigint;
     decimals: number;
   }): AssembledTx;
+
+  add_volume_savings(args: {
+    publisher: string;
+    corridor: string;
+    volume_delta: bigint;
+    savings_delta: bigint;
+  }): AssembledTx;
 }
 
 /**
@@ -420,6 +434,24 @@ export async function submitToOracle(
       throw new Error(`submitToOracle: no transaction hash returned for ${row.intentHash}`);
     }
 
+    if (row.outcome === 'completed') {
+      const volumeDelta = BigInt(Math.round(Number(row.quotedAmount) * 1_000_000));
+      const savingsDelta = BigInt(Math.round((row.savingsUsdc ?? 0) * 1_000_000));
+
+      await withRetry(
+        async () => {
+          const assembled = await client.add_volume_savings({
+            publisher: publisherKeypair.publicKey(),
+            corridor: row.corridor,
+            volume_delta: volumeDelta,
+            savings_delta: savingsDelta,
+          });
+          return assembled.signAndSend();
+        },
+        { intentHash: row.intentHash, onAlert: config.onAlert, options: config.retry }
+      );
+    }
+
     await onRowSubmitted?.(row.intentHash, rowTxHash);
     txHash = rowTxHash;
   }
@@ -492,6 +524,56 @@ export async function publishCorridorRates(
   return published;
 }
 
+async function getCorridorMedianRate(
+  executor: QueryExecutor,
+  corridor: string
+): Promise<number | undefined> {
+  const { rows } = await executor(
+    `SELECT delivered_rate
+       FROM outcome_log
+      WHERE corridor = $1
+        AND delivered_rate IS NOT NULL
+      ORDER BY reconciled_at DESC
+      LIMIT 100`,
+    [corridor]
+  );
+  if (rows.length === 0) return undefined;
+  const rates = rows
+    .map((r) => Number(r['delivered_rate'] as string))
+    .filter((r) => !isNaN(r) && r > 0)
+    .sort((a, b) => a - b);
+  if (rates.length === 0) return undefined;
+  const mid = Math.floor(rates.length / 2);
+  return rates.length % 2 === 0 ? (rates[mid - 1]! + rates[mid]!) / 2 : rates[mid]!;
+}
+
+function calculateSavingsUsdc(row: OutcomeRow, medianRate?: number): number {
+  if (row.outcome !== 'completed' || !row.deliveredAmount || !row.quotedAmount) {
+    return 0;
+  }
+
+  const deliveredAmount = Number(row.deliveredAmount);
+  const quotedAmount = Number(row.quotedAmount);
+
+  // Try priority 1: Anchor's own indicative rate (quotedRate)
+  let baselineRate = Number(row.quotedRate);
+
+  // Try priority 2: Corridor median rate if baselineRate is unavailable
+  if (!baselineRate || baselineRate <= 0) {
+    baselineRate = medianRate ?? 0;
+  }
+
+  if (baselineRate <= 0) {
+    return 0; // Cannot determine baseline, savings = 0
+  }
+
+  // savings = baseline_cost_usdc - actual_cost_usdc
+  const baselineCost = deliveredAmount / baselineRate;
+  const savings = baselineCost - quotedAmount;
+
+  return Math.max(0, savings);
+}
+
 export async function runBatch(config: BatchConfig): Promise<BatchResult> {
   const rows = await fetchPendingOutcomes(config.executor, config.batchSize);
 
@@ -535,8 +617,20 @@ export async function runBatch(config: BatchConfig): Promise<BatchResult> {
     }
   }
 
+  // Calculate savings for each row in this batch
+  const rowsWithSavings: OutcomeRow[] = [];
+  for (const row of rows) {
+    if (row.outcome === 'completed') {
+      const medianRate = await getCorridorMedianRate(config.executor, row.corridor);
+      const savingsUsdc = calculateSavingsUsdc(row, medianRate);
+      rowsWithSavings.push({ ...row, savingsUsdc });
+    } else {
+      rowsWithSavings.push(row);
+    }
+  }
+
   let submitted = 0;
-  const txHash = await submitToOracle(rows, config, async (intentHash, rowTxHash) => {
+  const txHash = await submitToOracle(rowsWithSavings, config, async (intentHash, rowTxHash) => {
     await markPublished(config.executor, intentHash, rowTxHash);
     submitted += 1;
   });
