@@ -78,6 +78,7 @@ export const OPERATIONS = {
   submitOfframpIntent: 'POST /api/v1/intent/offramp',
   getAnchorHealth: 'GET /api/v1/anchors/{id}/health',
   getHealth: 'GET /api/v1/health',
+  getVolumeSavings: 'GET /api/v1/corridors/{corridor}/volume-savings',
 } as const;
 
 export type OperationName = keyof typeof OPERATIONS;
