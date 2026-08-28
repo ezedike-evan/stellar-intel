@@ -1,0 +1,3538 @@
+# Stellar Intel — full documentation
+
+> Neutral routing and reputation data for Stellar anchors: live off-ramp rates,
+> anchor reliability scores, and a non-custodial intent API.
+
+This file is generated from the Markdown sources under `docs/` in
+https://github.com/ezedike-evan/stellar-intel — do not edit it by hand. Each
+section below is one source file, reproduced verbatim and introduced by an
+HTML comment naming its path. Relative links inside a document are relative
+to `docs/`, so most of them resolve to another section of this file.
+
+Docs site: https://stellar-intel.vercel.app/docs
+OpenAPI spec: https://stellar-intel.vercel.app/openapi.json
+
+## Contents
+
+### Overview
+
+What Stellar Intel is, what it does not do, and how it is put together.
+
+- FAQ (docs/FAQ.md)
+- Non-Custody Manifesto (docs/NON_CUSTODY.md)
+- Stellar Intel — Architecture (docs/ARCHITECTURE.md)
+
+### API reference
+
+The HTTP and GraphQL surfaces, their version guarantees, and their wire formats.
+
+- Intent API (docs/INTENT_API.md)
+- GraphQL API (docs/GRAPHQL_API.md)
+- API Versioning & Deprecation Policy (docs/VERSIONING.md)
+- Canonical JSON (docs/CANONICAL_JSON.md)
+
+### Integration guides
+
+Worked examples, client libraries, the MCP server, and webhook delivery.
+
+- Cookbook (docs/COOKBOOK.md)
+- SDK (docs/SDK.md)
+- Stellar Intel — MCP Server (docs/MCP.md)
+- Webhooks (docs/WEBHOOKS.md)
+
+### Data and methodology
+
+How scores, rates, benchmarks, and on-chain published metrics are computed.
+
+- Anchor Reputation (docs/ANCHOR_REPUTATION.md)
+- Benchmarks (docs/BENCHMARKS.md)
+- Settlement SLA ($100-capped) (docs/SETTLEMENT_SLA.md)
+- Reputation Oracle — Soroban Contract Spec (docs/ORACLE_SPEC.md)
+- On-Chain Volume + Savings Oracle (docs/VOLUME_SAVINGS.md)
+- SEP Compliance Matrix (docs/SEP_COMPLIANCE.md)
+
+### Anchors
+
+How an anchor joins the registry and how the public directory is kept honest.
+
+- Anchor Onboarding (docs/ANCHOR_ONBOARDING.md)
+- Contributing to SDF's Anchor Directory (docs/ANCHOR_DIRECTORY_CONTRIBUTION.md)
+
+### Trust, security, and legal
+
+The security posture, the threat model, the regulatory basis, and the terms.
+
+- Security Policy (docs/SECURITY.md)
+- Threat Model (docs/THREAT_MODEL.md)
+- Jurisdictional Memo (docs/JURISDICTIONAL.md)
+- Governance: Multisig Contract Administration (docs/GOVERNANCE.md)
+- Terms of Service (docs/TERMS_OF_SERVICE.md)
+
+==============================================================================
+SECTION: OVERVIEW
+==============================================================================
+
+<!-- source: docs/FAQ.md -->
+
+# FAQ
+
+**Last reviewed:** 2026-08-26
+
+### Is this custodial? Do you hold my money?
+
+No. Stellar Intel never holds user funds, user keys, fiat, or KYC data. You sign
+every transaction in your own wallet; the anchor takes custody under SEP-24/SEP-6;
+Stellar enforces atomicity. See [`docs/NON_CUSTODY.md`](NON_CUSTODY.md).
+
+### What happens if an anchor fails or doesn't pay out?
+
+The anchor — not Stellar Intel — is the settlement party. We surface that risk
+**before** you choose: each anchor carries a reputation score built from real
+outcomes (fill rate, slippage, settle latency). A failing anchor ranks down and
+its failures are recorded. If an outcome is wrong, you can file a dispute, which
+resolves on signed, replayable evidence. See
+[`docs/ANCHOR_REPUTATION.md`](ANCHOR_REPUTATION.md).
+
+### How is this different from a block explorer or a single anchor's app?
+
+We compare **live rates across every integrated anchor** and rank by net landed
+value (rate − fees − slippage − historical fill-rate penalty), not headline rate —
+then let you execute in one click. Plus a public reputation oracle and an MCP agent
+surface. It's the execution layer, not just a price page.
+
+### Why did anchor X not show up in the comparison?
+
+Most often: the anchor doesn't serve that corridor, or it only exposes a SEP the
+rate engine doesn't yet quote. Historically SEP-6-only anchors (e.g. Cowrie) were
+dropped because the flow was SEP-24-only — SEP-6 support is being added (see
+[`docs/SEP_COMPLIANCE.md`](SEP_COMPLIANCE.md)). Failed anchors render as
+"unavailable" rather than disappearing silently.
+
+### Which corridors and anchors are supported?
+
+See the registry in [`constants/anchors.ts`](../constants/anchors.ts) and the live
+app. Coverage expands via [anchor onboarding](ANCHOR_ONBOARDING.md).
+
+### Can an AI agent off-ramp through this?
+
+Yes — an MCP server exposes pricing/comparison and a user-signed execute path. The
+agent cannot move funds on its own; every executing call must be signed by the
+user's wallet. See [`docs/MCP.md`](MCP.md).
+
+### Is there an SDK?
+
+A typed client (`@stellarintel/sdk`) is on the roadmap (v4). Today you can call the
+[HTTP API](INTENT_API.md) directly. See [`docs/SDK.md`](SDK.md).
+
+### How do I contribute?
+
+Read [`CONTRIBUTING.md`](../CONTRIBUTING.md), pick a
+[`good-first-issue`](https://github.com/Ezedike-Evan/stellar-intel/labels/good-first-issue),
+and open a PR. The [`docs/COOKBOOK.md`](COOKBOOK.md) has end-to-end recipes.
+
+<!-- source: docs/NON_CUSTODY.md -->
+
+# Non-Custody Manifesto
+
+**Last reviewed:** 2026-08-26
+
+Stellar Intel is **non-custodial by construction**. This is an architectural
+property, not a policy promise — the system has no code path that could take
+custody.
+
+## What Stellar Intel never holds
+
+- **User funds.** USDC never passes through our accounts. The user signs a Stellar
+  transaction in their own wallet (Freighter); the asset moves from the user
+  directly to the anchor.
+- **User keys.** We never see, request, or store a private key. Signing happens in
+  the wallet extension. Intents are signed client-side (Ed25519 via Freighter) and
+  we only ever receive the signed envelope (see [`docs/INTENT_API.md`](INTENT_API.md)).
+- **Fiat / settlement.** The anchor settles fiat to the beneficiary under its own
+  SEP-24 / SEP-6 flow. We are not in the settlement path.
+- **KYC data.** KYC is collected by the anchor (anchor-hosted SEP-24 interactive
+  flow, or the anchor's SEP-12 customer API). We do not store KYC fields.
+
+## How the boundary is enforced
+
+1. Every leg of an off-ramp is **signed by the user**.
+2. The **anchor takes custody** under the relevant SEP.
+3. **Stellar enforces atomicity** at the ledger level.
+
+There is no wallet we control in the value path, no held key, and no autonomous
+spend — including from the [MCP agent surface](MCP.md), where every executing call
+must be signed by the user's wallet.
+
+## What we do hold
+
+- Public, non-sensitive data: anchor outcomes (fill rate, slippage, settle latency)
+  and their public reputation scores.
+- Server-side config (`ADMIN_SECRET_KEY` for admin routes; see
+  [`docs/SECURITY.md`](SECURITY.md)).
+
+## Related
+
+- [`docs/SECURITY.md`](SECURITY.md) — disclosure + key handling.
+- [`docs/JURISDICTIONAL.md`](JURISDICTIONAL.md) — why this is not money transmission.
+
+<!-- source: docs/ARCHITECTURE.md -->
+
+# Stellar Intel — Architecture
+
+> How the pieces fit together. This document is the map a new contributor
+> reads before opening a PR, the reviewer consults before approving one, and
+> the grant committee reads to understand what is actually being built.
+>
+> Scope: the intent router, the reputation write path, the Soroban oracle,
+> the MCP/agent surface, and the SEP-10/24/38 flow. Where something ships
+> today it is marked ✅; where it is planned it is marked 🛠️ and the
+> milestone wave is named.
+
+**Last reviewed:** 2026-08-26
+
+---
+
+## Table of contents
+
+1. [System overview](#1-system-overview)
+2. [Component inventory & repo layout](#2-component-inventory--repo-layout)
+3. [The intent lifecycle](#3-the-intent-lifecycle)
+4. [SEP-10 / SEP-24 / SEP-38 — the anchor handshake](#4-sep-10--sep-24--sep-38--the-anchor-handshake)
+5. [Intent router internals](#5-intent-router-internals)
+6. [Reputation write path](#6-reputation-write-path)
+7. [Soroban oracle](#7-soroban-oracle)
+8. [MCP / agent surface](#8-mcp--agent-surface)
+9. [Trust boundaries & invariants](#9-trust-boundaries--invariants)
+10. [File map](#10-file-map)
+
+---
+
+## 1. System overview
+
+Stellar Intel is three planes sharing one vocabulary (the intent):
+
+- **Control plane** — the Next.js app (web UI + API routes) and the MCP server.
+  Both consume the same router and oracle primitives.
+- **Execution plane** — the anchors (MoneyGram, Cowrie, Anclap today) reached
+  over SEP-10/24/38, and the Stellar ledger itself for payment submission.
+- **Observation plane** — the Soroban reputation oracle on mainnet, fed by a
+  publisher worker; read permissionlessly by any third party.
+
+```mermaid
+flowchart LR
+  subgraph Clients
+    User["👤 User (browser + Freighter)"]
+    Agent["🤖 Agent (Claude / Cursor / custom)"]
+  end
+
+  subgraph Control["Control plane — Next.js on Vercel"]
+    UI["Web UI\n/app/offramp"]
+    MCP["MCP server\n@stellarintel/mcp 🛠️ v4"]
+    API["/api/* route handlers\nrates, quotes, intents, scores"]
+    Router["Intent router\nlib/router 🛠️ v1.2"]
+  end
+
+  subgraph Execution["Execution plane"]
+    Anchors["Anchors\n(MoneyGram, Cowrie, Anclap)"]
+    Horizon["Stellar Horizon\nmainnet"]
+  end
+
+  subgraph Observation["Observation plane"]
+    Publisher["Publisher worker\nlib/publisher 🛠️ v2"]
+    Oracle["Soroban oracle\ncontract 🛠️ v2"]
+    Consumers["3rd-party consumers\n(wallets, indexers, rivals)"]
+  end
+
+  User --> UI
+  Agent --> MCP
+  UI --> API
+  MCP --> API
+  API --> Router
+  Router -->|SEP-38 RFQ| Anchors
+  Router -->|reputation read| Oracle
+  UI -->|SEP-10 / SEP-24| Anchors
+  UI -->|signed payment| Horizon
+  Horizon --> Anchors
+  UI -->|outcome| Publisher
+  Publisher -->|signed tx| Oracle
+  Oracle --> Consumers
+```
+
+The user's wallet is the only thing that holds keys. The app holds none; the
+router holds none; the publisher holds one key, used only to submit reputation
+writes to Soroban — never to move user funds.
+
+---
+
+## 2. Component inventory & repo layout
+
+| Module                      | Role                                                                                        | Path                                   | Status                  |
+| --------------------------- | ------------------------------------------------------------------------------------------- | -------------------------------------- | ----------------------- |
+| **Offramp page**            | The end-user surface. Corridor select → rate table → execute drawer → status tracker.       | `app/offramp/page.tsx`                 | ✅                      |
+| **RateTable**               | Sortable list of live anchor quotes for the selected corridor.                              | `components/offramp/RateTable.tsx`     | ✅                      |
+| **ExecuteDrawer**           | 6-step SEP-10/24 off-ramp: `authenticating → initiating → kyc → building → signing → done`. | `components/offramp/ExecuteDrawer.tsx` | ✅                      |
+| **StatusTracker**           | Polls `/transaction?id=...` and renders the SEP-24 state machine.                           | `components/offramp/StatusTracker.tsx` | ✅                      |
+| **Anchor registry**         | Typed list of anchors + corridors + assets. Single source of truth.                         | `lib/stellar/anchors.ts`               | ✅                      |
+| **SEP-1 resolver**          | `stellar.toml` discovery, TRANSFER_SERVER_SEP0024 + WEB_AUTH_ENDPOINT extraction.           | `lib/stellar/sep1.ts`                  | ✅                      |
+| **SEP-10 client**           | Challenge fetch, Freighter sign, JWT exchange. Network asserted as mainnet.                 | `lib/stellar/sep10.ts`                 | ✅                      |
+| **SEP-24 client**           | `/fee`, `/transactions/withdraw/interactive`, `/transaction` wrappers. 10s timeout.         | `lib/stellar/sep24.ts`                 | ✅                      |
+| **Horizon helper**          | Build + sign + submit the user's withdrawal payment on the Stellar ledger.                  | `lib/stellar/horizon.ts`               | ✅                      |
+| **Freighter hook**          | Wallet connection state + account + network.                                                | `hooks/useFreighter.ts`                | ✅                      |
+| **Rates hook**              | SWR-powered parallel rate aggregation across all anchors on a corridor.                     | `hooks/useAnchorRates.ts`              | ✅                      |
+| **Status hook**             | SWR polling loop keyed by `[transferServer, transactionId, jwt]`.                           | `hooks/useWithdrawStatus.ts`           | ✅                      |
+| **SEP-38 client**           | Firm-quote RFQ against anchors; supersedes the `/fee` + stored-rate approach.               | `lib/stellar/sep38.ts`                 | ✅                      |
+| **Intent canonicalizer**    | Deterministic JSON → hash → sign.                                                           | `lib/intent/`                          | ✅                      |
+| **Intent router (solver)**  | Scores candidate anchors by net landed value; returns a single-anchor or split plan.        | `lib/router/`                          | ✅                      |
+| **Reputation store**        | Outcome storage + composite scoring (SQLite dev / Postgres prod).                           | `lib/reputation/`                      | ✅                      |
+| **Publisher worker**        | Signs outcome tuples and invokes the Soroban contract.                                      | `lib/publisher/`                       | 🛠️ v2                   |
+| **Soroban oracle contract** | On-chain reputation storage + read helpers.                                                 | `contracts/reputation/`                | ✅ testnet · 🛠️ mainnet |
+| **MCP server**              | Exposes router + oracle as MCP tools.                                                       | `packages/mcp/`                        | ✅ basic                |
+| **SDK**                     | Typed client for the API + MCP.                                                             | `packages/sdk/`                        | 🛠️ v4                   |
+
+> All module paths are namespaced — no runtime concern spans two modules in
+> opposite directions. `lib/stellar/*` has no dependencies on `lib/router/*`
+> or `lib/publisher/*`; `components/*` only imports from `lib/*` and `hooks/*`.
+
+---
+
+## 3. The intent lifecycle
+
+An **intent** is the user's signed, canonicalized statement of purpose. It is
+the atomic unit every other component is built around.
+
+```ts
+// types/intent.ts — planned shape
+interface Intent {
+  version: 1;
+  nonce: string; // 128-bit random, replay protection
+  account: string; // user's Stellar public key
+  corridor: `${string}-${string}`; // e.g. 'usdc-ngn'
+  sellAsset: { code: string; issuer: string };
+  sellAmount: string; // decimal string
+  buyAsset: { code: string }; // fiat, e.g. 'NGN'
+  minReceive: string; // floor on delivered amount
+  deliveryHint: DeliveryHint; // bank / mobile-money / cash pickup
+  deadline: string; // RFC3339
+  preferences?: {
+    allowSplit: boolean; // default: true
+    maxAnchors: number; // default: 2
+    preferAnchorIds?: string[]; // user whitelist
+  };
+}
+interface SignedIntent {
+  intent: Intent;
+  intentHash: string; // sha-256 over canonical JSON
+  signature: string; // ed25519 over intentHash, by account
+}
+```
+
+Canonicalization rules live in `docs/CANONICAL_JSON.md` (sorted keys, no
+trailing whitespace, fixed UTF-8 encoding, integer normalization). The hash is
+what everyone commits to: the user when they sign, the anchor when they
+honour a quote, the publisher when they write the outcome.
+
+### Lifecycle
+
+```mermaid
+sequenceDiagram
+  autonumber
+  actor U as User
+  participant UI as Web UI
+  participant R as Intent router
+  participant A as Anchor(s)
+  participant H as Horizon
+  participant P as Publisher
+  participant O as Soroban oracle
+
+  U->>UI: Pick corridor + amount
+  UI->>R: Build draft intent
+  R->>A: SEP-38 RFQ (parallel, all candidates)
+  A-->>R: Firm quotes { rate, expires, id }
+  R->>R: Score by net landed value, consult oracle
+  R-->>UI: Ranked plan (single anchor or split)
+  UI->>U: Present plan + ask to sign
+  U->>UI: Sign intent (Freighter, off-chain ed25519)
+  UI->>A: SEP-10 authenticate (per anchor in plan)
+  A-->>UI: JWT
+  UI->>A: SEP-24 /transactions/withdraw/interactive
+  A-->>UI: { id, interactive url }
+  UI->>U: KYC popup (anchor-hosted)
+  U->>A: Complete KYC
+  UI->>H: Build + sign + submit payment(s)
+  H-->>A: Payment received
+  A-->>UI: Status transitions (polled)
+  A->>U: Fiat lands off-chain
+  UI->>P: Outcome tuple { intent_hash, delivered, latency }
+  P->>O: publish_outcome(tuple, publisher_sig)
+  O-->>P: Event: OutcomeStored(intent_hash)
+```
+
+Steps 1–11 are implemented today (single-anchor path, without SEP-38 — see
+§ 4). Steps 12–16 land with the reputation wave (v2).
+
+---
+
+## 4. SEP-10 / SEP-24 / SEP-38 — the anchor handshake
+
+### 4.1 SEP-1 — discovery ✅
+
+`getTransferServer(domain)` and `getWebAuthEndpoint(domain)` fetch and cache
+the anchor's `stellar.toml`, pulling `TRANSFER_SERVER_SEP0024` and
+`WEB_AUTH_ENDPOINT`. Everything downstream is keyed off those two URLs.
+
+### 4.2 SEP-10 — authentication ✅
+
+```mermaid
+sequenceDiagram
+  autonumber
+  participant UI as Web UI
+  participant F as Freighter
+  participant A as Anchor
+
+  UI->>A: GET {WEB_AUTH_ENDPOINT}?account=G...
+  A-->>UI: { transaction (XDR), network_passphrase }
+  UI->>UI: Assert network_passphrase == Networks.PUBLIC
+  UI->>F: signTransaction(xdr, { networkPassphrase })
+  F-->>UI: Signed XDR
+  UI->>A: POST {WEB_AUTH_ENDPOINT} { transaction: signed }
+  A-->>UI: { token: JWT }
+  UI->>UI: Cache JWT (in-memory, tab-scoped, per anchor domain)
+```
+
+Implemented in `lib/stellar/sep10.ts`. Key invariants:
+
+- **Network pinning.** `fetchChallenge` throws if the anchor's
+  `network_passphrase` is not mainnet. This blocks a malicious anchor from
+  trying to phish a testnet-scoped signature into a mainnet replay.
+- **JWT is scoped.** The JWT is used only as the `Authorization: Bearer …`
+  header on that anchor's SEP-24 endpoints. It is never passed cross-anchor.
+- **Ephemeral.** No JWT is persisted to localStorage or IndexedDB.
+
+### 4.3 SEP-24 — interactive withdrawal ✅
+
+`ExecuteDrawer` walks six steps, each with an error state and a cancel path:
+
+| Step             | Substrate            | What happens                                                                                                    | Failure recovery                                                        |
+| ---------------- | -------------------- | --------------------------------------------------------------------------------------------------------------- | ----------------------------------------------------------------------- |
+| `authenticating` | SEP-10               | Fetch challenge, sign, exchange for JWT.                                                                        | Retry in-place; on rejection, return to idle.                           |
+| `initiating`     | SEP-24               | `POST /transactions/withdraw/interactive` with JWT.                                                             | Surface anchor error; retry with fresh JWT.                             |
+| `kyc`            | Anchor-hosted iframe | Open the returned URL in a popup. Anchor owns the KYC surface.                                                  | On popup close without success, poll `/transaction` for `pending_user`. |
+| `building`       | Horizon              | `buildWithdrawPayment` — construct the USDC payment to the anchor's receiving address at the quoted amount.     | Fee estimation retries; network reselect.                               |
+| `signing`        | Freighter            | User signs the payment XDR.                                                                                     | User-reject returns to idle; signature-required errors surface.         |
+| `done`           | —                    | Drawer closes; `onSuccess` hoists `{ transactionId, transferServer, jwt }` to the page; `StatusTracker` mounts. | Terminal.                                                               |
+
+**The `done` hoist is the fix for the tracker-never-mounts bug (#002).**
+Before `commit 45a82eb` the drawer completed the withdrawal but never told the
+page; after, the drawer closes on success and the tracker owns the viewport
+with a live `transactionId`.
+
+### 4.4 SEP-24 status machine ✅
+
+The polling loop in `hooks/useWithdrawStatus.ts` fans these SEP-24 values into
+five UI states (`types/index.ts:105–119` is the authoritative enum):
+
+```mermaid
+stateDiagram-v2
+  [*] --> incomplete
+  incomplete --> pending_user_transfer_start
+  pending_user_transfer_start --> pending_anchor
+  pending_anchor --> pending_external
+  pending_external --> pending_stellar
+  pending_stellar --> completed
+  pending_anchor --> refunded
+  pending_anchor --> error
+  pending_external --> refunded
+  pending_external --> error
+  completed --> [*]
+  refunded --> [*]
+  error --> [*]
+```
+
+Terminal states (`completed`, `refunded`, `error`) stop the SWR poll. Non-
+terminal states poll on a 5-second cadence with exponential backoff on
+consecutive failures (hardening lands with v1.1).
+
+### 4.5 SEP-38 — firm quote RFQ 🛠️ v1.1
+
+Today's rate aggregation uses SEP-24 `/fee` + a cached exchange rate, which is
+correct enough for comparison but not firm. v1.1 replaces this with SEP-38:
+
+```
+POST /sep38/quote
+{ sell_asset, sell_amount, buy_asset, context: "sep24" }
+→ { id, price, expires_at, total_price, fee }
+```
+
+The returned `id` is then passed as `quote_id` to `POST /transactions/withdraw/interactive`
+so the anchor is contractually bound to the price. This is the moment the
+product moves from "useful rate page" to "firm execution layer" — and it is
+also what makes every future reputation write comparable (we have a stated
+quote to compare the delivered amount against).
+
+---
+
+## 5. Intent router internals 🛠️ v1.2
+
+The router takes a draft intent and returns a **plan**: one or more anchors,
+each with a quoted amount, ranked so that the top result maximizes expected
+net landed value.
+
+### Scoring
+
+For each candidate anchor `a` on the intent's corridor, and each amount chunk
+`n` the router considers:
+
+```
+score(a, n) = grossRate(a, n)            // SEP-38 firm rate
+            − feeFrac(a, n)              // anchor fee as fraction of sell
+            − slippagePenalty(a, n)      // historical quote → delivered delta
+            − failurePenalty(a)          // 1 − fillRate(a)
+            × settlementDiscount(a)      // 1 / (1 + latency_hours × λ)
+```
+
+The `slippagePenalty`, `failurePenalty`, and `settlementDiscount` inputs are
+all read from the reputation oracle — **not** from the anchor's self-report.
+That inversion is the whole point: the anchor cannot score itself.
+
+### Splitting
+
+For intents above a threshold (configurable per corridor, default $5,000 USDC),
+the router considers splitting across up to `maxAnchors` anchors. Split is
+**only** proposed when:
+
+1. At least two anchors have quoted the corridor in the last 30 seconds.
+2. The sum of their chunks' `score` is strictly greater than the best single
+   anchor's score, net of the fixed-fee cost of the second leg.
+3. Both anchors have a `fillRate` above a floor (default 0.9).
+
+If any of the three fails, the router returns a single-anchor plan. We never
+propose a split to look sophisticated — splits exist when they are strictly
+better.
+
+### Determinism
+
+The router is deterministic given the same inputs and the same oracle snapshot
+root. A plan is replayable from its inputs, which matters for dispute
+resolution.
+
+---
+
+## 6. Reputation write path 🛠️ v2
+
+Every terminal intent (completed, refunded, or error) produces an **outcome
+tuple** the publisher writes to the Soroban oracle.
+
+```mermaid
+sequenceDiagram
+  autonumber
+  participant UI as Web UI
+  participant API as /api/outcomes
+  participant Q as Outcome queue
+  participant P as Publisher worker
+  participant O as Soroban oracle
+
+  UI->>API: POST outcome { intent_hash, anchor_id, delivered_rate, delivered_amount, settle_seconds, outcome, stellar_tx }
+  API->>API: Verify user-signed intent_hash exists; verify stellar_tx on-chain
+  API->>Q: Enqueue
+  Q->>P: Lease next outcome
+  P->>P: Canonicalize tuple; sign with publisher key
+  P->>O: invoke publish_outcome(tuple, sig)
+  O-->>P: Emits OutcomeStored(intent_hash, anchor_id, corridor)
+  P->>Q: Ack (on OutcomeStored receipt)
+  alt Transient error
+    P->>Q: Nack with backoff
+  else Fatal error (verified forgery)
+    P->>Q: Dead-letter + Sentry alert
+  end
+```
+
+### Properties
+
+- **User-witnessed, not anchor-claimed.** The outcome's `delivered_amount`
+  comes from the SEP-24 `/transaction` response _and_ (where possible) a
+  ledger lookup of the `stellar_transaction_id`. The user's wallet signs the
+  trigger. An anchor cannot inflate its own delivery numbers.
+- **Publisher cannot invent.** The publisher key signs transport, not
+  content. The on-chain contract verifies that the `intent_hash` references a
+  known intent and that the `stellar_tx` exists on the public ledger.
+- **At-least-once delivery.** The queue is durable; Soroban writes are
+  idempotent keyed on `intent_hash`. A duplicate write returns the stored
+  event, not a new one.
+- **Dead-letter on dispute.** If the anchor disputes an outcome inside the
+  dispute window, it is routed to human review; the write proceeds with a
+  `disputed: true` flag.
+
+---
+
+## 7. Soroban reputation oracle ✅ testnet · 🛠️ mainnet
+
+The oracle is a single Soroban contract (`contracts/reputation/`) with a small,
+admin-gated surface. It is **implemented and unit-tested on testnet**
+(`contracts/reputation/tests/basic.rs`); mainnet deployment and 2-of-3 multisig
+admin are v2 gates. The authoritative interface is
+[`docs/ORACLE_SPEC.md`](ORACLE_SPEC.md); the storage/interface below are the
+target design.
+
+### Storage
+
+```mermaid
+erDiagram
+  OUTCOME {
+    BytesN32 intent_hash PK
+    String anchor_id
+    String corridor
+    U128 quoted_rate
+    U128 delivered_rate
+    U128 quoted_amount
+    U128 delivered_amount
+    U64 settle_seconds
+    Symbol outcome "completed|refunded|error"
+    U64 timestamp
+    Bool disputed
+    BytesN64 publisher_sig
+  }
+  AGGREGATE {
+    String anchor_corridor PK "anchor_id:corridor"
+    U64 n_outcomes
+    U128 sum_delivered_minus_quoted
+    U128 sum_fill_count
+    U64 last_updated
+  }
+  PUBLISHER {
+    Address key PK
+    Bool enabled
+    U64 registered_at
+  }
+
+  OUTCOME ||--o{ AGGREGATE : "reduces into"
+  PUBLISHER ||--o{ OUTCOME : "signs"
+```
+
+### Interface
+
+```rust
+// contracts/reputation/src/lib.rs — implemented surface (see docs/ORACLE_SPEC.md)
+impl ReputationContract {
+    pub fn submit_outcome(/* … outcome fields … */) -> Result<(), Error>; // publisher-gated
+}
+// src/anchors.rs
+pub fn list(env: &Env) -> Vec<String>;
+pub fn register(env: &Env, anchor_id: String) -> Result<(), Error>;       // admin
+// src/admin.rs
+pub fn set_admin(env: &Env, admin: &Address) -> Result<(), Error>;
+pub fn get_admin(env: &Env) -> Option<Address>;
+// Planned (v2): read_aggregate, dispute, 2-of-3 multisig add/remove_publisher.
+```
+
+### Upgrade policy
+
+- **Admin** — a 2-of-3 multisig held by the maintainer and two community
+  signers (onboarded pre-v2 release). The admin can enable/disable publishers;
+  it cannot rewrite outcomes.
+- **Upgradability** — the contract is upgradable via a Soroban
+  `UpdateCurrentContract` operation, gated by the admin multisig, with a
+  mandatory 7-day on-chain time-lock on every upgrade proposal.
+- **Publisher whitelist** — starts at one (Stellar Intel's publisher). Over
+  time, third-party publishers onboard; governance lives in
+  `docs/ORACLE_SPEC.md`.
+
+### Consumer ergonomics
+
+Two client libraries ship alongside the contract:
+
+- [`crates/stellar-intel-reputation/`](../crates/stellar-intel-reputation/) —
+  Rust consumer for other Soroban contracts (`read_aggregate`/`corridor_score`/
+  `corridor_aggregate` helpers, typed structs). Publish-ready (`publish = true`,
+  full crates.io metadata); the actual `cargo publish` awaits a maintainer
+  adding a `CARGO_REGISTRY_TOKEN` secret (`.github/workflows/publish-rust-sdk.yml`).
+- `packages/sdk/oracle.ts` — TypeScript consumer for off-chain readers
+  (wallets, rival aggregators, dashboards). _(planned)_
+
+---
+
+## 8. MCP / agent surface 🛠️ v4
+
+The MCP server (`packages/mcp/`) is a thin adapter: its tools are 1:1 with the
+HTTP API, typed with the same schemas. An agent can discover, quote, execute,
+and read reputation — with zero held keys.
+
+### Tools
+
+| Tool                        | Input                                       | Output                 | Authority                                                   |
+| --------------------------- | ------------------------------------------- | ---------------------- | ----------------------------------------------------------- |
+| `list_corridors`            | —                                           | `Corridor[]`           | Read-only.                                                  |
+| `list_anchors_for_corridor` | `{ corridorId }`                            | `Anchor[]`             | Read-only.                                                  |
+| `quote_corridor`            | `{ corridorId, sellAmount, deliveryHint? }` | `Plan`                 | Read-only; RFQs live anchors.                               |
+| `build_intent`              | `{ plan, deadlineSeconds, preferences? }`   | `Intent` (unsigned)    | Read-only.                                                  |
+| `submit_signed_intent`      | `{ intent, signature }`                     | `{ transactionIds[] }` | Executes — requires user signature from the calling wallet. |
+| `read_reputation`           | `{ anchorId, corridorId }`                  | `Aggregate`            | Read-only.                                                  |
+| `read_outcome`              | `{ intentHash }`                            | `Outcome \| null`      | Read-only.                                                  |
+| `watch_transaction`         | `{ transactionId, transferServer, jwt }`    | Event stream           | Read-only.                                                  |
+
+### Agent-safety invariants
+
+1. **No signing in the MCP.** `submit_signed_intent` _requires_ a signature
+   produced by the end-user's wallet. The server never holds a key capable of
+   moving funds.
+2. **Scoped JWTs.** The MCP never caches an anchor JWT longer than a single
+   intent's lifetime.
+3. **Auditable.** Every `submit_signed_intent` call logs `intent_hash +
+signature + caller` to an append-only local log for the user to review.
+4. **Rate-limited.** Per-caller and per-account quote caps prevent an agent
+   from hammering anchors during a runaway loop.
+
+Install: `claude mcp add stellar-intel npx -y @stellarintel/mcp@latest`.
+See `docs/MCP.md` for the end-to-end tutorial and three worked examples.
+
+---
+
+## 9. Trust boundaries & invariants
+
+A reviewer should leave this document certain of the following seven
+invariants. If any is broken by a PR, the PR is wrong.
+
+1. **We never hold user keys.** Signing happens in Freighter (web) or the
+   caller's wallet (agent). No key material is ever transmitted to our
+   servers.
+2. **We never hold user funds.** Payment flows directly from the user's
+   Stellar account to the anchor's receiving address. No Stellar Intel
+   account sits between them.
+3. **We never touch fiat.** Fiat settlement is between the anchor and the
+   user's bank / mobile-money provider. Stellar Intel has no banking rail.
+4. **Network is pinned.** Every SEP-10 challenge must be mainnet-scoped or it
+   is rejected at parse time.
+5. **Outcomes are user-witnessed.** Every reputation write references a
+   user-signed `intent_hash` and an on-ledger `stellar_transaction_id`. An
+   anchor cannot backfill its own reputation.
+6. **The publisher cannot invent.** The publisher signs transport, not
+   content. The contract verifies shape and on-ledger existence.
+7. **Data is permissionless to read.** The oracle has no read-access
+   control. Aggregates are free for anyone to consume.
+
+Threats against these invariants — anchor failure, replay, MITM, publisher
+key compromise, agent misuse — are enumerated in `docs/THREAT_MODEL.md`.
+
+---
+
+## 10. File map
+
+```
+stellar-intel/
+├── app/
+│   ├── offramp/page.tsx           # ✅ end-user surface
+│   ├── layout.tsx
+│   └── page.tsx
+├── components/offramp/
+│   ├── RateTable.tsx              # ✅ live quote table
+│   ├── ExecuteDrawer.tsx          # ✅ 6-step SEP-10/24 flow
+│   ├── StatusTracker.tsx          # ✅ SEP-24 state machine UI
+│   ├── CountrySelector.tsx        # ✅
+│   └── CurrencySelector.tsx       # ✅
+├── hooks/
+│   ├── useAnchorRates.ts          # ✅ SWR rate aggregation
+│   ├── useFreighter.ts            # ✅ wallet connection
+│   ├── useWithdrawStatus.ts       # ✅ SEP-24 polling
+│   └── useTheme.ts                # ✅
+├── lib/
+│   ├── config.ts                  # ✅ env-guarded config
+│   ├── analytics.ts               # ✅ funnel event tracking + PII redaction
+│   ├── utils.ts                   # ✅ computeTotalReceived, format helpers
+│   └── stellar/
+│       ├── anchors.ts             # ✅ registry (MoneyGram, Cowrie, Anclap)
+│       ├── sep1.ts                # ✅ stellar.toml resolver
+│       ├── sep10.ts               # ✅ challenge → sign → JWT
+│       ├── sep24.ts               # ✅ /fee, /interactive, /transaction
+│       ├── sep38.ts               # ✅ firm-quote RFQ (SEP-38)
+│       ├── sep6.ts                # 🛠️ programmatic withdraw (SEP-6) — in progress
+│       └── horizon.ts             # ✅ build + submit payment
+├── lib/intent/                    # ✅ schema, hash/canonicalize, sign, replay
+├── lib/router/                    # ✅ solver (solve.ts)
+├── lib/reputation/                # ✅ store (SQLite/Postgres), composite, bands, disputes
+├── lib/publisher/                 # 🛠️ v2 outcome publisher
+├── contracts/reputation/          # ✅ testnet · 🛠️ mainnet — Soroban reputation oracle
+├── packages/
+│   ├── mcp/                       # ✅ basic MCP server (@stellarintel/mcp)
+│   └── sdk/                       # 🛠️ v4 typed client
+├── types/index.ts                 # ✅ Anchor, Corridor, AnchorRate, WithdrawStatus, …
+├── tests/                         # ✅ vitest — anchors, SEP-1, SEP-10, status
+├── docs/
+│   ├── PROPOSAL.md                # project thesis
+│   ├── PRODUCTION_AUDIT.md        # what is enforced vs only documented
+│   ├── ARCHITECTURE.md            # this document
+│   ├── ROADMAP.md                 # wave-by-wave scope
+│   ├── INTENT_API.md              # intent schema + signing
+│   ├── ORACLE_SPEC.md             # Soroban interface
+│   ├── MCP.md                     # agent surface
+│   ├── ANCHOR_REPUTATION.md       # scoring methodology
+│   ├── CANONICAL_JSON.md          # hash canonicalization
+│   ├── THREAT_MODEL.md            # adversaries + mitigations
+│   ├── NON_CUSTODY.md             # custody manifesto
+│   ├── JURISDICTIONAL.md          # money-transmission memo
+│   ├── SECURITY.md                # disclosure policy
+│   └── ANALYTICS.md               # funnel dashboard + event taxonomy
+└── .github/workflows/             # ✅ ci, codeql, lighthouse, data-health, …
+```
+
+Paths marked ✅ are present on `main` today; paths marked 🛠️ land with the
+wave noted. Anything else is a documentation gap — open an issue with the
+`docs` label.
+
+---
+
+_See also: [`docs/PROPOSAL.md`](PROPOSAL.md) for the thesis,
+[`docs/ROADMAP.md`](ROADMAP.md) for the wave plan, and
+[`docs/THREAT_MODEL.md`](THREAT_MODEL.md) for adversarial analysis._
+
+==============================================================================
+SECTION: API REFERENCE
+==============================================================================
+
+<!-- source: docs/INTENT_API.md -->
+
+# Intent API
+
+**Last reviewed:** 2026-08-26
+
+The off-ramp intent is the core primitive of Stellar Intel. A user expresses
+_what_ they want — "withdraw this USDC to this corridor" — and MAY sign it with
+their Stellar key. When a signature is supplied the server verifies it over the
+canonical payload before routing; unsigned intents are still accepted (the
+signature is an optional attestation, not a gate). The user never hands over a
+key; they sign a canonical payload.
+
+Source of truth: [`types/intent.ts`](../types/intent.ts),
+[`lib/intent/`](../lib/intent/), and the route
+[`app/api/intent/offramp/route.ts`](../app/api/intent/offramp/route.ts).
+
+## Payload — `OfframpIntent`
+
+The inner object describing one off-ramp operation
+(`OfframpIntentSchema` in `types/intent.ts`):
+
+| Field        | Type   | Rule                                              |
+| ------------ | ------ | ------------------------------------------------- |
+| `anchorId`   | string | Non-empty; an id from `constants/anchors.ts`.     |
+| `corridorId` | string | Non-empty; a corridor id (e.g. `usdc-ngn`).       |
+| `amount`     | string | Positive decimal, ≤ 7 dp (`/^\d+(\.\d{1,7})?$/`). |
+| `publicKey`  | string | Stellar public key (`G…`, 56 chars).              |
+
+## Signed envelope — `SignedIntentEnvelope`
+
+The wire format the server accepts (`SignedIntentEnvelopeSchema`). Construction:
+
+1. **Canonicalize** the `intent` — keys sorted recursively, then `JSON.stringify`
+   (see [`docs/CANONICAL_JSON.md`](CANONICAL_JSON.md) and `lib/intent/`).
+2. **Hash** the canonical bytes — SHA-256 → `hash` (lowercase hex, 64 chars).
+3. **Sign** the canonical JSON bytes — Ed25519 via Freighter → `signature` (base64).
+4. Include the matching Stellar `publicKey` returned by Freighter.
+
+```jsonc
+{
+  "intent": {
+    "anchorId": "cowrie",
+    "corridorId": "usdc-ngn",
+    "amount": "100",
+    "publicKey": "GAB…",
+  },
+  "hash": "<64-char lowercase hex sha-256 of canonical intent>",
+  "signature": "<base64 ed25519 signature>",
+  "publicKey": "GAB…",
+}
+```
+
+When a `signature` + `publicKey` are supplied, the server recomputes the
+canonical hash and verifies the Ed25519 signature (`lib/intent/verify.ts`,
+`verifyOptionalIntentAttestation`) before routing — a forged or tampered signed
+intent is rejected at the boundary (401). Supplying only one of the two is a 400.
+Omitting both is allowed and routes the intent unattested.
+
+## Replay protection
+
+`lib/intent/replay.ts` (`registerIntentReplay`) implements nonce + deadline
+replay protection and is available for callers that maintain a nonce. It is
+**not yet wired into `POST /api/intent/offramp`** — the off-ramp path is instead
+idempotent by construction (`quoteId = sha256(canonical intent)`, honoured by
+`Idempotency-Key`). Wiring replay into the signed path is tracked as follow-up
+work; until then, do not rely on the endpoint to reject a re-submitted envelope.
+
+## Endpoint
+
+```http
+POST /api/intent/offramp
+Content-Type: application/json
+
+<SignedIntentEnvelope>
+```
+
+- **200** — intent accepted for routing (signature verified when one was supplied).
+- **400** — schema validation failed, or only one of `signature`/`publicKey` was supplied.
+- **401** — a supplied signature did not verify.
+
+```bash
+curl -sX POST https://stellar-intel.vercel.app/api/intent/offramp \
+  -H 'content-type: application/json' \
+  -d @signed-intent.json
+```
+
+## `IntentV1` — canonical router primitive
+
+`types/intent.ts` also exports `IntentV1Schema` / `IntentV1` (re-exported from
+`lib/intent/schema.ts`), the richer canonical intent the router consumes. The
+off-ramp envelope above is the v1 path wired into the UI today; `IntentV1` is the
+shape the multi-anchor router (see [`docs/ROADMAP.md`](ROADMAP.md), Wave 1.2 /
+v2.2) scores and splits across anchors.
+
+## Canonical Intent V1 — versioned superset
+
+`CanonicalIntentV1Schema` in `types/intent.ts` is the **versioned superset** that
+covers all intent kinds in one discriminated union. It is what `POST /api/intent/offramp`
+parses after #817. Off-ramp-only clients that omit `kind` are accepted unchanged; the
+endpoint injects `kind: "offramp"` automatically.
+
+### Common fields (all kinds)
+
+| Field              | Type           | Description                                            |
+| ------------------ | -------------- | ------------------------------------------------------ |
+| `schemaVersion`    | `1` (literal)  | Schema version. Defaults to `1` when omitted.          |
+| `kind`             | see below      | Discriminant: `"offramp"`, `"chained"`, `"recurring"`. |
+| `sourceAsset`      | string         | Asset code being sold (e.g. `"USDC"`).                 |
+| `destinationAsset` | string         | Asset or fiat code being received (e.g. `"NGN"`).      |
+| `amount`           | decimal string | Sell amount; positive, up to 7 decimal places.         |
+| `sender`           | string         | Stellar public key of the originating account.         |
+| `recipient`        | string         | Destination address or account for the payout.         |
+
+### `kind: "offramp"` (single off-ramp)
+
+Backwards-compatible with legacy clients that send `type: "offramp"` or omit `kind`.
+No additional fields beyond the common base.
+
+```jsonc
+{
+  "schemaVersion": 1,
+  "kind": "offramp",
+  "sourceAsset": "USDC",
+  "destinationAsset": "NGN",
+  "amount": "100.00",
+  "sender": "GAB...",
+  "recipient": "0800-123-456",
+}
+```
+
+### `kind: "chained"` (multi-hop)
+
+Expresses a sequence of atomic swaps: on-ramp, swap, or yield. Asset continuity
+across hops is validated by the solver before execution. Requires at least 2 hops.
+
+Additional field:
+
+| Field  | Type    | Description                                        |
+| ------ | ------- | -------------------------------------------------- |
+| `hops` | `Hop[]` | Ordered list of hops (minimum 2). See `IntentHop`. |
+
+Each `IntentHop`:
+
+| Field        | Type                             | Description                                 |
+| ------------ | -------------------------------- | ------------------------------------------- |
+| `kind`       | `"on-ramp"`, `"swap"`, `"yield"` | Executor category for this hop.             |
+| `sellAsset`  | `{ code, issuer? }`              | Asset sold going into this hop.             |
+| `buyAsset`   | `{ code, issuer? }`              | Asset received out of this hop.             |
+| `minReceive` | decimal string                   | Floor on the amount received from this hop. |
+
+```jsonc
+{
+  "schemaVersion": 1,
+  "kind": "chained",
+  "sourceAsset": "XLM",
+  "destinationAsset": "NGN",
+  "amount": "500.00",
+  "sender": "GAB...",
+  "recipient": "0800-123-456",
+  "hops": [
+    {
+      "kind": "on-ramp",
+      "sellAsset": { "code": "XLM" },
+      "buyAsset": { "code": "USDC", "issuer": "GA5..." },
+      "minReceive": "14.5",
+    },
+    {
+      "kind": "swap",
+      "sellAsset": { "code": "USDC", "issuer": "GA5..." },
+      "buyAsset": { "code": "NGN" },
+      "minReceive": "11000",
+    },
+  ],
+}
+```
+
+### `kind: "recurring"` (scheduled)
+
+Repeats a payment on a cron schedule. The endpoint will reject this kind with
+`501 NOT_IMPLEMENTED` until the scheduler service is wired up.
+
+Additional field:
+
+| Field      | Type             | Description                                                |
+| ---------- | ---------------- | ---------------------------------------------------------- |
+| `schedule` | `IntentSchedule` | POSIX cron expression and optional termination conditions. |
+
+`IntentSchedule` fields:
+
+| Field   | Type    | Description                                                   |
+| ------- | ------- | ------------------------------------------------------------- |
+| `cron`  | string  | 5-field POSIX cron expression (e.g. `"0 9 * * 1"` = Mondays). |
+| `count` | integer | Optional: cancel after this many executions.                  |
+| `until` | RFC3339 | Optional: cancel after this timestamp.                        |
+
+```jsonc
+{
+  "schemaVersion": 1,
+  "kind": "recurring",
+  "sourceAsset": "USDC",
+  "destinationAsset": "NGN",
+  "amount": "100.00",
+  "sender": "GAB...",
+  "recipient": "0800-123-456",
+  "schedule": {
+    "cron": "0 9 * * 1",
+    "count": 12,
+  },
+}
+```
+
+## Related
+
+- [`docs/CANONICAL_JSON.md`](CANONICAL_JSON.md) — the exact canonicalization rules.
+- [`docs/ARCHITECTURE.md`](ARCHITECTURE.md) — where the intent sits in the flow.
+- [`docs/ANCHOR_REPUTATION.md`](ANCHOR_REPUTATION.md) — how outcomes feed scoring.
+
+<!-- source: docs/GRAPHQL_API.md -->
+
+# GraphQL API
+
+**Last reviewed:** 2026-08-26
+
+An additive, alternative surface over the same resources REST v1 exposes —
+anchors, health, rates, and off-ramp intents. **REST v1 stays canonical**
+(see [`public/openapi.json`](../public/openapi.json), generated by
+`npm run emit-openapi`); this endpoint exists for clients that prefer a
+single round trip over several REST calls, not as a replacement.
+
+Source of truth: [`lib/graphql/typeDefs.ts`](../lib/graphql/typeDefs.ts) (schema),
+[`lib/graphql/resolvers.ts`](../lib/graphql/resolvers.ts), and the route
+[`app/api/graphql/route.ts`](../app/api/graphql/route.ts).
+
+## No forked business logic
+
+Every resolver calls the exact same `lib/` functions the REST routes call —
+none of the four resources have a second implementation:
+
+| Resource | GraphQL field                   | Shared with REST via                                                                                                       |
+| -------- | ------------------------------- | -------------------------------------------------------------------------------------------------------------------------- |
+| Anchors  | `Query.anchor`, `Query.anchors` | `lib/stellar/anchors.ts` (`getAnchorById`, `getAnchorsByCorridorId`)                                                       |
+| Health   | `Query.health`                  | `lib/stellar/anchors.ts` (degraded anchors), `lib/metrics.ts` (`getPublisherHealth`, `getMetricsSnapshot`)                 |
+| Rates    | `Query.rates`                   | `lib/api/rates-resolver.ts` (`resolveCorridorRates`) — the same cache-aware resolver `GET /api/rates/[corridor]` calls     |
+| Intents  | `Mutation.submitOfframpIntent`  | `lib/api/offramp-intent.ts` (`resolveOfframpIntent`) — the same routing/tx-building logic `POST /api/intent/offramp` calls |
+
+`lib/api/rates-resolver.ts` and `lib/api/offramp-intent.ts` were factored out
+of the REST routes specifically so both surfaces resolve through one function
+each — see their module docstrings.
+
+## Endpoint
+
+```
+POST /api/graphql
+```
+
+A GraphiQL explorer is served at the same path outside production
+(`NODE_ENV !== 'production'`) for local/staging use. Requests are rate
+limited per IP (`api.graphql` bucket, 60 requests/minute), mirroring the
+REST routes.
+
+## Example query
+
+```graphql
+query Compare($corridor: ID!) {
+  rates(corridor: $corridor, amount: "100") {
+    bestRateId
+    rates {
+      anchorId
+      source
+      totalReceived
+    }
+  }
+  health {
+    ratesCache {
+      hits
+      misses
+    }
+  }
+}
+```
+
+## Example mutation
+
+```graphql
+mutation Submit($input: OfframpIntentInput!) {
+  submitOfframpIntent(input: $input) {
+    quoteId
+    unsignedTx
+    route {
+      anchorId
+      corridorId
+    }
+  }
+}
+```
+
+`OfframpIntentInput` is validated with the identical zod schema
+(`IntentSchema` in `lib/api/offramp-intent.ts`) `POST /api/intent/offramp`
+uses, so a payload accepted by one is accepted by the other.
+
+## Errors
+
+GraphQL always responds `200` with an `errors` array; each error's
+`extensions.code` mirrors the REST `ApiError.code` values (`BAD_USER_INPUT`,
+`NO_ROUTE`, `TX_BUILD_FAILED`) so clients can branch the same way regardless
+of which surface they used.
+
+<!-- source: docs/VERSIONING.md -->
+
+# API Versioning & Deprecation Policy
+
+> What `API-Version` guarantees, how breaking changes are announced, and how
+> long old versions are supported. Every consumer of the Stellar Intel API —
+> whether a web app, an MCP agent, or a third-party integration — should read
+> this document once.
+
+**Last reviewed:** 2026-08-26
+
+---
+
+## Table of contents
+
+- [Versioning scheme](#versioning-scheme)
+- [What constitutes a breaking change](#what-constitutes-a-breaking-change)
+- [Deprecation process](#deprecation-process)
+- [Version support window](#version-support-window)
+- [Announcement channels](#announcement-channels)
+- [API-Version header](#api-version-header)
+- [Experimental endpoints](#experimental-endpoints)
+- [Related](#related)
+
+---
+
+## Versioning scheme
+
+The public API uses a **date-based versioning** scheme: `vYYYY-MM-DD` (e.g.
+`v2026-07-01`). This allows asynchronous, semantic releases without the
+overhead of a monotonically incrementing integer major version. Each date
+version is a stable snapshot of the API surface.
+
+| Component      | Version identifier           | Where it lives                  |
+| -------------- | ---------------------------- | ------------------------------- |
+| HTTP API       | `v2026-07-01`                | `Accept` / `API-Version` header |
+| Soroban oracle | Contract address (immutable) | `.deployments/{network}.json`   |
+| MCP tools      | `@stellarintel/mcp` npm      | `package.json` version          |
+| TypeScript SDK | `@stellarintel/sdk` npm      | `package.json` version          |
+| OpenAPI spec   | `v1` (snapshot)              | `public/openapi.json`           |
+
+The HTTP API and the Soroban oracle are versioned independently. The REST API
+may ship `v2026-10-01` while the oracle contract remains at its initial
+deployment address.
+
+---
+
+## What constitutes a breaking change
+
+A change is **breaking** if it requires a consumer to modify their code to
+avoid a silent behaviour change or a runtime error:
+
+- Removing or renaming a REST endpoint, query parameter, or request body field
+- Changing the type, format, or nullability of a response field
+- Adding a new required request header or authentication scheme
+- Changing a Soroban contract entrypoint signature or renaming it
+- Changing the MCP tool name, input schema, or output shape
+- Removing an env var that operators rely on
+
+The following are **not** breaking:
+
+- Adding a new endpoint, field, or optional query parameter
+- Extending the OpenAPI spec with new schemas
+- Adding a new MCP tool
+- Enlarging a response with an optional field (consumers that forward
+  unknown keys are safe; consumers that deserialise into a closed type
+  may break — use open-ended deserialisation)
+- Bug fixes that align behaviour with documented contracts
+
+---
+
+## Deprecation process
+
+> **Not yet implemented.** The lifecycle below is the intended policy, not a
+> description of running code. Grepping `lib/` and `app/` for `sunset`,
+> `Deprecation:` or `Warning: 299` returns nothing — there is no helper, no
+> middleware, and no route emitting these headers. `lib/logger.ts` stamps
+> `API-Version` on every response and nothing else. Treat this section as the
+> contract a future implementation must satisfy; see the tracking issue in
+> [`CHANGELOG.md`](../CHANGELOG.md).
+
+Every breaking change follows a four-phase lifecycle:
+
+| Phase                | Duration    | What happens                                                                                                           |
+| -------------------- | ----------- | ---------------------------------------------------------------------------------------------------------------------- |
+| **Announce**         | Day 0       | Deprecation notice posted on announcement channels (see below). The old endpoint or field continues to work unchanged. |
+| **Soft deprecation** | Days 0–90   | The old path still works. Responses include a `Warning: 299 - "deprecated"` header. Logs may warn on server side.      |
+| **Hard deprecation** | Days 90–180 | The old path returns `200` + a `Sunset` header with the removal date. Instrumentation counts usage.                    |
+| **Removal**          | Day 180+    | The old path returns `410 Gone` or a Soroban contract error. Consumers must have migrated.                             |
+
+Phase durations are minimums. A deprecated endpoint may be kept longer if
+usage remains high, announced via an extended sunset notice.
+
+**Expedited removal** (30-day minimum) is reserved for:
+
+- Security vulnerabilities that cannot be fixed while preserving the old
+  contract
+- Data-corruption bugs in a Soroban contract entrypoint
+- Legal or regulatory requirements
+
+Expedited removals are announced on all channels with the reason.
+
+---
+
+## Version support window
+
+| Surface                          | Supported versions       | Window                                            |
+| -------------------------------- | ------------------------ | ------------------------------------------------- |
+| HTTP REST API                    | Current only¹            | Intended: current + 1 previous, 180 days          |
+| Soroban oracle contract          | Current deployed address | Until a migration is announced and executed       |
+| MCP tools                        | Latest npm release only  | Semver within `@stellarintel/mcp`                 |
+| TypeScript SDK                   | Latest npm release only  | Semver within `@stellarintel/sdk`                 |
+| Web UI (`app.stellar-intel.com`) | Latest only              | No version guarantee — always use the current URL |
+
+¹ **The stated window is not yet what the code enforces.**
+`SUPPORTED_API_VERSIONS` in `lib/api/api-version.ts` contains exactly one
+element, and `negotiateApiVersion` rejects anything else with a 400. So there is
+no "previous" version to fall back to, and the 180-day window has never been
+exercised. It becomes true the first time a version ships and the outgoing one
+is appended to that array — which is the mechanical change required, not a
+rewrite. `tests/api-version-negotiation.spec.ts` asserts this row against the
+array so the two cannot drift apart again.
+
+REST API consumers should specify an `API-Version` header to lock their
+integration to a known surface. Unsigned requests default to the latest
+version, which may change without notice.
+
+---
+
+## Announcement channels
+
+Deprecations and breaking changes are announced on:
+
+1. **GitHub releases** — every versioned API release is a GitHub Release with
+   a changelog entry. Subscribe at
+   `https://github.com/ezedike-evan/stellar-intel/releases`.
+2. **CHANGELOG.md** — the `[Unreleased]` section lists pending deprecations;
+   dated sections record shipped ones.
+3. **API response headers** _(not yet implemented)_ — deprecated endpoints will
+   return `Sunset` and `Warning` headers (see deprecation process above).
+4. **Status page** _(not yet implemented)_ — there is no `app/api/status/route.ts`,
+   and `announced_deprecations` appears nowhere in `lib/` or `app/`. The intent
+   is that `https://stellar-intel.vercel.app/api/status` returns it as a JSON
+   array.
+5. **Mailing list** — subscribe at
+   `https://stellar-intel.vercel.app/updates` (planned).
+
+---
+
+## API-Version header
+
+```http
+Accept: application/json
+API-Version: 1.3.0
+```
+
+The `API-Version` request header selects the API version for the request.
+Omit it to receive the latest version (subject to change).
+
+| Behaviour                             | Version sent         | Response                                         |
+| ------------------------------------- | -------------------- | ------------------------------------------------ |
+| Consumer targets a known version      | `API-Version: 1.3.0` | That version's surface                           |
+| Consumer omits the header             | (none)               | Latest version — may change                      |
+| Consumer sends an unsupported version | `API-Version: 0.9.0` | `400 Bad Request` with supported versions listed |
+
+**Migration.** To move from one version to the next, update the `API-Version`
+header and adjust for any breaking changes listed in the changelog.
+
+**Current status.** Implemented in both directions (#888).
+
+Responses are stamped with `API-Version` by the request wrappers in
+`lib/logger.ts`, so it is present on every response — including error responses
+— rather than on the handful of routes that used to set it by hand. The value
+comes from `lib/api/api-version.ts`, and a test asserts it matches
+`info.version` in `public/openapi.json`.
+
+Requests may pin a version with the same header. An unsupported value returns
+`400` with a `supportedVersions` list; omitting the header still means "latest",
+so pinning is opt-in and no existing client is broken by the check.
+
+**Known mismatch with the scheme above.** The _Versioning scheme_ section
+declares date-based versions (`vYYYY-MM-DD`), but nothing has ever emitted one.
+`API-Version` carries the semver spec version (`1.3.0`), kept in step with
+`info.version` in `public/openapi.json`, and that is what the negotiation
+accepts. Adopting date versions is a live decision, not an oversight in the
+implementation: it means changing `API_VERSION` in `lib/api/api-version.ts` and
+adding the old value to `SUPPORTED_API_VERSIONS` so pinned clients keep working
+across the switch. Documented here rather than resolved silently in either
+direction.
+
+---
+
+## Experimental endpoints
+
+> **Not yet implemented.** No route lives under `/api/v1/experimental/` and
+> nothing emits `X-Experimental`. The convention is reserved here so that the
+> first experimental endpoint has a stated contract rather than inventing one.
+
+Endpoints under `/api/v1/experimental/` or marked with `X-Experimental: true`
+in their response header are **not covered** by this deprecation policy. They
+may change or disappear at any time without notice. Do not depend on them in
+production.
+
+An experimental endpoint graduates to stable after:
+
+1. At least one release cycle (180 days) of field use
+2. A documented contract in `public/openapi.json`
+3. A `CHANGELOG.md` entry marking it stable
+
+---
+
+## Related
+
+- [`docs/ROADMAP.md`](ROADMAP.md) — when breaking changes are planned relative
+  to waves.
+- [`docs/ARCHITECTURE.md`](ARCHITECTURE.md) — how the API and oracle fit into
+  the system.
+- [`CHANGELOG.md`](../CHANGELOG.md) — per-release changelog with deprecation
+  notices.
+- [`CONTRIBUTING.md`](../CONTRIBUTING.md) — conventions for PRs that introduce
+  or remove API surface.
+
+<!-- source: docs/CANONICAL_JSON.md -->
+
+# Canonical JSON
+
+**Last reviewed:** 2026-08-26
+
+Intents are hashed and signed over a **canonical** serialization so the same
+logical intent always produces the same bytes, regardless of key order or
+formatting. Without this, two semantically identical intents could hash
+differently and a signature could not be verified server-side.
+
+Source of truth: [`lib/intent/`](../lib/intent/) (`hash.ts`, `sign.ts`,
+`envelope.ts`) and [`types/intent.ts`](../types/intent.ts).
+
+## Canonicalization rules
+
+Given the `intent` object:
+
+1. **Sort object keys recursively** — every object's keys in ascending (code-point)
+   order, applied at every nesting level.
+2. **Serialize with `JSON.stringify`** over the key-sorted structure — no extra
+   whitespace, standard JSON escaping.
+3. The resulting UTF-8 bytes are the canonical payload.
+
+Arrays preserve their order (order is semantically meaningful); only object keys
+are sorted.
+
+## Hash
+
+```
+hash = lowercase_hex( SHA-256( canonical_bytes ) )   // 64 hex chars
+```
+
+This `hash` is included in the signed envelope and the server recomputes it from
+the received `intent`. A mismatch rejects the request before signature checking.
+
+## Signature
+
+```
+signature = base64( Ed25519_sign( canonical_bytes, userPrivateKey ) )
+```
+
+Signing happens in the user's wallet (Freighter); the private key never leaves the
+wallet. The server verifies the signature against the envelope's `publicKey`, which
+must equal `intent.publicKey`.
+
+## Worked shape
+
+```jsonc
+// intent (authoring order — arbitrary)
+{ "publicKey": "GAB…", "amount": "100", "anchorId": "cowrie", "corridorId": "usdc-ngn" }
+
+// canonical (keys sorted ascending: amount, anchorId, corridorId, publicKey)
+{"amount":"100","anchorId":"cowrie","corridorId":"usdc-ngn","publicKey":"GAB…"}
+```
+
+> Implementation note: treat `lib/intent` as authoritative for the exact ordering
+> and serialization, and verify against its tests rather than hand-ordering keys.
+
+## Related
+
+- [`docs/INTENT_API.md`](INTENT_API.md) — the envelope and endpoint.
+- [`docs/THREAT_MODEL.md`](THREAT_MODEL.md) — replay/tamper mitigations.
+
+==============================================================================
+SECTION: INTEGRATION GUIDES
+==============================================================================
+
+<!-- source: docs/COOKBOOK.md -->
+
+# Cookbook
+
+**Last reviewed:** 2026-08-26
+
+End-to-end recipes against the live API. Base URL in examples:
+`https://stellar-intel.vercel.app` (swap for `http://localhost:3000` in dev).
+
+> Endpoints and shapes are defined in code — see
+> [`app/api/`](../app/api/) and [`docs/INTENT_API.md`](INTENT_API.md). The
+> generated OpenAPI surface lives in [`lib/api/openapi.ts`](../lib/api/openapi.ts)
+> (`npm run emit-openapi`).
+
+## 1. Compare off-ramp rates for a corridor
+
+```bash
+curl -s "https://stellar-intel.vercel.app/api/rates/usdc-ngn?amount=100" | jq
+```
+
+Returns one row per anchor with `exchangeRate`, `fee`, `totalReceived`, `source`
+(`sep38` firm, `sep24-fee`/`sep6-info` indicative), plus an `errors[]` array
+explaining any anchor that could not quote.
+
+## 2. Submit a signed off-ramp intent
+
+```bash
+# 1. Canonicalize the intent fields below, sha-256, ed25519-sign via Freighter
+#    (client-side) to get `signature` + `publicKey`. Signing is optional — see
+#    docs/INTENT_API.md — omit both fields to route unattested.
+# 2. POST the intent (flat fields, no wrapping object; the server recomputes
+#    the canonical hash itself, so it is never sent on the wire):
+curl -sX POST https://stellar-intel.vercel.app/api/intent/offramp \
+  -H 'content-type: application/json' \
+  -d '{
+    "type": "offramp",
+    "sourceAsset": "USDC",
+    "destinationAsset": "NGN",
+    "amount": "100",
+    "sender": "GAB…",
+    "recipient": "0800-123-456",
+    "signature": "<base64>",
+    "publicKey": "GAB…"
+  }'
+```
+
+Returns `{ route, unsignedTx, quoteId }` on success. See
+[`docs/INTENT_API.md`](INTENT_API.md) for the exact canonicalization/signing
+steps and [`docs/CANONICAL_JSON.md`](CANONICAL_JSON.md) for the hashing rules.
+
+## 3. Read an anchor's reputation
+
+```bash
+# One anchor
+curl -s https://stellar-intel.vercel.app/api/reputation/cowrie | jq
+# Per-corridor leaderboard
+curl -s "https://stellar-intel.vercel.app/api/reputation/leaderboard?corridor=usdc-ngn" | jq
+# History window
+curl -s "https://stellar-intel.vercel.app/api/reputation/cowrie/history?window=30d" | jq
+```
+
+Score formula: `fillRate × (1 − slippage) ÷ (settleSeconds / 300)` — see
+[`docs/ANCHOR_REPUTATION.md`](ANCHOR_REPUTATION.md).
+
+## 4. Off-ramp via an AI agent (MCP)
+
+Run the MCP server and let an agent price/compare, then sign with the user's
+wallet to execute. See [`docs/MCP.md`](MCP.md) for the `npx tsx scripts/mcp/server.ts`
+run command and tool list. The agent cannot spend without a user signature.
+
+## 5. Consume the reputation oracle on-chain
+
+Read anchor scores directly from the Soroban contract
+([`contracts/reputation/`](../contracts/reputation/)) — no deploy or funded
+account required, every call is a pure `simulateTransaction` against the live
+testnet oracle:
+
+```bash
+node examples/consumer-contract/read-oracle.mjs cowrie usdc-ngn
+```
+
+Prints `list_anchors`, `get_score_for_corridor`, and `get_corridor_aggregate`
+straight from testnet, using the same pattern as the app's
+[`lib/oracle/read.ts`](../lib/oracle/read.ts). To call the oracle from inside
+another Soroban contract instead of a client script, see
+[`examples/consumer-contract/README.md`](../examples/consumer-contract/README.md)
+for the build/deploy/invoke steps. Entrypoints are documented in
+[`docs/ORACLE_SPEC.md`](ORACLE_SPEC.md). A published JS/Python SDK wrapper
+around this is tracked on the roadmap; until then this script is the
+zero-setup path to live data.
+
+## 6. Re-run the anchor fleet survey
+
+```bash
+node scripts/anchor-survey.mjs           # human summary
+node scripts/anchor-survey.mjs --json    # machine output
+```
+
+Classifies directory anchors by SEP support — see
+[`docs/SEP_COMPLIANCE.md`](SEP_COMPLIANCE.md).
+
+<!-- source: docs/SDK.md -->
+
+# SDK
+
+> **Status: roadmap (v4).** A first-class typed client `@stellarintel/sdk` is a
+> v4 "Universal" deliverable (see [`docs/ROADMAP.md`](ROADMAP.md)). It is **not yet
+> published to npm** — the npm badge in the README is aspirational. Until it ships,
+> use the HTTP API directly (below). The MCP package
+> ([`packages/mcp/`](../packages/mcp/), `@stellarintel/mcp`) is the agent-facing
+> surface that exists today.
+
+**Last reviewed:** 2026-08-26
+
+## `stellar-intel-reputation` (Rust, on-chain)
+
+Unlike the other SDKs on this page, `stellar-intel-reputation` is not an HTTP
+wrapper — it's the architecturally distinct one. It reads the deployed
+Soroban reputation contract ([`contracts/reputation/`](../contracts/reputation/),
+interface documented in [`docs/ORACLE_SPEC.md`](ORACLE_SPEC.md)) directly
+on-chain from inside another Soroban contract's execution context, with no
+API round trip.
+
+Source lives in this repo today at
+[`crates/stellar-intel-reputation/`](../crates/stellar-intel-reputation/)
+and is publish-ready for crates.io (`cargo publish --dry-run` runs in CI);
+until the maintainer wires up a `CARGO_REGISTRY_TOKEN`, depend on it directly:
+
+```toml
+[dependencies]
+stellar-intel-reputation = { git = "https://github.com/ezedike-evan/stellar-intel", package = "stellar-intel-reputation" }
+# once published: stellar-intel-reputation = "0.2"
+```
+
+```rust,ignore
+use stellar_intel_reputation::ReputationReader;
+
+let reader = ReputationReader::new(&env, oracle_contract_id);
+let score = reader.corridor_score(anchor_id, corridor);
+```
+
+Source and full method list: [`crates/stellar-intel-reputation/README.md`](../crates/stellar-intel-reputation/README.md).
+A runnable example consumer contract lives at
+[`examples/consumer-contract/`](../examples/consumer-contract/).
+
+## Today: call the HTTP API
+
+Every capability the SDK will wrap is already reachable over HTTP. See
+[`docs/COOKBOOK.md`](COOKBOOK.md) for runnable examples and
+[`docs/INTENT_API.md`](INTENT_API.md) for the intent contract.
+
+```ts
+// Minimal typed fetch wrapper you can drop in today.
+const BASE = 'https://stellar-intel.vercel.app';
+
+export async function getRates(corridorId: string, amount: string) {
+  const res = await fetch(`${BASE}/api/rates/${corridorId}?amount=${amount}`);
+  if (!res.ok) throw new Error(`rates ${res.status}`);
+  return res.json();
+}
+
+export async function getReputation(anchorId: string) {
+  const res = await fetch(`${BASE}/api/reputation/${anchorId}`);
+  if (!res.ok) throw new Error(`reputation ${res.status}`);
+  return res.json();
+}
+
+export async function submitOfframpIntent(signedEnvelope: unknown) {
+  const res = await fetch(`${BASE}/api/intent/offramp`, {
+    method: 'POST',
+    headers: { 'content-type': 'application/json' },
+    body: JSON.stringify(signedEnvelope),
+  });
+  if (!res.ok) throw new Error(`intent ${res.status}`);
+  return res.json();
+}
+```
+
+Types you can import from the repo today: `OfframpIntent`, `SignedIntentEnvelope`,
+`IntentV1` ([`types/intent.ts`](../types/intent.ts)) and the reputation types
+([`types/reputation.ts`](../types/reputation.ts)).
+
+## Planned `@stellarintel/sdk` surface (v4)
+
+- Typed wrappers for the rates, intent, and reputation APIs.
+- React hooks (the app's `hooks/useAnchorRates.ts` is the reference pattern).
+- A signing helper that builds → canonicalizes → hashes → signs an intent via a
+  wallet adapter.
+- Three reference integrations (web, agent, wallet).
+
+When it ships, this document becomes the SDK reference; the HTTP recipes above
+remain valid as the underlying transport.
+
+<!-- source: docs/MCP.md -->
+
+# Stellar Intel — MCP Server
+
+**Last reviewed:** 2026-08-26
+
+The MCP server exposes Stellar Intel's off-ramp routing to MCP-capable agents
+over stdio or streamable HTTP. It lives in
+[`scripts/mcp`](../scripts/mcp) (in-repo dev server) and
+[`packages/mcp`](../packages/mcp) (the published `@stellarintel/mcp` package),
+and both reuse the same routing + canonical-hashing logic as the web app
+(`lib/mcp/offramp.ts`).
+
+**Scope:** Stellar Intel abstracts anchors, not chains. These tools answer
+"what's my best fiat exit price, and which Stellar anchor should I trust to
+execute it" — not "move this value across chains." For cross-chain pay/bridge
+intents, an agent should reach for ROZO instead. See
+[docs/AGENT_POSITIONING.md](AGENT_POSITIONING.md) for the full comparison.
+
+## Running
+
+### stdio (default)
+
+```bash
+npx tsx scripts/mcp/server.ts
+# or the published package
+npx @stellarintel/mcp
+```
+
+### Streamable HTTP
+
+The same tool set is served over streamable HTTP behind a flag; stdio stays
+the default. From the published package:
+
+```bash
+npx @stellarintel/mcp --transport http [--host 127.0.0.1] [--port 3000]
+```
+
+This binds `http://<host>:<port>/mcp`; point an MCP client at that URL — no
+local install required. Sessions are managed per agent (each initialization
+gets its own session ID), so multiple hosted agents can use the server
+concurrently. The in-repo dev server at
+[`scripts/mcp/server.ts`](../scripts/mcp/server.ts) is stdio-only.
+
+The server applies safe mainnet defaults for the `NEXT_PUBLIC_*` config values,
+so an agent does not need the web app's `.env` to invoke it.
+
+## Tools
+
+### `intel.offramp.quote` (#135)
+
+Returns the best net-received quote for a corridor + amount.
+
+- **Input:** `{ from: string, to: string, amount: string }`
+- **Output:** `{ anchor, quoteId, netReceived, expiresAt }`
+
+```jsonc
+// input
+{ "from": "USDC", "to": "NGN", "amount": "100" }
+// output
+{
+  "anchor": "cowrie",
+  "quoteId": "<64-hex sha256>",
+  "netReceived": "156800",
+  "expiresAt": "2026-…Z"
+}
+```
+
+### `intel.offramp.prepare` (#136)
+
+Returns an **unsigned** intent envelope plus an unsigned Stellar transaction for
+an agent to sign. The `intentHash` is the canonical SHA-256 the agent signs.
+
+- **Input:** an off-ramp intent without a signature
+  `{ type: "offramp", sourceAsset, destinationAsset, amount, sender, recipient }`
+- **Output:** `{ unsignedEnvelope: { intent, intentHash }, unsignedTx }`
+
+### `intel.execute` (#819)
+
+Carries a prepared intent through to signed execution. **Stellar Intel never
+signs anything here** — the non-custodial invariant holds all the way through:
+the calling agent signs `unsignedEnvelope.intentHash` (an off-chain attestation
+of consent) and the `unsignedTx` from `intel.offramp.prepare` (a real Stellar
+transaction signature) with its own wallet, entirely outside this server. This
+tool only verifies the signed material still matches the intent it was
+prepared for, then submits the transaction to Horizon.
+
+Verification, in order: the `intentHash` is recomputed from `intent` and must
+match; `signature` must verify against `intentHash` under `intent.sender`'s
+public key; the decoded `signedTx` must be signed, sourced from
+`intent.sender`, carry exactly one payment operation to the routed anchor
+account for `intent.amount`/`intent.sourceAsset`, and memo-hash `intentHash`.
+Any mismatch is rejected before anything reaches Horizon.
+
+- **Input:**
+  `{ unsignedEnvelope: { intent, intentHash }, signature, signedTx }` — the
+  exact `unsignedEnvelope` from `intel.offramp.prepare`, a base64 ed25519
+  signature over `intentHash` from the sender's key, and the base64 XDR of
+  `unsignedTx` after the sender has signed it.
+- **Output:** `{ status: "submitted", hash, ledger, corridorId, anchorId }`
+
+```jsonc
+// input
+{
+  "unsignedEnvelope": { "intent": { "type": "offramp", "..." }, "intentHash": "<64-hex>" },
+  "signature": "<base64 ed25519 sig over intentHash>",
+  "signedTx": "<base64 signed transaction XDR>"
+}
+// output
+{
+  "status": "submitted",
+  "hash": "<64-hex tx hash>",
+  "ledger": 12345,
+  "corridorId": "usdc-ngn",
+  "anchorId": "cowrie"
+}
+```
+
+Only the off-ramp intent surface is supported today, matching `quote`/`prepare`
+above. Per #819, broader intent types (beyond off-ramp) are deferred until the
+universal intent collapse work lands, so the tool doesn't ship off-ramp-only
+assumptions baked into a wider surface prematurely.
+
+## Tests
+
+- `tests/mcp-offramp.spec.ts` — unit tests for both tool cores, including the
+  acceptance check that the returned envelope signs correctly with a provided
+  keypair (#136).
+- `tests/mcp-e2e.spec.ts` — spawns the server as a subprocess and exercises both
+  tools through a real MCP client, asserting valid responses and a clean exit
+  (#137).
+
+```bash
+npm run test -- tests/mcp-offramp.spec.ts tests/mcp-e2e.spec.ts
+```
+
+<!-- source: docs/WEBHOOKS.md -->
+
+# Webhooks
+
+**Last reviewed:** 2026-08-26
+
+Stellar Intel can push real-time event notifications to your HTTPS endpoint instead of requiring you to poll the API. Each delivery is HMAC-SHA256 signed so you can verify authenticity before acting on the payload.
+
+## Event types
+
+| Kind                           | When it fires                                                        |
+| ------------------------------ | -------------------------------------------------------------------- |
+| `intent.created`               | An off-ramp intent is accepted for routing                           |
+| `intent.settled`               | An intent reaches a terminal `completed` state                       |
+| `intent.failed`                | An intent reaches a terminal `failed` state                          |
+| `reputation.event_written`     | A new outcome row is appended to the reputation log                  |
+| `anchor.health_status_changed` | An anchor's health status transitions (e.g. `healthy` to `degraded`) |
+
+## Payload envelope
+
+Every delivery is a `POST` request with `Content-Type: application/json` and a body of the form:
+
+```json
+{
+  "id": "3f2a1b4c-...",
+  "kind": "intent.created",
+  "createdAt": "2026-07-28T12:00:00.000Z",
+  "payload": { ... }
+}
+```
+
+`id` is unique per event and can be used for idempotent processing.
+
+## Signature verification
+
+Each delivery includes two headers:
+
+| Header                | Value                                                                 |
+| --------------------- | --------------------------------------------------------------------- |
+| `x-webhook-signature` | `t={unix_timestamp_sec},v1={hex_hmac}`                                |
+| `x-webhook-timestamp` | Unix timestamp in seconds (same value as `t` in the signature header) |
+
+### How to verify
+
+1. Extract `t` (timestamp) and `v1` (signature) from `x-webhook-signature`.
+2. Build the signed payload string: concatenate the timestamp, a literal `.`, and the raw request body bytes exactly as received (do not parse and re-serialize).
+3. Compute `HMAC-SHA256(your_secret, signed_payload)` and encode as lowercase hex.
+4. Compare your computed value to `v1` using **constant-time** comparison to prevent timing attacks.
+5. Reject the request if the timestamp is more than 5 minutes old (replay protection).
+
+### Verification example (Node.js)
+
+```ts
+import { createHmac, timingSafeEqual } from 'crypto';
+
+function verify(secret: string, header: string, rawBody: string): boolean {
+  const parts: Record<string, string> = {};
+  for (const seg of header.split(',')) {
+    const eq = seg.indexOf('=');
+    if (eq !== -1) parts[seg.slice(0, eq)] = seg.slice(eq + 1);
+  }
+
+  const { t, v1 } = parts as { t?: string; v1?: string };
+  if (!t || !v1) return false;
+
+  const timestamp = parseInt(t, 10);
+  if (Number.isNaN(timestamp)) return false;
+
+  const now = Math.floor(Date.now() / 1000);
+  if (Math.abs(now - timestamp) > 300) return false; // 5-minute window
+
+  const expected = createHmac('sha256', secret).update(`${timestamp}.${rawBody}`).digest('hex');
+
+  try {
+    return timingSafeEqual(Buffer.from(v1, 'hex'), Buffer.from(expected, 'hex'));
+  } catch {
+    return false;
+  }
+}
+```
+
+> Use the raw body bytes, not `JSON.stringify(req.body)`. Any whitespace or key-ordering difference will break verification.
+
+## Retry and dead-letter
+
+If your endpoint does not respond with a 2xx status code, Stellar Intel retries up to 5 times with exponential backoff (1 s, 2 s, 4 s, 8 s between attempts). After all attempts are exhausted the delivery is moved to the dead-letter log, visible via `GET /api/webhooks/failures` (admin key required).
+
+Your endpoint should return `200` (or any 2xx) as quickly as possible and process the event asynchronously to avoid triggering retries due to slow processing.
+
+## Subscription management
+
+All subscription endpoints require the `x-admin-key` header.
+
+### Create a subscription
+
+```http
+POST /api/webhooks/subscriptions
+x-admin-key: <admin_key>
+Content-Type: application/json
+
+{
+  "url": "https://your-server.example.com/webhooks",
+  "events": ["intent.created", "intent.settled"]
+}
+```
+
+Response `201`:
+
+```json
+{
+  "id": "3f2a1b4c-...",
+  "url": "https://your-server.example.com/webhooks",
+  "events": ["intent.created", "intent.settled"],
+  "secret": "a9f3..."
+}
+```
+
+The `secret` is returned **only once**. Store it immediately — it cannot be retrieved again.
+
+### List subscriptions
+
+```http
+GET /api/webhooks/subscriptions
+x-admin-key: <admin_key>
+```
+
+Secrets are omitted from the list response.
+
+### Delete a subscription
+
+```http
+DELETE /api/webhooks/subscriptions/{id}
+x-admin-key: <admin_key>
+```
+
+Returns `204 No Content` on success.
+
+### List dead-letter failures
+
+```http
+GET /api/webhooks/failures
+x-admin-key: <admin_key>
+```
+
+Returns all delivery records that exhausted retries without a successful response.
+
+==============================================================================
+SECTION: DATA AND METHODOLOGY
+==============================================================================
+
+<!-- source: docs/ANCHOR_REPUTATION.md -->
+
+# Anchor Reputation
+
+**Last reviewed:** 2026-08-26
+
+Every quote, fill, failure, and settlement latency an anchor produces is recorded
+as an **outcome**. Outcomes aggregate into a public, user-verifiable score. The
+goal is carrot, not stick: an anchor earns a track record it can point to.
+
+Source of truth: [`lib/reputation/`](../lib/reputation/),
+[`types/reputation.ts`](../types/reputation.ts), the
+`/api/reputation/*` routes, and the Soroban contract in
+[`contracts/reputation/`](../contracts/reputation/) (see
+[`docs/ORACLE_SPEC.md`](ORACLE_SPEC.md)).
+
+## Composite score
+
+Defined in [`lib/reputation/composite.ts`](../lib/reputation/composite.ts):
+
+```
+score = fillRate × (1 − slippage) ÷ (settleSeconds / NORM_SETTLE_SECONDS)
+```
+
+- `fillRate` — fraction of quotes that settled, `[0, 1]`.
+- `slippage` — fractional gap between quoted and delivered value, `[0, 1]`.
+- `settleSeconds` — median settlement time; floored at `MIN_SETTLE_SECONDS` (1).
+- `NORM_SETTLE_SECONDS = 300` — the "baseline fast" reference.
+
+A score of **1.0** = perfect fill, zero slippage, settled at exactly the 300 s
+reference. **> 1.0** = faster than reference. Higher is better.
+
+## Score bands
+
+[`lib/reputation/bands.ts`](../lib/reputation/bands.ts) maps a raw score to a band
+via `SCORE_THRESHOLDS` (`getScoreBand` / `getBandLabel`) so the UI can render
+confidence labels rather than raw floats.
+
+## Storage
+
+The reputation store is pluggable (`lib/reputation/store.ts`):
+
+- **Dev** — SQLite ([`lib/reputation/sqlite.ts`](../lib/reputation/sqlite.ts)).
+- **Prod** — Postgres ([`lib/reputation/postgres.ts`](../lib/reputation/postgres.ts)).
+
+Aggregation, bucketing, reconciliation, locking, and PII redaction live alongside
+(`aggregate.ts`, `buckets.ts`, `reconcile.ts`, `lock.ts`, `redact.ts`). Migrations
+are in `lib/reputation/migrations/`.
+
+## API
+
+| Method & path                                   | Purpose                                                                                                                        |
+| ----------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------ |
+| `GET /api/reputation/leaderboard?corridor=…`    | Ranked anchors (optionally per-corridor).                                                                                      |
+| `GET /api/reputation/[anchor]`                  | Current score + bands for one anchor.                                                                                          |
+| `GET /api/reputation/[anchor]/history?window=…` | Historical score series.                                                                                                       |
+| `POST /api/reputation/append`                   | Append a signed outcome tuple.                                                                                                 |
+| `POST /api/reputation/dispute`                  | File a dispute against an outcome.                                                                                             |
+| `POST /api/reputation/reconcile`                | Reconcile aggregates (maintenance).                                                                                            |
+| `POST /api/reputation/refresh`                  | Refresh materialized aggregates.                                                                                               |
+| `GET /api/reputation/sdf-export`                | Candidate export for SDF's Anchor Directory — see [`docs/ANCHOR_DIRECTORY_CONTRIBUTION.md`](ANCHOR_DIRECTORY_CONTRIBUTION.md). |
+
+Outcomes are signed and replayable, so a dispute resolves on evidence, not
+opinion. Admin-only review is gated by `ADMIN_SECRET_KEY` via
+`/api/admin/disputes`.
+
+## On-chain mirror
+
+The same outcomes are written to the Soroban reputation contract for permissionless
+reads. The contract interface (`submit_outcome`, anchor registry, admin) is
+specified in [`docs/ORACLE_SPEC.md`](ORACLE_SPEC.md). Mainnet deployment is a
+roadmap gate (see [`docs/ROADMAP.md`](ROADMAP.md), Wave 2.1).
+
+## Disputes
+
+Terminal-state rows expose a "flag incorrect outcome" path. A dispute records the
+contesting party and the disputed outcome id; because every outcome carries the
+user's signature and is replayable from the ledger, adjudication is evidence-based.
+
+---
+
+## New Anchor Reputation: Bootstrap to Live
+
+When an anchor is first onboarded to the fleet, it has no transaction history. This
+section explains how the reputation system handles this cold-start period.
+
+Source of truth:
+[`lib/reputation/thresholds.ts`](../lib/reputation/thresholds.ts),
+[`lib/reputation/aggregate.ts`](../lib/reputation/aggregate.ts),
+[`lib/reputation/bands.ts`](../lib/reputation/bands.ts), and the
+[`ScorecardCard`](../components/offramp/ScorecardCard.tsx) component.
+
+### Bootstrap Phase
+
+On onboarding, a new anchor has **no composite score** — the system does not
+assign a synthetic seed value. Instead, the scorecard enters an
+`insufficient_data` state, and the UI displays a **"Collecting Data"** notice
+that tells consumers the anchor is still being evaluated.
+
+During bootstrap:
+
+- `compositeScore` is `null` — no score is computed or displayed
+- The scorecard `state` field is `"insufficient_data"` (see
+  [`Scorecard` type](../lib/reputation/aggregate.ts))
+- Score bands (green / amber / red) are not assigned
+- The UI shows the number of remaining outcomes needed and an estimated time
+  to reach the threshold
+  ([`ScorecardCard`](../components/offramp/ScorecardCard.tsx))
+
+**Example bootstrap API response** (`GET /api/reputation/[anchor]`):
+
+| Field            | Value                 |
+| ---------------- | --------------------- |
+| `state`          | `"insufficient_data"` |
+| `sampleSize`     | `0`                   |
+| `compositeScore` | `null`                |
+| `scoreBand`      | _(not assigned)_      |
+
+### Accruing Reputation
+
+As the anchor processes transactions, each terminal outcome (completed,
+partial, refunded, expired, or error) is appended to the outcome log
+([`types/reputation.ts`](../types/reputation.ts)). Rolling scorecards
+aggregate these outcomes over 7-, 30-, and 90-day windows.
+
+The composite score formula
+([`lib/reputation/composite.ts`](../lib/reputation/composite.ts)) combines the
+three factors as:
+
+```
+composite = fillRate × (1 − slippage) ÷ (settleSeconds / 300)
+```
+
+A score of `1.0` means a perfect fill, zero slippage, at exactly the 300-second
+reference settle time; values above `1.0` indicate faster-than-reference
+settlement. Aggregation over each window uses a **flat window** — every
+transaction in the window contributes with equal weight, with no exponential
+decay or recency bias ([`lib/reputation/aggregate.ts`](../lib/reputation/aggregate.ts)).
+
+**Progression toward live status:**
+
+| Outcomes | Scorecard `state`   | Score Band          | Phase     |
+| -------- | ------------------- | ------------------- | --------- |
+| 0        | `insufficient_data` | _(none)_            | bootstrap |
+| 1–29     | `insufficient_data` | _(none)_            | bootstrap |
+| 30+      | `ok`                | green / amber / red | live      |
+
+The threshold of **30 outcomes** is defined by `MIN_OUTCOMES_THRESHOLD` in
+[`lib/reputation/thresholds.ts`](../lib/reputation/thresholds.ts) and can be
+overridden with the `NEXT_PUBLIC_MIN_OUTCOMES` environment variable.
+
+### Live Status
+
+An anchor graduates to **live** status when it has accumulated at least
+**`MIN_OUTCOMES_THRESHOLD`** (default **30**) terminal outcomes within the
+scorecard window. At that point:
+
+- The scorecard `state` becomes `"ok"` and exposes full metrics: `fillRate`,
+  `settleMs` (p50 / p95), and `slippage` (p50 / p95)
+- A composite score is computed and mapped to a
+  [score band](../lib/reputation/bands.ts):
+
+  | Band  | Score range | Label             |
+  | ----- | ----------- | ----------------- |
+  | green | ≥ 95        | Excellent         |
+  | amber | 80 – 94     | Needs Improvement |
+  | red   | < 80        | Critical          |
+
+- The reputation score is fully evidence-based and trusted by downstream
+  consumers for routing and risk decisions
+
+### What Consumers Should Do During Bootstrap
+
+If your integration reads anchor reputation scores, inspect the scorecard
+`state` field before acting on the score:
+
+- **`"insufficient_data"`** — the anchor is still in bootstrap. Treat it as
+  unscored; apply wider risk tolerances or defer high-value routing decisions
+  until enough outcomes have been recorded.
+- **`"ok"`** — the anchor has a live, evidence-based score. Use the
+  `compositeScore` and score band with standard confidence.
+
+You can also call
+[`hasEnoughData(outcomesCount)`](../lib/reputation/thresholds.ts) and
+[`estimateTimeToThreshold(outcomesCount)`](../lib/reputation/thresholds.ts)
+to programmatically check readiness and display a progress indicator in your
+UI, as the built-in
+[`ScorecardCard`](../components/offramp/ScorecardCard.tsx) does.
+
+<!-- source: docs/BENCHMARKS.md -->
+
+# Benchmarks
+
+**Last reviewed:** 2026-08-26
+
+How Stellar Intel measures itself. This document holds the corridor- and
+anchor-level performance numbers that back the product claims.
+
+> **Status: methodology defined; numbers pending.** The metric surface exists
+> (`/api/metrics`, client latency capture in `lib/metrics`, per-anchor outcomes in
+> `lib/reputation/*`), but a published benchmark dataset is a roadmap deliverable
+> (see [`docs/ROADMAP.md`](ROADMAP.md), cross-cutting "Benchmarks" track). Do not
+> cite numbers here until the table below is populated from real runs. Numbers
+> stale by > 60 days block the next release gate.
+
+## Metrics tracked
+
+| Metric                      | Definition                                                   | Source                                          |
+| --------------------------- | ------------------------------------------------------------ | ----------------------------------------------- |
+| **Quote latency**           | Time to fetch a corridor's rate comparison (p50/p95).        | `quote_fetch_latency` (client), `/api/metrics`. |
+| **Quote-to-signed**         | Time from rate shown to user signature.                      | client metrics.                                 |
+| **Fill rate**               | Fraction of quotes that settle, per anchor.                  | `lib/reputation/*`.                             |
+| **Slippage**                | Quoted vs delivered value, per anchor.                       | reputation outcomes.                            |
+| **Settle latency**          | `pending_external` → fiat landed (p50/p95/p99).              | reputation outcomes.                            |
+| **Split vs single savings** | Extra landed value from split routing vs best single anchor. | router + outcomes (roadmap).                    |
+
+## Corridor results
+
+| Corridor | Quote p50 | Quote p95 | Best anchor | Fill rate | Settle p50 |
+| -------- | --------- | --------- | ----------- | --------- | ---------- |
+| usdc-ngn | _pending_ | _pending_ | _pending_   | _pending_ | _pending_  |
+| usdc-kes | _pending_ | _pending_ | _pending_   | _pending_ | _pending_  |
+| usdc-ars | _pending_ | _pending_ | _pending_   | _pending_ | _pending_  |
+
+## How to reproduce
+
+```bash
+curl -s "https://stellar-intel.vercel.app/api/metrics" | jq
+# Per-anchor settle/fill history:
+curl -s "https://stellar-intel.vercel.app/api/reputation/<anchor>/history?window=30d" | jq
+```
+
+Populate the table from a dated run and link the raw export. See
+[`docs/ANCHOR_REPUTATION.md`](ANCHOR_REPUTATION.md) for the score formula.
+
+<!-- source: docs/SETTLEMENT_SLA.md -->
+
+# Settlement SLA ($100-capped)
+
+**Last reviewed:** 2026-08-26
+
+Primitive III of the execution layer (ROADMAP.md line 101, issue #814): a
+settlement-guarantee product. For a **covered** off-ramp, Stellar Intel promises
+the withdrawal settles within a guaranteed deadline; if it doesn't, the user is
+eligible for a payout up to a **$100 cap**.
+
+> **Status: underwriting + terms only.** This launch ships the fail-closed
+> underwriting logic and these terms — not a live payout system. It is
+> **hard-blocked** on the actuarial dataset reaching threshold (a real
+> regulatory/financial-risk gate). No corridor is covered until the maintainer
+> activates it against real data; the underwriting fails closed until then.
+
+## Guarantee terms
+
+| Term               | Value                                                                                                                                                                                |
+| ------------------ | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
+| **Cap**            | **$100** per covered intent (not raised in this issue)                                                                                                                               |
+| **Coverage**       | Off-ramp intents whose amount is `> 0` and `≤ $100`, on a corridor/anchor pair the underwriting has marked SLA-eligible                                                              |
+| **Guarantee**      | The withdrawal settles within `guaranteedSettlementMs` (derived from the pair's p95 settlement latency × a margin factor)                                                            |
+| **Payout trigger** | A covered intent whose terminal outcome **breaches** the guarantee — `refunded`, `expired`, `error`, or `partial` — **or** `completed` past the guaranteed deadline (latency breach) |
+| **Payout amount**  | `min(amount, $100)`                                                                                                                                                                  |
+| **Not payable**    | A clean, on-time `completed` settlement                                                                                                                                              |
+
+## Underwriting (eligibility)
+
+A corridor/anchor pair is offered an SLA only when its actuarial aggregate
+(`CorridorAggregate`, `lib/reputation/aggregate.ts`) clears **every** threshold
+in `SlaUnderwritingConfig` (`lib/reputation/sla.ts`):
+
+- a full actuarial **window** (default 90 days),
+- a minimum settled-outcome **sample size**,
+- a minimum **fill rate** (`successCount / txCount`),
+- a bounded **p95 settlement latency**,
+- a minimum **composite score** (`lib/reputation/composite.ts`).
+
+`assessSlaEligibility()` is **fail-closed**: missing latency/composite data, a
+short window, or any unmet threshold returns `{ eligible: false, reasons }`. A
+pair can therefore never be underwritten on thin or poor data — which is exactly
+what keeps the product inert until the dataset exists.
+
+## Dispute process
+
+Breach claims reuse the **existing reputation dispute surface** — no second
+dispute path is introduced:
+
+- `POST /api/reputation/dispute` (intentHash, publicKey, signature, anchorId,
+  reason) marks the outcome row `disputed` with `disputedReason`.
+- The disputed outcome is adjudicated through the same reputation flow; a
+  confirmed breach on a covered intent is what authorizes the capped payout.
+
+## Activation checklist (maintainer)
+
+1. Confirm the actuarial dataset has reached threshold for the target pair(s).
+2. Tune `SlaUnderwritingConfig` to the observed distribution.
+3. Wire `assessSlaEligibility` into quoting (surface "SLA-covered" on eligible
+   pairs ≤ $100) and `assessPayout` into the dispute-resolution flow.
+
+Until step 1 is signed off, the underwriting stays fail-closed and no SLA is
+offered.
+
+<!-- source: docs/ORACLE_SPEC.md -->
+
+# Reputation Oracle — Soroban Contract Spec
+
+**Last reviewed:** 2026-08-26
+
+The reputation oracle is a Soroban smart contract that stores anchor outcomes
+on-chain so any consumer can read an anchor's track record without Stellar Intel's
+permission.
+
+Source of truth: [`contracts/reputation/`](../contracts/reputation/)
+(`Cargo.toml`, `src/lib.rs`, `src/admin.rs`, `src/anchors.rs`, `src/outcome.rs`,
+`tests/basic.rs`).
+
+> **Status.** The contract is implemented and unit-tested
+> (`contracts/reputation/tests/basic.rs`) and deployed to testnet at
+> `CCZ54NTEOVL2DKWCGJA5XHTHOGRDS7JHFKYWEC6QH2IMZLYNM3FBFKDG` (see
+> `.deployments/testnet.json`), with `submitToOracle`
+> (`packages/publisher/src/batch.ts`) wired against it. Mainnet deployment,
+> multi-signer admin, and the public read SDK are roadmap gates — see
+> [`docs/ROADMAP.md`](ROADMAP.md) Wave 2.1. Do not assume a live mainnet
+> address yet.
+
+## Contract
+
+`ReputationContract` (`#[contract]` in `src/lib.rs`). Entrypoints:
+
+### Outcomes — `src/outcome.rs`, `src/lib.rs`
+
+```rust
+pub fn submit_outcome(/* … outcome fields … */) -> Result<(), Error>
+```
+
+Records a single anchor outcome (the on-chain mirror of an off-chain outcome
+tuple — fill, slippage, settle latency). Writes are restricted to authorized
+publishers via the admin gate.
+
+### Anchor registry — `src/anchors.rs`
+
+```rust
+pub fn list(env: &Env) -> Vec<String>            // registered anchor ids
+pub fn register(env: &Env, anchor_id: String) -> Result<(), Error>
+```
+
+### Admin — `src/admin.rs`
+
+```rust
+pub fn set_admin(env: &Env, admin: &Address) -> Result<(), Error>
+pub fn get_admin(env: &Env) -> Option<Address>
+pub fn require_admin(env: &Env, caller: &Address) -> Result<(), Error>  // internal gate
+```
+
+`require_admin` is the authorization check that guards `register`.
+
+### Custody
+
+There are **two independent authorities**, and conflating them is the mistake to
+avoid:
+
+| Authority         | Storage key                | Can do                                              |
+| ----------------- | -------------------------- | --------------------------------------------------- |
+| Operational admin | `DataKey::Admin`           | register anchors, add/revoke publishers, migrations |
+| Upgrade admin     | `UpgradeKey::UpgradeAdmin` | replace the contract WASM                           |
+
+**Multisig requires no contract change.** Both are `soroban_sdk::Address`
+values, so either may be a Stellar account with several signers and a threshold;
+`require_auth()` delegates the threshold check to the host. The two-step handoff
+(`propose_admin` → `accept_admin`, with `cancel_admin_proposal`) means authority
+is never transferred to an address that cannot sign.
+
+What matters operationally is therefore _which accounts these are_, not what the
+contract supports. Read it back rather than assuming:
+
+```bash
+npx tsx scripts/verify-oracle-read.mts
+```
+
+It prints the admin, the upgrade admin, the pending admin and the contract
+version, and warns when the two authorities are the same account — one
+compromised key that can both forge data and replace the code.
+
+> **Current testnet state (checked 2026-08-04).** `contract_version` is `0`, the
+> upgrade admin is unset, and `pending_admin` / `upgrade_admin` are not
+> implemented at all: the deployed bytecode predates them. That also means it
+> predates the authorization fixes in #907, so **the live testnet contract still
+> has the unauthenticated `set_corridor_metrics` write path**. Re-deploy before
+> treating testnet reads as trustworthy. The anchor registry is also empty, so
+> every score read returns "no data".
+
+### Who can write what
+
+Every state-changing entrypoint is gated. There are two gates, and which one
+applies depends on whether the write is an operational data feed or a
+governance action.
+
+| Gate                                                         | Entrypoints                                                                                                                               |
+| ------------------------------------------------------------ | ----------------------------------------------------------------------------------------------------------------------------------------- |
+| **Publisher** (`publishers::is_authorized` + `require_auth`) | `submit_outcome`, `set_corridor_metrics`, `publish_corridor_rate`, `add_volume_savings`                                                   |
+| **Admin** (`admin::require_admin`)                           | `register_anchor`, `add_publisher`, `revoke_publisher`, `propose_admin`, `cancel_admin_proposal`, `migrate_corridor_v2`, `migrate_all_v2` |
+| **Candidate self-auth**                                      | `accept_admin`                                                                                                                            |
+| **Upgrade admin**                                            | `upgrade`                                                                                                                                 |
+
+`set_corridor_metrics`, `migrate_corridor_v2` and `migrate_all_v2` were
+**unguarded** until #907 — they took no caller at all, so any account could
+forge an anchor's score inputs or trigger a state migration. Adding the gate was
+a breaking ABI change: all three now take a leading caller `Address` and return
+`Result<(), Error>`.
+
+## Consuming the oracle
+
+Off-chain, read the same data through [`/api/reputation/*`](ANCHOR_REPUTATION.md).
+On-chain, a consumer contract calls the read entrypoints directly. A TypeScript
+read helper and JS/Python example consumers are roadmap deliverables (Wave 2.1).
+
+## Building & testing
+
+```bash
+cd contracts/reputation
+cargo test                                          # runs tests/basic.rs
+npx tsx scripts/deploy-oracle-testnet.ts             # build + deploy to testnet
+```
+
+## Storage versions
+
+The corridor aggregate exists in two shapes. Both are readable; **v1 keys are
+never deleted**, so an existing reader keeps working across a migration with no
+cutover window.
+
+| Version | Read entrypoints                                         | Tuple                                                                 |
+| ------- | -------------------------------------------------------- | --------------------------------------------------------------------- |
+| v1      | `get_corridor_aggregate`, `get_score_for_corridor`       | `(fill_rate_bps, slippage_bps, settle_seconds_p50, n)`                |
+| v2      | `get_corridor_aggregate_v2`, `get_score_for_corridor_v2` | `(fill_rate_bps, slippage_bps, composite_bps, settle_seconds_p50, n)` |
+
+Migration is admin-gated and idempotent, via `migrate_corridor_v2` (one pair) or
+`migrate_all_v2` (registered anchors × the compiled-in corridor list). The
+runbook, including the corridor-list caveat and what a partial migration means,
+is in [`ORACLE_MIGRATION.md`](ORACLE_MIGRATION.md).
+
+## Upgrade & governance
+
+Publisher whitelist management and a two-step admin transfer are implemented;
+see [`GOVERNANCE.md`](GOVERNANCE.md) for the custody runbook. The upgrade path
+exists (`init_upgrade` / `upgrade`) but has **no rotation** — once the upgrade
+admin is bound it cannot be changed (#963). Treat the deployed contract
+(testnet) as admin-controlled and not yet production-governed.
+
+## Related
+
+- [`docs/ORACLE_MIGRATION.md`](ORACLE_MIGRATION.md) — the v1 → v2 storage
+  migration runbook and compatibility guarantee.
+- [`docs/ANCHOR_REPUTATION.md`](ANCHOR_REPUTATION.md) — the scoring methodology fed
+  into outcomes.
+- [`docs/ARCHITECTURE.md`](ARCHITECTURE.md) — where the oracle sits in the system.
+
+<!-- source: docs/VOLUME_SAVINGS.md -->
+
+# On-Chain Volume + Savings Oracle
+
+> An independently verifiable "fees saved" metric — proof that routing through
+> Stellar Intel beats the alternative, published on-chain rather than claimed
+> in marketing copy.
+>
+> Source of truth: [`contracts/reputation/src/volume_savings.rs`](../contracts/reputation/src/volume_savings.rs)
+> (`VolumeSavings` struct, `add_volume_savings` / `get_volume_savings` entrypoints).
+
+**Last reviewed:** 2026-08-26
+
+---
+
+## Methodology
+
+### "Fees saved" definition
+
+For each executed intent, the **savings** is the difference between the
+baseline cost and the actual cost, expressed in USDC:
+
+```
+savings = baseline_received - actual_received
+```
+
+Where:
+
+- **`actual_received`** — the fiat amount the user actually received after
+  all anchor fees, derived from the delivered rate in the settled outcome.
+- **`baseline_received`** — the fiat amount the user would have received
+  using a reference baseline rate.
+
+### Baseline selection
+
+The baseline is determined using the following priority order:
+
+1. **Anchor's own indicative rate** at intent time (from SEP-24 `/fee` or
+   SEP-38 `QUOTE` response). This captures what the user would have gotten
+   if they went directly to that same anchor without Stellar Intel routing.
+2. **Corridor median rate** — the median of all available anchor rates for
+   the corridor at the time of execution, used when the anchor-specific
+   baseline is unavailable (e.g. the anchor only provides a firm quote
+   post-routing).
+3. **Previous published corridor rate** — the last on-chain corridor rate
+   published by `publish_corridor_rate`, used as fallback when neither
+   anchor-specific nor corridor-median data exists.
+
+### Volume tracking
+
+Cumulative volume is the sum of all `actual_received` values (in USDC
+equivalent) for the corridor. This is the total value that flowed through
+Stellar Intel's routing for that corridor.
+
+### On-chain publishing
+
+Volume and savings are published by the same publisher service that submits
+outcomes (see `packages/publisher/src/batch.ts`). Each settlement triggers:
+
+1. Outcome submission to the reputation oracle (`submit_outcome`).
+2. Volume + savings increment via `add_volume_savings`.
+
+Both values are **cumulative and monotonically increasing**. A consumer can
+read the latest snapshot and compare it against a previously recorded value
+to compute the delta over any interval.
+
+### Units
+
+| Field              | Unit                           | Description                    |
+| ------------------ | ------------------------------ | ------------------------------ |
+| `volume_usdc`      | microUSDC (1 USDC = 1,000,000) | Cumulative settled volume      |
+| `savings_usdc`     | microUSDC (1 USDC = 1,000,000) | Cumulative estimated savings   |
+| `settlement_count` | count                          | Number of settlements included |
+| `updated_at`       | ledger timestamp               | Last update time               |
+
+### Verifiability
+
+Anyone can independently verify the published numbers by:
+
+1. Reading `get_volume_savings(corridor)` from the Soroban contract.
+2. Replaying the outcome log for the corridor from the reputation store.
+3. Applying the same methodology to confirm the cumulative totals match.
+
+This ensures the numbers are not self-reported marketing claims but are
+derived from on-chain evidence that any third party can audit.
+
+---
+
+## Related
+
+- [`docs/ARCHITECTURE.md`](ARCHITECTURE.md) — where the volume+savings oracle
+  fits in the system.
+- [`docs/ORACLE_SPEC.md`](ORACLE_SPEC.md) — the base reputation oracle spec.
+- [`docs/ANCHOR_REPUTATION.md`](ANCHOR_REPUTATION.md) — scoring methodology.
+- [`contracts/reputation/src/volume_savings.rs`](../contracts/reputation/src/volume_savings.rs)
+  — contract implementation.
+
+<!-- source: docs/SEP_COMPLIANCE.md -->
+
+# SEP Compliance Matrix
+
+**Last reviewed:** 2026-08-26
+
+Stellar Intel integrates with Stellar anchors that implement various Stellar Ecosystem Proposals (SEPs). SEP-6 enables programmatic deposit/withdraw — the anchor exposes a machine-readable API rather than hosting an iframe — allowing Stellar Intel to collect KYC fields natively and surface indicative rates for SEP-6-only anchors. Anchors that advertise SEP-6 but not SEP-24 receive an **Indicative** badge in the comparison UI, since their rates are derived from the SEP-6 `/info` fee schedule rather than a live quote.
+
+## What Stellar Intel implements
+
+| SEP        | What it is                                  | Status                      | Code                                              |
+| ---------- | ------------------------------------------- | --------------------------- | ------------------------------------------------- |
+| **SEP-1**  | `stellar.toml` resolution                   | ✅ implemented              | [`lib/stellar/sep1.ts`](../lib/stellar/sep1.ts)   |
+| **SEP-6**  | Programmatic deposit/withdraw               | 🛠️ in progress              | `lib/stellar/sep6.ts` (planned)                   |
+| **SEP-10** | Web authentication (challenge → sign → JWT) | ✅ implemented              | [`lib/stellar/sep10.ts`](../lib/stellar/sep10.ts) |
+| **SEP-12** | KYC customer API                            | 🛠️ in progress (with SEP-6) | `lib/stellar/sep12.ts` (planned)                  |
+| **SEP-24** | Interactive hosted deposit/withdraw         | ✅ implemented              | [`lib/stellar/sep24.ts`](../lib/stellar/sep24.ts) |
+| **SEP-31** | Cross-border payments (B2B)                 | ⚪ detection only           | capability flag, no flow                          |
+| **SEP-38** | Firm-quote RFQ                              | ✅ implemented              | [`lib/stellar/sep38.ts`](../lib/stellar/sep38.ts) |
+
+Rate sourcing tiers (in [`lib/stellar/server-rates.ts`](../lib/stellar/server-rates.ts)):
+
+1. **SEP-38** firm quote (preferred).
+2. **SEP-24** indicative — live FX × the anchor's published SEP-24 withdraw fee.
+3. **SEP-6** indicative — live FX × the anchor's SEP-6 `/info` fee (in progress; this is what makes SEP-6-only anchors like Cowrie appear in the comparison).
+
+## Why SEP-6 matters here
+
+The off-ramp execution flow was historically SEP-24-only (anchor-hosted KYC in an iframe). SEP-6-only anchors advertise `TRANSFER_SERVER` but no `TRANSFER_SERVER_SEP0024`, so they were silently dropped from the comparison and could not be executed. SEP-6 support is being added in two phases:
+
+- **Phase 1 — quotes.** Parse SEP-6 `/info` fees and surface an indicative rate so SEP-6 anchors appear in the comparison (Tier 3 above).
+- **Phase 2 — execution.** Programmatic withdraw: SEP-6 `/withdraw` + SEP-12 (`/customer`) KYC collected via a dynamic in-app form (replacing the hosted iframe for SEP-6 anchors), with status polling through the unified status map.
+
+The difference: **SEP-24** = the anchor hosts the KYC/checkout page (we embed a URL); **SEP-6** = we collect every field ourselves and submit programmatically (we build the form, do SEP-12 KYC). They are not mutually exclusive — many anchors support both.
+
+Tracking: batch-2 issues `#B001–#B025` (see [`issues-batch-2.md`](../issues-batch-2.md)).
+
+## Per-anchor SEP support matrix
+
+Registered anchors ([`constants/anchors.ts`](../constants/anchors.ts)). Capability is read from each anchor's `stellar.toml`; refresh with `node scripts/anchor-survey.mjs`.
+
+| Anchor                              | SEP-1 | SEP-6 | SEP-10 | SEP-12 | SEP-24 | SEP-31 | SEP-38 | Corridors               |
+| ----------------------------------- | :---: | :---: | :----: | :----: | :----: | :----: | :----: | ----------------------- |
+| MoneyGram (`stellar.moneygram.com`) |  ✅   |  ❌   |   ✅   |   ❌   |   ✅   |   ❌   |   ❌   | NGN, KES, GHS, MXN, BRL |
+| Cowrie Exchange (`cowrie.exchange`) |  ✅   |  ✅   |   ✅   |   ❌   |   ❌   |   ❌   |   ❌   | NGN                     |
+| Anclap (`anclap.com`)               |  ✅   |  ✅   |   ✅   |   ❌   |   ✅   |   ❌   |   ❌   | ARS, PEN                |
+| NGNC (`ngnc.online`)                |  ✅   |  ❌   |   ✅   |   ❌   |   ✅   |   ❌   |   ❌   | NGN                     |
+| MyKobo (`mykobo.co`)                |  ✅   |  ✅   |   ✅   |   ❌   |   ✅   |   ✅   |   ❌   | EUR                     |
+| nTokens (`ntokens.com`)             |  ✅   |  ✅   |   ✅   |   ❌   |   ✅   |   ✅   |   ❌   | BRL                     |
+| **Zeam Money** (`zeam.money`)       |  ✅   |  ❌   |   ✅   |   ❌   |   ✅   |   ✅   | **✅** | ZAR (see note)          |
+
+> Snapshot — keep current via `node scripts/anchor-survey.mjs`. Capability legend: ✅ advertised · ❌ not advertised. SEP-38 column reflects `ANCHOR_QUOTE_SERVER` presence in the anchor's `stellar.toml`.
+>
+> **Live-probed 2026-08-04** (#720) with `npx tsx scripts/probe-sep38.mts`; capture committed at
+> [`tests/fixtures/sep38/capability-capture.json`](../tests/fixtures/sep38/capability-capture.json).
+> The previous version of this table listed four of the seven registered anchors and recorded no
+> SEP-38 support anywhere, which was wrong.
+
+### SEP-38 availability, in one line
+
+**Zeam Money is the only registered anchor advertising a quote server** — and its `/info` offers
+USDC and BRL only. No anchor serves a firm quote for **NGN**, so the USDC→NGN flow is indicative
+pricing plus SEP-24 execution, and is labelled as such in the UI. Zeam's SEP-38 also offers no
+**ZAR**, despite the registry listing it on the `usdc-zar` corridor; SEP-24 may serve ZAR
+independently, so that is flagged in `constants/anchors.ts` rather than resolved by guesswork.
+
+## Notes
+
+- **Cowrie Exchange** (`cowrie.exchange`) implements SEP-6 programmatic withdraw for the NGN corridor. It does not advertise `TRANSFER_SERVER_SEP0024`, so it appears in the rate comparison as an **Indicative** source only (Tier 3). Full programmatic execution via SEP-6 + SEP-12 is tracked in batch-2.
+- **Anclap** supports both SEP-6 and SEP-24. Where both are present, Stellar Intel prefers the SEP-24 hosted flow for execution and falls back to SEP-6 indicative pricing when no firm quote is available.
+- **nTokens** (`ntokens.com`) services the BRL corridor via `ntokens-box.bpventures.us`. Its TOML advertises `TRANSFER_SERVER_SEP0024`, a `DIRECT_PAYMENT_SERVER` (SEP-31), and `TRANSFER_SERVER` (SEP-6). SEP-38 and SEP-12 are not advertised.
+- **MoneyGram** serves the widest corridor set (five currencies) exclusively through SEP-24. It does not publish a SEP-6 transfer server or an anchor quote server.
+- SEP-12 columns will flip to ✅ once the in-app KYC form (tracked in batch-2) is wired to each anchor's `/customer` endpoint.
+
+## Fleet survey
+
+`scripts/anchor-survey.mjs` classifies the broader directory (stellar.expert `anchor` tag) by SEP support. Latest documented snapshot: 92 directory-tagged → 41 reachable toml → 11 transfer-capable / 30 issuer-only; 51 unreachable. See [`maintainer.md`](../maintainer.md) §11.
+
+==============================================================================
+SECTION: ANCHORS
+==============================================================================
+
+<!-- source: docs/ANCHOR_ONBOARDING.md -->
+
+# Anchor Onboarding
+
+**Last reviewed:** 2026-08-26
+
+Listing on Stellar Intel is **carrot, not stick**: we aggregate your quotes,
+publish your track record to a public reputation oracle, and never custody user
+funds. There is no listing fee and no exclusivity ask.
+
+Both anchor operators and community integrators use this process. To start, open an
+[🔌 Anchor onboarding issue](https://github.com/Ezedike-Evan/stellar-intel/issues/new?template=anchor-onboard.yml)
+([`.github/ISSUE_TEMPLATE/anchor-onboard.yml`](../.github/ISSUE_TEMPLATE/anchor-onboard.yml)).
+
+## What we validate
+
+From your `stellar.toml` at `https://{domain}/.well-known/stellar.toml`:
+
+- **SEP-1** — the toml parses, declares your asset under `[[CURRENCIES]]`, and
+  carries a signing key.
+- **SEP-10** — `WEB_AUTH_ENDPOINT` present (web authentication).
+- A transfer rail (one of):
+  - **SEP-24** — `TRANSFER_SERVER_SEP0024` (interactive hosted withdraw). The
+    default, fully supported execution path today.
+  - **SEP-6** — `TRANSFER_SERVER` (programmatic withdraw). Now **accepted** for
+    onboarding and rate comparison when it is the only transfer rail advertised.
+    Acceptance is currently for quote/rate visibility and the programmatic path is
+    subject to the caveats below; full SEP-6 + SEP-12 execution is rolling out —
+    see [`docs/SEP_COMPLIANCE.md`](SEP_COMPLIANCE.md).
+- **SEP-38** — `ANCHOR_QUOTE_SERVER` for firm quotes. Optional today; required from
+  v1.1. Without it you get an indicative rate (live FX × your published fee).
+
+Resolution is implemented in [`lib/stellar/sep1.ts`](../lib/stellar/sep1.ts) and
+classified by [`scripts/anchor-survey.mjs`](../scripts/anchor-survey.mjs). Domains
+the survey could not resolve are tracked, with a monthly recheck and promotion
+criteria, in [`docs/ANCHOR_FLEET_RECHECK.md`](ANCHOR_FLEET_RECHECK.md).
+
+## SEP-6 acceptance caveats
+
+SEP-6 anchors are acceptable for onboarding when they advertise a valid
+`TRANSFER_SERVER` endpoint and can provide a usable rate signal. The current caveat
+is operational rather than structural:
+
+- We accept SEP-6 anchors for quote/rate comparison now.
+- Programmatic execution still depends on the broader SEP-6 + SEP-12 flow being
+  available in the app.
+- Anchors that support both SEP-6 and SEP-24 should be documented in the SEP
+  compliance matrix so maintainers can distinguish the execution path clearly.
+
+Use [`docs/SEP_COMPLIANCE.md`](SEP_COMPLIANCE.md) as the canonical matrix for
+SEP-6 vs SEP-24 capability and rollout status.
+
+## Home domain vs service domain
+
+List the domain that hosts your `stellar.toml`. Note that your **issuer/home
+domain** is often distinct from the **service subdomain** that hosts SEP endpoints
+(e.g. MoneyGram: `mgusd.moneygram.com` is issuer-only; `stellar.moneygram.com` runs
+the SEP-24 service). We resolve endpoints from the toml, so point us at the toml
+that advertises your live transfer/auth servers.
+
+## What gets registered
+
+Once validated, your anchor is added to
+[`constants/anchors.ts`](../constants/anchors.ts) with its id, home domain,
+supported corridors, asset, and SEP capabilities. Issuer-only domains (no transfer
+rail) are not listed as off-ramp anchors.
+
+## Reputation & disputes
+
+Every quote, fill, failure, and settlement latency for your anchor is written to a
+public reputation oracle with your anchor id attached
+([`docs/ANCHOR_REPUTATION.md`](ANCHOR_REPUTATION.md)). New anchors start with a
+bootstrap confidence band and accrue a live score from real outcomes. You agree to
+respond to disputes within five business days.
+
+> **Reputation accrual:** Newly onboarded anchors begin in a bootstrap
+> phase with seeded confidence scores. See
+> [Anchor Reputation: Bootstrap to Live](./ANCHOR_REPUTATION.md#new-anchor-reputation-bootstrap-to-live)
+> for how reputation accrues and when live status is reached.
+
+## Non-custody
+
+Stellar Intel never holds user funds, keys, or fiat
+([`docs/NON_CUSTODY.md`](NON_CUSTODY.md)). You handle user custody and KYC via your
+own SEP flow.
+
+## Checklist
+
+- [ ] `stellar.toml` live and parses cleanly (`curl` + `jq`).
+- [ ] SEP-1 + SEP-10 + (SEP-24 or SEP-6) advertised.
+- [ ] If SEP-6 is the only transfer rail, note the current caveat in the onboarding issue and confirm the anchor is documented in the SEP compliance matrix.
+- [ ] Asset issuer matches the canonical USDC issuer (or your declared asset).
+- [ ] Corridors and fee/rate model documented in the onboarding issue.
+- [ ] Technical contact who can answer toml/SEP-10/KYC questions within a day.
+
+<!-- source: docs/ANCHOR_DIRECTORY_CONTRIBUTION.md -->
+
+# Contributing to SDF's Anchor Directory
+
+**Last reviewed:** 2026-08-26
+
+Tracks issue [#796](https://github.com/ezedike-evan/stellar-intel/issues/796),
+part of epic #794. Goal: contribute our live anchor health data (uptime, TOML
+integrity, quote latency) back to SDF's public [Anchor
+Directory](https://anchors.stellar.org/) — cheap legitimacy and an SDF
+relationship builder.
+
+## Research: does SDF accept third-party contributions?
+
+**Short answer: not yet, and there is no published format.** As of this
+writing:
+
+- The Anchor Directory has no documented public ingestion API or submission
+  schema. Its own [launch post](https://stellar.org/blog/developers/anchor-directory-guide-finding-interoperable-asset-issuers-on-off-ramps-stellar)
+  does not describe one, and the directory explicitly disclaims completeness
+  ("this directory is not comprehensive... we recommend checking block
+  explorers like stellar.expert").
+- **Attestation of Reserves** — the feature this issue is aimed at — has been
+  listed as "coming soon" on the directory since its relaunch and, per our
+  research, still has no public spec or ingestion channel.
+- Getting listed or updating a listing today is a manual, contact-based
+  process: each anchor tile links to an email contact, and prospective
+  anchors are directed to reach out to SDF directly rather than submit
+  through an API. There is no evidence SDF (or the directory) currently
+  accepts unsolicited third-party health/uptime data from a project like
+  ours.
+
+This means step 1 of the issue's scope ("identify SDF's accepted contribution
+format") has a real answer: **no such format exists yet.** The rest of this
+doc treats that as the current state, not a blocker — we ship the export path
+now so it's a non-event whenever SDF opens a channel.
+
+## What we export today
+
+`GET /api/reputation/sdf-export` (implementation:
+[`lib/reputation/sdfExport.ts`](../lib/reputation/sdfExport.ts)) turns our
+existing signals into a self-describing JSON document:
+
+- **Health status** (`healthy` / `degraded` / `unknown`) and failure detail
+  from the nightly validator's ledger (`constants/anchor-health.json`, see
+  [`scripts/validate-anchors.mjs`](../scripts/validate-anchors.mjs) and
+  [`lib/stellar/anchors.ts`](../lib/stellar/anchors.ts)) — this already covers
+  TOML-reachability integrity and auto-clears once an anchor recovers.
+- **Uptime and average latency**, derived from `uptime`-kind probe samples in
+  the reputation store (`lib/reputation/probe.ts`), once the probe pipeline
+  from #785/#786 is publishing real samples.
+- **Per-corridor quote-latency percentiles** (p50/p95), derived from
+  `quote`-kind probe samples the same way.
+
+Each response carries a `schemaVersion` (currently `0.1.0-candidate`) and a
+`note` field stating plainly that this is our own candidate shape, not an
+SDF-endorsed one — so nobody downstream mistakes it for an official format.
+
+### Example response shape
+
+```json
+{
+  "schemaVersion": "0.1.0-candidate",
+  "generatedAt": "2026-07-29T00:00:00.000Z",
+  "source": "https://github.com/ezedike-evan/stellar-intel",
+  "note": "SDF has not published an Anchor Directory ingestion API — ...",
+  "anchors": [
+    {
+      "anchorId": "cowrie",
+      "name": "Cowrie Exchange",
+      "homeDomain": "cowrie.exchange",
+      "serviceDomain": null,
+      "seps": ["sep6", "sep10"],
+      "corridors": ["usdc-ngn"],
+      "health": {
+        "status": "healthy",
+        "lastCheckedAt": "2026-07-28T02:00:00.000Z",
+        "lastError": null,
+        "consecutiveFailures": 0,
+        "uptime": 0.997,
+        "avgLatencyMs": 184,
+        "quoteLatencyByCorridor": {
+          "usdc-ngn": { "p50Ms": 210, "p95Ms": 340, "sampleCount": 20 }
+        }
+      }
+    }
+  ]
+}
+```
+
+## Known limitation: depends on #785
+
+Until [#785](https://github.com/ezedike-evan/stellar-intel/issues/785) (the
+publisher that writes probe-derived data on-chain) lands, uptime and
+quote-latency fields will mostly read `null`/empty for anchors with no
+accumulated probe samples yet — the export degrades honestly rather than
+fabricating a number. Health `status` still reflects the nightly validator's
+ledger regardless, since that pipeline is already live.
+
+## How to actually contribute this today
+
+Since there is no submission API to call, the current path is manual:
+
+1. Fetch `GET /api/reputation/sdf-export` (or run it against production once
+   deployed) to produce the current JSON snapshot.
+2. Reach out via the contact link on each of our anchors' tiles in the
+   [Anchor Directory](https://anchors.stellar.org/), or through SDF's general
+   developer contact channels, and offer the export as supporting data for
+   listing/attestation purposes.
+3. If/when SDF publishes a real ingestion format, adapt
+   `buildSdfAnchorDirectoryExport` in
+   [`lib/reputation/sdfExport.ts`](../lib/reputation/sdfExport.ts) to emit
+   that shape directly — the field mapping above should carry over with
+   little change, since it's already built from the same uptime/latency/TOML
+   signals SDF's "coming soon" attestation feature targets.
+
+==============================================================================
+SECTION: TRUST, SECURITY, AND LEGAL
+==============================================================================
+
+<!-- source: docs/SECURITY.md -->
+
+# Security Policy
+
+**Last reviewed:** 2026-08-26
+
+## Reporting a vulnerability
+
+Please **do not** open a public issue for security vulnerabilities. Email the
+maintainer privately and allow a reasonable window for a fix before disclosure:
+
+- **Contact:** open a [GitHub security advisory](https://github.com/Ezedike-Evan/stellar-intel/security/advisories/new)
+  (preferred), or email the maintainer listed on the GitHub profile.
+
+We honour responsible disclosure and will credit reporters in the release notes
+unless you prefer to remain anonymous.
+
+## Supported versions
+
+The `main` branch is the supported surface. There is no LTS branch yet.
+
+## Custody boundary
+
+Stellar Intel is non-custodial: no user funds, no user keys, no fiat, no KYC data.
+See [`docs/NON_CUSTODY.md`](NON_CUSTODY.md). The largest class of "security" risk
+for users — losing funds — is structurally out of scope because we never hold them.
+
+## Key & secret handling
+
+- **No user keys.** Signing is in the user's wallet (Freighter). Intents are
+  Ed25519-signed client-side; the server only verifies signatures
+  ([`docs/INTENT_API.md`](INTENT_API.md)).
+- **`ADMIN_SECRET_KEY`** gates `/admin/disputes` and admin reputation routes. Keep
+  it server-side only; never expose it to the client (it is **not** a
+  `NEXT_PUBLIC_*` var). See `lib/config.ts` for env validation.
+- **Publisher keys** (Soroban oracle) are server-held and never shipped to the
+  browser. Rotation policy is a roadmap item ([`docs/ROADMAP.md`](ROADMAP.md)).
+- **Contract admin key** — the reputation contract's admin `Address` is
+  currently a single HSM-backed key. The migration path to a community-governed
+  multisig (M-of-N Stellar account) is documented in
+  [`docs/GOVERNANCE.md`](GOVERNANCE.md). The two-step `propose_admin` /
+  `accept_admin` entrypoints on the contract are in place to execute that
+  handoff safely once the signer set is ratified.
+
+## Network & data integrity
+
+- **SEP-10** authentication asserts the mainnet network passphrase before signing a
+  challenge (`lib/stellar/sep10.ts`), preventing cross-network challenge replay.
+- **Anchor calls run server-side** (e.g. `/api/rates/[corridor]`) so third-party
+  anchor responses never execute with the user's origin/credentials.
+- **No fabricated rates.** A failed anchor renders as unavailable; the codebase and
+  PR template forbid stub/placeholder rates.
+- **Replay protection** on signed intents (`lib/intent/replay.ts`).
+
+## Supply chain
+
+- Dependencies are watched by Dependabot (`.github/dependabot.yml`) and reviewed in
+  CI (`dependency-review.yml`), with CodeQL scanning (`codeql.yml`).
+- An SBOM-on-release process is a roadmap item (v5).
+
+## Related
+
+- [`docs/THREAT_MODEL.md`](THREAT_MODEL.md) — adversaries and mitigations.
+- [`docs/NON_CUSTODY.md`](NON_CUSTODY.md) — the custody boundary in detail.
+
+<!-- source: docs/THREAT_MODEL.md -->
+
+# Threat Model
+
+**Last reviewed:** 2026-08-26
+
+Scope: the Stellar Intel web app, its API, the intent flow, the reputation store,
+and the Soroban oracle. Out of scope by construction: theft of user funds or keys —
+the system is [non-custodial](NON_CUSTODY.md) and never holds either.
+
+| Threat                           | Vector                                               | Mitigation                                                                                                                                                                                    |
+| -------------------------------- | ---------------------------------------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| **Anchor failure / silent drop** | Anchor accepts a withdraw then never settles         | Per-anchor outcomes feed the reputation score (fill rate); failing anchors rank down. Failed quotes render as unavailable, never as a zero/fabricated rate. Nightly `data-health` validation. |
+| **MITM on anchor traffic**       | Tampered `stellar.toml` or quote in transit          | TLS to anchor domains; anchor calls run server-side; SEP-10 asserts the network passphrase before signing.                                                                                    |
+| **Intent replay**                | Re-submitting a previously-signed envelope           | `lib/intent/replay.ts` treats each signed envelope as single-use; server recomputes the canonical hash and verifies the signature.                                                            |
+| **Intent tampering**             | Altering amount/anchor after signing                 | Server recomputes SHA-256 over the canonical intent and verifies the Ed25519 signature; `publicKey` must match. Any change invalidates the signature.                                         |
+| **Reputation poisoning**         | Forged or spam outcomes to skew scores               | Outcomes are signed and replayable; disputes resolve on evidence. On-chain writes gated by `require_admin` / publisher whitelist.                                                             |
+| **Oracle tampering**             | Unauthorized contract writes                         | Soroban `require_admin` gate on `submit_outcome` / `register`; multi-signer admin + time-locked upgrade are roadmap hardening.                                                                |
+| **Admin-route abuse**            | Hitting `/admin/disputes` or admin reputation routes | Gated by server-only `ADMIN_SECRET_KEY` (not a `NEXT_PUBLIC_*` var).                                                                                                                          |
+| **Agent misuse**                 | An AI agent tries to drain a wallet via MCP          | MCP surface is advisory + user-signed: every executing call must be signed by the user's wallet. No held keys, no autonomous spend.                                                           |
+| **Griefing / DoS on rates**      | Hammering `/api/rates` or anchors                    | Per-anchor timeouts + isolation (`server-rates.ts`); API rate limiting (`lib/api/rate-limit.ts`).                                                                                             |
+| **Supply-chain compromise**      | Malicious dependency                                 | Dependabot + `dependency-review` + CodeQL; SBOM on release (roadmap).                                                                                                                         |
+| **Publisher key compromise**     | Stolen Soroban publisher key                         | Server-held keys; rotation ceremony documented (roadmap).                                                                                                                                     |
+
+## Review cadence
+
+This model is reviewed when the architecture changes materially (new SEP, new
+write path, new admin surface) and at each major release gate. An annual external
+red-team exercise is a v5 roadmap item.
+
+## Related
+
+- [`docs/SECURITY.md`](SECURITY.md) · [`docs/NON_CUSTODY.md`](NON_CUSTODY.md) ·
+  [`docs/ORACLE_SPEC.md`](ORACLE_SPEC.md)
+
+<!-- source: docs/JURISDICTIONAL.md -->
+
+# Jurisdictional Memo
+
+> **Not legal advice.** This memo records the architectural basis for Stellar
+> Intel's regulatory posture for reviewers and contributors. Operators must obtain
+> their own counsel for their jurisdiction.
+
+**Last reviewed:** 2026-08-26
+
+## Thesis: not money transmission
+
+Money-transmitter / MSB / VASP classification generally attaches to a party that
+**takes control of customer funds**. Stellar Intel is architected so that it never
+does — see [`docs/NON_CUSTODY.md`](NON_CUSTODY.md). The classification-relevant
+facts, all enforced in code:
+
+1. **Every leg is signed by the user.** Value moves only on a transaction the user
+   signs in their own wallet (Freighter). We submit nothing on a user's behalf with
+   a held key. Intents are user-signed envelopes
+   ([`docs/INTENT_API.md`](INTENT_API.md)).
+2. **The anchor takes custody.** Fiat settlement and KYC are between the user and a
+   regulated anchor under SEP-24 / SEP-6. We are not in the settlement path.
+3. **Stellar enforces atomicity.** The ledger, not Stellar Intel, guarantees the
+   transfer semantics.
+
+Stellar Intel therefore functions as an **information and routing layer** (rate
+comparison + a public reputation oracle + an agent surface), not a transmitter of
+value.
+
+## Risk register (architecture-level)
+
+| Concern                  | Posture                                                                                                            |
+| ------------------------ | ------------------------------------------------------------------------------------------------------------------ |
+| MSB / money transmission | No custody, no held keys, no settlement path — see facts above.                                                    |
+| VASP / data              | We store public anchor outcomes, not user funds or KYC; KYC stays with the anchor.                                 |
+| Sanctions / AML          | KYC/AML is performed by the regulated anchor in its SEP flow; we do not onboard users to a financial product.      |
+| Per-country variance     | Reviewed per jurisdiction with counsel; this memo is the architectural baseline, not a country-by-country opinion. |
+
+## Maintenance
+
+Reviewed annually and whenever a new write path or custody-adjacent surface is
+proposed. Must stay internally consistent with
+[`docs/NON_CUSTODY.md`](NON_CUSTODY.md), [`docs/SECURITY.md`](SECURITY.md), and
+[`docs/THREAT_MODEL.md`](THREAT_MODEL.md) — a PR that breaks one should update all.
+
+---
+
+## Credit Layer — Regulatory Feasibility Memo
+
+> **Not legal advice.** This memo records exploratory research into the
+> regulatory landscape surrounding a potential future credit layer. No lending
+> implementation is in scope. Any future lending feature is blocked by
+> regulatory approval and by sufficient capital availability.
+> See [`docs/ROADMAP.md`](ROADMAP.md) and
+> [`docs/PROPOSAL.md`](PROPOSAL.md) for the strategic thesis.
+
+> **Scope.** This is a Year 2+ roadmap initiative (post-v5 Institutional).
+> The discussion below is intended to frame the conversation for contributors
+> and reviewers — it does not commit to building anything.
+
+### Background: Lending Against Observed On-Chain Remittance History
+
+Stellar Intel's core thesis is that the execution layer — rate comparison,
+reputation-ranked routing, intent submission, and outcome recording — solves
+an immediate problem: getting a dollar from a wallet to a bank account in an
+emerging market with the certainty of a tracked parcel.
+
+A long-observed extension of this thesis is: _if we can observe a user
+successfully remit $200 every two weeks for twelve months through reputable
+anchors, can that history serve as an underwriting signal for a small-dollar
+loan?_ The loan itself would not be fiat-denominated — it would be a USDC
+advance against a future inbound remittance, settled automatically when the
+next remittance lands, creating a closed loop.
+
+In this model:
+
+1. **The reputation oracle** (see [`docs/ORACLE_SPEC.md`](ORACLE_SPEC.md))
+   already records every terminal outcome: intent hash, anchor, quoted rate,
+   delivered rate, settle time, and outcome status. Over time, the oracle
+   accumulates a per-user remittance history that is user-signed,
+   replayable, and permissionless to read.
+2. **The intent primitive** (see [`docs/INTENT_API.md`](INTENT_API.md))
+   already expresses a user's commitment to a future action. A credit-layer
+   extension might express a commitment to repay.
+3. **Non-custody remains.** A lending facility would still not hold user
+   keys or fiat — the user would sign the loan agreement as an intent, and
+   repayment would be automatic at the next remittance.
+
+None of this is implemented. None of this is scoped. This memo exists so that
+when the roadmap reaches a point where credit becomes feasible, the
+regulatory landscape has already been surveyed.
+
+### Proposed Definition: "Proven Remittance History"
+
+> **Research proposal — not a finalized lending policy.**
+> The thresholds below are informed by the project's existing reputation and
+> actuarial concepts (see [`docs/ANCHOR_REPUTATION.md`](ANCHOR_REPUTATION.md)
+> and [`lib/reputation/thresholds.ts`](../lib/reputation/thresholds.ts)).
+> They are offered as a starting point for discussion, not as underwriting
+> criteria.
+
+For the purpose of credit-layer research, "proven remittance history" is
+proposed to mean the following objective, measurable criteria, ALL of which
+must be satisfied:
+
+| Criterion                                   | Proposed Threshold                 | Rationale                                                                                                                              |
+| ------------------------------------------- | ---------------------------------- | -------------------------------------------------------------------------------------------------------------------------------------- |
+| **Account age**                             | ≥ 12 months                        | A full year of observable behaviour filters out ephemeral accounts and provides at least one cycle of seasonal variance.               |
+| **Remittance history duration**             | ≥ 6 months of consecutive data     | The outcome log must extend back at least six months. Aligns with the existing 90-day rolling scorecard window multiplied by 2.        |
+| **Successful remittance transactions**      | ≥ 24 completed intents             | Two per month over twelve months. Comparably sized to the `MIN_OUTCOMES_THRESHOLD` (30) used for anchor scorecard graduation.          |
+| **Transaction consistency**                 | ≤ 2 gaps > 60 days between intents | Demonstrates recurring need rather than one-off usage. Consistent with the behavioural stability signal.                               |
+| **Volume threshold (total)**                | ≥ $2,400 USDC cumulative           | Average $200/mo over twelve months — below this, the economics of a loan (origination cost, monitoring, recovery) are likely negative. |
+| **Volume threshold (per intent)**           | ≥ $50 USDC per intent              | Below this, the fixed-cost of underwriting exceeds any reasonable advance.                                                             |
+| **Fill rate**                               | ≥ 0.9 (90 %) across all intents    | Borrows from the reputation composite score `fillRate` factor. High fill rate signals delivery reliability.                            |
+| **Slippage tolerance**                      | ≤ 5 % p95 slippage                 | Borrows from the reputation composite score `slippage` factor. Low slippage signals predictable delivery value.                        |
+| **Settlement time**                         | p95 settle ≤ 24 hours              | Borrows from the reputation composite score `settleSeconds` factor. Fast settlement reduces counterparty risk window.                  |
+| **Anchor diversity**                        | ≥ 2 distinct anchors used          | Using multiple anchors reduces anchor-specific failure correlation and indicates the user is not locked to a single provider.          |
+| **Dispute-free history**                    | 0 open or upheld disputes          | An active dispute undermines the reliability of the recorded outcome history.                                                          |
+| **Reputation score of preferred anchor(s)** | Score band ≥ "amber" (≥ 80)        | The anchors the user transacts through must themselves have a track record (see [`docs/ANCHOR_REPUTATION.md`](ANCHOR_REPUTATION.md)).  |
+
+**Measurement sources.** All proposed criteria use data already recorded in
+the outcome log ([`types/reputation.ts`](../types/reputation.ts)):
+
+- Account age: derived from the first observed `intentHash` timestamp for a
+  given Stellar public key.
+- Remittance history duration: the span between the earliest and latest
+  outcome timestamps per key.
+- Transaction count, fill rate, slippage, settle time: direct fields on the
+  `OutcomeLogRow` and computed by the rolling scorecard in
+  [`lib/reputation/aggregate.ts`](../lib/reputation/aggregate.ts).
+- Anchor diversity, disputes: queryable from the outcome log.
+- Volume: `deliveredAmount` summed across completed intents.
+
+**Open questions for the proposed criteria:**
+
+1. Should synthetic probe transactions (nightly $1 off-ramps — see Wave 2.3
+   in [`docs/ROADMAP.md`](ROADMAP.md)) count toward proven history? Probes
+   are user-witnessed but may not reflect genuine remittance behaviour.
+2. Does a single corridor user have a materially different risk profile from
+   a multi-corridor user?
+3. Should the threshold adjust for the destination country's remittance
+   volume? A $200/mo user in Nigeria may have different repayment
+   characteristics from a $200/mo user in Argentina.
+4. What happens when the user switches Stellar accounts? Should history be
+   portable via a signed attestation?
+
+### Regulatory Landscape
+
+> This section summarises the regulatory posture of each jurisdiction
+> Stellar Intel currently serves, as it might apply to a credit layer.
+> It is not a legal opinion. Operators must obtain their own counsel for
+> each jurisdiction.
+
+#### United States
+
+| Factor                 | Assessment                                                                                                                            |
+| ---------------------- | ------------------------------------------------------------------------------------------------------------------------------------- |
+| **Lending licence**    | State-by-state. Lending to consumers requires a licence in most states; rates are usury-capped per state.                             |
+| **MSB classification** | If the system advances USDC, it may be classified as a money transmitter in addition to a lender.                                     |
+| **Federal oversight**  | Consumer Financial Protection Bureau (CFPB) for small-dollar lending; FinCEN for MSB transmission.                                    |
+| **Key consideration**  | A non-custodial lending facility that never takes fiat may not fit neatly into existing state lending regimes.                        |
+| **Open question**      | Does advancing USDC against a future inbound USDC transfer constitute a "loan" under state usury laws, or a prepaid forward contract? |
+
+#### European Union (MiCA)
+
+| Factor                         | Assessment                                                                                                                                       |
+| ------------------------------ | ------------------------------------------------------------------------------------------------------------------------------------------------ |
+| **Lending licence**            | e-money institution (EMI) or credit institution licence may be required depending on duration.                                                   |
+| **MiCA stablecoin regulation** | USDC is a significant stablecoin under MiCA; any system using it for credit-like products falls under the MiCA framework.                        |
+| **Consumer credit directive**  | The Consumer Credit Directive (CCD) applies to loans up to €100,000; requires standardised information, right of withdrawal, and APR disclosure. |
+| **Key consideration**          | The closed-loop nature (advance against next remittance) may shorten the duration enough to argue it is not "credit" — uncertain.                |
+| **Open question**              | Would auto-repayment from an inbound remittance constitute a "payment service" under PSD2, requiring a separate licence?                         |
+
+#### Nigeria
+
+| Factor                      | Assessment                                                                                                                                                              |
+| --------------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| **CBN digital lending**     | The Central Bank of Nigeria (CBN) has restricted digital lending; lenders must be registered with the CBN and comply with the CBN's 2021 framework for digital lending. |
+| **Money transmission**      | CBN's regulations on International Money Transfer Operators (IMTOs) apply to inbound cross-border transfers.                                                            |
+| **USDC / crypto treatment** | Nigeria has taken a cautious approach to crypto; USDC-denominated lending may face regulatory uncertainty.                                                              |
+| **Key consideration**       | Nigeria is the largest corridor by volume. The regulatory cost of compliance must be weighed against potential user impact.                                             |
+| **Open question**           | Could a non-custodial, oracle-based lending mechanism avoid classification as a "digital lender" under CBN rules?                                                       |
+
+#### Other Key Corridors
+
+| Jurisdiction  | Primary Regulator       | Key Instruments                                                                       | Likely Classification        | Risk Level  |
+| ------------- | ----------------------- | ------------------------------------------------------------------------------------- | ---------------------------- | ----------- |
+| **Kenya**     | Central Bank of Kenya   | CBK Digital Credit Guidelines; Data Protection Act                                    | Digital credit provider      | Medium      |
+| **Ghana**     | Bank of Ghana           | Payment Systems and Services Act; E-Money Issuers Guidelines                          | E-money / payment service    | Medium      |
+| **Mexico**    | CNBV / CONDUSEF         | Ley de Instituciones de Crédito; Fintech Law (Ley Fintech) for crowdfunding / e-money | Payment institution (IFPE)   | Medium      |
+| **Brazil**    | Banco Central do Brasil | Payment Arrangement Law; the new legal framework for virtual assets                   | Payment institution / credit | Medium–High |
+| **Argentina** | BCRA / CNV              | Virtual Asset Provider (PSAV) registration; Consumer credit regime                    | PSAV / credit provider       | High        |
+
+### Licensing Implications
+
+**Summary.** A lending facility that advances USDC against proven remittance
+history would likely require some combination of the following licences,
+depending on the jurisdictions served:
+
+| Licence Type                   | Required When                                                              | Example Regimes                |
+| ------------------------------ | -------------------------------------------------------------------------- | ------------------------------ |
+| Money transmission / MSB       | Any jurisdiction where advancing USDC is classified as transmitting value. | US (FinCEN), most US states    |
+| Consumer credit / lending      | Loan is to a natural person, attracts interest or fees, and is not exempt. | US states, EU (CCD), UK (FCA)  |
+| E-money / payment institution  | System holds funds or facilitates payment settlement.                      | EU (MiCA/EMD2), Ghana, Nigeria |
+| Virtual asset service provider | Any jurisdiction that treats USDC as a virtual asset.                      | Argentina (PSAV), EU (MiCA)    |
+
+**Mitigation strategies under research:**
+
+1. **Partnership model.** The lending facility is operated by a regulated
+   third party; Stellar Intel provides the data oracle (remittance history
+   attestation) but does not originate loans.
+2. **Non-interest structure.** If the "loan" is structured as a fee-based
+   prepaid advance (no interest), it may escape usury and lending-licence
+   requirements in some jurisdictions.
+3. **Jurisdictional gating.** Launch only in jurisdictions where the
+   regulatory path is clear and cost-effective, excluding those where it is
+   not.
+
+### AML / KYC and Consumer Protection Considerations
+
+**Current posture.** Today, Stellar Intel does not collect KYC. The anchor
+performs KYC in its own SEP-24 or SEP-6 flow. The project stores only public
+outcome data (fill rate, slippage, settle time). See
+[`docs/NON_CUSTODY.md`](NON_CUSTODY.md).
+
+**Credit layer implications.** A lending facility would introduce new
+AML/KYC and consumer protection obligations:
+
+| Consideration                     | Impact                                                                                                                                                         |
+| --------------------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| **Customer due diligence**        | A lender must verify borrower identity. The anchor's KYC is not shared with Stellar Intel. A separate CDD process would be required.                           |
+| **Beneficial ownership**          | For non-natural-person borrowers, beneficial ownership must be identified — currently out of scope.                                                            |
+| **Credit reporting**              | Loan performance data (repayment history, defaults) must be reported to credit bureaus. Stellar Intel currently does not register with any credit bureau.      |
+| **Fair lending / discrimination** | Using on-chain behaviour as an underwriting signal may introduce disparate impact. Historical transaction patterns may correlate with demographics.            |
+| **Debt collection**               | If a loan defaults, collection processes are regulated. Auto-repayment from an inbound remittance may constitute an unauthorised collection practice.          |
+| **Right of withdrawal**           | EU CCD and many US state laws give consumers a right to withdraw from a credit agreement within a cooling-off period. Automatic execution conflicts with this. |
+| **Data privacy**                  | Using the outcome log for credit scoring may constitute a new data use not consented to by users. GDPR / CCPA / Data Protection Act considerations apply.      |
+
+**Key privacy question.** The outcome log is public. If a lender reads a
+user's public remittance history to make an underwriting decision, has the
+user consented to that use? The permissionless-read design of the oracle
+(see [`docs/ORACLE_SPEC.md`](ORACLE_SPEC.md)) is intentional — but it was
+designed for anchor reputation, not consumer credit scoring. A credit layer
+may need an explicit consent layer on top.
+
+### Risks and Assumptions
+
+| Risk                                 | Description                                                                                                                                                | Likelihood | Impact     |
+| ------------------------------------ | ---------------------------------------------------------------------------------------------------------------------------------------------------------- | ---------- | ---------- |
+| **Regulatory classification error**  | The system is classified as a lender or MSB in a jurisdiction unexpectedly, triggering retroactive liability.                                              | Low        | High       |
+| **Credit risk (default)**            | The user does not remit again, leaving an unrecoverable advance. No collateral is posted (non-custodial design).                                           | Medium     | High       |
+| **Oracle data quality**              | The outcome log is incomplete, gapped, or manipulable, leading to incorrect underwriting decisions.                                                        | Low        | High       |
+| **Adverse selection**                | Users with proven remittance history are the least likely to need credit, making the lending pool unrepresentative and risky.                              | Medium     | Medium     |
+| **Regulatory fragmentation**         | Each corridor jurisdiction has different lending and AML requirements; blanket compliance may be cost-prohibitive.                                         | High       | Medium     |
+| **User consent / privacy challenge** | Using outcome data for credit scoring without explicit consent creates legal risk under data protection regimes.                                           | Medium     | Medium     |
+| **Currency / FX risk**               | The advance is in USDC; the repayment is in USDC — but the user's actual income (remittance) is in local fiat. FX volatility affects willingness to repay. | Medium     | Low–Medium |
+
+**Key assumptions underlying this research:**
+
+1. **Remittance history is predictive of repayment.** The core underwriting
+   hypothesis — that a reliable remitter is a reliable borrower — is
+   plausible but untested. Microlending research (CGAP, 2019–2024) has
+   found mixed results on the predictive power of transaction history
+   alone.
+2. **The oracle data is sufficient.** The outcome log records only Stellar
+   Intel-sourced transactions. If a user also remits through other channels
+   (other wallets, direct SEP-24, bank transfer), that history is invisible
+   to the oracle.
+3. **Interest rate / fee economics work.** At small dollar amounts ($50–200
+   per advance), the cost of data verification, disbursement, monitoring,
+   and collection must be covered. It is not yet known whether the margins
+   support a sustainable product.
+4. **The legal entity can hold capital.** The project currently operates as
+   an open-source repository. A lending facility requires a regulated legal
+   entity with capital reserves. This is a separate undertaking requiring
+   its own capital raise.
+
+### Open Questions and Compliance Challenges
+
+1. **Closed-loop repayment.** If the loan is repaid automatically from the
+   next remittance, does the user retain control of their funds? The
+   non-custodial design means Stellar Intel never controls funds — but an
+   intent that commits the next remittance to repayment is legally
+   different from a signed intent to withdraw.
+2. **Oracle-based underwriting regulation.** No regulator has yet issued
+   guidance on using on-chain reputation oracles for consumer credit
+   decisions. This may change, and any lending feature must be designed to
+   accommodate future regulation.
+3. **Cross-border lending.** Lending to a borrower in Nigeria from a legal
+   entity in the United States may trigger cross-border lending
+   restrictions in both jurisdictions.
+4. **Insolvency remoteness.** If Stellar Intel were to become insolvent,
+   user outcome data is on-chain (permissionless) but any off-chain systems
+   (the publisher, the API) may fail. A lending facility must be structured
+   to survive the failure of its data provider.
+5. **Securitisation / capital markets.** At scale, the loan book would need
+   funding beyond equity — either debt or securitisation. Each adds
+   regulatory complexity.
+
+### Why This Remains a Future Roadmap Item
+
+The v1–v5 roadmap (see [`docs/ROADMAP.md`](ROADMAP.md)) is scoped to
+building, hardening, and scaling the **execution layer** — rate aggregation,
+reputation, oracle, MCP surface, and institutional compliance. A credit
+layer is not part of any current wave.
+
+Credit is blocked by four independent gates that must ALL be cleared:
+
+| Gate                       | Current Status      | Path to Clear                                                                                           |
+| -------------------------- | ------------------- | ------------------------------------------------------------------------------------------------------- |
+| **Regulatory approval**    | Not engaged         | Engage counsel in at least one pilot jurisdiction; determine licensing path; apply or partner.          |
+| **Sufficient capital**     | Not available       | Separate capital raise for a regulated lending entity. Project funds are for execution-layer dev.       |
+| **Proven data quality**    | Early (v2 underway) | The oracle must accumulate enough outcomes across enough corridors to validate the underwriting thesis. |
+| **User consent / privacy** | Not designed        | Design a consent layer on top of the permissionless oracle for credit-specific data use.                |
+
+**These gates place any lending feature in the Year 2+ window** — after v5
+Institutional has shipped, the jurisdiction compliance matrix is published,
+and a separate legal entity with capital reserves has been established.
+
+### Explicit Scope Statement
+
+To avoid any ambiguity:
+
+- **No lending implementation is in scope** for the current roadmap or any
+  planned wave. No contracts, APIs, database schemas, underwriting models,
+  or credit-related business logic exist in the repository.
+- **This issue is research only.** The analysis above is a survey of the
+  regulatory landscape — it is not a product specification.
+- **Any lending feature is blocked by regulatory approval.** No work on a
+  credit layer will proceed until counsel has confirmed a licensing path for
+  at least one pilot jurisdiction.
+- **Any lending feature is blocked by sufficient capital availability.** The
+  project has no capital allocated to lending, and a lending facility would
+  require a separate raise on top of whatever funds the rest of the roadmap.
+- **This is a Year 2+ roadmap initiative.** The current roadmap (v1
+  Executable → v5 Institutional) must ship before credit feasibility is
+  re-evaluated.
+
+### Related Documentation
+
+- [`docs/ROADMAP.md`](ROADMAP.md) — the current wave plan; no credit layer in any wave.
+- [`docs/ORACLE_SPEC.md`](ORACLE_SPEC.md) — the on-chain reputation oracle that would
+  provide the underwriting data.
+- [`docs/ANCHOR_REPUTATION.md`](ANCHOR_REPUTATION.md) — the scoring methodology that
+  informs the proposed threshold criteria.
+- [`docs/NON_CUSTODY.md`](NON_CUSTODY.md) — why the product cannot be a lender without
+  a fundamental architectural change (or a separate legal entity).
+- [`docs/PROPOSAL.md`](PROPOSAL.md) — the project thesis; the scope is an observation
+  record plus a non-custodial execution path, not lending.
+- [`types/reputation.ts`](../types/reputation.ts) — the outcome log schema that would
+  feed any future credit scoring.
+- [`lib/reputation/thresholds.ts`](../lib/reputation/thresholds.ts) — the existing
+  threshold logic that informed the proposed quantitative criteria.
+
+**Cross-document consistency note.** The analysis in this memo is exploratory
+and has **not yet** been reflected in [`docs/NON_CUSTODY.md`](NON_CUSTODY.md),
+[`docs/SECURITY.md`](SECURITY.md), or [`docs/THREAT_MODEL.md`](THREAT_MODEL.md).
+If credit-layer research advances beyond the exploratory stage, those four
+documents must be updated together to remain internally consistent — per the
+maintenance policy stated at the top of this document.
+
+<!-- source: docs/GOVERNANCE.md -->
+
+# Governance: Multisig Contract Administration
+
+**Last reviewed:** 2026-08-26
+
+This document covers how the Stellar Intel reputation contract transitions from
+a single-key admin to community-governed multisig, the ongoing signer-change
+process, and the emergency procedures that protect the protocol during that
+transition.
+
+## Background
+
+The reputation contract (`contracts/reputation/`) stores one `Address` as the
+contract admin. That address controls anchor registration, publisher
+authorization, and contract upgrades. At genesis the address was a
+single HSM-backed key held by the core team. This document defines the path to
+distributing that authority across a multisig signer set.
+
+## How Stellar multisig applies here
+
+Soroban's `Address::require_auth()` delegates signature verification to the
+Stellar host. If the stored admin address is a Stellar account with M-of-N
+signers, any transaction that includes admin calls must carry signatures from at
+least M of those N accounts. No contract-level vote counting is needed — the
+host enforces the threshold.
+
+**Target configuration:**
+
+- N = 5 signers (community maintainers + core team)
+- M = 3 (medium threshold on the multisig account)
+- Low threshold remains 1 (for read operations that don't mutate)
+
+## Migration runbook
+
+### Prerequisites
+
+- Rust toolchain + `cargo` with the `soroban` CLI installed.
+- Stellar account with sufficient XLM for transaction fees.
+- Authorization from the current admin (private key access).
+
+### Step 1 — Create the multisig account
+
+Create a new Stellar account or convert an existing one to multisig. Set the
+medium threshold to the required quorum and add each signer:
+
+```bash
+stellar account set-options \
+  --source <MULTISIG_ACCOUNT> \
+  --med-threshold 3 \
+  --add-signer <SIGNER_1_PUBLIC_KEY> --weight 1 \
+  --add-signer <SIGNER_2_PUBLIC_KEY> --weight 1 \
+  --add-signer <SIGNER_3_PUBLIC_KEY> --weight 1 \
+  --add-signer <SIGNER_4_PUBLIC_KEY> --weight 1 \
+  --add-signer <SIGNER_5_PUBLIC_KEY> --weight 1
+```
+
+Verify the threshold and signer list on Stellar Expert or Horizon before
+proceeding.
+
+### Step 2 — Propose the multisig account as the new admin
+
+The current single-key admin calls `propose_admin` on the contract, nominating
+the multisig account:
+
+```bash
+stellar contract invoke \
+  --id <CONTRACT_ID> \
+  --source <CURRENT_ADMIN_KEY> \
+  -- propose_admin \
+  --caller <CURRENT_ADMIN_ADDRESS> \
+  --candidate <MULTISIG_ACCOUNT_ADDRESS>
+```
+
+Verify the pending candidate is stored:
+
+```bash
+stellar contract invoke --id <CONTRACT_ID> -- pending_admin
+# Returns the multisig account address
+```
+
+### Step 3 — Accept with the multisig account
+
+At least M signers of the multisig account co-sign a transaction calling
+`accept_admin`. This can be done with the Stellar Laboratory (multi-sig
+XDR flow) or by collecting signatures out-of-band and submitting the composed
+transaction:
+
+```bash
+stellar contract invoke \
+  --id <CONTRACT_ID> \
+  --source <MULTISIG_ACCOUNT> \
+  -- accept_admin \
+  --candidate <MULTISIG_ACCOUNT_ADDRESS>
+```
+
+Because the medium threshold is 3, the transaction envelope must carry
+signatures from at least 3 of the 5 signer accounts before it is valid.
+
+### Step 4 - Verify
+
+```bash
+stellar contract invoke --id <CONTRACT_ID> -- admin
+# Must return <MULTISIG_ACCOUNT_ADDRESS>
+
+stellar contract invoke --id <CONTRACT_ID> -- pending_admin
+# Must return None
+```
+
+### Step 5 - Retire the single key
+
+Optionally reduce the old admin account's weight to 0 so it can no longer
+sign for anything. Keep the keypair in offline storage for audit purposes.
+
+## Signer-change governance process
+
+Any change to the multisig signer set (adding a signer, removing a signer,
+changing the threshold) follows this process:
+
+1. **Proposal** - A current signer opens a GitHub Discussion in the
+   `stellar-intel` repository tagged `governance/signer-change`. The proposal
+   must include: the proposed new signer set, the reason for the change, and
+   a 72-hour comment window.
+
+2. **Review** - Existing signers comment with approval or objection. Objections
+   block the change; disputes escalate to a maintainer vote.
+
+3. **Approval** - After 72 hours with no blocking objections and at least M
+   explicit approvals from current signers, the Discussion is marked resolved.
+
+4. **Execution** - A Stellar `set_options` transaction is constructed with the
+   new signer set and submitted with the required M-of-N signatures. The
+   transaction hash is linked back to the Discussion for auditability.
+
+5. **Record** - The Discussion is closed and linked from the CHANGELOG with the
+   effective date.
+
+### Emergency signer removal
+
+If a signing key is compromised or a signer becomes unresponsive and must be
+removed urgently:
+
+- Any M (quorum) of remaining signers may submit a `set_options` transaction to
+  remove the compromised key without waiting for the 72-hour window.
+- The emergency action must be posted to the governance Discussion within 24
+  hours with a full explanation.
+
+## Contract upgrade governance
+
+The contract upgrade authority (`init_upgrade` / `upgrade` entrypoints in
+`src/upgrade.rs`) uses a separate `UpgradeAdmin` key. The same multisig
+migration path applies: set `UpgradeAdmin` to the multisig account using the
+same propose/accept flow as for the main admin:
+
+```bash
+stellar contract invoke \
+  --id <CONTRACT_ID> \
+  --source <CURRENT_UPGRADE_ADMIN_KEY> \
+  -- propose_upgrade_admin \
+  --caller <CURRENT_UPGRADE_ADMIN_ADDRESS> \
+  --candidate <MULTISIG_ACCOUNT_ADDRESS>
+```
+
+Then, co-signed by at least M signers of the multisig account:
+
+```bash
+stellar contract invoke \
+  --id <CONTRACT_ID> \
+  -- accept_upgrade_admin \
+  --candidate <MULTISIG_ACCOUNT_ADDRESS>
+```
+
+Verify with `pending_upgrade_admin` (should be empty afterwards) and
+`upgrade_admin` (should be the multisig). `cancel_upgrade_proposal` withdraws a
+proposal that has not been accepted.
+
+Two-step by design: the nominee must accept, so a mistyped address fails to
+complete rather than permanently binding the code-replacement authority to an
+account nobody controls.
+
+Until the upgrade admin is migrated, any WASM upgrade requires the core-team
+HSM key. This is documented in `docs/SECURITY.md`.
+
+## Related
+
+- [`docs/SDK_HANDOFF.md`](SDK_HANDOFF.md) - community SDK maintainer model
+- [`docs/SECURITY.md`](SECURITY.md) - key handling and custody boundary
+- [`docs/CONTRIBUTOR_LADDER.md`](CONTRIBUTOR_LADDER.md) - how contributors
+  become maintainers and then signer candidates
+
+<!-- source: docs/TERMS_OF_SERVICE.md -->
+
+# Terms of Service
+
+> **Draft — not legal advice, and not yet reviewed by counsel.** This is an
+> engineering draft written to be factually accurate about how the system
+> behaves. It must be reviewed by a qualified lawyer before it is presented to
+> users as binding terms. See [Review status](#review-status).
+
+**Last reviewed:** 2026-08-26
+
+---
+
+## 1. What Stellar Intel is
+
+Stellar Intel is an **information and routing layer**: it compares off-ramp rates
+across Stellar anchors, publishes an anchor reputation oracle, and exposes that
+data through a web interface, a public API, and an agent surface.
+
+It is **not** a money transmitter, an exchange, a broker, or a custodian. It does
+not move your money. Every transfer is between you and a third-party anchor.
+
+## 2. Non-custody
+
+Stellar Intel is non-custodial **by construction**, not by promise — there is no
+code path through which it could take custody
+([`docs/NON_CUSTODY.md`](NON_CUSTODY.md)).
+
+Specifically, Stellar Intel never holds:
+
+- **Your funds.** Assets move directly from your wallet to the anchor. They never
+  pass through an account Stellar Intel controls.
+- **Your keys.** Signing happens in your wallet. Stellar Intel never sees,
+  requests, or stores a private key or seed phrase.
+- **Your fiat.** The anchor settles fiat to the beneficiary under its own flow.
+- **Your KYC data.** Identity verification is collected by the anchor, not by us.
+
+**You sign every transaction.** Nothing moves without a signature you produce in
+your own wallet.
+
+## 3. Rates are estimates, not offers
+
+This is the most important thing on this page.
+
+Most rates shown are **indicative**: derived from anchors' published fee schedules
+and live exchange rates. They are an estimate of what you would receive, not a
+binding quote, and the amount you actually receive may differ.
+
+Where an anchor supports SEP-38 firm quotes, a quote you obtain during execution
+**is** binding on that anchor for the period it states — and it expires. Rates
+carrying a firm quote are labelled distinctly in the interface from those that
+are indicative.
+
+Stellar Intel does not set, guarantee, or underwrite any rate. The rate is the
+anchor's.
+
+## 4. Reputation scores are observations, not endorsements
+
+Anchor scores are computed from observed outcomes and availability probes, using
+the published methodology in
+[`docs/ANCHOR_REPUTATION.md`](ANCHOR_REPUTATION.md). Scores derived from a small
+number of observations are labelled as such.
+
+A score is a description of past behaviour. It is **not** a recommendation, a
+guarantee of future performance, a statement about an anchor's solvency or
+licensing, or a substitute for your own diligence.
+
+Listing an anchor is not an endorsement of it.
+
+## 5. Your responsibilities
+
+- **Wallet security is yours.** Stellar Intel cannot recover a lost key, reverse a
+  transaction, or freeze funds. Nobody can.
+- **Verify before you sign.** Check the destination, asset, and amount in your
+  wallet's signing prompt. That prompt, not this interface, is what authorises the
+  transfer.
+- **The anchor relationship is yours.** Its terms, fees, KYC requirements, limits,
+  and settlement timelines are between you and it.
+- **Compliance is yours.** You are responsible for the legality of your use where
+  you live, including tax and reporting obligations.
+
+## 6. Third-party anchors
+
+Anchors are independent third parties. Stellar Intel does not control them and is
+not responsible for their conduct, solvency, availability, or compliance.
+
+Anchor data is fetched from the anchors themselves and may be stale, incomplete,
+or wrong. An anchor may change its fees, suspend a corridor, or fail to settle,
+without notice to us.
+
+## 7. Availability
+
+The service is provided **as is**, with no guarantee of availability, accuracy, or
+fitness for a particular purpose. It depends on third-party infrastructure —
+anchors, the Stellar network, and data providers — any of which may be
+unavailable.
+
+Data may be cached. The interface indicates freshness where it is known.
+
+## 8. Limitation of liability
+
+To the maximum extent permitted by law, Stellar Intel and its contributors are not
+liable for losses arising from use of the service, including losses from an
+inaccurate rate, an anchor's conduct, a failed or delayed settlement, or a
+transaction you signed.
+
+> **Counsel must review this clause.** Enforceability of a liability limitation
+> varies significantly by jurisdiction, and some consumer-protection regimes void
+> it outright.
+
+## 9. Jurisdiction
+
+Stellar Intel's regulatory posture rests on never taking custody. The architectural
+basis is recorded in [`docs/JURISDICTIONAL.md`](JURISDICTIONAL.md), which is a memo
+for reviewers, **not** a country-by-country legal opinion.
+
+The service is not offered to users in jurisdictions where it would be unlawful,
+and it is not directed at any jurisdiction in particular. If use is restricted
+where you are, do not use it.
+
+## 10. Security and disclosure
+
+Vulnerability reporting is covered by [`docs/SECURITY.md`](SECURITY.md). The
+in-scope and out-of-scope surfaces are in
+[`docs/THREAT_MODEL.md`](THREAT_MODEL.md). Notably, your wallet and the anchors'
+systems are outside Stellar Intel's control and therefore outside its threat model.
+
+## 11. Changes
+
+These terms may change. Material changes will be reflected in the "Last updated"
+date. Continued use after a change constitutes acceptance.
+
+---
+
+## Short-form disclaimer
+
+The user-facing summary rendered in the product (issue #739). It must remain
+consistent with the sections above; if one changes, change both.
+
+> Stellar Intel is non-custodial. You sign every transaction with your own wallet.
+> Rates are live quotes, not guarantees.
+
+Kept to three sentences deliberately — it appears in a banner, and a disclaimer
+too long to read is not a disclaimer. Each sentence maps to a section above:
+non-custody (§2), user-signed (§2), rates are estimates (§3).
+
+`components/offramp/DisclaimerBanner.tsx` renders this text and links here, so
+this document is the single source for the wording.
+
+---
+
+## Review status
+
+| Item                                           | Status                           |
+| ---------------------------------------------- | -------------------------------- |
+| Factually consistent with `NON_CUSTODY.md`     | Yes                              |
+| Factually consistent with `JURISDICTIONAL.md`  | Yes                              |
+| Factually consistent with `THREAT_MODEL.md`    | Yes                              |
+| Reflects that most rates are indicative (#720) | Yes                              |
+| **Reviewed by a qualified lawyer**             | **No — required before publish** |
+
+Two things a reviewer should look at first: the liability limitation in §8, and
+whether §9's approach to jurisdiction is sufficient for the corridors actually
+served.
+
+## Related
+
+- [`docs/NON_CUSTODY.md`](NON_CUSTODY.md) — why custody is structurally impossible
+- [`docs/JURISDICTIONAL.md`](JURISDICTIONAL.md) — regulatory posture
+- [`docs/THREAT_MODEL.md`](THREAT_MODEL.md) — what is in and out of scope
+- [`docs/ANCHOR_REPUTATION.md`](ANCHOR_REPUTATION.md) — how scores are computed
+- [`docs/SEP_COMPLIANCE.md`](SEP_COMPLIANCE.md) — which anchors support firm quotes

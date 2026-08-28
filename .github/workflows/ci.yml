@@ -57,6 +57,16 @@ jobs:
           git diff --exit-code -- public/openapi.json \
             || { echo "::error::public/openapi.json is stale — run 'npm run emit-openapi' and commit the result"; exit 1; }
 
+      # lib/seo/llms-full.generated.txt is the corpus served at /llms-full.txt.
+      # It is generated from docs/ but committed, so editing a doc without
+      # regenerating would leave agents reading last month's documentation
+      # (#1064).
+      - name: llms-full.txt is in sync
+        run: |
+          npm run emit-llms-full
+          git diff --exit-code -- lib/seo/llms-full.generated.txt \
+            || { echo "::error::lib/seo/llms-full.generated.txt is stale — run 'npm run emit-llms-full' and commit the result"; exit 1; }
+
       - name: Unit tests (vitest)
         run: npm run test -- --reporter=default --coverage
 
