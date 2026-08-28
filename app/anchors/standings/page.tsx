@@ -15,6 +15,9 @@ import { ANCHORS } from '@/constants';
 import { AnchorLogo } from '@/components/ui/AnchorLogo';
 import { weightedComposite } from '@/lib/reputation/composite';
 import { holdsTopRank, isMeasured, rankStandings, scoreLabel } from '@/lib/reputation/standings';
+import { buildDatasetJsonLd, serializeJsonLd } from '@/lib/seo/jsonld';
+import { deriveReputationCoverage } from '@/lib/reputation/coverage';
+import type { OutcomeLogRow } from '@/types/reputation';
 
 export const metadata: Metadata = {
   title: 'Anchor Standings — Stellar Intel',
@@ -38,6 +41,12 @@ interface StandingsEntry {
   sampleSize: number;
 }
 
+interface StandingsResult {
+  standings: StandingsEntry[];
+  /** All raw outcome rows fetched, used to compute the Dataset JSON-LD coverage window. */
+  allRows: OutcomeLogRow[];
+}
+
 // ─── Score helpers ────────────────────────────────────────────────────────────
 //
 // The composite formula mirrors app/api/reputation/leaderboard/route.ts:
@@ -52,11 +61,15 @@ interface StandingsEntry {
 
 // ─── Data loading ─────────────────────────────────────────────────────────────
 
-async function loadStandings(): Promise<StandingsEntry[]> {
+async function loadStandings(): Promise<StandingsResult> {
   // Import server-only reputation modules dynamically to avoid bundling them
   // into the client. This page is a React Server Component.
   const { buildScorecards, mapOutcomeRows } = await import('@/lib/reputation/aggregate');
   const { getReputationStore } = await import('@/lib/reputation/store');
+
+  // Collect every raw row so the JSON-LD coverage window reflects the full
+  // corpus, not just what the scorecard exposes.
+  const allRows: OutcomeLogRow[] = [];
 
   const entries = await Promise.all(
     ANCHORS.map(async (anchor) => {
@@ -65,6 +78,7 @@ async function loadStandings(): Promise<StandingsEntry[]> {
         // here, and at prerender time there is none. Same guard as loadAnchorRows
         // in app/anchors/[id]/page.tsx.
         const rows = await getReputationStore().query({ anchorId: anchor.id });
+        allRows.push(...rows);
         const scorecard = buildScorecards(mapOutcomeRows(rows))[30];
 
         if (scorecard.state !== 'ok') {
@@ -109,16 +123,42 @@ async function loadStandings(): Promise<StandingsEntry[]> {
 
   // Measured anchors first, descending by composite and numbered 1..m.
   // Unmeasured anchors follow, unranked.
-  return rankStandings(entries);
+  return { standings: rankStandings(entries), allRows };
 }
 
 // ─── Page ─────────────────────────────────────────────────────────────────────
 
+const SITE_URL = process.env.NEXT_PUBLIC_SITE_URL ?? 'https://stellar-intel.vercel.app';
+
 export default async function StandingsPage() {
-  const standings = await loadStandings();
+  const { standings, allRows } = await loadStandings();
   const measured = standings.filter((entry) => isMeasured(entry.sampleSize));
 
+  // Coverage window is derived from the raw rows fetched above — never
+  // hardcoded — so the JSON-LD is always consistent with the displayed data.
+  const coverage = deriveReputationCoverage(allRows);
+  const jsonLd = buildDatasetJsonLd({
+    url: `${SITE_URL}/anchors/standings`,
+    name: 'Stellar Anchor Reputation Standings',
+    description:
+      'Ranked reputation standings for Stellar off-ramp anchors, computed from a rolling 30-day ' +
+      'window of on-chain settled transactions. Each anchor is scored on fill rate, settlement ' +
+      `time (p50), and slippage (p50). ${measured.length} of ${standings.length} anchors are ` +
+      'currently measured; unmeasured anchors are listed separately rather than scored as zero.',
+    temporalCoverage: coverage.temporalCoverage,
+    totalSamples: coverage.totalSamples,
+    updateFrequency: 'PT5M', // Standings revalidate every 5 minutes.
+    license: 'https://creativecommons.org/licenses/by/4.0/',
+    dateModified: new Date().toISOString(),
+  });
+
   return (
+    <>
+      <script
+        type="application/ld+json"
+        // eslint-disable-next-line react/no-danger
+        dangerouslySetInnerHTML={{ __html: serializeJsonLd(jsonLd) }}
+      />
     <main className="mx-auto max-w-5xl px-4 py-12 sm:py-16">
       <header>
         <h1 className="type-title">Anchor standings</h1>
@@ -275,5 +315,6 @@ export default async function StandingsPage() {
         rumour.
       </p>
     </main>
+    </>
   );
 }
