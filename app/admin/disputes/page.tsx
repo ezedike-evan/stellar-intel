@@ -62,7 +62,7 @@ export default function AdminDisputesPage() {
   if (!adminKey) {
     return (
       <div className="mx-auto max-w-sm py-16">
-        <h1 className="mb-6 text-xl font-semibold text-gray-900 dark:text-white">Admin login</h1>
+        <h2 className="mb-6 text-xl font-semibold text-gray-900 dark:text-white">Admin login</h2>
         {errorMsg && <p className="mb-4 text-sm text-red-600 dark:text-red-400">{errorMsg}</p>}
         <form
           onSubmit={(e) => {
