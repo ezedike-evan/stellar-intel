@@ -110,12 +110,9 @@ jobs:
       - name: Smoke-test preview URL
         env:
           PREVIEW_URL: ${{ needs.deploy.outputs.preview-url }}
-        run: |
-          if [ -f "tests/e2e/smoke.spec.ts" ]; then
-            npx playwright test tests/e2e/smoke.spec.ts --reporter=line
-          else
-            echo "No smoke spec yet — issuing a baseline HTTP probe instead."
-            STATUS=$(curl -sS -o /dev/null -w "%{http_code}" --max-time 30 "$PREVIEW_URL/")
-            echo "Homepage HTTP: $STATUS"
-            test "$STATUS" = "200"
-          fi
+        # Runs the whole tests/e2e directory rather than naming one spec, so this
+        # job can't silently drift out of date again the way it did when it named
+        # tests/e2e/smoke.spec.ts — a vitest file, not a Playwright spec, which
+        # made this job fail immediately with "Vitest cannot be imported in a
+        # CommonJS module" every time it actually ran (#1028).
+        run: npx playwright test --reporter=line
