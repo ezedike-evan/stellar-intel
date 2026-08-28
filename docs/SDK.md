@@ -46,6 +46,28 @@ Every capability the SDK will wrap is already reachable over HTTP. See
 [`docs/COOKBOOK.md`](COOKBOOK.md) for runnable examples and
 [`docs/INTENT_API.md`](INTENT_API.md) for the intent contract.
 
+### Option 1: use the hosted API directly
+
+No package installation is required. The hosted API is available at
+`https://stellar-intel.vercel.app`:
+
+```bash
+curl -sS "https://stellar-intel.vercel.app/api/rates/usdc-ngn?amount=100"
+```
+
+### Option 2: install the Rust client from this repository
+
+The HTTP client exists today, but is not yet published to crates.io. Add it as
+a Git dependency:
+
+```toml
+[dependencies]
+stellar-intel-client = { git = "https://github.com/ezedike-evan/stellar-intel", package = "stellar-intel-client" }
+```
+
+See [`crates/stellar-intel-client/README.md`](../crates/stellar-intel-client/README.md)
+for usage, retries, and error handling.
+
 ```ts
 // Minimal typed fetch wrapper you can drop in today.
 const BASE = 'https://stellar-intel.vercel.app';
@@ -77,7 +99,14 @@ Types you can import from the repo today: `OfframpIntent`, `SignedIntentEnvelope
 `IntentV1` ([`types/intent.ts`](../types/intent.ts)) and the reputation types
 ([`types/reputation.ts`](../types/reputation.ts)).
 
-## Planned `@stellarintel/sdk` surface (v4)
+## Future: published `@stellarintel/sdk` package (v4)
+
+The npm package is planned and is not available yet. Once published, its
+installation will be:
+
+```bash
+npm install @stellarintel/sdk
+```
 
 - Typed wrappers for the rates, intent, and reputation APIs.
 - React hooks (the app's `hooks/useAnchorRates.ts` is the reference pattern).

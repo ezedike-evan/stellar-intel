@@ -10,6 +10,24 @@ export default function QuickstartPage() {
         </p>
       </div>
 
+      <section className="space-y-4 rounded-xl border border-border bg-bg-subtle p-6">
+        <h2 className="text-xl font-semibold text-primary-text">Start here: no install required</h2>
+        <p className="text-secondary-text">
+          The hosted API is available today. Use the commands below with <code>curl</code>; piping
+          the response to <code>jq</code> is optional. If you prefer a client library, the Rust
+          client can be installed directly from this repository.
+        </p>
+        <CodeBlock
+          language="toml"
+          code={`[dependencies]
+stellar-intel-client = { git = "https://github.com/ezedike-evan/stellar-intel", package = "stellar-intel-client" }`}
+        />
+        <p className="text-sm text-secondary-text">
+          The published <code>@stellarintel/sdk</code> package is planned but is not available yet.
+          Do not use <code>npm install @stellarintel/sdk</code> until it is published.
+        </p>
+      </section>
+
       <section className="space-y-4">
         <h2 className="text-xl font-semibold text-primary-text">1. Compare rates for a corridor</h2>
         <p className="text-secondary-text">
@@ -18,7 +36,7 @@ export default function QuickstartPage() {
         </p>
         <CodeBlock
           language="bash"
-          code={`curl -s "https://stellar-intel.vercel.app/api/rates/usdc-ngn?amount=100" | jq`}
+          code={`curl -sS "https://stellar-intel.vercel.app/api/rates/usdc-ngn?amount=100"`}
         />
         <p className="text-sm text-secondary-text">
           Returns one row per anchor with <code>exchangeRate</code>, <code>fee</code>,{' '}
@@ -35,7 +53,7 @@ export default function QuickstartPage() {
         </p>
         <CodeBlock
           language="bash"
-          code={`curl -s "https://stellar-intel.vercel.app/api/reputation/cowrie" | jq`}
+          code={`curl -sS "https://stellar-intel.vercel.app/api/reputation/cowrie"`}
         />
         <p className="text-sm text-secondary-text">
           Returns scorecards, fill rate, settle latency, and sample counts.
@@ -49,7 +67,7 @@ export default function QuickstartPage() {
         </p>
         <CodeBlock
           language="bash"
-          code={`curl -s "https://stellar-intel.vercel.app/api/reputation/leaderboard?corridor=usdc-ngn" | jq`}
+          code={`curl -sS "https://stellar-intel.vercel.app/api/reputation/leaderboard?corridor=usdc-ngn"`}
         />
       </section>
 
@@ -85,7 +103,7 @@ curl -sX POST https://stellar-intel.vercel.app/api/intent/offramp \\
         </p>
         <CodeBlock
           language="bash"
-          code={`curl -s "https://stellar-intel.vercel.app/v1/public/scores" | jq`}
+          code={`curl -sS "https://stellar-intel.vercel.app/v1/public/scores"`}
         />
       </section>
 
