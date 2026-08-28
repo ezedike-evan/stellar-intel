@@ -20,6 +20,7 @@ describe('AmountInput', () => {
     fireEvent.change(screen.getByRole('textbox'), { target: { value: '-10' } });
     expect(onChange).not.toHaveBeenCalled();
   });
+  
 
   it('renders the USDC label', () => {
     render(<AmountInput value="100" onChange={vi.fn()} />);
