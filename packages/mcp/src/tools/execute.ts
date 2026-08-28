@@ -43,6 +43,7 @@ export function registerExecuteTool(server: McpServer): void {
         'transaction itself with its own wallet before calling this tool.',
       inputSchema: inputShape,
       outputSchema: ExecuteOutputSchema,
+      annotations: { destructiveHint: true, idempotentHint: false },
     },
     async (args) => {
       try {

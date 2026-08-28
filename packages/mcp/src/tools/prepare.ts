@@ -22,6 +22,7 @@ export function registerPrepareTool(server: McpServer): void {
         'Returns an unsigned intent envelope (intent + hash) and an unsigned Stellar transaction for agent signing.',
       inputSchema: inputShape,
       outputSchema: PrepareOutputSchema,
+      annotations: { readOnlyHint: true },
     },
     async (args) => {
       try {
