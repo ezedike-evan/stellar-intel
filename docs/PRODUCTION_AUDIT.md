@@ -194,8 +194,12 @@ vitest assertions across ~170 spec files.
 ### Gates that do not exist
 
 - **No secret scanning.**
-- **No end-to-end test in the merge gate.** Playwright smoke exists but is
-  skipped on PRs.
+- **No end-to-end test in the merge gate.** Playwright smoke exists on PRs
+  but is skipped for fork PRs (the preview deploy it depends on requires the
+  PR to come from this repository). `.github/workflows/postmerge-playwright.yml`
+  runs the full Playwright suite against `main` after every merge — against a
+  locally built `next start`, independent of who opened the PR — so `main`
+  itself is never left unverified, but no PR is blocked by it.
 - **No custody-boundary test.** §1's central claim is unguarded.
 - **No link checker**, so a doc can reference a file that does not exist.
 
