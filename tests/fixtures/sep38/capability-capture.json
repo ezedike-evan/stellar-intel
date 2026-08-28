@@ -1,0 +1,49 @@
+{
+  "_comment": "Live SEP-38 capability capture (#720). Regenerate with scripts/probe-sep38.mts --write-fixture.",
+  "capturedAt": "2026-08-04T17:54:57.652Z",
+  "question": "Can any registered anchor serve a SEP-38 firm quote for USDC->NGN?",
+  "answer": "No. No anchor on the usdc-ngn corridor declares ANCHOR_QUOTE_SERVER.",
+  "anchors": {
+    "moneygram": {
+      "homeDomain": "stellar.moneygram.com",
+      "tomlHttp": 200,
+      "anchorQuoteServer": null
+    },
+    "cowrie": {
+      "homeDomain": "cowrie.exchange",
+      "tomlHttp": 200,
+      "anchorQuoteServer": null
+    },
+    "anclap": {
+      "homeDomain": "anclap.com",
+      "tomlHttp": 200,
+      "anchorQuoteServer": null
+    },
+    "ngnc": {
+      "homeDomain": "ngnc.online",
+      "tomlHttp": 200,
+      "anchorQuoteServer": null
+    },
+    "mykobo": {
+      "homeDomain": "mykobo.co",
+      "tomlHttp": 200,
+      "anchorQuoteServer": null
+    },
+    "ntokens": {
+      "homeDomain": "ntokens.com",
+      "tomlHttp": 200,
+      "anchorQuoteServer": null
+    },
+    "zeam": {
+      "homeDomain": "zeam.money",
+      "tomlHttp": 200,
+      "anchorQuoteServer": "https://anchor.zeam.money/sep38",
+      "sep38InfoHttp": 200,
+      "sep38Assets": [
+        "stellar:USDC:GA5ZSEJYB37JRC5AVCIA5MOP4RHTM335X2KGX3IHOJAPP5RE34K4KZVN",
+        "stellar:BRL:GDVKY2GU2DRXWTBEYJJWSFXIGBZV6AZNBVVSUHEPZI54LIS6BA7DVVSP",
+        "iso4217:BRL"
+      ]
+    }
+  }
+}

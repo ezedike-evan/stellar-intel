@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server';
-import { checkRateLimit } from '@/lib/api/rate-limit';
+import { checkRateLimit, getClientIp } from '@/lib/api/rate-limit';
 import { computeCorridorAggregate, type SettlementEvent } from '@/lib/reputation/aggregate';
 import { withRequestLogger } from '@/lib/logger';
 
@@ -11,9 +11,13 @@ const KNOWN_ANCHORS = [
   { anchorId: 'anchor-cowrie', corridor: 'usdc-ngn' },
 ];
 
-let lastEtag = '';
+const PAYLOAD_CACHE_MS = 60_000;
 
-function buildScorePayload() {
+let lastEtag = '';
+let cachedPayload: ReturnType<typeof computeScorePayload> | null = null;
+let cachedAt = 0;
+
+function computeScorePayload() {
   return KNOWN_ANCHORS.map(({ anchorId, corridor }) => ({
     anchorId,
     corridor,
@@ -21,14 +25,24 @@ function buildScorePayload() {
   }));
 }
 
+// Cached for PAYLOAD_CACHE_MS so identical requests within the window get a
+// stable ETag: computeCorridorAggregate stamps a fresh `lastRefresh` on every
+// call, so recomputing per-request made the payload — and therefore the
+// ETag — different on every single request, defeating 304 responses.
+function buildScorePayload() {
+  const now = Date.now();
+  if (!cachedPayload || now - cachedAt >= PAYLOAD_CACHE_MS) {
+    cachedPayload = computeScorePayload();
+    cachedAt = now;
+  }
+  return cachedPayload;
+}
+
 export async function GET(request: NextRequest): Promise<NextResponse> {
   return withRequestLogger(request, 'api.public.scores', async (logger) => {
-    const ip =
-      request.headers.get('x-forwarded-for')?.split(',')[0]?.trim() ??
-      request.headers.get('x-real-ip') ??
-      'unknown';
+    const ip = getClientIp(request.headers);
 
-    const rl = checkRateLimit(ip);
+    const rl = await checkRateLimit(ip);
     if (!rl.allowed) {
       logger.warn({ event: 'rate_limit_exceeded', ip, retryAfter: rl.retryAfter });
       return NextResponse.json(
@@ -44,7 +58,8 @@ export async function GET(request: NextRequest): Promise<NextResponse> {
     }
 
     const payload = buildScorePayload();
-    const etag = `"${Buffer.from(JSON.stringify(payload)).length}-${Date.now()}"`;
+    const payloadHash = Buffer.from(JSON.stringify(payload)).toString('base64');
+    const etag = `"${payloadHash}"`;
 
     const ifNoneMatch = request.headers.get('if-none-match');
     if (ifNoneMatch && ifNoneMatch === lastEtag) {
@@ -61,5 +76,5 @@ export async function GET(request: NextRequest): Promise<NextResponse> {
         'X-RateLimit-Remaining': String(rl.remaining),
       },
     });
-  })
+  });
 }

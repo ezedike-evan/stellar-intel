@@ -1,5 +1,7 @@
 # Benchmarks
 
+**Last reviewed:** 2026-08-26
+
 How Stellar Intel measures itself. This document holds the corridor- and
 anchor-level performance numbers that back the product claims.
 

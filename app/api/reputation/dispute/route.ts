@@ -1,14 +1,16 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { z } from 'zod';
-import { Keypair } from '@stellar/stellar-sdk';
 import { withRequestLogger } from '@/lib/logger';
+import { STELLAR_PUBKEY_PATTERN } from '@/lib/patterns';
 import type { ApiError } from '@/types';
+import { checkRateLimit, clearRateLimitStore } from '@/lib/api/rate-limit';
+import { verifyIntentSignature } from '@/lib/intent/verify';
 
 const DisputeBodySchema = z.object({
   intentHash: z.string().regex(/^[0-9a-f]{64}$/, {
     message: 'intentHash must be a lowercase hex-encoded SHA-256 (64 chars)',
   }),
-  publicKey: z.string().regex(/^G[A-Z0-9]{55}$/, {
+  publicKey: z.string().regex(STELLAR_PUBKEY_PATTERN, {
     message: 'publicKey must be a valid Stellar public key (G…, 56 chars)',
   }),
   signature: z.string().min(1, { message: 'signature is required' }),
@@ -32,31 +34,29 @@ export interface DisputeRecord {
 
 const disputes = new Map<string, DisputeRecord>();
 
-interface RateLimitEntry {
-  count: number;
-  windowStart: number;
-}
-const rateLimitStore = new Map<string, RateLimitEntry>();
-
 const DISPUTE_WINDOW_MS = 86_400_000; // 24 hours
 const DISPUTE_MAX = 10;
 
-function checkDisputeRateLimit(publicKey: string): boolean {
-  const now = Date.now();
-  const entry = rateLimitStore.get(publicKey);
-
-  if (!entry || now - entry.windowStart >= DISPUTE_WINDOW_MS) {
-    rateLimitStore.set(publicKey, { count: 1, windowStart: now });
-    return true;
-  }
-  if (entry.count >= DISPUTE_MAX) return false;
-  entry.count += 1;
-  return true;
+/**
+ * Per-signer dispute quota, now counted through the shared limiter instead of a
+ * private Map — the private one was per-instance, so the "10 per 24 h" cap was
+ * really 10 per instance per 24 h (#733 / #911).
+ *
+ * Keyed by publicKey rather than IP on purpose: the quota belongs to the signer,
+ * and rotating IPs should not buy more disputes.
+ */
+async function checkDisputeRateLimit(publicKey: string): Promise<boolean> {
+  const result = await checkRateLimit(publicKey, {
+    bucket: 'api.reputation.dispute',
+    maxRequests: DISPUTE_MAX,
+    windowMs: DISPUTE_WINDOW_MS,
+  });
+  return result.allowed;
 }
 
 export function clearDisputeStores(): void {
   disputes.clear();
-  rateLimitStore.clear();
+  clearRateLimitStore();
 }
 
 // ─── Route handler ────────────────────────────────────────────────────────────
@@ -90,16 +90,8 @@ export async function POST(request: NextRequest): Promise<NextResponse> {
 
     logger.info({ event: 'dispute_submission', anchorId, publicKey, intentHash });
 
-    // Verify Ed25519 proof: signature over the raw intentHash bytes
-    let valid = false;
-    try {
-      const keypair = Keypair.fromPublicKey(publicKey);
-      const messageBytes = Buffer.from(intentHash, 'hex');
-      const sigBytes = Buffer.from(signature, 'base64');
-      valid = keypair.verify(messageBytes, sigBytes);
-    } catch {
-      valid = false;
-    }
+    // Verify Ed25519 proof: signature over the raw intentHash bytes.
+    const valid = verifyIntentSignature({ intentHash, publicKey, signature });
 
     if (!valid) {
       logger.warn({ event: 'signature_verification_failed', publicKey, intentHash });
@@ -109,7 +101,7 @@ export async function POST(request: NextRequest): Promise<NextResponse> {
       );
     }
 
-    if (!checkDisputeRateLimit(publicKey)) {
+    if (!(await checkDisputeRateLimit(publicKey))) {
       logger.warn({ event: 'rate_limited', publicKey });
       return NextResponse.json<ApiError>(
         { code: 'RATE_LIMITED', message: 'Dispute limit of 10 per 24 h exceeded' },

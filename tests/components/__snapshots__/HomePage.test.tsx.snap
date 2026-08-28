@@ -2,223 +2,1260 @@
 
 exports[`HomePage > matches snapshot 1`] = `
 <div
-  class="space-y-16"
+  class="space-y-24 sm:space-y-32"
 >
+  <script
+    type="application/ld+json"
+  >
+    {"@context":"https://schema.org","@type":"FinancialProduct","name":"Stellar Intel","description":"A public health and reputation record for Stellar off-ramp anchors. Every registered anchor is probed every five minutes across four signals, with the scoring method published.","url":"https://stellar-intel.vercel.app","applicationCategory":"FinanceApplication"}
+  </script>
   <section
-    class="py-12 text-center"
+    aria-labelledby="hero-heading"
+    class="grid grid-cols-1 items-start gap-x-6 gap-y-12 py-16 lg:grid-cols-12 lg:py-24"
   >
     <div
-      class="mb-4 inline-flex items-center gap-2 rounded-full bg-blue-50 px-4 py-1.5 text-sm font-medium text-blue-700 dark:bg-blue-950 dark:text-blue-300"
+      class="lg:col-span-7"
     >
-      <svg
-        aria-hidden="true"
-        class="lucide lucide-zap h-3.5 w-3.5"
-        fill="none"
-        height="24"
-        stroke="currentColor"
-        stroke-linecap="round"
-        stroke-linejoin="round"
-        stroke-width="2"
-        viewBox="0 0 24 24"
-        width="24"
-        xmlns="http://www.w3.org/2000/svg"
+      <p
+        class="text-fg-muted mb-6 flex flex-wrap items-center gap-2 font-mono text-xs tracking-wide"
       >
-        <path
-          d="M4 14a1 1 0 0 1-.78-1.63l9.9-10.2a.5.5 0 0 1 .86.46l-1.92 6.02A1 1 0 0 0 13 10h7a1 1 0 0 1 .78 1.63l-9.9 10.2a.5.5 0 0 1-.86-.46l1.92-6.02A1 1 0 0 0 11 14z"
+        <span
+          aria-hidden="true"
+          class="bg-control-border inline-block h-px w-6"
         />
-      </svg>
-      Stellar Execution Layer
-    </div>
-    <h1
-      class="mb-4 text-4xl font-bold tracking-tight text-gray-900 dark:text-white md:text-5xl"
-    >
-      Where stablecoin transactions
-      <br />
-      <span
-        class="text-blue-600"
+        probed every 5 minutes · 4 signals
+      </p>
+      <h1
+        class="type-display"
+        id="hero-heading"
       >
-        happen on Stellar.
-      </span>
-    </h1>
-    <p
-      class="mx-auto max-w-2xl text-lg text-gray-600 dark:text-gray-400"
-    >
-      Stellar Intel is the execution layer for cross-border stablecoin flows — execute USDC off-ramps across anchors for Nigeria, Kenya, Ghana, Mexico, and more in one click.
-    </p>
-  </section>
-  <section
-    class="rounded-xl border border-gray-200 bg-gray-50 p-4 dark:border-gray-700 dark:bg-gray-800/50"
-  >
-    <div
-      class="flex items-center gap-3"
-    >
-      <svg
-        aria-hidden="true"
-        class="lucide lucide-globe h-5 w-5 text-blue-600"
-        fill="none"
-        height="24"
-        stroke="currentColor"
-        stroke-linecap="round"
-        stroke-linejoin="round"
-        stroke-width="2"
-        viewBox="0 0 24 24"
-        width="24"
-        xmlns="http://www.w3.org/2000/svg"
-      >
-        <circle
-          cx="12"
-          cy="12"
-          r="10"
-        />
-        <path
-          d="M12 2a14.5 14.5 0 0 0 0 20 14.5 14.5 0 0 0 0-20"
-        />
-        <path
-          d="M2 12h20"
-        />
-      </svg>
-      <div>
-        <div
-          class="text-xl font-bold text-gray-900 dark:text-white"
+        <span
+          class="text-secondary-text block"
         >
-          3
+          What anchors say.
+        </span>
+        <span
+          class="block"
+        >
+          What anchors did.
+        </span>
+      </h1>
+      <p
+        class="text-secondary-text measure mt-6 text-base sm:text-lg"
+      >
+        A directory records what an anchor declares about itself, and stays correct until that anchor's deployment changes without the listing changing with it. This is the other half: seven registered off-ramp anchors, probed on a clock, with the scoring method published and small samples labelled as small.
+      </p>
+      <div
+        class="mt-10 flex flex-wrap items-center gap-3"
+      >
+        <a
+          href="/anchors"
+        >
+          See the record
+        </a>
+        <a
+          href="/methodology"
+        >
+          Read the method →
+        </a>
+      </div>
+    </div>
+    <div
+      class="lg:col-span-5 lg:col-start-8"
+    >
+      <div
+        class="border-border bg-bg-subtle rounded-sm border"
+      >
+        <div
+          class="border-border text-fg-muted flex items-center justify-between border-b px-4 py-3 font-mono text-xs tracking-wide"
+        >
+          <span>
+            usdc → ngn
+          </span>
+          <span>
+            100.00 USDC
+          </span>
         </div>
         <div
-          class="text-xs text-gray-500 dark:text-gray-400"
+          class="p-4"
         >
-          Anchors tracked
+          <div
+            class="min-h-[168px]"
+          >
+            <p
+              class="text-fg-muted font-mono text-xs tracking-wide"
+            >
+              best landed value
+            </p>
+            <p
+              class="text-accent mt-2 font-mono text-4xl font-medium tracking-tight tabular-nums"
+            >
+              NGN 158,000.00
+            </p>
+            <dl
+              class="border-border mt-5 space-y-2 border-t pt-4 font-mono text-xs"
+            >
+              <div
+                class="flex justify-between gap-4"
+              >
+                <dt
+                  class="text-fg-muted"
+                >
+                  anchor
+                </dt>
+                <dd
+                  class="text-secondary-text"
+                >
+                  Anchor A
+                </dd>
+              </div>
+              <div
+                class="flex justify-between gap-4"
+              >
+                <dt
+                  class="text-fg-muted"
+                >
+                  rate
+                </dt>
+                <dd
+                  class="text-secondary-text tabular-nums"
+                >
+                  1 USDC = 1,600 NGN
+                </dd>
+              </div>
+            </dl>
+            <a
+              href="/offramp"
+            >
+              compare all live rates →
+            </a>
+          </div>
         </div>
       </div>
     </div>
   </section>
-  <section>
-    <h2
-      class="mb-6 text-xl font-semibold text-gray-900 dark:text-white"
+  <section
+    class="transition-all duration-700 ease-out opacity-0 translate-y-8 motion-reduce:transition-none motion-reduce:transform-none motion-reduce:opacity-100"
+    style="transition-delay: 0ms;"
+  >
+    <section
+      aria-labelledby="registry-heading"
     >
-      Start transacting
-    </h2>
-    <div
-      class="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-4"
-    >
-      <a
-        href="/offramp"
+      <div
+        class="flex flex-wrap items-baseline justify-between gap-x-6 gap-y-2"
       >
-        <div
-          class="rounded-xl border bg-white p-4 shadow-sm transition-colors dark:bg-gray-900 border-gray-200 dark:border-gray-700 group h-full cursor-pointer transition-shadow hover:shadow-md"
+        <h2
+          class="type-title"
+          id="registry-heading"
+        >
+          The seven
+        </h2>
+        <p
+          class="text-fg-muted font-mono text-xs tracking-wide"
+        >
+          0
+           of 
+          3
+           advertise a quote server
+        </p>
+      </div>
+      <p
+        class="text-secondary-text measure mt-4 text-base"
+      >
+        Every anchor in the registry, the corridors it is registered for, and the SEPs it says it supports. What it actually did on those endpoints is the record.
+      </p>
+      <ul
+        class="border-border mt-10 border-t"
+      >
+        <li
+          class="border-border grid grid-cols-1 gap-x-6 gap-y-3 border-b py-5 sm:grid-cols-12 sm:items-baseline"
         >
           <div
-            class="mb-4 inline-flex rounded-lg p-2.5 bg-green-50 dark:bg-green-950/30"
+            class="sm:col-span-4"
           >
-            <svg
-              aria-hidden="true"
-              class="lucide lucide-arrow-down-right h-5 w-5 text-green-600"
-              fill="none"
-              height="24"
-              stroke="currentColor"
-              stroke-linecap="round"
-              stroke-linejoin="round"
-              stroke-width="2"
-              viewBox="0 0 24 24"
-              width="24"
-              xmlns="http://www.w3.org/2000/svg"
+            <p
+              class="text-sm font-medium"
             >
-              <path
-                d="m7 7 10 10"
-              />
-              <path
-                d="M17 7v10H7"
-              />
-            </svg>
+              Anchor A
+            </p>
+            <p
+              class="text-fg-muted mt-1 font-mono text-xs break-all"
+            >
+              anchor-a.example
+            </p>
           </div>
-          <h3
-            class="mb-2 font-semibold text-gray-900 dark:text-white"
+          <div
+            class="sm:col-span-4"
           >
-            Off-ramp
-          </h3>
+            <span
+              class="text-fg-muted font-mono text-xs tracking-wide sm:sr-only"
+            >
+              corridors 
+            </span>
+            <span
+              class="text-secondary-text font-mono text-xs"
+            />
+          </div>
+          <div
+            class="sm:col-span-4"
+          >
+            <span
+              class="text-secondary-text font-mono text-xs"
+            />
+            <span
+              class="text-fg-muted mt-1 block font-mono text-xs"
+            >
+              no quote server
+            </span>
+          </div>
+        </li>
+        <li
+          class="border-border grid grid-cols-1 gap-x-6 gap-y-3 border-b py-5 sm:grid-cols-12 sm:items-baseline"
+        >
+          <div
+            class="sm:col-span-4"
+          >
+            <p
+              class="text-sm font-medium"
+            >
+              Anchor B
+            </p>
+            <p
+              class="text-fg-muted mt-1 font-mono text-xs break-all"
+            >
+              anchor-b.example
+            </p>
+          </div>
+          <div
+            class="sm:col-span-4"
+          >
+            <span
+              class="text-fg-muted font-mono text-xs tracking-wide sm:sr-only"
+            >
+              corridors 
+            </span>
+            <span
+              class="text-secondary-text font-mono text-xs"
+            />
+          </div>
+          <div
+            class="sm:col-span-4"
+          >
+            <span
+              class="text-secondary-text font-mono text-xs"
+            />
+            <span
+              class="text-fg-muted mt-1 block font-mono text-xs"
+            >
+              no quote server
+            </span>
+          </div>
+        </li>
+        <li
+          class="border-border grid grid-cols-1 gap-x-6 gap-y-3 border-b py-5 sm:grid-cols-12 sm:items-baseline"
+        >
+          <div
+            class="sm:col-span-4"
+          >
+            <p
+              class="text-sm font-medium"
+            >
+              Anchor C
+            </p>
+            <p
+              class="text-fg-muted mt-1 font-mono text-xs break-all"
+            >
+              anchor-c.example
+            </p>
+          </div>
+          <div
+            class="sm:col-span-4"
+          >
+            <span
+              class="text-fg-muted font-mono text-xs tracking-wide sm:sr-only"
+            >
+              corridors 
+            </span>
+            <span
+              class="text-secondary-text font-mono text-xs"
+            />
+          </div>
+          <div
+            class="sm:col-span-4"
+          >
+            <span
+              class="text-secondary-text font-mono text-xs"
+            />
+            <span
+              class="text-fg-muted mt-1 block font-mono text-xs"
+            >
+              no quote server
+            </span>
+          </div>
+        </li>
+      </ul>
+      <a
+        href="/anchors"
+      >
+        open the health record →
+      </a>
+    </section>
+  </section>
+  <section
+    class="transition-all duration-700 ease-out opacity-0 translate-y-8 motion-reduce:transition-none motion-reduce:transform-none motion-reduce:opacity-100"
+    style="transition-delay: 0ms;"
+  >
+    <section
+      aria-label="Registry coverage"
+      class="border-border border-t pt-8"
+    >
+      <dl
+        class="grid grid-cols-3 gap-6"
+      >
+        <div>
+          <dt
+            class="text-fg-muted font-mono text-xs tracking-wide"
+          >
+            anchors
+          </dt>
+          <dd
+            class="mt-2 font-mono text-3xl tabular-nums"
+          >
+            3
+          </dd>
+        </div>
+        <div>
+          <dt
+            class="text-fg-muted font-mono text-xs tracking-wide"
+          >
+            corridors
+          </dt>
+          <dd
+            class="mt-2 font-mono text-3xl tabular-nums"
+          >
+            2
+          </dd>
+        </div>
+        <div>
+          <dt
+            class="text-fg-muted font-mono text-xs tracking-wide"
+          >
+            countries
+          </dt>
+          <dd
+            class="mt-2 font-mono text-3xl tabular-nums"
+          >
+            2
+          </dd>
+        </div>
+      </dl>
+    </section>
+  </section>
+  <section
+    class="transition-all duration-700 ease-out opacity-0 translate-y-8 motion-reduce:transition-none motion-reduce:transform-none motion-reduce:opacity-100"
+    style="transition-delay: 0ms;"
+  >
+    <section
+      aria-label="Supported corridors"
+    >
+      <p
+        class="mb-3 text-xs font-semibold uppercase tracking-wide text-fg-muted"
+      >
+        Supported corridors
+      </p>
+      <ul
+        class="flex flex-wrap gap-2"
+      >
+        <li
+          class="inline-flex items-center gap-2 rounded-full border border-border bg-bg-subtle px-3 py-1.5 text-sm font-medium text-secondary-text"
+        >
+          <span
+            aria-hidden="true"
+            class="text-base leading-none"
+          >
+            🇳🇬
+          </span>
+          <span>
+            NGN
+          </span>
+          <span
+            class="sr-only"
+          >
+            Nigeria
+          </span>
+        </li>
+        <li
+          class="inline-flex items-center gap-2 rounded-full border border-border bg-bg-subtle px-3 py-1.5 text-sm font-medium text-secondary-text"
+        >
+          <span
+            aria-hidden="true"
+            class="text-base leading-none"
+          >
+            🇰🇪
+          </span>
+          <span>
+            KES
+          </span>
+          <span
+            class="sr-only"
+          >
+            Kenya
+          </span>
+        </li>
+      </ul>
+    </section>
+  </section>
+  <section
+    class="transition-all duration-700 ease-out opacity-0 translate-y-8 motion-reduce:transition-none motion-reduce:transform-none motion-reduce:opacity-100"
+    style="transition-delay: 0ms;"
+  >
+    <section
+      aria-labelledby="leaderboard-teaser-heading"
+    >
+      <div
+        class="mb-4 flex flex-wrap items-end justify-between gap-2"
+      >
+        <div>
+          <h2
+            class="text-lg font-semibold text-primary-text"
+            id="leaderboard-teaser-heading"
+          >
+            Anchor leaderboard
+          </h2>
           <p
-            class="text-sm text-gray-500 dark:text-gray-400"
+            class="mt-1 text-sm text-secondary-text"
           >
-            Execute USDC off-ramps across Stellar anchors by country and corridor.
+            Live payout ranking for 
+            USDC
+             → 
+            NGN
+            , updated every 30s.
           </p>
         </div>
-      </a>
-    </div>
+        <a
+          href="/anchors"
+        >
+          See full leaderboard
+          <svg
+            aria-hidden="true"
+            class="lucide lucide-arrow-right h-3.5 w-3.5"
+            fill="none"
+            height="24"
+            stroke="currentColor"
+            stroke-linecap="round"
+            stroke-linejoin="round"
+            stroke-width="2"
+            viewBox="0 0 24 24"
+            width="24"
+            xmlns="http://www.w3.org/2000/svg"
+          >
+            <path
+              d="M5 12h14"
+            />
+            <path
+              d="m12 5 7 7-7 7"
+            />
+          </svg>
+        </a>
+      </div>
+      <div
+        class="overflow-hidden rounded-xl border border-border"
+      >
+        <table
+          class="w-full text-sm"
+        >
+          <thead>
+            <tr
+              class="border-b border-border bg-bg-sunken /50"
+            >
+              <th
+                class="px-4 py-3 text-left font-medium text-secondary-text"
+              >
+                Rate Rank
+              </th>
+              <th
+                class="px-4 py-3 text-left font-medium text-secondary-text"
+              >
+                Anchor
+              </th>
+              <th
+                class="px-4 py-3 text-right font-medium text-secondary-text"
+              >
+                Rate (per USDC)
+              </th>
+              <th
+                class="px-4 py-3 text-right font-medium text-secondary-text"
+              >
+                Fee
+              </th>
+              <th
+                class="px-4 py-3 text-right font-medium text-secondary-text"
+              >
+                You Receive
+              </th>
+            </tr>
+          </thead>
+          <tbody>
+            <tr
+              class="border-t border-border bg-accent-subtle/50  "
+            >
+              <td
+                class="px-4 py-3 text-fg-muted"
+              >
+                #1
+              </td>
+              <td
+                class="px-4 py-3"
+              >
+                <div
+                  class="flex items-center gap-2"
+                >
+                  <span
+                    class="border-border bg-bg-sunken text-secondary-text inline-flex shrink-0 items-center justify-center overflow-hidden rounded-full border font-medium saturate-[0.75] transition-[filter] duration-100 ease-out group-hover:saturate-100 group-focus-visible:saturate-100 h-7 w-7 text-xs"
+                  >
+                    <img
+                      alt="Anchor A logo"
+                      class="h-full w-full object-contain"
+                      data-nimg="1"
+                      decoding="async"
+                      height="40"
+                      loading="lazy"
+                      src="http://localhost:3000/anchors/anchor-a.svg"
+                      style="color: transparent;"
+                      width="40"
+                    />
+                  </span>
+                  <span
+                    class="font-medium text-primary-text"
+                  >
+                    Anchor A
+                  </span>
+                  <span
+                    class="rounded-full bg-accent-subtle px-2 py-0.5 text-xs font-medium text-accent"
+                  >
+                    Best
+                  </span>
+                  <span
+                    aria-label="Firm quote expires in 60 seconds"
+                    aria-live="polite"
+                    class="rounded-full bg-accent-subtle px-2 py-0.5 text-xs font-medium text-status-up"
+                    role="timer"
+                  >
+                    Firm · 
+                    60
+                    s left
+                  </span>
+                </div>
+              </td>
+              <td
+                class="px-4 py-3 text-right text-secondary-text"
+              >
+                1 USDC = 1,600 NGN
+              </td>
+              <td
+                class="px-4 py-3 text-right text-secondary-text"
+              >
+                $1.00
+              </td>
+              <td
+                class="px-4 py-3 text-right font-medium text-primary-text"
+              >
+                NGN 158,000.00
+              </td>
+            </tr>
+          </tbody>
+        </table>
+      </div>
+    </section>
   </section>
   <section
-    class="rounded-xl border border-gray-200 p-6 dark:border-gray-700"
+    class="transition-all duration-700 ease-out opacity-0 translate-y-8 motion-reduce:transition-none motion-reduce:transform-none motion-reduce:opacity-100"
+    style="transition-delay: 0ms;"
   >
-    <h2
-      class="mb-4 text-lg font-semibold text-gray-900 dark:text-white"
+    <section
+      aria-labelledby="live-rates-heading"
     >
-      How it works
-    </h2>
-    <div
-      class="grid grid-cols-1 gap-6 md:grid-cols-3"
+      <h2
+        class="type-title"
+        id="live-rates-heading"
+      >
+        Live rates
+      </h2>
+      <p
+        class="text-secondary-text measure mt-4 text-base"
+      >
+        Best available rate per corridor, right now. A dash means no anchor answered — which is itself a reading, and it is recorded as one.
+      </p>
+      <div
+        class="mt-10"
+      >
+        <div
+          class="overflow-hidden rounded-xl border border-border"
+        >
+          <table
+            class="w-full text-sm"
+          >
+            <tbody>
+              <tr
+                class="border-border border-t"
+              >
+                <td
+                  class="px-4 py-3"
+                >
+                  <div
+                    class="bg-bg-sunken h-3 animate-pulse rounded-sm"
+                  />
+                </td>
+                <td
+                  class="px-4 py-3"
+                >
+                  <div
+                    class="bg-bg-sunken h-3 animate-pulse rounded-sm"
+                  />
+                </td>
+                <td
+                  class="px-4 py-3"
+                >
+                  <div
+                    class="bg-bg-sunken h-3 animate-pulse rounded-sm"
+                  />
+                </td>
+                <td
+                  class="px-4 py-3"
+                >
+                  <div
+                    class="bg-bg-sunken h-3 animate-pulse rounded-sm"
+                  />
+                </td>
+                <td
+                  class="px-4 py-3"
+                >
+                  <div
+                    class="bg-bg-sunken h-3 animate-pulse rounded-sm"
+                  />
+                </td>
+              </tr>
+              <tr
+                class="border-border border-t"
+              >
+                <td
+                  class="px-4 py-3"
+                >
+                  <div
+                    class="bg-bg-sunken h-3 animate-pulse rounded-sm"
+                  />
+                </td>
+                <td
+                  class="px-4 py-3"
+                >
+                  <div
+                    class="bg-bg-sunken h-3 animate-pulse rounded-sm"
+                  />
+                </td>
+                <td
+                  class="px-4 py-3"
+                >
+                  <div
+                    class="bg-bg-sunken h-3 animate-pulse rounded-sm"
+                  />
+                </td>
+                <td
+                  class="px-4 py-3"
+                >
+                  <div
+                    class="bg-bg-sunken h-3 animate-pulse rounded-sm"
+                  />
+                </td>
+                <td
+                  class="px-4 py-3"
+                >
+                  <div
+                    class="bg-bg-sunken h-3 animate-pulse rounded-sm"
+                  />
+                </td>
+              </tr>
+              <tr
+                class="border-border border-t"
+              >
+                <td
+                  class="px-4 py-3"
+                >
+                  <div
+                    class="bg-bg-sunken h-3 animate-pulse rounded-sm"
+                  />
+                </td>
+                <td
+                  class="px-4 py-3"
+                >
+                  <div
+                    class="bg-bg-sunken h-3 animate-pulse rounded-sm"
+                  />
+                </td>
+                <td
+                  class="px-4 py-3"
+                >
+                  <div
+                    class="bg-bg-sunken h-3 animate-pulse rounded-sm"
+                  />
+                </td>
+                <td
+                  class="px-4 py-3"
+                >
+                  <div
+                    class="bg-bg-sunken h-3 animate-pulse rounded-sm"
+                  />
+                </td>
+                <td
+                  class="px-4 py-3"
+                >
+                  <div
+                    class="bg-bg-sunken h-3 animate-pulse rounded-sm"
+                  />
+                </td>
+              </tr>
+              <tr
+                class="border-border border-t"
+              >
+                <td
+                  class="px-4 py-3"
+                >
+                  <div
+                    class="bg-bg-sunken h-3 animate-pulse rounded-sm"
+                  />
+                </td>
+                <td
+                  class="px-4 py-3"
+                >
+                  <div
+                    class="bg-bg-sunken h-3 animate-pulse rounded-sm"
+                  />
+                </td>
+                <td
+                  class="px-4 py-3"
+                >
+                  <div
+                    class="bg-bg-sunken h-3 animate-pulse rounded-sm"
+                  />
+                </td>
+                <td
+                  class="px-4 py-3"
+                >
+                  <div
+                    class="bg-bg-sunken h-3 animate-pulse rounded-sm"
+                  />
+                </td>
+                <td
+                  class="px-4 py-3"
+                >
+                  <div
+                    class="bg-bg-sunken h-3 animate-pulse rounded-sm"
+                  />
+                </td>
+              </tr>
+            </tbody>
+          </table>
+        </div>
+      </div>
+    </section>
+  </section>
+  <section
+    class="transition-all duration-700 ease-out opacity-0 translate-y-8 motion-reduce:transition-none motion-reduce:transform-none motion-reduce:opacity-100"
+    style="transition-delay: 0ms;"
+  >
+    <section
+      aria-labelledby="how-heading"
     >
-      <div
-        class="flex gap-4"
+      <h2
+        class="type-title"
+        id="how-heading"
       >
-        <div
-          class="flex h-8 w-8 shrink-0 items-center justify-center rounded-full bg-blue-600 text-xs font-bold text-white"
+        How the record is made
+      </h2>
+      <ol
+        class="border-border mt-10 border-t"
+      >
+        <li
+          class="border-border grid grid-cols-1 gap-x-6 gap-y-2 border-b py-8 sm:grid-cols-12"
         >
-          01
+          <span
+            class="text-fg-muted font-mono text-xs tracking-wide sm:col-span-2"
+          >
+            01
+          </span>
+          <h3
+            class="text-base font-medium sm:col-span-3"
+          >
+            Probe
+          </h3>
+          <p
+            class="text-secondary-text text-base sm:col-span-7"
+          >
+            Every registered anchor, every five minutes, across four signals: did the endpoint answer, does stellar.toml still parse, does the issuer still match the asset on-chain, was a quote available.
+          </p>
+        </li>
+        <li
+          class="border-border grid grid-cols-1 gap-x-6 gap-y-2 border-b py-8 sm:grid-cols-12"
+        >
+          <span
+            class="text-fg-muted font-mono text-xs tracking-wide sm:col-span-2"
+          >
+            02
+          </span>
+          <h3
+            class="text-base font-medium sm:col-span-3"
+          >
+            Record
+          </h3>
+          <p
+            class="text-secondary-text text-base sm:col-span-7"
+          >
+            Each probe is an outcome, stored and replayable. Nothing is averaged away, and a sample too small to score is labelled small rather than dressed up as confidence it has not earned.
+          </p>
+        </li>
+        <li
+          class="border-border grid grid-cols-1 gap-x-6 gap-y-2 border-b py-8 sm:grid-cols-12"
+        >
+          <span
+            class="text-fg-muted font-mono text-xs tracking-wide sm:col-span-2"
+          >
+            03
+          </span>
+          <h3
+            class="text-base font-medium sm:col-span-3"
+          >
+            Publish
+          </h3>
+          <p
+            class="text-secondary-text text-base sm:col-span-7"
+          >
+            The composite score, the method behind it, and the raw coverage are all public — on the web, through the API, and mirrored to a Soroban contract for permissionless reads.
+          </p>
+        </li>
+      </ol>
+      <p
+        class="text-secondary-text measure mt-10 text-base"
+      >
+        Built on the record, there is an execution path: choose a corridor, then sign a single intent in Freighter and settle directly on Stellar — non-custodial, with the anchor taking custody under SEP-24 and this project never holding funds.
+      </p>
+    </section>
+  </section>
+  <section
+    class="transition-all duration-700 ease-out opacity-0 translate-y-8 motion-reduce:transition-none motion-reduce:transform-none motion-reduce:opacity-100"
+    style="transition-delay: 0ms;"
+  >
+    <section
+      aria-labelledby="build-heading"
+    >
+      <h2
+        class="type-title"
+        id="build-heading"
+      >
+        Build on it
+      </h2>
+      <div
+        class="border-border mt-10 grid grid-cols-1 border-t sm:grid-cols-3"
+      >
+        <a
+          href="/offramp"
+        >
+          <h3
+            class="text-base font-medium"
+          >
+            Off-ramp
+            <span
+              aria-hidden="true"
+              class="text-fg-muted group-hover:text-primary-text ml-2 inline-block transition-colors"
+            >
+              →
+            </span>
+          </h3>
+          <p
+            class="text-secondary-text mt-2 text-sm"
+          >
+            Route a USDC off-ramp to the cheapest anchor, by country and corridor.
+          </p>
+        </a>
+        <a
+          href="/docs"
+        >
+          <h3
+            class="text-base font-medium"
+          >
+            Developer portal
+            <span
+              aria-hidden="true"
+              class="text-fg-muted group-hover:text-primary-text ml-2 inline-block transition-colors"
+            >
+              →
+            </span>
+          </h3>
+          <p
+            class="text-secondary-text mt-2 text-sm"
+          >
+            API reference, quickstart, authentication, and integration docs for wallets, agents, and third-party apps.
+          </p>
+        </a>
+        <a
+          href="/docs/api"
+        >
+          <h3
+            class="text-base font-medium"
+          >
+            Interactive API
+            <span
+              aria-hidden="true"
+              class="text-fg-muted group-hover:text-primary-text ml-2 inline-block transition-colors"
+            >
+              →
+            </span>
+          </h3>
+          <p
+            class="text-secondary-text mt-2 text-sm"
+          >
+            Every endpoint, live, in the playground. No key and no setup to read the record.
+          </p>
+        </a>
+      </div>
+    </section>
+  </section>
+  <section
+    class="transition-all duration-700 ease-out opacity-0 translate-y-8 motion-reduce:transition-none motion-reduce:transform-none motion-reduce:opacity-100"
+    style="transition-delay: 0ms;"
+  >
+    <section
+      aria-labelledby="faq-heading"
+    >
+      <h2
+        class="mb-6 text-xl font-semibold text-primary-text"
+        id="faq-heading"
+      >
+        Frequently asked questions
+      </h2>
+      <dl
+        class="divide-y divide-gray-200 rounded-xl border border-border dark:divide-gray-700"
+      >
+        <div>
+          <dt
+            id="faq-heading-0"
+          >
+            <button
+              aria-controls="faq-panel-0"
+              aria-expanded="false"
+              class="flex w-full items-center justify-between px-5 py-4 text-left text-sm font-medium text-primary-text hover:bg-bg-sunken focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-accent dark:hover:bg-bg-sunken/60"
+              type="button"
+            >
+              <span>
+                Is this custodial? Do you hold my money?
+              </span>
+              <svg
+                aria-hidden="true"
+                class="lucide lucide-chevron-down ml-4 h-4 w-4 shrink-0 text-fg-muted transition-transform duration-200 dark:text-fg-muted"
+                fill="none"
+                height="24"
+                stroke="currentColor"
+                stroke-linecap="round"
+                stroke-linejoin="round"
+                stroke-width="2"
+                viewBox="0 0 24 24"
+                width="24"
+                xmlns="http://www.w3.org/2000/svg"
+              >
+                <path
+                  d="m6 9 6 6 6-6"
+                />
+              </svg>
+            </button>
+          </dt>
+          <dd
+            class="px-5 pb-4 pt-0 text-sm text-secondary-text"
+            hidden=""
+            id="faq-panel-0"
+          >
+            No. Stellar Intel never holds user funds, user keys, fiat, or KYC data. You sign every transaction in your own wallet; the anchor takes custody under SEP-24/SEP-6; Stellar enforces atomicity.
+          </dd>
         </div>
         <div>
-          <div
-            class="font-medium text-gray-900 dark:text-white"
+          <dt
+            id="faq-heading-1"
           >
-            Pick your corridor
-          </div>
-          <div
-            class="mt-1 text-sm text-gray-500 dark:text-gray-400"
+            <button
+              aria-controls="faq-panel-1"
+              aria-expanded="false"
+              class="flex w-full items-center justify-between px-5 py-4 text-left text-sm font-medium text-primary-text hover:bg-bg-sunken focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-accent dark:hover:bg-bg-sunken/60"
+              type="button"
+            >
+              <span>
+                What happens if an anchor fails or doesn't pay out?
+              </span>
+              <svg
+                aria-hidden="true"
+                class="lucide lucide-chevron-down ml-4 h-4 w-4 shrink-0 text-fg-muted transition-transform duration-200 dark:text-fg-muted"
+                fill="none"
+                height="24"
+                stroke="currentColor"
+                stroke-linecap="round"
+                stroke-linejoin="round"
+                stroke-width="2"
+                viewBox="0 0 24 24"
+                width="24"
+                xmlns="http://www.w3.org/2000/svg"
+              >
+                <path
+                  d="m6 9 6 6 6-6"
+                />
+              </svg>
+            </button>
+          </dt>
+          <dd
+            class="px-5 pb-4 pt-0 text-sm text-secondary-text"
+            hidden=""
+            id="faq-panel-1"
           >
-            Select the country and amount you want to withdraw.
-          </div>
-        </div>
-      </div>
-      <div
-        class="flex gap-4"
-      >
-        <div
-          class="flex h-8 w-8 shrink-0 items-center justify-center rounded-full bg-blue-600 text-xs font-bold text-white"
-        >
-          02
-        </div>
-        <div>
-          <div
-            class="font-medium text-gray-900 dark:text-white"
-          >
-            Compare live rates
-          </div>
-          <div
-            class="mt-1 text-sm text-gray-500 dark:text-gray-400"
-          >
-            We fetch real SEP-24 rates from all supported Stellar anchors.
-          </div>
-        </div>
-      </div>
-      <div
-        class="flex gap-4"
-      >
-        <div
-          class="flex h-8 w-8 shrink-0 items-center justify-center rounded-full bg-blue-600 text-xs font-bold text-white"
-        >
-          03
+            The anchor — not Stellar Intel — is the settlement party. We surface that risk before you choose: each anchor carries a reputation score built from real outcomes (fill rate, slippage, settle latency). A failing anchor ranks down and its failures are recorded. If an outcome is wrong, you can file a dispute, which resolves on signed, replayable evidence.
+          </dd>
         </div>
         <div>
-          <div
-            class="font-medium text-gray-900 dark:text-white"
+          <dt
+            id="faq-heading-2"
           >
-            Execute in one click
-          </div>
-          <div
-            class="mt-1 text-sm text-gray-500 dark:text-gray-400"
+            <button
+              aria-controls="faq-panel-2"
+              aria-expanded="false"
+              class="flex w-full items-center justify-between px-5 py-4 text-left text-sm font-medium text-primary-text hover:bg-bg-sunken focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-accent dark:hover:bg-bg-sunken/60"
+              type="button"
+            >
+              <span>
+                How is this different from a block explorer or a single anchor's app?
+              </span>
+              <svg
+                aria-hidden="true"
+                class="lucide lucide-chevron-down ml-4 h-4 w-4 shrink-0 text-fg-muted transition-transform duration-200 dark:text-fg-muted"
+                fill="none"
+                height="24"
+                stroke="currentColor"
+                stroke-linecap="round"
+                stroke-linejoin="round"
+                stroke-width="2"
+                viewBox="0 0 24 24"
+                width="24"
+                xmlns="http://www.w3.org/2000/svg"
+              >
+                <path
+                  d="m6 9 6 6 6-6"
+                />
+              </svg>
+            </button>
+          </dt>
+          <dd
+            class="px-5 pb-4 pt-0 text-sm text-secondary-text"
+            hidden=""
+            id="faq-panel-2"
           >
-            Select the best option and execute directly on Stellar via Freighter.
-          </div>
+            An explorer tells you what settled on-chain. An anchor's own app tells you what that anchor says about itself. Neither answers "did this anchor respond on its endpoints this week, and does its stellar.toml still match what is on-chain" — that is the record we keep, on a five-minute clock, with the scoring method published and small samples labelled as small. The execution path is real and non-custodial, but the record is the half that works without anyone's cooperation.
+          </dd>
         </div>
-      </div>
-    </div>
+        <div>
+          <dt
+            id="faq-heading-3"
+          >
+            <button
+              aria-controls="faq-panel-3"
+              aria-expanded="false"
+              class="flex w-full items-center justify-between px-5 py-4 text-left text-sm font-medium text-primary-text hover:bg-bg-sunken focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-accent dark:hover:bg-bg-sunken/60"
+              type="button"
+            >
+              <span>
+                Why did anchor X not show up in the comparison?
+              </span>
+              <svg
+                aria-hidden="true"
+                class="lucide lucide-chevron-down ml-4 h-4 w-4 shrink-0 text-fg-muted transition-transform duration-200 dark:text-fg-muted"
+                fill="none"
+                height="24"
+                stroke="currentColor"
+                stroke-linecap="round"
+                stroke-linejoin="round"
+                stroke-width="2"
+                viewBox="0 0 24 24"
+                width="24"
+                xmlns="http://www.w3.org/2000/svg"
+              >
+                <path
+                  d="m6 9 6 6 6-6"
+                />
+              </svg>
+            </button>
+          </dt>
+          <dd
+            class="px-5 pb-4 pt-0 text-sm text-secondary-text"
+            hidden=""
+            id="faq-panel-3"
+          >
+            Most often: the anchor doesn't serve that corridor, or it only exposes a SEP the rate engine doesn't yet quote. Historically SEP-6-only anchors were dropped because the flow was SEP-24-only — SEP-6 support is being added. Failed anchors render as "unavailable" rather than disappearing silently.
+          </dd>
+        </div>
+        <div>
+          <dt
+            id="faq-heading-4"
+          >
+            <button
+              aria-controls="faq-panel-4"
+              aria-expanded="false"
+              class="flex w-full items-center justify-between px-5 py-4 text-left text-sm font-medium text-primary-text hover:bg-bg-sunken focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-accent dark:hover:bg-bg-sunken/60"
+              type="button"
+            >
+              <span>
+                Which corridors and anchors are supported?
+              </span>
+              <svg
+                aria-hidden="true"
+                class="lucide lucide-chevron-down ml-4 h-4 w-4 shrink-0 text-fg-muted transition-transform duration-200 dark:text-fg-muted"
+                fill="none"
+                height="24"
+                stroke="currentColor"
+                stroke-linecap="round"
+                stroke-linejoin="round"
+                stroke-width="2"
+                viewBox="0 0 24 24"
+                width="24"
+                xmlns="http://www.w3.org/2000/svg"
+              >
+                <path
+                  d="m6 9 6 6 6-6"
+                />
+              </svg>
+            </button>
+          </dt>
+          <dd
+            class="px-5 pb-4 pt-0 text-sm text-secondary-text"
+            hidden=""
+            id="faq-panel-4"
+          >
+            See the anchor registry in constants/anchors.ts and the live app. Coverage expands via the anchor onboarding process.
+          </dd>
+        </div>
+        <div>
+          <dt
+            id="faq-heading-5"
+          >
+            <button
+              aria-controls="faq-panel-5"
+              aria-expanded="false"
+              class="flex w-full items-center justify-between px-5 py-4 text-left text-sm font-medium text-primary-text hover:bg-bg-sunken focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-accent dark:hover:bg-bg-sunken/60"
+              type="button"
+            >
+              <span>
+                Can an AI agent off-ramp through this?
+              </span>
+              <svg
+                aria-hidden="true"
+                class="lucide lucide-chevron-down ml-4 h-4 w-4 shrink-0 text-fg-muted transition-transform duration-200 dark:text-fg-muted"
+                fill="none"
+                height="24"
+                stroke="currentColor"
+                stroke-linecap="round"
+                stroke-linejoin="round"
+                stroke-width="2"
+                viewBox="0 0 24 24"
+                width="24"
+                xmlns="http://www.w3.org/2000/svg"
+              >
+                <path
+                  d="m6 9 6 6 6-6"
+                />
+              </svg>
+            </button>
+          </dt>
+          <dd
+            class="px-5 pb-4 pt-0 text-sm text-secondary-text"
+            hidden=""
+            id="faq-panel-5"
+          >
+            Yes — an MCP server exposes pricing/comparison and a user-signed execute path. The agent cannot move funds on its own; every executing call must be signed by the user's wallet.
+          </dd>
+        </div>
+        <div>
+          <dt
+            id="faq-heading-6"
+          >
+            <button
+              aria-controls="faq-panel-6"
+              aria-expanded="false"
+              class="flex w-full items-center justify-between px-5 py-4 text-left text-sm font-medium text-primary-text hover:bg-bg-sunken focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-accent dark:hover:bg-bg-sunken/60"
+              type="button"
+            >
+              <span>
+                Is there an SDK?
+              </span>
+              <svg
+                aria-hidden="true"
+                class="lucide lucide-chevron-down ml-4 h-4 w-4 shrink-0 text-fg-muted transition-transform duration-200 dark:text-fg-muted"
+                fill="none"
+                height="24"
+                stroke="currentColor"
+                stroke-linecap="round"
+                stroke-linejoin="round"
+                stroke-width="2"
+                viewBox="0 0 24 24"
+                width="24"
+                xmlns="http://www.w3.org/2000/svg"
+              >
+                <path
+                  d="m6 9 6 6 6-6"
+                />
+              </svg>
+            </button>
+          </dt>
+          <dd
+            class="px-5 pb-4 pt-0 text-sm text-secondary-text"
+            hidden=""
+            id="faq-panel-6"
+          >
+            A typed client (@stellarintel/sdk) is on the roadmap (v4). Today you can call the HTTP API directly.
+          </dd>
+        </div>
+        <div>
+          <dt
+            id="faq-heading-7"
+          >
+            <button
+              aria-controls="faq-panel-7"
+              aria-expanded="false"
+              class="flex w-full items-center justify-between px-5 py-4 text-left text-sm font-medium text-primary-text hover:bg-bg-sunken focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-accent dark:hover:bg-bg-sunken/60"
+              type="button"
+            >
+              <span>
+                How do I contribute?
+              </span>
+              <svg
+                aria-hidden="true"
+                class="lucide lucide-chevron-down ml-4 h-4 w-4 shrink-0 text-fg-muted transition-transform duration-200 dark:text-fg-muted"
+                fill="none"
+                height="24"
+                stroke="currentColor"
+                stroke-linecap="round"
+                stroke-linejoin="round"
+                stroke-width="2"
+                viewBox="0 0 24 24"
+                width="24"
+                xmlns="http://www.w3.org/2000/svg"
+              >
+                <path
+                  d="m6 9 6 6 6-6"
+                />
+              </svg>
+            </button>
+          </dt>
+          <dd
+            class="px-5 pb-4 pt-0 text-sm text-secondary-text"
+            hidden=""
+            id="faq-panel-7"
+          >
+            Read CONTRIBUTING.md, pick a good-first-issue, and open a PR. The docs/COOKBOOK.md has end-to-end recipes.
+          </dd>
+        </div>
+      </dl>
+    </section>
   </section>
 </div>
 `;

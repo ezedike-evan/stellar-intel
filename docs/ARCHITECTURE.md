@@ -9,6 +9,8 @@
 > today it is marked ✅; where it is planned it is marked 🛠️ and the
 > milestone wave is named.
 
+**Last reviewed:** 2026-08-28
+
 ---
 
 ## Table of contents
@@ -23,6 +25,7 @@
 8. [MCP / agent surface](#8-mcp--agent-surface)
 9. [Trust boundaries & invariants](#9-trust-boundaries--invariants)
 10. [File map](#10-file-map)
+11. [Environment variable schema](#11-environment-variable-schema)
 
 ---
 
@@ -240,7 +243,7 @@ Implemented in `lib/stellar/sep10.ts`. Key invariants:
 | `signing`        | Freighter            | User signs the payment XDR.                                                                                     | User-reject returns to idle; signature-required errors surface.         |
 | `done`           | —                    | Drawer closes; `onSuccess` hoists `{ transactionId, transferServer, jwt }` to the page; `StatusTracker` mounts. | Terminal.                                                               |
 
-**The `done` hoist is the fix for credibility bug #2** (see `PROPOSAL.md § 5`).
+**The `done` hoist is the fix for the tracker-never-mounts bug (#002).**
 Before `commit 45a82eb` the drawer completed the withdrawal but never told the
 page; after, the drawer closes on success and the tracker owns the viewport
 with a live `transactionId`.
@@ -459,10 +462,13 @@ pub fn get_admin(env: &Env) -> Option<Address>;
 
 Two client libraries ship alongside the contract:
 
-- `contracts/reputation/sdk-rs/` — Rust consumer for other Soroban contracts
-  (`read_aggregate` helper, typed structs). _(planned)_
+- [`crates/stellar-intel-reputation/`](../crates/stellar-intel-reputation/) —
+  Rust consumer for other Soroban contracts (`read_aggregate`/`corridor_score`/
+  `corridor_aggregate` helpers, typed structs). Publish-ready (`publish = true`,
+  full crates.io metadata); the actual `cargo publish` awaits a maintainer
+  adding a `CARGO_REGISTRY_TOKEN` secret (`.github/workflows/publish-rust-sdk.yml`).
 - `packages/sdk/oracle.ts` — TypeScript consumer for off-chain readers
-  (wallets, rival aggregators, dashboards).
+  (wallets, rival aggregators, dashboards). _(planned)_
 
 ---
 
@@ -551,6 +557,7 @@ stellar-intel/
 │   └── useTheme.ts                # ✅
 ├── lib/
 │   ├── config.ts                  # ✅ env-guarded config
+│   ├── analytics.ts               # ✅ funnel event tracking + PII redaction
 │   ├── utils.ts                   # ✅ computeTotalReceived, format helpers
 │   └── stellar/
 │       ├── anchors.ts             # ✅ registry (MoneyGram, Cowrie, Anclap)
@@ -560,7 +567,7 @@ stellar-intel/
 │       ├── sep38.ts               # ✅ firm-quote RFQ (SEP-38)
 │       ├── sep6.ts                # 🛠️ programmatic withdraw (SEP-6) — in progress
 │       └── horizon.ts             # ✅ build + submit payment
-├── lib/intent/                    # ✅ canonicalize, hash, sign, replay, envelope
+├── lib/intent/                    # ✅ schema, hash/canonicalize, sign, replay
 ├── lib/router/                    # ✅ solver (solve.ts)
 ├── lib/reputation/                # ✅ store (SQLite/Postgres), composite, bands, disputes
 ├── lib/publisher/                 # 🛠️ v2 outcome publisher
@@ -571,7 +578,8 @@ stellar-intel/
 ├── types/index.ts                 # ✅ Anchor, Corridor, AnchorRate, WithdrawStatus, …
 ├── tests/                         # ✅ vitest — anchors, SEP-1, SEP-10, status
 ├── docs/
-│   ├── PROPOSAL.md                # grant thesis
+│   ├── PROPOSAL.md                # project thesis
+│   ├── PRODUCTION_AUDIT.md        # what is enforced vs only documented
 │   ├── ARCHITECTURE.md            # this document
 │   ├── ROADMAP.md                 # wave-by-wave scope
 │   ├── INTENT_API.md              # intent schema + signing
@@ -582,13 +590,69 @@ stellar-intel/
 │   ├── THREAT_MODEL.md            # adversaries + mitigations
 │   ├── NON_CUSTODY.md             # custody manifesto
 │   ├── JURISDICTIONAL.md          # money-transmission memo
-│   └── SECURITY.md                # disclosure policy
+│   ├── SECURITY.md                # disclosure policy
+│   └── ANALYTICS.md               # funnel dashboard + event taxonomy
 └── .github/workflows/             # ✅ ci, codeql, lighthouse, data-health, …
 ```
 
 Paths marked ✅ are present on `main` today; paths marked 🛠️ land with the
 wave noted. Anything else is a documentation gap — open an issue with the
 `docs` label.
+
+---
+
+## 11. Environment variable schema
+
+Every `process.env` read in `app/` and `lib/` is listed below. The authoritative
+values and inline commentary live in `.env.example`; this table is the
+cross-reference for reviewers and contributors.
+
+| Variable                          | Required               | Default                                      | Where read                                        | Purpose                                                                                                                                                                                     |
+| --------------------------------- | ---------------------- | -------------------------------------------- | ------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `NEXT_PUBLIC_STELLAR_NETWORK`     | Yes                    | —                                            | `lib/config.ts`                                   | Network selection: `mainnet` or `testnet`.                                                                                                                                                  |
+| `NEXT_PUBLIC_HORIZON_URL`         | Yes                    | —                                            | `lib/config.ts`                                   | Horizon endpoint for payment submission.                                                                                                                                                    |
+| `NEXT_PUBLIC_USDC_ISSUER`         | Yes                    | —                                            | `lib/config.ts`                                   | Trusted USDC issuer public key.                                                                                                                                                             |
+| `NEXT_PUBLIC_APP_NAME`            | Yes                    | —                                            | `lib/config.ts`                                   | Application name; boot fails if unset.                                                                                                                                                      |
+| `NEXT_PUBLIC_STELLAR_EXPERT_URL`  | No                     | `https://api.stellar.expert/explorer/public` | `lib/config.ts`                                   | Base URL for Stellar Expert transaction links.                                                                                                                                              |
+| `NEXT_PUBLIC_SITE_URL`            | No                     | Vercel deployment URL                        | `app/layout.tsx`, `app/sitemap.ts`, several pages | Canonical origin for `<link rel="canonical">`, OG tags, sitemap, and robots.txt. When unset, all canonical and OG URLs resolve to the Vercel deployment domain rather than a custom domain. |
+| `NEXT_PUBLIC_PLAUSIBLE_DOMAIN`    | No                     | unset (no tracking)                          | `app/layout.tsx`                                  | Plausible Analytics domain. When unset, no tracking script is injected.                                                                                                                     |
+| `NEXT_PUBLIC_INTENT_FLOW`         | No                     | `'off'`                                      | `lib/flags.ts`                                    | Gates the signed-intent off-ramp path. Read as `=== 'true'` in `FLAGS` and as `!== 'off'` in `flags` — set to `'true'` to enable both consumers.                                            |
+| `NEXT_PUBLIC_REPUTATION_WRITES`   | No                     | on                                           | `lib/flags.ts`                                    | Gates submitting outcome tuples after a completed off-ramp. Set to `'off'` to disable.                                                                                                      |
+| `NEXT_PUBLIC_MCP_ADVERTISE`       | No                     | on                                           | `lib/flags.ts`                                    | Controls the MCP install banner in the UI. Set to `'off'` to hide.                                                                                                                          |
+| `NEXT_PUBLIC_V11_CORRIDORS`       | No                     | off                                          | `lib/flags.ts`                                    | Enables v1.1 corridors (ZAR, XOF). Must be `'on'`; a corridor still stays hidden until at least one anchor serves it.                                                                       |
+| `NEXT_PUBLIC_RECURRING_INTENTS`   | No                     | off                                          | `lib/flags.ts`                                    | Enables the sign-once recurring-intent engine. Must be `'on'`; effective only when `NEXT_PUBLIC_INTENT_FLOW` is also enabled.                                                               |
+| `NEXT_PUBLIC_MIN_OUTCOMES`        | No                     | `30`                                         | `lib/reputation/thresholds.ts`                    | Minimum recorded outcomes before a reputation score is considered statistically meaningful.                                                                                                 |
+| `ADMIN_SECRET_KEY`                | Yes (admin routes)     | —                                            | `lib/auth/admin.ts`                               | Bearer secret for `/admin/*` API routes and the dispute management surface.                                                                                                                 |
+| `CRON_SECRET`                     | Yes (cron routes)      | —                                            | `lib/api/cron-auth.ts`                            | Bearer secret for cron-triggered routes (publisher tick, reconcile, refresh).                                                                                                               |
+| `ROUTING_STRATEGY`                | No                     | `first-match`                                | `lib/env.ts`                                      | Router selection strategy: `first-match` (safe default) or `scored` (multi-factor).                                                                                                         |
+| `FEE_BUDGET_PCT`                  | No                     | `0.05`                                       | `lib/env.ts`                                      | Maximum acceptable anchor fee as a fraction of sell amount (e.g. `0.05` = 5%).                                                                                                              |
+| `SOROSWAP_API_KEY`                | Yes (swap hops)        | —                                            | `lib/stellar/soroswap.ts`                         | Soroswap aggregator API key. Unset causes `SoroswapConfigError` before any request.                                                                                                         |
+| `SOROSWAP_API_BASE_URL`           | No                     | `https://api.soroswap.finance`               | `lib/stellar/soroswap.ts`                         | Base URL for the Soroswap API. Override only for a local Soroswap instance.                                                                                                                 |
+| `ANCHOR_PAYMENT_ACCOUNTS`         | No                     | —                                            | `lib/intent/anchor-accounts.ts`                   | JSON map of anchor id to Stellar receiving address for the signed-intent off-ramp path. Unset means every corridor returns `NO_ROUTE`.                                                      |
+| `REPUTATION_BACKEND`              | No                     | `sqlite` (dev) / `postgres` (prod)           | `lib/reputation/store.ts`                         | Storage backend: `sqlite` or `postgres`. Overridden to `postgres` when `DATABASE_URL` is set.                                                                                               |
+| `DATABASE_URL`                    | Yes (postgres backend) | —                                            | `lib/reputation/pool.ts`                          | Postgres connection string. Presence implies the postgres backend.                                                                                                                          |
+| `LOG_LEVEL`                       | No                     | `info`                                       | `lib/logger.ts`                                   | Pino log level: `trace`, `debug`, `info`, `warn`, or `error`.                                                                                                                               |
+| `METRICS_RESET_WINDOW_MS`         | No                     | `3600000` (1 h)                              | `lib/metrics.ts`                                  | Rolling-window length for in-memory metrics counters.                                                                                                                                       |
+| `ORACLE_CONTRACT_ID`              | No                     | testnet default                              | `lib/oracle/deployment.ts`                        | Soroban reputation oracle contract address. Required for publisher and scripts targeting mainnet.                                                                                           |
+| `STELLAR_NETWORK`                 | Yes (publisher)        | —                                            | `lib/oracle/read.ts` (via publisher)              | Which network the publisher signs against. Has no default — an unset value used to mean mainnet, so the publisher now requires it explicitly.                                               |
+| `PUBLISHER_SECRET`                | Yes (publisher)        | —                                            | `app/api/publisher/tick/route.ts`                 | Secret key of a registered oracle publisher. Must not be the contract admin key.                                                                                                            |
+| `SOROBAN_RPC_URL`                 | No                     | derived from `STELLAR_NETWORK`               | `lib/oracle/read.ts`                              | Soroban RPC endpoint override. Set only for a custom or local RPC.                                                                                                                          |
+| `STELLAR_NETWORK_PASSPHRASE`      | No                     | derived from `STELLAR_NETWORK`               | `lib/oracle/read.ts`                              | Soroban network passphrase override for oracle reads. Override only in combination with a matching `SOROBAN_RPC_URL`.                                                                       |
+| `HORIZON_URL`                     | No                     | derived from `STELLAR_NETWORK`               | oracle scripts                                    | Server-side Horizon endpoint override.                                                                                                                                                      |
+| `BATCH_SIZE`                      | No                     | `DEFAULT_BATCH_SIZE` in packages/publisher   | `app/api/publisher/tick/route.ts`                 | Rows per publisher batch.                                                                                                                                                                   |
+| `PUBLISH_GATE_OVERRIDE`           | No                     | unset (gate on)                              | publisher                                         | Bypasses the 90-day probe-coverage gate on mainnet publishes. Must be exactly `'true'`; logs at error level when used.                                                                      |
+| `MAINNET_DEPLOYER_KEY`            | No                     | —                                            | `scripts/deploy-oracle-mainnet.ts`                | Deployer key for mainnet contract deployment scripts. Leave unset otherwise.                                                                                                                |
+| `RATES_TOML_TIMEOUT_MS`           | No                     | `8000`                                       | `lib/stellar/server-rates.ts`                     | TOML fetch timeout in milliseconds.                                                                                                                                                         |
+| `RATES_SEP38_TIMEOUT_MS`          | No                     | `8000`                                       | `lib/stellar/server-rates.ts`                     | SEP-38 quote fetch timeout in milliseconds.                                                                                                                                                 |
+| `RATES_SEP24_INFO_TIMEOUT_MS`     | No                     | `8000`                                       | `lib/stellar/server-rates.ts`                     | SEP-24 /info fetch timeout in milliseconds.                                                                                                                                                 |
+| `RATES_TOML_RETRY_ATTEMPTS`       | No                     | `1`                                          | `lib/stellar/server-rates.ts`                     | Retry count for TOML fetches on network errors.                                                                                                                                             |
+| `RATES_SEP38_RETRY_ATTEMPTS`      | No                     | `1`                                          | `lib/stellar/server-rates.ts`                     | Retry count for SEP-38 quote fetches on network errors.                                                                                                                                     |
+| `RATES_SEP24_INFO_RETRY_ATTEMPTS` | No                     | `1`                                          | `lib/stellar/server-rates.ts`                     | Retry count for SEP-24 /info fetches on network errors.                                                                                                                                     |
+| `QUOTE_DRIFT_THRESHOLD_PERCENT`   | No                     | `3`                                          | `lib/reputation/thresholds.ts`                    | Quote drift alert threshold (percent deviation from cross-anchor median). Flagging is informational; no auto-exclusion.                                                                     |
+| `ANCHOR_DEGRADE_THRESHOLD`        | No                     | `3`                                          | `lib/reputation/thresholds.ts`                    | Consecutive failing probe cycles before an anchor is marked `degraded`. Shared with `scripts/validate-anchors.mjs`.                                                                         |
+| `ANCHOR_DOWN_THRESHOLD`           | No                     | `2 × ANCHOR_DEGRADE_THRESHOLD`               | `lib/reputation/thresholds.ts`                    | Consecutive failing probe cycles before escalation to `down`. Floored at `ANCHOR_DEGRADE_THRESHOLD`.                                                                                        |
+| `PROBE_LATENCY_BUDGET_MS`         | No                     | `5000`                                       | `lib/reputation/thresholds.ts`                    | Maximum tolerated quote latency. Slower-than-budget responses count as a latency-dimension probe failure.                                                                                   |
+| `TEST_SEP24_INFO`                 | No (test only)         | unset                                        | `lib/stellar/sep24.ts`                            | When set in `NODE_ENV=test`, enables real SEP-24 /info requests instead of mock data. Has no effect in production.                                                                          |
 
 ---
 

@@ -34,7 +34,7 @@ export function QuotePill({ source, expiresAt, onExpire }: QuotePillProps) {
   if (source === 'unavailable') {
     return (
       <span
-        className="rounded-full bg-red-100 px-2 py-0.5 text-xs font-medium text-red-700 dark:bg-red-900/40 dark:text-red-300"
+        className="rounded-full bg-bg-sunken px-2 py-0.5 text-xs font-medium text-status-down"
         role="status"
         aria-label="Quote unavailable"
       >
@@ -47,7 +47,7 @@ export function QuotePill({ source, expiresAt, onExpire }: QuotePillProps) {
     if (timeLeft === 0) {
       return (
         <span
-          className="rounded-full bg-red-100 px-2 py-0.5 text-xs font-medium text-red-700 dark:bg-red-900/40 dark:text-red-300"
+          className="rounded-full bg-bg-sunken px-2 py-0.5 text-xs font-medium text-status-down"
           role="status"
           aria-label="Firm quote expired"
         >
@@ -58,7 +58,7 @@ export function QuotePill({ source, expiresAt, onExpire }: QuotePillProps) {
 
     return (
       <span
-        className="rounded-full bg-green-100 px-2 py-0.5 text-xs font-medium text-green-700 dark:bg-green-900/40 dark:text-green-300"
+        className="rounded-full bg-accent-subtle px-2 py-0.5 text-xs font-medium text-status-up"
         role="timer"
         aria-live="polite"
         aria-label={`Firm quote expires in ${timeLeft} seconds`}
@@ -68,14 +68,42 @@ export function QuotePill({ source, expiresAt, onExpire }: QuotePillProps) {
     );
   }
 
-  // default to indicative
-  return (
-    <span
-      className="rounded-full bg-gray-100 px-2 py-0.5 text-xs font-medium text-gray-700 dark:bg-gray-800 dark:text-gray-300"
-      role="status"
-      aria-label="Indicative quote"
-    >
-      Indicative
-    </span>
-  );
+  if (source === 'sep24-fee') {
+    return (
+      <span
+        className="rounded-full bg-bg-sunken px-2 py-0.5 text-xs font-medium text-secondary-text"
+        role="status"
+        aria-label="Indicative quote"
+      >
+        Indicative
+      </span>
+    );
+  }
+
+  if (source === 'sep6-info') {
+    return (
+      <span
+        className="rounded-full bg-bg-sunken px-2 py-0.5 text-xs font-medium text-status-unknown"
+        role="status"
+        aria-label="SEP-6 indicative rate"
+      >
+        Indicative (SEP-6)
+      </span>
+    );
+  }
+
+  if (source === 'sep6-fee') {
+    return (
+      <span
+        className="rounded-full bg-accent-subtle px-2 py-0.5 text-xs font-medium text-accent dark:bg-accent-subtle dark:text-accent"
+        role="status"
+        aria-label="SEP-6 indicative rate"
+      >
+        Indicative (SEP-6)
+      </span>
+    );
+  }
+
+  const _exhaustive: never = source;
+  return null;
 }

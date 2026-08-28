@@ -1,42 +1,239 @@
 @import 'tailwindcss';
+@import '../styles/print.css';
 
 @custom-variant dark (&:where(.dark, .dark *));
 
+/* Theme tokens ---------------------------------------------------------------
+   All components MUST use these tokens instead of ad-hoc colour values. A
+   component that needs a value which does not exist here needs the token added
+   here — not an inline hex "just this once", which is where drift starts.
+
+   Tone: precise-technical. The product's whole claim is the difference between
+   what an anchor declares and what an anchor did, so the interface is built to
+   read as an instrument: one cold accent, hard edges, borders rather than
+   shadows, machine text in a mono face, and no decoration that asserts
+   something the data has not earned.
+
+   One accent, `--accent`, a cold mint. It marks the single most important thing
+   in a view — a live status, a best result, the one number the eye should land
+   on. If it appears three times in one screen it has stopped being an accent.
+   Green-dominant hues also carry most of their energy in luma, so this survives
+   H.264 4:2:0 chroma subsampling in the launch film without smearing (measured
+   chroma 0.229 dark / 0.185 light, against a 0.25 ceiling).
+
+   `--accent-2` is retained as an alias of `--accent` so existing imports keep
+   compiling. It used to be the teal terminus of a purple→teal gradient; that
+   gradient is gone, and nothing new should reference this token.
+
+   Neutrals are very slightly warm rather than pure grey, and there is no pure
+   #ffffff or #000000 in either theme — pure values bloom on OLED and clip on
+   video encodes.
+
+   Every fg/bg pair below is asserted at >= 4.5:1 in both themes by
+   tests/contrast.spec.ts, which parses THIS FILE at runtime — so these values
+   are the source of truth, not a copy of it. Keep :root and .dark as flat
+   single-brace blocks with six-digit hex and trailing semicolons; the spec's
+   parser is anchored on `^:root {` / `^.dark {` and returns nothing if the
+   shape changes.
+
+   Token              Light       Dark        Measured (light / dark)
+   ─────────────────  ──────────  ──────────  ──────────────────────────────
+   primary-text       #0b0c0e     #edefec     17.91:1 / 16.92:1 on background
+   secondary-text     #4c5250     #9aa0a0      7.31:1 /  7.37:1 on background
+   fg-muted           #6a706e     #7e8587     non-essential labels only
+   background         #f5f5f2     #0b0c0e     Page background
+   bg-subtle          #eaeae5     #131519     Cards, panels, raised surfaces
+   bg-sunken          #e2e2dc     #08090b     Wells, code blocks, inputs
+   border             #d8d8d1     #22262b     Decorative dividers, card edges
+   control-border     #6e7472     #8a9290      4.77:1 /  4.61:1 on control bg
+   accent             #0a6b50     #63dcae      5.95:1 / 11.54:1 on background
+   accent-subtle      #dcf2ea     #10241e      5.55:1 /  9.57:1 vs accent
+   accent-2           = accent    = accent    Deprecated alias, do not use
+   status-up          #0a6b50     #63dcae     Anchor answered / healthy
+   status-down        #a3341f     #e8705c     Anchor failed / degraded
+   status-unknown     #8a6a12     #e0b457     Not yet probed / small sample
+   ──────────────────────────────────────────────────────────────────────── */
 @theme {
   --color-primary-text: var(--primary-text);
   --color-secondary-text: var(--secondary-text);
+  --color-fg-muted: var(--fg-muted);
   --color-background: var(--background);
   --color-bg-subtle: var(--bg-subtle);
+  --color-bg-sunken: var(--bg-sunken);
   --color-border: var(--border);
+  --color-control-border: var(--control-border);
   --color-accent: var(--accent);
+  --color-accent-subtle: var(--accent-subtle);
+  --color-accent-2: var(--accent-2);
+  --color-status-up: var(--status-up);
+  --color-status-down: var(--status-down);
+  --color-status-unknown: var(--status-unknown);
+
+  /* Typefaces. Archivo carries the voice, Spline Sans Mono carries every piece
+     of machine-produced text — issuer keys, ledger sequences, corridor ids,
+     SEP names, scores. Wired in app/fonts.ts. */
+  --font-sans: var(--font-archivo), system-ui, sans-serif;
+  --font-mono: var(--font-mono), ui-monospace, monospace;
+
+  /* Radii. precise-technical ships hard edges, and the rule is two values, not
+     five — mixed radii is the fastest way for an interface to look unresolved.
+     Every step is collapsed onto 2px so the 170-odd existing `rounded-lg` /
+     `rounded-xl` / `rounded-2xl` usages resolve correctly without a risky
+     sweeping rename. `--radius-full` survives for genuinely circular things
+     (avatars, logo marks, spinners) and nothing else. */
+  --radius-none: 0px;
+  --radius-xs: 2px;
+  --radius-sm: 2px;
+  --radius-md: 2px;
+  --radius-lg: 2px;
+  --radius-xl: 2px;
+  --radius-2xl: 2px;
+  --radius-3xl: 2px;
+  --radius-4xl: 2px;
+
+  /* Type roles — a closed set. No component sets a font size directly; if
+     content does not fit a role, the role set is wrong. Display type gets
+     negative tracking and small type gets positive, which is the single most
+     common thing generated interfaces get backwards. */
+  --text-display: clamp(2.5rem, 5vw, 5.5rem);
+  --text-display--line-height: 1.02;
+  --text-display--letter-spacing: -0.025em;
+  --text-display--font-weight: 700;
+
+  --text-title: clamp(2rem, 3vw, 3rem);
+  --text-title--line-height: 1.1;
+  --text-title--letter-spacing: -0.015em;
+  --text-title--font-weight: 600;
+
+  --text-subtitle: 1.5rem;
+  --text-subtitle--line-height: 1.3;
+  --text-subtitle--letter-spacing: -0.005em;
+  --text-subtitle--font-weight: 500;
+
+  --text-body: 1.0625rem;
+  --text-body--line-height: 1.6;
+  --text-body--letter-spacing: 0em;
+  --text-body--font-weight: 400;
+
+  --text-small: 0.875rem;
+  --text-small--line-height: 1.5;
+  --text-small--letter-spacing: 0em;
+  --text-small--font-weight: 450;
+
+  --text-caption: 0.8125rem;
+  --text-caption--line-height: 1.4;
+  --text-caption--letter-spacing: 0.02em;
+  --text-caption--font-weight: 500;
+
+  /* Motion. UI motion is functional — it explains where something came from and
+     where it went. Never linear; entry eases out, exit eases in and runs faster
+     because nobody wants to wait for something to leave. */
+  --ease-out-quart: cubic-bezier(0.22, 1, 0.36, 1);
+  --ease-out-soft: cubic-bezier(0.33, 1, 0.68, 1);
+  --ease-in-quart: cubic-bezier(0.55, 0, 1, 0.45);
+  --ease-in-out-quart: cubic-bezier(0.65, 0, 0.35, 1);
 }
 
 :root {
-  --primary-text: #000000;
-  --secondary-text: #6b7280;
-  --background: #ffffff;
-  --bg-subtle: #f9fafb;
-  --border: #e2e8f0;
-  --accent: #2563eb;
+  --primary-text: #0b0c0e;
+  --secondary-text: #4c5250;
+  --fg-muted: #6a706e;
+  --background: #f5f5f2;
+  --bg-subtle: #eaeae5;
+  --bg-sunken: #e2e2dc;
+  --border: #d8d8d1;
+  --control-border: #6e7472;
+  --accent: #0a6b50;
+  --accent-subtle: #dcf2ea;
+  --accent-2: #0a6b50;
+  --status-up: #0a6b50;
+  --status-down: #a3341f;
+  --status-unknown: #8a6a12;
 }
 
 .dark {
-  --primary-text: #ffffff;
-  --secondary-text: #9ca3af;
-  --background: #000000;
-  --bg-subtle: #111827;
-  --border: #1e293b;
-  --accent: #2563eb;
+  --primary-text: #edefec;
+  --secondary-text: #9aa0a0;
+  --fg-muted: #7e8587;
+  --background: #0b0c0e;
+  --bg-subtle: #131519;
+  --bg-sunken: #08090b;
+  --border: #22262b;
+  --control-border: #8a9290;
+  --accent: #63dcae;
+  --accent-subtle: #10241e;
+  --accent-2: #63dcae;
+  --status-up: #63dcae;
+  --status-down: #e8705c;
+  --status-unknown: #e0b457;
+}
+
+/* Type roles -----------------------------------------------------------------
+   `.type-display` and `.type-title` set the `wdth` axis to 125. Expanded
+   display type is the one deliberate deviation in this system: the category is
+   uniformly condensed or default-width, and expanded reads as engineered
+   signage rather than a template. */
+@utility type-display {
+  font-family: var(--font-sans);
+  font-variation-settings: 'wdth' 125;
+  font-size: var(--text-display);
+  font-weight: 700;
+  letter-spacing: -0.025em;
+  line-height: 1.02;
+  text-wrap: balance;
+}
+
+@utility type-title {
+  font-family: var(--font-sans);
+  font-variation-settings: 'wdth' 125;
+  font-size: var(--text-title);
+  font-weight: 600;
+  letter-spacing: -0.015em;
+  line-height: 1.1;
+  text-wrap: balance;
+}
+
+/* Body copy sits at 60–75 characters. `ch` is the width of a zero, and
+   Archivo's zero is wide, so 58ch measures out at ~69 characters — the number
+   is face-specific and has to be measured rather than assumed. */
+@utility measure {
+  max-width: 58ch;
+}
+
+/* Texture --------------------------------------------------------------------
+   Flat solid colour is the default that reads as unfinished. This is a single
+   large soft light source implying a direction, at an opacity that should be
+   almost invisible in isolation and obviously missing when removed. */
+@utility surface-lit {
+  background-image: radial-gradient(
+    120% 90% at 12% -10%,
+    color-mix(in srgb, var(--primary-text) 5%, transparent) 0%,
+    transparent 55%
+  );
+}
+
+/* Motion preferences ---------------------------------------------------------
+   Every transform-based animation collapses to nothing when the user has asked
+   for reduced motion. This is not optional and it is not a nice-to-have. */
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.01ms !important;
+    scroll-behavior: auto !important;
+  }
 }
 
 /* Mobile bottom sheet -------------------------------------------------------- */
-/* Below the `sm` breakpoint the execute drawer is a bottom sheet with
+/* Below the `lg` breakpoint the execute drawer is a bottom sheet with
    swipe-to-dismiss. JS touch handlers feed a live translateY offset; this CSS
    owns the snap-back animation, the safe-area padding (so content clears the
    iOS home indicator), and disabling the transition while actively dragging so
-   the sheet tracks the finger 1:1. Scoped to phones so the desktop side panel
-   is untouched. */
-@media (max-width: 639px) {
+   the sheet tracks the finger 1:1. Scoped below 1024px so the desktop
+   centered-modal layout is untouched. */
+@media (max-width: 1023px) {
   .bottom-sheet {
     padding-bottom: env(safe-area-inset-bottom);
     transition: transform 0.3s ease;

@@ -63,4 +63,48 @@ describe('WalletButton', () => {
     render(<WalletButton />);
     expect(screen.getByText('Please switch Freighter to Mainnet')).toBeInTheDocument();
   });
+
+  describe('connected dropdown', () => {
+    const publicKey = 'GABCDEFGHIJKLMNOPQRSTUVWXYZ012345678901234567890123456789';
+
+    function renderConnected() {
+      mockUseWallet.mockReturnValue({
+        ...base,
+        isInstalled: true,
+        isConnected: true,
+        publicKey,
+        network: 'PUBLIC',
+      });
+      return render(<WalletButton />);
+    }
+
+    it('opens the dropdown and shows Disconnect, Transaction history, and Stellar Expert items', () => {
+      renderConnected();
+      fireEvent.click(screen.getByRole('button', { name: /GABC/ }));
+
+      expect(screen.getByRole('menuitem', { name: 'Disconnect' })).toBeInTheDocument();
+      const historyLink = screen.getByRole('menuitem', { name: 'Transaction history' });
+      expect(historyLink).toHaveAttribute('href', '/history');
+      expect(screen.getByRole('menuitem', { name: 'View on Stellar Expert' })).toHaveAttribute(
+        'href',
+        expect.stringContaining(publicKey)
+      );
+    });
+
+    it('calls disconnect() when the Disconnect item is clicked', () => {
+      const disconnect = vi.fn();
+      mockUseWallet.mockReturnValue({
+        ...base,
+        isInstalled: true,
+        isConnected: true,
+        publicKey,
+        network: 'PUBLIC',
+        disconnect,
+      });
+      render(<WalletButton />);
+      fireEvent.click(screen.getByRole('button', { name: /GABC/ }));
+      fireEvent.click(screen.getByRole('menuitem', { name: 'Disconnect' }));
+      expect(disconnect).toHaveBeenCalledOnce();
+    });
+  });
 });

@@ -1,6 +1,12 @@
 import { describe, it, expect } from 'vitest';
 import { IntentV1Schema } from '@/lib/intent/schema';
 import type { IntentV1 } from '@/lib/intent/schema';
+import {
+  CanonicalIntentV1Schema,
+  OfframpIntentV1Schema,
+  ChainedIntentV1Schema,
+  RecurringIntentV1Schema,
+} from '@/types/intent';
 
 // ─── Fixtures ─────────────────────────────────────────────────────────────────
 
@@ -133,5 +139,174 @@ describe('IntentV1Schema typed error shape', () => {
       const paths = result.error.issues.map((i) => i.path.join('.'));
       expect(paths).toContain('nonce');
     }
+  });
+});
+
+// ─── Canonical Intent V1 ──────────────────────────────────────────────────────
+
+const BASE_V1 = {
+  sourceAsset: 'USDC',
+  destinationAsset: 'NGN',
+  amount: '100.00',
+  sender: 'GABC1234567890ABCDEFGHIJKLMNOPQRSTUVWXYZ1234567890ABCDEF',
+  recipient: '0800-123-456',
+};
+
+describe('OfframpIntentV1Schema', () => {
+  it('accepts a valid offramp intent', () => {
+    const result = OfframpIntentV1Schema.safeParse({ kind: 'offramp', ...BASE_V1 });
+    expect(result.success).toBe(true);
+  });
+
+  it('defaults schemaVersion to 1', () => {
+    const result = OfframpIntentV1Schema.safeParse({ kind: 'offramp', ...BASE_V1 });
+    expect(result.success && result.data.schemaVersion).toBe(1);
+  });
+
+  it('rejects a zero amount', () => {
+    const result = OfframpIntentV1Schema.safeParse({ kind: 'offramp', ...BASE_V1, amount: '0' });
+    expect(result.success).toBe(false);
+  });
+
+  it('rejects amount with more than 7 decimal places', () => {
+    const result = OfframpIntentV1Schema.safeParse({
+      kind: 'offramp',
+      ...BASE_V1,
+      amount: '1.00000001',
+    });
+    expect(result.success).toBe(false);
+  });
+
+  it('rejects missing sourceAsset', () => {
+    const { sourceAsset: _s, ...rest } = BASE_V1;
+    const result = OfframpIntentV1Schema.safeParse({ kind: 'offramp', ...rest });
+    expect(result.success).toBe(false);
+  });
+});
+
+describe('ChainedIntentV1Schema', () => {
+  const HOP_A = {
+    kind: 'on-ramp' as const,
+    sellAsset: { code: 'XLM' },
+    buyAsset: { code: 'USDC', issuer: 'GA5ZSEJYB37JRC5AVCIA5MOP4RHTM335X2KGX3IHOJAPP5RE34K4KZVN' },
+    minReceive: '14.5',
+  };
+  const HOP_B = {
+    kind: 'swap' as const,
+    sellAsset: { code: 'USDC', issuer: 'GA5ZSEJYB37JRC5AVCIA5MOP4RHTM335X2KGX3IHOJAPP5RE34K4KZVN' },
+    buyAsset: { code: 'NGN' },
+    minReceive: '11000',
+  };
+
+  it('accepts a valid 2-hop chained intent', () => {
+    const result = ChainedIntentV1Schema.safeParse({
+      kind: 'chained',
+      ...BASE_V1,
+      hops: [HOP_A, HOP_B],
+    });
+    expect(result.success).toBe(true);
+  });
+
+  it('rejects a single-hop chained intent', () => {
+    const result = ChainedIntentV1Schema.safeParse({
+      kind: 'chained',
+      ...BASE_V1,
+      hops: [HOP_A],
+    });
+    expect(result.success).toBe(false);
+  });
+
+  it('rejects chained intent with no hops', () => {
+    const result = ChainedIntentV1Schema.safeParse({ kind: 'chained', ...BASE_V1, hops: [] });
+    expect(result.success).toBe(false);
+  });
+
+  it('rejects an invalid hop kind', () => {
+    const result = ChainedIntentV1Schema.safeParse({
+      kind: 'chained',
+      ...BASE_V1,
+      hops: [{ ...HOP_A, kind: 'borrow' }, HOP_B],
+    });
+    expect(result.success).toBe(false);
+  });
+});
+
+describe('RecurringIntentV1Schema', () => {
+  const SCHEDULE = { cron: '0 9 * * 1', count: 12 };
+
+  it('accepts a valid recurring intent', () => {
+    const result = RecurringIntentV1Schema.safeParse({
+      kind: 'recurring',
+      ...BASE_V1,
+      schedule: SCHEDULE,
+    });
+    expect(result.success).toBe(true);
+  });
+
+  it('accepts recurring intent without count', () => {
+    const result = RecurringIntentV1Schema.safeParse({
+      kind: 'recurring',
+      ...BASE_V1,
+      schedule: { cron: '0 9 * * 1' },
+    });
+    expect(result.success).toBe(true);
+  });
+
+  it('rejects missing schedule', () => {
+    const result = RecurringIntentV1Schema.safeParse({ kind: 'recurring', ...BASE_V1 });
+    expect(result.success).toBe(false);
+  });
+
+  it('rejects schedule with empty cron', () => {
+    const result = RecurringIntentV1Schema.safeParse({
+      kind: 'recurring',
+      ...BASE_V1,
+      schedule: { cron: '' },
+    });
+    expect(result.success).toBe(false);
+  });
+
+  it('rejects a non-positive count', () => {
+    const result = RecurringIntentV1Schema.safeParse({
+      kind: 'recurring',
+      ...BASE_V1,
+      schedule: { ...SCHEDULE, count: 0 },
+    });
+    expect(result.success).toBe(false);
+  });
+});
+
+describe('CanonicalIntentV1Schema', () => {
+  it('routes to offramp by kind', () => {
+    const result = CanonicalIntentV1Schema.safeParse({ kind: 'offramp', ...BASE_V1 });
+    expect(result.success && result.data.kind).toBe('offramp');
+  });
+
+  it('routes to chained by kind', () => {
+    const hops = [
+      { kind: 'on-ramp', sellAsset: { code: 'XLM' }, buyAsset: { code: 'USDC' }, minReceive: '1' },
+      { kind: 'swap', sellAsset: { code: 'USDC' }, buyAsset: { code: 'NGN' }, minReceive: '800' },
+    ];
+    const result = CanonicalIntentV1Schema.safeParse({ kind: 'chained', ...BASE_V1, hops });
+    expect(result.success && result.data.kind).toBe('chained');
+  });
+
+  it('routes to recurring by kind', () => {
+    const result = CanonicalIntentV1Schema.safeParse({
+      kind: 'recurring',
+      ...BASE_V1,
+      schedule: { cron: '0 9 * * 1' },
+    });
+    expect(result.success && result.data.kind).toBe('recurring');
+  });
+
+  it('rejects an unknown kind', () => {
+    const result = CanonicalIntentV1Schema.safeParse({ kind: 'borrow', ...BASE_V1 });
+    expect(result.success).toBe(false);
+  });
+
+  it('rejects a body missing kind', () => {
+    const result = CanonicalIntentV1Schema.safeParse(BASE_V1);
+    expect(result.success).toBe(false);
   });
 });

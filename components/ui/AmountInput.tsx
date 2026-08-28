@@ -1,9 +1,10 @@
 'use client';
 import { useState, useEffect, useRef } from 'react';
+import { TYPICAL_AMOUNTS } from '@/constants/anchors';
 
 const POSITIVE_DECIMAL_RE = /^\d*\.?\d{0,7}$/;
 
-const SUGGESTED_AMOUNTS = [50, 100, 500];
+const DEFAULT_SUGGESTED_AMOUNTS = [50, 100, 500];
 
 function formatChipLabel(value: number): string {
   try {
@@ -28,12 +29,30 @@ interface AmountInputProps {
   value: string;
   onChange: (value: string) => void;
   disabled?: boolean;
+  /** Connected wallet's USDC balance (null = no trustline / not connected). */
+  balance?: number | null;
+  isBalanceLoading?: boolean;
+  /** Selects corridor-specific "typical amount" chips when defined; falls back to defaults otherwise. */
+  corridorId?: string;
 }
 
-export function AmountInput({ value, onChange, disabled }: AmountInputProps) {
+export function AmountInput({
+  value,
+  onChange,
+  disabled,
+  balance,
+  isBalanceLoading,
+  corridorId,
+}: AmountInputProps) {
   const [raw, setRaw] = useState(value);
   const [error, setError] = useState<string | null>(null);
   const debounceRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+
+  const suggestedAmounts = (corridorId && TYPICAL_AMOUNTS[corridorId]) || DEFAULT_SUGGESTED_AMOUNTS;
+
+  const numericRaw = Number(raw);
+  const insufficient =
+    balance != null && Number.isFinite(numericRaw) && numericRaw > 0 && numericRaw > balance;
 
   useEffect(() => {
     // eslint-disable-next-line react-hooks/set-state-in-effect
@@ -54,6 +73,12 @@ export function AmountInput({ value, onChange, disabled }: AmountInputProps) {
     setRaw(str);
     setError(null);
     onChange(str);
+  }
+
+  function handleMaxClick() {
+    if (balance == null) return;
+    const floored = Math.floor(balance * 100) / 100;
+    handleChipClick(floored);
   }
 
   function handleChange(e: React.ChangeEvent<HTMLInputElement>) {
@@ -85,9 +110,7 @@ export function AmountInput({ value, onChange, disabled }: AmountInputProps) {
 
   return (
     <div>
-      <label className="mb-1.5 block text-sm font-medium text-gray-700 dark:text-gray-300">
-        Amount (USDC)
-      </label>
+      <label className="mb-1.5 block text-sm font-medium text-secondary-text">Amount (USDC)</label>
       <div className="relative">
         <input
           type="text"
@@ -95,37 +118,60 @@ export function AmountInput({ value, onChange, disabled }: AmountInputProps) {
           value={raw}
           onChange={handleChange}
           disabled={disabled}
-          aria-invalid={error !== null}
-          aria-describedby={error ? 'amount-error' : 'amount-hint'}
-          className={`w-full rounded-lg border px-3 py-2.5 pr-16 text-sm text-gray-900 focus:outline-none focus:ring-2 disabled:opacity-50 dark:text-white ${
-            error
-              ? 'border-red-400 bg-red-50 focus:border-red-500 focus:ring-red-500/20 dark:border-red-700 dark:bg-red-950/20'
-              : 'border-gray-300 bg-white focus:border-blue-500 focus:ring-blue-500/20 dark:border-gray-600 dark:bg-gray-800'
+          aria-invalid={error !== null || insufficient}
+          aria-describedby={
+            error ? 'amount-error' : insufficient ? 'amount-insufficient' : 'amount-hint'
+          }
+          className={`w-full rounded-lg border py-2.5 pl-3 text-sm text-primary-text focus:outline-none focus:ring-2 disabled:opacity-50 ${
+            balance != null && balance > 0 ? 'pr-28' : 'pr-16'
+          } ${
+            error || insufficient
+              ? 'border-status-down/40 bg-bg-sunken focus:border-status-down/40 focus:ring-status-down/20  '
+              : 'border-control-border bg-bg-subtle focus:border-accent focus:ring-accent/20 '
           }`}
         />
-        <span className="pointer-events-none absolute inset-y-0 right-3 flex items-center text-sm font-medium text-gray-400">
+        <span className="pointer-events-none absolute inset-y-0 right-3 flex items-center gap-1.5 text-sm font-medium text-secondary-text">
+          {balance != null && balance > 0 && (
+            <button
+              type="button"
+              disabled={disabled}
+              onClick={handleMaxClick}
+              className="pointer-events-auto rounded-md border border-control-border px-1.5 py-0.5 text-[10px] font-semibold uppercase tracking-wide text-secondary-text hover:border-border hover:text-accent disabled:opacity-50 dark:hover:border-accent dark:hover:text-accent"
+            >
+              Max
+            </button>
+          )}
           USDC
         </span>
       </div>
+      {!isBalanceLoading && balance != null && (
+        <p className="mt-1 text-xs text-fg-muted">
+          Balance: {balance.toLocaleString(undefined, { maximumFractionDigits: 2 })} USDC
+        </p>
+      )}
       <div className="mt-2 flex gap-2">
-        {SUGGESTED_AMOUNTS.map((amount) => (
+        {suggestedAmounts.map((amount) => (
           <button
             key={amount}
             type="button"
             disabled={disabled}
             onClick={() => handleChipClick(amount)}
-            className="rounded-md border border-gray-300 bg-white px-3 py-1 text-xs font-medium text-gray-700 transition-colors hover:border-blue-400 hover:bg-blue-50 hover:text-blue-700 disabled:opacity-50 dark:border-gray-600 dark:bg-gray-800 dark:text-gray-300 dark:hover:border-blue-500 dark:hover:bg-blue-950/30 dark:hover:text-blue-400"
+            className="rounded-md border border-control-border bg-bg-subtle px-3 py-1 text-xs font-medium text-secondary-text transition-colors hover:border-border hover:bg-accent-subtle hover:text-accent disabled:opacity-50 dark:hover:border-accent dark:hover:bg-bg-sunken dark:hover:text-accent"
           >
             {formatChipLabel(amount)}
           </button>
         ))}
       </div>
       {error ? (
-        <p id="amount-error" role="alert" className="mt-1 text-xs text-red-500">
+        <p id="amount-error" role="alert" className="mt-1 text-xs text-status-down">
           {error}
         </p>
+      ) : insufficient ? (
+        <p id="amount-insufficient" role="alert" className="mt-1 text-xs text-status-down">
+          Insufficient balance
+        </p>
       ) : (
-        <p id="amount-hint" className="mt-1 text-xs text-gray-500 dark:text-gray-400">
+        <p id="amount-hint" className="mt-1 text-xs text-fg-muted">
           Enter the amount of USDC to off-ramp
         </p>
       )}

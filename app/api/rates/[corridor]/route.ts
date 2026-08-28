@@ -1,12 +1,16 @@
 import { NextRequest, NextResponse } from 'next/server';
+import { checkRateLimit, getClientIp } from '@/lib/api/rate-limit';
 import { withRequestLogger } from '@/lib/logger';
 import { isValidCorridorId } from '@/lib/stellar/anchors';
-import { fetchCorridorRates } from '@/lib/stellar/server-rates';
+import { AMOUNT_PATTERN } from '@/lib/patterns';
+import { resolveCorridorRates } from '@/lib/api/rates-resolver';
+import { FRESH_TTL_MS } from '@/lib/api/rate-cache';
+
+/** How long a CDN may serve stale without reaching the origin. */
+const CDN_STALE_SECONDS = 60;
 
 // Live anchor calls must run per-request, never at build time.
 export const dynamic = 'force-dynamic';
-
-const AMOUNT_PATTERN = /^\d+(\.\d+)?$/;
 
 // ─── GET /api/rates/[corridor]?amount=100 ────────────────────────────────────
 //
@@ -18,6 +22,22 @@ export async function GET(
   { params }: { params: Promise<{ corridor: string }> | { corridor: string } }
 ): Promise<NextResponse> {
   return withRequestLogger(request, 'api.rates', async (logger) => {
+    const ip = getClientIp(request.headers);
+    const rl = await checkRateLimit(ip, { bucket: 'api.rates', maxRequests: 90 });
+    if (!rl.allowed) {
+      logger.warn({ event: 'rate_limit_exceeded', ip, retryAfter: rl.retryAfter });
+      return NextResponse.json(
+        { error: 'Too many requests', retryAfter: rl.retryAfter },
+        {
+          status: 429,
+          headers: {
+            'Retry-After': String(rl.retryAfter),
+            'X-RateLimit-Remaining': '0',
+          },
+        }
+      );
+    }
+
     const { corridor } = await params;
 
     if (!corridor || !isValidCorridorId(corridor)) {
@@ -25,7 +45,8 @@ export async function GET(
       return NextResponse.json({ error: `Unknown corridor: "${corridor}"` }, { status: 400 });
     }
 
-    const amount = new URL(request.url).searchParams.get('amount') ?? '100';
+    const url = new URL(request.url);
+    const amount = url.searchParams.get('amount') ?? '100';
     if (!AMOUNT_PATTERN.test(amount) || Number(amount) <= 0) {
       logger.warn({ event: 'invalid_amount', amount });
       return NextResponse.json(
@@ -34,17 +55,63 @@ export async function GET(
       );
     }
 
-    const result = await fetchCorridorRates(corridor, amount);
-    logger.info({
-      event: 'rates_fetched',
-      corridor,
-      amount,
-      quoted: result.rates.length,
-      failed: result.errors.length,
+    // A client can opt out of the shared cache with the standard no-cache
+    // directives, or explicitly with ?forceRefresh=true.
+    const cacheControl = request.headers.get('cache-control') ?? '';
+    const pragma = request.headers.get('pragma') ?? '';
+    const forceRefresh =
+      cacheControl.includes('no-cache') ||
+      cacheControl.includes('no-store') ||
+      pragma.includes('no-cache') ||
+      url.searchParams.get('forceRefresh') === 'true';
+
+    // Hit/miss counters feed the /api/metrics snapshot (#737). A bypassed or
+    // degraded-anchor lookup counts as a miss — it still costs an upstream fetch.
+    const {
+      comparison: result,
+      servedFromCache,
+      cacheStatus,
+    } = await resolveCorridorRates(corridor, amount, {
+      forceRefresh,
     });
 
+    if (servedFromCache) {
+      logger.info({
+        event: 'rates_served_from_cache',
+        corridor,
+        amount,
+        cacheStatus,
+        quoted: result.rates.length,
+      });
+    } else {
+      logger.info({
+        event: 'rates_fetched',
+        corridor,
+        amount,
+        quoted: result.rates.length,
+        failed: result.errors?.length ?? 0,
+        forceRefresh,
+      });
+    }
+
+    // Listing rates aren't a locked-in quote — execution re-authenticates and
+    // re-quotes with the anchor from scratch, so a short shared cache here
+    // only affects how stale the comparison table can be, not correctness.
     return NextResponse.json(result, {
-      headers: { 'Cache-Control': 'no-store' },
+      headers: {
+        // max-age mirrors the server-side fresh window; the CDN stale window
+        // deliberately does NOT mirror STALE_TTL_MS. The server revalidates
+        // behind the first stale request, so its 10-minute window self-heals in
+        // seconds. A CDN just serves stale — giving it 10 minutes would let a
+        // rate-comparison page show ten-minute-old rates without the origin
+        // ever being asked.
+        'Cache-Control': `public, max-age=${FRESH_TTL_MS / 1000}, stale-while-revalidate=${CDN_STALE_SECONDS}`,
+        // HIT = fresh, STALE = served now and refreshing behind this request,
+        // MISS = fetched live. Lets a caller see cache behaviour without
+        // guessing from latency.
+        'X-Cache': cacheStatus,
+        'X-RateLimit-Remaining': String(rl.remaining),
+      },
     });
   });
 }

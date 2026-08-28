@@ -1,23 +1,35 @@
 {
   "name": "@stellarintel/mcp",
   "version": "0.1.0",
-  "description": "Stellar Intel MCP server — stdio transport",
-  "main": "dist/index.js",
-  "types": "dist/index.d.ts",
-  "bin": {
-    "@stellarintel/mcp": "dist/index.js"
+  "description": "Stellar Intel MCP server — stdio and streamable HTTP transports",
+  "license": "MIT",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/ezedike-evan/stellar-intel.git",
+    "directory": "packages/mcp"
   },
+  "publishConfig": {
+    "access": "public"
+  },
+  "main": "dist/packages/mcp/src/index.js",
+  "types": "dist/packages/mcp/src/index.d.ts",
+  "bin": "dist/packages/mcp/src/index.js",
   "scripts": {
-    "build": "tsc",
-    "start": "node dist/index.js",
-    "dev": "ts-node src/index.ts"
+    "prebuild": "rm -rf dist",
+    "build": "tsc && tsc-alias -p tsconfig.json",
+    "start": "node dist/packages/mcp/src/index.js",
+    "dev": "ts-node -r tsconfig-paths/register src/index.ts"
   },
   "dependencies": {
-    "@modelcontextprotocol/sdk": "^1.0.0"
+    "@modelcontextprotocol/sdk": "^1.0.0",
+    "@stellar/stellar-sdk": "^16.0.1",
+    "zod": "^4.3.6"
   },
   "devDependencies": {
     "typescript": "^6",
     "ts-node": "^10.9.2",
+    "tsc-alias": "^1.8.10",
+    "tsconfig-paths": "^4.2.0",
     "@types/node": "^26"
   },
   "files": [

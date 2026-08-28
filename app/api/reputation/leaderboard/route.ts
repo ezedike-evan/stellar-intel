@@ -2,7 +2,12 @@ import { NextRequest, NextResponse } from 'next/server';
 import { z } from 'zod';
 import { ANCHORS, CORRIDORS } from '@/constants';
 import { withRequestLogger } from '@/lib/logger';
+import { buildScorecards, mapOutcomeRows } from '@/lib/reputation/aggregate';
+import { tryGetReputationStore } from '@/lib/reputation/store';
+import { getScoreForCorridor, type CorridorScore } from '@/lib/oracle/read';
 import type { ApiError } from '@/types';
+import { enforceRateLimit } from '@/lib/api/response';
+import { weightedComposite } from '@/lib/reputation/composite';
 
 // ─── Query param schema ────────────────────────────────────────────────────────
 
@@ -21,6 +26,13 @@ export interface LeaderboardEntry {
   settle_p50: number;
   slippage_p50: number;
   n: number;
+  /**
+   * The same anchor's score as read live from the reputation oracle contract
+   * (testnet) — null when no corridor filter is given (the contract's score
+   * is per anchor+corridor, so it's ambiguous without one), the anchor isn't
+   * registered on-chain yet, or the read failed. Never blocks the response.
+   */
+  onChain: CorridorScore | null;
 }
 
 export interface LeaderboardResponse {
@@ -28,21 +40,6 @@ export interface LeaderboardResponse {
   corridor: string | null;
   generatedAt: string;
 }
-
-// ─── Stub reputation data ─────────────────────────────────────────────────────
-//
-// In production this would be sourced from an aggregated outcomes store.
-// For now we derive deterministic stub metrics from the anchor registry so
-// the endpoint is fully functional and testable without a database.
-
-const STUB_METRICS: Record<
-  string,
-  { fill_rate: number; settle_p50: number; slippage_p50: number; n: number }
-> = {
-  moneygram: { fill_rate: 0.97, settle_p50: 42, slippage_p50: 0.003, n: 1240 },
-  cowrie: { fill_rate: 0.94, settle_p50: 55, slippage_p50: 0.005, n: 380 },
-  anclap: { fill_rate: 0.91, settle_p50: 68, slippage_p50: 0.008, n: 210 },
-};
 
 /**
  * Composite score formula (0–1, higher is better):
@@ -52,39 +49,46 @@ const STUB_METRICS: Record<
  *
  * All terms are clamped to [0, 1] before weighting.
  */
-function computeComposite(fill_rate: number, settle_p50: number, slippage_p50: number): number {
-  const fillScore = Math.min(1, Math.max(0, fill_rate));
-  const slippageScore = Math.min(1, Math.max(0, 1 - slippage_p50 / 0.05));
-  const settleScore = Math.min(1, Math.max(0, 1 - settle_p50 / 300));
-
-  const raw = 0.4 * fillScore + 0.3 * slippageScore + 0.3 * settleScore;
-  // Round to 4 decimal places to keep the payload compact
-  return Math.round(raw * 10_000) / 10_000;
-}
-
-function buildLeaderboard(corridorFilter: string | undefined): LeaderboardEntry[] {
+async function buildLeaderboard(corridorFilter: string | undefined): Promise<LeaderboardEntry[]> {
   const anchors =
     corridorFilter !== undefined
       ? ANCHORS.filter((a) => a.corridors.includes(corridorFilter))
       : ANCHORS;
 
-  const entries: LeaderboardEntry[] = anchors.map((anchor) => {
-    const m = STUB_METRICS[anchor.id] ?? {
-      fill_rate: 0.9,
-      settle_p50: 90,
-      slippage_p50: 0.01,
-      n: 50,
-    };
+  // Null when no durable store is configured (local/dev without DATABASE_URL):
+  // every anchor degrades to an empty — not fake — scorecard rather than the
+  // whole leaderboard failing. This used to be attempted around `store.query`
+  // below, which could never work, because construction throws first.
+  const store = tryGetReputationStore();
 
-    return {
-      anchor_id: anchor.id,
-      composite: computeComposite(m.fill_rate, m.settle_p50, m.slippage_p50),
-      fill_rate: m.fill_rate,
-      settle_p50: m.settle_p50,
-      slippage_p50: m.slippage_p50,
-      n: m.n,
-    };
-  });
+  const entries = await Promise.all(
+    anchors.map(async (anchor): Promise<LeaderboardEntry> => {
+      const rows = store ? await store.query({ anchorId: anchor.id }) : [];
+
+      const scorecard = buildScorecards(mapOutcomeRows(rows))[30];
+      const fill_rate = scorecard.state === 'ok' ? scorecard.fillRate : 0;
+      const settle_p50 = scorecard.state === 'ok' ? scorecard.settleMs.p50 / 1000 : 0;
+      const slippage_p50 = scorecard.state === 'ok' ? scorecard.slippage.p50 : 0;
+      const n = scorecard.sampleSize;
+
+      // A scorecard with no real samples yet has nothing to score — report it
+      // honestly at the bottom rather than let zeroed inputs read as "perfect"
+      // through the composite formula.
+      const composite =
+        scorecard.state === 'ok' ? weightedComposite(fill_rate, settle_p50, slippage_p50) : 0;
+
+      let onChain: CorridorScore | null = null;
+      if (corridorFilter !== undefined) {
+        try {
+          onChain = await getScoreForCorridor(anchor.id, corridorFilter);
+        } catch {
+          onChain = null;
+        }
+      }
+
+      return { anchor_id: anchor.id, composite, fill_rate, settle_p50, slippage_p50, n, onChain };
+    })
+  );
 
   // Sort descending by composite score
   return entries.sort((a, b) => b.composite - a.composite);
@@ -110,6 +114,12 @@ function etagFor(corridor: string | undefined, leaderboard: LeaderboardEntry[]):
 
 export async function GET(request: NextRequest): Promise<NextResponse> {
   return withRequestLogger(request, 'api.reputation.leaderboard', async (logger) => {
+    const limited = await enforceRateLimit(request, {
+      bucket: 'api.reputation.leaderboard',
+      maxRequests: 120,
+    });
+    if (limited) return limited;
+
     const { searchParams } = request.nextUrl;
 
     const rawParams = {
@@ -133,7 +143,7 @@ export async function GET(request: NextRequest): Promise<NextResponse> {
     logger.info({ event: 'leaderboard_requested', corridor });
 
     const generatedAt = new Date().toISOString();
-    const leaderboard = buildLeaderboard(corridor);
+    const leaderboard = await buildLeaderboard(corridor);
 
     const etag = etagFor(corridor, leaderboard);
 

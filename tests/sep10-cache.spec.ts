@@ -97,13 +97,16 @@ describe('SEP-10 JWT cache', () => {
   });
 
   it('expired cached token triggers a fresh sign flow', async () => {
+    // Freeze time for the whole test — a real-clock 1s expiry window is racy
+    // under CI load, where the first `authenticate()` await can itself take
+    // longer than that, expiring the token before it's ever cached.
+    vi.useFakeTimers();
     const shortExp = Math.floor(Date.now() / 1000) + 1;
     stubChallengeAndJwt(makeJwt(shortExp));
 
     await authenticate(mockResolvedAnchor(ANCHOR), PUBLIC_KEY);
 
     // Advance past expiry
-    vi.useFakeTimers();
     vi.setSystemTime(new Date((shortExp + 5) * 1000));
 
     const freighter = await getFreighter();

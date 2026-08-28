@@ -1,13 +1,17 @@
 import { SepError, parseSepErrorBody } from './errors';
 import { getTransferServer } from './sep1';
 import { getAnchorsByCorridorId, getCorridorById } from './anchors';
+import { fetchWithTimeout } from './http';
 import { computeTotalReceived } from '@/lib/utils';
+import { normalizeStatus } from './sep24-status-map';
 import type {
   Sep24FeeParams,
   AnchorRate,
   RateComparison,
   Sep24WithdrawRequest,
   Sep24WithdrawResponse,
+  Sep24DepositRequest,
+  Sep24DepositResponse,
   Sep24Transaction,
   WithdrawStatusValue,
   ResolvedAnchor,
@@ -25,35 +29,15 @@ export const TERMINAL_STATES: ReadonlySet<WithdrawStatusValue> = new Set([
   'too_large',
 ]);
 
-const KNOWN_STATUSES = new Set<WithdrawStatusValue>([
-  'incomplete',
-  'pending_user_transfer_start',
-  'pending_user_transfer_complete',
-  'pending_external',
-  'pending_anchor',
-  'pending_stellar',
-  'pending_trust',
-  'pending_user',
-  'completed',
-  'refunded',
-  'error',
-  'no_market',
-  'too_small',
-  'too_large',
-]);
+const RETRYABLE_STATUS_CODES = new Set([500, 502, 503, 504]);
+const GET_SEP24_TRANSACTION_MAX_ATTEMPTS = 3;
+const GET_SEP24_TRANSACTION_RETRY_BASE_MS = 500;
 
-function normalizeStatus(raw: unknown): WithdrawStatusValue {
-  if (typeof raw === 'string' && KNOWN_STATUSES.has(raw as WithdrawStatusValue)) {
-    return raw as WithdrawStatusValue;
-  }
-  return 'pending_external';
+function sleep(ms: number): Promise<void> {
+  return new Promise((resolve) => setTimeout(resolve, ms));
 }
 
-/**
- * Fetches the current status of a single SEP-24 transaction.
- * Unknown anchor status strings are normalized to "pending_external" rather than throwing.
- */
-export async function getSep24Transaction(
+async function fetchSep24TransactionOnce(
   transferServer: string,
   transactionId: string,
   jwt: string,
@@ -87,13 +71,48 @@ export async function getSep24Transaction(
       (tx['fee_details'] as { total?: string })?.total !== undefined) && {
       amountFee: (tx['amount_fee'] ?? (tx['fee_details'] as { total?: string })?.total) as string,
     }),
-    ...(tx['stellar_transaction_id'] !== undefined && {
-      stellarTransactionId: tx['stellar_transaction_id'] as string,
+    ...((tx['stellar_transaction_id'] ?? tx['stellarTransactionId']) !== undefined && {
+      stellarTransactionId: (tx['stellar_transaction_id'] ?? tx['stellarTransactionId']) as string,
     }),
-    ...(tx['external_transaction_id'] !== undefined && {
-      externalTransactionId: tx['external_transaction_id'] as string,
+    ...((tx['external_transaction_id'] ?? tx['externalTransactionId']) !== undefined && {
+      externalTransactionId: (tx['external_transaction_id'] ??
+        tx['externalTransactionId']) as string,
+    }),
+    ...(tx['refunds'] !== undefined && {
+      refunds: tx['refunds'] as Sep24Transaction['refunds'],
     }),
   };
+}
+
+/**
+ * Fetches the current status of a single SEP-24 transaction.
+ * Unknown anchor status strings are normalized to "pending_external" rather than throwing.
+ * Transient 5xx failures are retried before surface-level failure.
+ */
+export async function getSep24Transaction(
+  transferServer: string,
+  transactionId: string,
+  jwt: string,
+  signal?: AbortSignal
+): Promise<Sep24Transaction> {
+  let attempt = 0;
+  while (true) {
+    attempt += 1;
+    try {
+      return await fetchSep24TransactionOnce(transferServer, transactionId, jwt, signal);
+    } catch (error) {
+      if (
+        attempt < GET_SEP24_TRANSACTION_MAX_ATTEMPTS &&
+        error instanceof SepError &&
+        RETRYABLE_STATUS_CODES.has(error.httpStatus)
+      ) {
+        const delayMs = Math.min(GET_SEP24_TRANSACTION_RETRY_BASE_MS * 2 ** (attempt - 1), 2000);
+        await sleep(delayMs);
+        continue;
+      }
+      throw error;
+    }
+  }
 }
 
 // ─── Typed errors ─────────────────────────────────────────────────────────────
@@ -105,6 +124,18 @@ export class Sep24WithdrawError extends Error {
   constructor(status: number, anchorBody: unknown, transferServer: string) {
     super(`Withdraw initiation failed: HTTP ${status} from ${transferServer}`);
     this.name = 'Sep24WithdrawError';
+    this.status = status;
+    this.anchorBody = anchorBody;
+  }
+}
+
+export class Sep24DepositError extends Error {
+  readonly status: number;
+  readonly anchorBody: unknown;
+
+  constructor(status: number, anchorBody: unknown, transferServer: string) {
+    super(`Deposit initiation failed: HTTP ${status} from ${transferServer}`);
+    this.name = 'Sep24DepositError';
     this.status = status;
     this.anchorBody = anchorBody;
   }
@@ -151,16 +182,6 @@ export function resolveAssetParams(
 // ─── GET /fee (low-level, takes transferServer directly) ─────────────────────
 
 export type Sep24FeeResult = { ok: true; fee: number } | { ok: false; reason: 'unsupported' };
-
-async function fetchWithTimeout(url: string, ms: number): Promise<Response> {
-  const controller = new AbortController();
-  const id = setTimeout(() => controller.abort(), ms);
-  try {
-    return await fetch(url, { signal: controller.signal });
-  } finally {
-    clearTimeout(id);
-  }
-}
 
 /**
  * Fetches the anchor's fee quote directly from a known transfer server.
@@ -302,19 +323,14 @@ export async function fetchAnchorFee(
   url.searchParams.set('amount', params.amount);
   url.searchParams.set('type', params.type);
 
-  const controller = new AbortController();
-  const timeout = setTimeout(() => controller.abort(), 10_000);
-
   let res: Response;
   try {
-    res = await fetch(url.toString(), { signal: controller.signal });
+    res = await fetchWithTimeout(url.toString(), 10_000);
   } catch (err) {
     if ((err as Error).name === 'AbortError') {
       throw new Error(`Request to ${params.anchorDomain} timed out after 10 seconds`);
     }
     throw err;
-  } finally {
-    clearTimeout(timeout);
   }
 
   if (!res.ok) {
@@ -521,7 +537,7 @@ export async function initiateWithdraw(
   params: Sep24WithdrawRequest,
   signal?: AbortSignal
 ): Promise<Sep24WithdrawResponse> {
-  const { jwt, assetCode, assetIssuer, amount, account } = params;
+  const { jwt, assetCode, assetIssuer, amount, account, quoteId } = params;
   const transferServer = anchor.TRANSFER_SERVER_SEP0024;
 
   if (!transferServer || !anchor.capabilities.sep24) {
@@ -542,6 +558,10 @@ export async function initiateWithdraw(
       amount,
       account,
       lang: 'en',
+      // Threads the SEP-38 firm quote id so the anchor honors the locked-in
+      // price instead of re-quoting at settlement. Omitted when no firm
+      // quote was available (e.g. the anchor doesn't advertise SEP-38).
+      ...(quoteId ? { quote_id: quoteId } : {}),
     }),
     ...(signal ? { signal } : {}),
   });
@@ -567,6 +587,73 @@ export async function initiateWithdraw(
 
   if (!data['id'] || typeof data['id'] !== 'string') {
     throw new Error('Anchor withdraw response is missing the "id" field');
+  }
+
+  return {
+    type: 'interactive_customer_info_needed',
+    url: data['url'] as string,
+    id: data['id'] as string,
+  };
+}
+
+// ─── Deposit interactive flow ─────────────────────────────────────────────────
+
+/**
+ * POSTs to the anchor's SEP-24 deposit interactive endpoint.
+ * Returns the popup URL and transaction ID issued by the anchor. Mirrors
+ * `initiateWithdraw` for the opposite direction (fiat/on-chain in, asset out).
+ */
+export async function initiateDeposit(
+  anchor: ResolvedAnchor,
+  params: Sep24DepositRequest,
+  signal?: AbortSignal
+): Promise<Sep24DepositResponse> {
+  const { jwt, assetCode, assetIssuer, amount, account } = params;
+  const transferServer = anchor.TRANSFER_SERVER_SEP0024;
+
+  if (!transferServer || !anchor.capabilities.sep24) {
+    throw new Error(`Anchor "${anchor.homeDomain}" does not support SEP-24 deposits.`);
+  }
+
+  const info = await getSep24Info(transferServer).catch(() => null);
+  const assetParams = resolveAssetParams(info, 'deposit', assetCode, assetIssuer);
+
+  const res = await fetch(`${transferServer}/transactions/deposit/interactive`, {
+    method: 'POST',
+    headers: {
+      'Content-Type': 'application/json',
+      Authorization: `Bearer ${jwt}`,
+    },
+    body: JSON.stringify({
+      ...assetParams,
+      amount,
+      account,
+      lang: 'en',
+    }),
+    ...(signal ? { signal } : {}),
+  });
+
+  if (!res.ok) {
+    const body: unknown =
+      typeof res.json === 'function' ? await res.json().catch(() => null) : null;
+    throw new Sep24DepositError(res.status, body, transferServer);
+  }
+
+  const data = (await res.json()) as Record<string, unknown>;
+
+  if (data['type'] !== 'interactive_customer_info_needed') {
+    throw new Error(
+      `Unexpected response type from anchor: "${data['type']}". ` +
+        `Expected "interactive_customer_info_needed".`
+    );
+  }
+
+  if (!data['url'] || typeof data['url'] !== 'string') {
+    throw new Error('Anchor deposit response is missing the "url" field');
+  }
+
+  if (!data['id'] || typeof data['id'] !== 'string') {
+    throw new Error('Anchor deposit response is missing the "id" field');
   }
 
   return {

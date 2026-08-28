@@ -21,3 +21,13 @@ jobs:
           fail-on-severity: moderate
           comment-summary-in-pr: always
           deny-licenses: GPL-2.0, GPL-3.0, AGPL-3.0
+          # stellar-xdr's StringM::from_str max-length validation bypass
+          # (moderate). Pinned transitively by soroban-sdk = "22.0.0" —
+          # the same version contracts/reputation and examples/consumer-contract
+          # already depend on — via soroban-sdk-macros' exact "=22.1.0" pin on
+          # stellar-xdr. No 22.x release of soroban-sdk fixes it; the fix only
+          # landed in a much later major line, and bumping there needs
+          # protocol/XDR compatibility verification against the deployed
+          # testnet contract before it's safe, which is out of scope here.
+          # Revisit once that bump is planned.
+          allow-ghsas: GHSA-x57h-xx53-v53w

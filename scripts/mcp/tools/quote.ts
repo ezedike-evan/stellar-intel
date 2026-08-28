@@ -16,7 +16,10 @@ export function registerQuoteTool(server: McpServer): void {
     {
       title: 'Off-ramp quote',
       description:
-        'Returns the best net-received quote for a corridor + amount (anchor, quoteId, netReceived, expiresAt).',
+        'Stellar Intel abstracts anchors, not chains: this returns the best net-received fiat exit ' +
+        'quote for a Stellar asset + corridor, scored across trusted SEP-24/38 anchors (anchor, quoteId, ' +
+        'netReceived, expiresAt). If the task is moving value across chains (pay/bridge), use ROZO instead — ' +
+        'see docs/AGENT_POSITIONING.md.',
       inputSchema: inputShape,
     },
     async (args) => {

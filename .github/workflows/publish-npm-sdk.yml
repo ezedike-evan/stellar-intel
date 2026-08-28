@@ -1,0 +1,68 @@
+name: Publish TypeScript SDK
+
+# Publishes @stellarintel/sdk to npm on an `sdk-v*` tag, with provenance via
+# OIDC -- no NPM_TOKEN stored in this repo.
+#
+# This will not work until a maintainer (a) claims the `@stellarintel` npm
+# scope, which is unclaimed as of 2026-08-05, and (b) configures npm trusted
+# publishing for it pointing at this repo/workflow:
+# https://docs.npmjs.com/generating-provenance-statements
+#
+# Same shape and same caveat as publish-python-sdk.yml. #821 shipped a Python
+# SDK that was never published for exactly this reason; the step is written
+# down here so #806 does not close the same way.
+on:
+  push:
+    tags: ['sdk-v*']
+
+permissions:
+  contents: read
+
+jobs:
+  publish:
+    name: build and publish
+    runs-on: ubuntu-latest
+    environment: npm
+    permissions:
+      id-token: write # required for npm provenance
+    steps:
+      - uses: actions/checkout@v7
+
+      - uses: actions/setup-node@v7
+        with:
+          node-version: '20'
+          cache: 'npm'
+          registry-url: 'https://registry.npmjs.org'
+
+      - run: npm ci
+
+      # The tag says what version is being published; package.json is the
+      # authority. A mismatch means the tag was pushed against the wrong
+      # commit, and publishing it would put a misleading version on npm.
+      - name: Tag matches package version
+        run: |
+          set -euo pipefail
+          TAG_VERSION="${GITHUB_REF_NAME#sdk-v}"
+          PKG_VERSION=$(node -p "require('./packages/sdk/package.json').version")
+          if [ "$TAG_VERSION" != "$PKG_VERSION" ]; then
+            echo "::error::Tag ${GITHUB_REF_NAME} does not match packages/sdk version ${PKG_VERSION}"
+            exit 1
+          fi
+
+      - name: Test
+        run: npx vitest run --dir packages/sdk
+
+      # The SDK pins an API-Version and hand-writes its wire types, so a spec
+      # drift is a wrong client rather than a compile error. Never publish
+      # without this passing.
+      - name: SDK matches the committed OpenAPI spec
+        run: npx vitest run --dir tests tests/sdk-spec-sync.spec.ts
+
+      - name: Build
+        run: npm run build --workspace=@stellarintel/sdk
+
+      - name: Publish to npm
+        run: npm publish --provenance --access public
+        working-directory: packages/sdk
+        env:
+          NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}

@@ -32,10 +32,7 @@ export function Timeline({ status }: TimelineProps) {
   const isTerminalError = ['error', 'refunded', 'no_market', 'expired'].includes(canonical ?? '');
 
   return (
-    <div
-      className="mt-6 pt-6 border-t border-gray-100 dark:border-gray-800"
-      aria-label="Transaction progress timeline"
-    >
+    <div className="mt-6 pt-6 border-t border-border" aria-label="Transaction progress timeline">
       <h4 className="sr-only">Progress Timeline</h4>
       <div className="space-y-4">
         {STAGES.map((stage, idx) => {
@@ -53,22 +50,22 @@ export function Timeline({ status }: TimelineProps) {
               {idx < STAGES.length - 1 && (
                 <div
                   className={`absolute left-2.5 top-6 h-full w-px -translate-x-1/2 ${
-                    idx < activeIndex ? 'bg-green-500' : 'bg-gray-200 dark:bg-gray-700'
+                    idx < activeIndex ? 'bg-status-up' : 'bg-bg-sunken '
                   }`}
                   aria-hidden="true"
                 />
               )}
 
               {/* Icon / Dot */}
-              <div className="relative z-10 flex h-5 w-5 shrink-0 items-center justify-center rounded-full bg-white dark:bg-gray-900">
+              <div className="relative z-10 flex h-5 w-5 shrink-0 items-center justify-center rounded-full bg-bg-subtle">
                 {isCompleted ? (
-                  <div className="flex h-5 w-5 items-center justify-center rounded-full bg-green-500 text-white">
+                  <div className="flex h-5 w-5 items-center justify-center rounded-full bg-status-up text-white">
                     <CheckIcon className="h-3 w-3" strokeWidth={3} />
                   </div>
                 ) : isActive ? (
-                  <div className="h-2.5 w-2.5 rounded-full bg-blue-500 animate-pulse" />
+                  <div className="h-2.5 w-2.5 rounded-full bg-accent animate-pulse" />
                 ) : (
-                  <div className="h-2 w-2 rounded-full bg-gray-300 dark:bg-gray-600" />
+                  <div className="h-2 w-2 rounded-full bg-border dark:bg-bg-sunken" />
                 )}
               </div>
 
@@ -77,10 +74,10 @@ export function Timeline({ status }: TimelineProps) {
                 <span
                   className={`text-sm font-medium ${
                     isActive
-                      ? 'text-gray-900 dark:text-white'
+                      ? 'text-primary-text'
                       : isCompleted
-                        ? 'text-gray-700 dark:text-gray-300'
-                        : 'text-gray-400 dark:text-gray-500'
+                        ? 'text-secondary-text'
+                        : 'text-secondary-text'
                   }`}
                 >
                   {stage.label}

@@ -1,5 +1,5 @@
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
-import { act, render, screen, waitFor } from '@testing-library/react';
+import { act, render, screen, waitFor, fireEvent } from '@testing-library/react';
 import { StatusTracker } from '@/components/offramp/StatusTracker';
 
 vi.mock('@/lib/stellar/sep1', async (importOriginal) => {
@@ -48,6 +48,7 @@ beforeEach(() => {
 
 afterEach(() => {
   vi.restoreAllMocks();
+  vi.unstubAllGlobals();
 });
 
 describe('StatusTracker', () => {
@@ -74,8 +75,9 @@ describe('StatusTracker', () => {
   it('shows completion celebration banner with localized amount when completed', () => {
     render(<StatusTracker {...BASE_PROPS} status="completed" amountIn="100" amountOut="154840" />);
     expect(screen.getByText('Delivered')).toBeInTheDocument();
-    // The formatted amount should contain the numeric value
-    expect(screen.getByText(/154,840|154840/)).toBeInTheDocument();
+    // The formatted amount should contain the numeric value. Excludes the
+    // hidden print-only receipt, which also renders the raw amount.
+    expect(screen.getByText(/154,840|154840/, { ignore: '.receipt *' })).toBeInTheDocument();
     // The raw amount detail row should not be shown when completed
     expect(screen.queryByText('You receive')).not.toBeInTheDocument();
   });
@@ -96,7 +98,7 @@ describe('StatusTracker', () => {
   it('renders a stellar.expert link when stellarTransactionId is a valid 64-char hex', () => {
     const txId = 'aabbccddeeff00112233445566778899aabbccddeeff00112233445566778899';
     render(<StatusTracker {...BASE_PROPS} status="completed" stellarTransactionId={txId} />);
-    const link = screen.getByRole('link');
+    const link = screen.getByRole('link', { name: /view transaction .* on stellar expert/i });
     expect(link).toHaveAttribute('href', `https://api.stellar.expert/explorer/public/tx/${txId}`);
     expect(link).toHaveAttribute('target', '_blank');
     expect(link).toHaveAttribute('rel', 'noopener noreferrer');
@@ -111,7 +113,9 @@ describe('StatusTracker', () => {
         stellarTransactionId="abc123def456789012345678"
       />
     );
-    expect(screen.queryByRole('link')).not.toBeInTheDocument();
+    expect(
+      screen.queryByRole('link', { name: /view transaction .* on stellar expert/i })
+    ).not.toBeInTheDocument();
   });
 
   it('shows "Live" indicator when status is not terminal', () => {
@@ -144,4 +148,134 @@ describe('StatusTracker', () => {
     expect(link).toHaveAttribute('href', 'mailto:support@cowrie.exchange');
     vi.useRealTimers();
   }, 15_000);
+
+  it('shows a distinct message for the error status, including the transaction id', () => {
+    render(<StatusTracker {...BASE_PROPS} status="error" />);
+    expect(
+      screen.getByText(
+        (_, node) =>
+          node?.textContent ===
+          'The anchor reported an error. Your USDC was not settled. Contact anchor support with transaction ID txn-abc-123.'
+      )
+    ).toBeInTheDocument();
+  });
+
+  it('shows a distinct message for the refunded status', () => {
+    render(<StatusTracker {...BASE_PROPS} status="refunded" />);
+    expect(screen.getByText(/anchor refunded your USDC/i)).toBeInTheDocument();
+  });
+
+  it('shows a distinct message for the expired status', () => {
+    render(<StatusTracker {...BASE_PROPS} status="expired" />);
+    expect(screen.getByText(/expired before settlement/i)).toBeInTheDocument();
+  });
+
+  it('shows "Off-ramp another amount" and "View transaction history" when completed', () => {
+    const onAdjust = vi.fn();
+    render(<StatusTracker {...BASE_PROPS} status="completed" onAdjust={onAdjust} />);
+
+    const historyLink = screen.getByRole('link', { name: 'View transaction history' });
+    expect(historyLink).toHaveAttribute('href', '/history');
+
+    const adjustButton = screen.getByRole('button', { name: 'Off-ramp another amount' });
+    adjustButton.click();
+    expect(onAdjust).toHaveBeenCalledTimes(1);
+  });
+
+  it('shows a Share button when completed with a valid stellar tx id, copying on click', async () => {
+    const writeText = vi.fn().mockResolvedValue(undefined);
+    vi.stubGlobal('navigator', { clipboard: { writeText } });
+
+    render(
+      <StatusTracker
+        {...BASE_PROPS}
+        status="completed"
+        amountIn="100"
+        stellarTransactionId="aabbccddeeff00112233445566778899aabbccddeeff00112233445566778899"
+      />
+    );
+
+    const shareButton = screen.getByRole('button', { name: 'Share' });
+    fireEvent.click(shareButton);
+
+    await waitFor(() => expect(writeText).toHaveBeenCalled());
+    expect(writeText.mock.calls[0]![0]).toContain('100 USDC');
+  });
+
+  it('does not show a Share button without a valid stellar tx id', () => {
+    render(<StatusTracker {...BASE_PROPS} status="completed" amountIn="100" />);
+    expect(screen.queryByRole('button', { name: 'Share' })).not.toBeInTheDocument();
+  });
+
+  it('does not show "Off-ramp another amount" without an onAdjust handler', () => {
+    render(<StatusTracker {...BASE_PROPS} status="completed" />);
+    expect(
+      screen.queryByRole('button', { name: 'Off-ramp another amount' })
+    ).not.toBeInTheDocument();
+    expect(screen.getByRole('link', { name: 'View transaction history' })).toBeInTheDocument();
+  });
+
+  it('does not show completion CTAs for a non-completed status', () => {
+    render(<StatusTracker {...BASE_PROPS} status="pending_anchor" onAdjust={vi.fn()} />);
+    expect(screen.queryByText('View transaction history')).not.toBeInTheDocument();
+  });
+
+  it('shows an explainer with a time estimate for a non-terminal status', () => {
+    render(<StatusTracker {...BASE_PROPS} status="pending_external" />);
+    expect(screen.getByText(/anchor is processing your bank transfer/i)).toBeInTheDocument();
+    expect(screen.getByText(/usually ~5–30 min/)).toBeInTheDocument();
+  });
+
+  it('does not show a time estimate for a terminal status', () => {
+    render(<StatusTracker {...BASE_PROPS} status="completed" />);
+    expect(screen.queryByText(/usually ~/)).not.toBeInTheDocument();
+  });
+
+  it('shows a "still waiting" counter after 5 poll attempts', () => {
+    render(<StatusTracker {...BASE_PROPS} status="pending_anchor" attemptCount={5} />);
+    expect(screen.getByText('(checked 5 times, still waiting...)')).toBeInTheDocument();
+  });
+
+  it('does not show the counter below 5 attempts', () => {
+    render(<StatusTracker {...BASE_PROPS} status="pending_anchor" attemptCount={4} />);
+    expect(screen.queryByText(/still waiting/)).not.toBeInTheDocument();
+  });
+
+  it('escalates to the slow-anchor message at 20 attempts, replacing the counter', () => {
+    render(<StatusTracker {...BASE_PROPS} status="pending_anchor" attemptCount={20} />);
+    expect(
+      screen.getByText('This is taking longer than usual. Anchor may be experiencing delays.')
+    ).toBeInTheDocument();
+    expect(screen.queryByText(/still waiting/)).not.toBeInTheDocument();
+  });
+
+  it('does not show the poll counter for a terminal status', () => {
+    render(<StatusTracker {...BASE_PROPS} status="completed" attemptCount={30} />);
+    expect(screen.queryByText(/still waiting/)).not.toBeInTheDocument();
+    expect(screen.queryByText(/taking longer than usual/)).not.toBeInTheDocument();
+  });
+
+  it('shows no terminal-error message for a non-error status', () => {
+    render(<StatusTracker {...BASE_PROPS} status="completed" />);
+    expect(screen.queryByText(/anchor reported an error/i)).not.toBeInTheDocument();
+    expect(screen.queryByText(/anchor refunded your USDC/i)).not.toBeInTheDocument();
+    expect(screen.queryByText(/expired before settlement/i)).not.toBeInTheDocument();
+  });
+
+  it('renders correctly for pending_user_transfer_complete status in USDC->NGN corridor', () => {
+    render(
+      <StatusTracker
+        {...BASE_PROPS}
+        status="pending_user_transfer_complete"
+        amountIn="100"
+        amountInAsset="USDC"
+        amountOut="154840"
+        amountOutAsset="NGN"
+        currencyCode="NGN"
+      />
+    );
+    expect(screen.getByText('Payment received, processing')).toBeInTheDocument();
+    expect(screen.getByText('100 USDC')).toBeInTheDocument();
+    expect(screen.getByText('154840 NGN')).toBeInTheDocument();
+  });
 });

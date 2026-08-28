@@ -1,0 +1,293 @@
+import { Sep6NotSupportedError, SepError, TimeoutError, parseSepErrorBody } from './errors';
+import { TERMINAL_STATES } from './sep24';
+import { mapToCanonical, normalizeStatus } from './sep24-status-map';
+import { getUsdFxRate } from '@/lib/fx/rates';
+import type {
+  WithdrawStatusValue,
+  WithdrawStatus,
+  Anchor,
+  AnchorRate,
+  Sep6WithdrawParams,
+  Sep6WithdrawResponse,
+} from '@/types';
+
+export { TERMINAL_STATES };
+
+// ─── Types ────────────────────────────────────────────────────────────────────
+
+/** Schema for a single field in the SEP-6 interactive form. */
+export interface Sep6FieldSchema {
+  description: string;
+  choices?: string[];
+}
+
+/** Fields required by the anchor for a SEP-6 transaction. */
+export interface Sep6AssetFields {
+  transaction?: Record<string, Sep6FieldSchema>;
+}
+
+/** Raw asset entry from the SEP-6 GET /info withdraw object. */
+export interface Sep6AssetInfo {
+  enabled: boolean;
+  fee_fixed?: number;
+  fee_percent?: number;
+  min_amount?: number;
+  max_amount?: number;
+  fields?: Sep6AssetFields;
+}
+
+/** Normalized, validated SEP-6 withdraw configuration for a single asset. */
+export interface Sep6WithdrawConfig {
+  enabled: true;
+  feeFixed: number;
+  feePercent: number;
+  min: number;
+  max: number;
+  fields: Sep6AssetFields;
+}
+
+export interface Sep6Transaction {
+  id: string;
+  status: WithdrawStatusValue;
+  normalizedStatus: WithdrawStatus;
+  updatedAt: Date;
+  amountIn?: string;
+  amountOut?: string;
+  amountFee?: string;
+  stellarTransactionId?: string;
+  externalTransactionId?: string;
+}
+
+// ─── Typed error ──────────────────────────────────────────────────────────────
+
+/** Thrown when the requested asset is not present or is disabled in the anchor's SEP-6 /info. */
+export class Sep6AssetDisabledError extends Error {
+  readonly assetCode: string;
+  readonly transferServer: string;
+
+  constructor(assetCode: string, transferServer: string) {
+    super(`Asset "${assetCode}" is not enabled for SEP-6 withdraw on ${transferServer}`);
+    this.name = 'Sep6AssetDisabledError';
+    this.assetCode = assetCode;
+    this.transferServer = transferServer;
+  }
+}
+
+// ─── Timeout helper ───────────────────────────────────────────────────────────
+
+const SEP6_INFO_TIMEOUT_MS = 8_000;
+
+function withTimeout<T>(promise: Promise<T>, ms: number, label: string): Promise<T> {
+  return Promise.race([
+    promise,
+    new Promise<T>((_, reject) =>
+      setTimeout(() => reject(new Error(`${label} timed out after ${ms}ms`)), ms)
+    ),
+  ]);
+}
+
+// ─── Fetchers ─────────────────────────────────────────────────────────────────
+
+export async function getSep6Info(
+  transferServer: string,
+  assetCode: string
+): Promise<Sep6WithdrawConfig> {
+  const raw = await withTimeout(
+    (async (): Promise<unknown> => {
+      const res = await fetch(`${transferServer}/info`);
+
+      if (!res.ok) {
+        const body: unknown =
+          typeof res.json === 'function' ? await res.json().catch(() => null) : null;
+        throw parseSepErrorBody(body, res.status);
+      }
+
+      return res.json();
+    })(),
+    SEP6_INFO_TIMEOUT_MS,
+    `SEP-6 /info ${transferServer}`
+  ).catch((err) => {
+    if (err instanceof Error && !(err instanceof SepError) && err.message.includes('timed out')) {
+      throw new TimeoutError(err.message);
+    }
+    throw err;
+  });
+
+  const data = raw as Record<string, unknown>;
+  const withdraw = data['withdraw'] as Record<string, unknown> | undefined;
+
+  if (!withdraw || typeof withdraw[assetCode] !== 'object' || withdraw[assetCode] === null) {
+    throw new Sep6AssetDisabledError(assetCode, transferServer);
+  }
+
+  const asset = withdraw[assetCode] as Sep6AssetInfo;
+
+  if (asset.enabled === false) {
+    throw new Sep6AssetDisabledError(assetCode, transferServer);
+  }
+
+  return {
+    enabled: true,
+    feeFixed: asset.fee_fixed ?? 0,
+    feePercent: asset.fee_percent ?? 0,
+    min: asset.min_amount ?? 0,
+    max: asset.max_amount ?? 0,
+    fields: asset.fields ?? {},
+  };
+}
+
+export async function getSep6Transaction(
+  transferServer: string,
+  transactionId: string,
+  jwt: string,
+  signal?: AbortSignal
+): Promise<Sep6Transaction> {
+  const res = await fetch(`${transferServer}/transaction?id=${transactionId}`, {
+    headers: { Authorization: `Bearer ${jwt}` },
+    ...(signal ? { signal } : {}),
+  });
+
+  if (!res.ok) {
+    const body: unknown =
+      typeof res.json === 'function' ? await res.json().catch(() => null) : null;
+    throw parseSepErrorBody(body, res.status);
+  }
+
+  const data = (await res.json()) as { transaction?: Record<string, unknown> };
+  const tx = data.transaction ?? {};
+  const status = normalizeStatus(tx['status']);
+
+  return {
+    id: String(tx['id'] ?? transactionId),
+    status,
+    normalizedStatus: mapToCanonical(status),
+    updatedAt: new Date(),
+    ...(tx['amount_in'] !== undefined && { amountIn: tx['amount_in'] as string }),
+    ...(tx['amount_out'] !== undefined && { amountOut: tx['amount_out'] as string }),
+    ...(tx['amount_fee'] !== undefined && { amountFee: tx['amount_fee'] as string }),
+    ...(tx['stellar_transaction_id'] !== undefined && {
+      stellarTransactionId: tx['stellar_transaction_id'] as string,
+    }),
+    ...(tx['external_transaction_id'] !== undefined && {
+      externalTransactionId: tx['external_transaction_id'] as string,
+    }),
+  };
+}
+
+export function buildSep6WithdrawRequest(
+  transferServer: string,
+  params: Sep6WithdrawParams
+): string {
+  if (!params.asset_code) throw new Error('asset_code is required');
+  if (!params.type) throw new Error('type is required');
+  if (!params.dest) throw new Error('dest is required');
+
+  const url = new URL(`${transferServer}/withdraw`);
+  url.searchParams.set('asset_code', params.asset_code);
+  url.searchParams.set('type', params.type);
+  url.searchParams.set('dest', params.dest);
+  if (params.amount) url.searchParams.set('amount', params.amount);
+  if (params.account) url.searchParams.set('account', params.account);
+
+  return url.toString();
+}
+
+export type { Sep6WithdrawParams, Sep6WithdrawResponse };
+
+// ─── Capability detection (network-free TOML inspection) ──────────────────────
+
+/**
+ * Minimal view of a resolved stellar.toml needed for SEP-6 capability
+ * detection. `TRANSFER_SERVER` is the SEP-6 base URL; `domain` is used only to
+ * build a descriptive error message.
+ *
+ * The shape is structural so a full {@link Sep1TomlData} (which omits the
+ * SEP-6-specific `TRANSFER_SERVER` key) can be passed without a cast — it simply
+ * reports the anchor as non-SEP-6.
+ */
+export interface Sep6CapableToml {
+  domain?: string;
+  TRANSFER_SERVER?: string | null;
+}
+
+/**
+ * Returns true when the anchor advertises a usable SEP-6 `TRANSFER_SERVER`.
+ * A blank or whitespace-only value is treated as absent.
+ */
+export function hasSep6(toml: Sep6CapableToml): boolean {
+  return typeof toml.TRANSFER_SERVER === 'string' && toml.TRANSFER_SERVER.trim().length > 0;
+}
+
+/**
+ * Returns the anchor's SEP-6 transfer server URL.
+ *
+ * Throws a typed {@link Sep6NotSupportedError} when the anchor does not
+ * advertise a `TRANSFER_SERVER`, mirroring `assertSep38Capable` in
+ * {@link file://./sep38.ts}.
+ */
+export function getSep6TransferServer(toml: Sep6CapableToml): string {
+  if (!hasSep6(toml)) {
+    throw new Sep6NotSupportedError(toml.domain ?? 'unknown');
+  }
+  return (toml.TRANSFER_SERVER as string).trim();
+}
+
+// ─── Indicative rate ─────────────────────────────────────────────────────────
+
+/**
+ * Builds an *indicative* off-ramp estimate for an anchor using its published
+ * SEP-6 /info withdraw fees combined with a live USD→fiat reference rate.
+ *
+ * Mirrors the SEP-24 indicative rate logic in server-rates.ts but sources fees
+ * from SEP-6 /info instead of SEP-24 /info.  The firm rate is set by the
+ * anchor inside the SEP-6 flow at execution.
+ *
+ * Throws when the computed estimate is non-finite or ≤ 0.
+ */
+export async function sep6IndicativeRate(
+  anchor: Anchor,
+  toml: Sep6CapableToml,
+  fiatCode: string,
+  corridorId: string,
+  amount: string,
+  sellAmount: number
+): Promise<AnchorRate> {
+  const transferServer = getSep6TransferServer(toml);
+
+  const [info, fxRate] = await Promise.all([
+    getSep6Info(transferServer, anchor.assetCode),
+    getUsdFxRate(fiatCode),
+  ]);
+
+  const feeFixed = info.feeFixed;
+  const feePercent = info.feePercent;
+  const netSellAmount = Math.max(0, sellAmount - feeFixed) * (1 - feePercent / 100);
+  const totalReceived = netSellAmount * fxRate;
+  const effectiveRate = sellAmount > 0 ? totalReceived / sellAmount : 0;
+
+  if (
+    !Number.isFinite(totalReceived) ||
+    totalReceived <= 0 ||
+    !Number.isFinite(effectiveRate) ||
+    effectiveRate <= 0
+  ) {
+    throw new Error(
+      `could not derive a SEP-6 indicative estimate for ${fiatCode} (amount: ${amount})`
+    );
+  }
+
+  const feeType: AnchorRate['feeType'] =
+    feeFixed > 0 && feePercent > 0 ? 'combined' : feePercent > 0 ? 'percent' : 'flat';
+
+  return {
+    anchorId: anchor.id,
+    anchorName: anchor.name,
+    corridorId,
+    fee: feeFixed > 0 ? feeFixed : null,
+    feeType,
+    exchangeRate: effectiveRate,
+    totalReceived,
+    source: 'sep6-info',
+    updatedAt: new Date(),
+  };
+}

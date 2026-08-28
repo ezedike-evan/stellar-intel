@@ -57,18 +57,18 @@ export function KycIframe({ url, origin, onComplete, onCancel, onError }: KycIfr
   return (
     <div className="relative h-full min-h-[500px] w-full">
       {isLoading && (
-        <div className="absolute inset-0 flex items-center justify-center bg-white dark:bg-gray-900">
+        <div className="absolute inset-0 flex items-center justify-center bg-bg-subtle">
           <div className="flex flex-col items-center gap-3">
-            <div className="h-8 w-8 animate-spin rounded-full border-4 border-blue-600 border-t-transparent"></div>
-            <p className="text-sm text-gray-600 dark:text-gray-400">Loading KYC form...</p>
+            <div className="h-8 w-8 animate-spin rounded-full border-4 border-border border-t-transparent"></div>
+            <p className="text-sm text-secondary-text">Loading KYC form...</p>
           </div>
         </div>
       )}
 
       {hasError && (
-        <div className="absolute inset-0 flex flex-col items-center justify-center bg-white dark:bg-gray-900 p-6">
+        <div className="absolute inset-0 flex flex-col items-center justify-center bg-bg-subtle p-6">
           <div className="text-center">
-            <div className="mb-4 text-red-500">
+            <div className="mb-4 text-status-down">
               <svg
                 className="mx-auto h-12 w-12"
                 fill="none"
@@ -83,15 +83,15 @@ export function KycIframe({ url, origin, onComplete, onCancel, onError }: KycIfr
                 />
               </svg>
             </div>
-            <h3 className="mb-2 text-lg font-semibold text-gray-900 dark:text-white">
+            <h3 className="mb-2 text-lg font-semibold text-primary-text">
               Unable to load KYC form
             </h3>
-            <p className="mb-4 text-sm text-gray-600 dark:text-gray-400">
+            <p className="mb-4 text-sm text-secondary-text">
               The anchor&apos;s KYC form couldn&apos;t be loaded in this frame.
             </p>
             <button
               onClick={openInNewTab}
-              className="rounded-lg bg-blue-600 px-4 py-2 text-sm font-medium text-white transition-colors hover:bg-blue-700 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:ring-offset-2"
+              className="rounded-lg bg-accent px-4 py-2 text-sm font-medium text-background transition-colors hover:opacity-90 focus:outline-none focus:ring-2 focus:ring-accent focus:ring-offset-2"
             >
               Open in New Tab
             </button>

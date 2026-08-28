@@ -1,12 +1,11 @@
 import { NetworkError } from './errors';
+import { sleep } from '@/lib/utils';
 
 interface RetryOptions {
   attempts?: number;
   base?: number;
   cap?: number;
 }
-
-const sleep = (ms: number) => new Promise((resolve) => setTimeout(resolve, ms));
 
 /**
  * Helper to extract Retry-After duration in milliseconds.

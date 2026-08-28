@@ -7,6 +7,24 @@ interface BadgeProps {
   risk?: RiskLevel;
 }
 
+/**
+ * Badges carry status, and status on this product means one of three things: an
+ * anchor answered, an anchor failed, or nobody has looked yet. Those map onto
+ * the three semantic status tokens rather than six raw Tailwind hues — a
+ * six-colour badge set spends the whole colour budget on labels and leaves the
+ * accent nothing to mark.
+ *
+ * `info` deliberately resolves to the neutral treatment. It was a blue badge,
+ * which introduced a fourth hue in order to say "this is a note".
+ *
+ * `mock` is the one variant that must never be quiet. It marks data that is
+ * illustrative rather than observed, on a product whose entire claim is the
+ * difference between those two things, so it gets a ring and uppercase mono
+ * instead of a soft orange fill that reads as decoration.
+ *
+ * Square, not pill-shaped: `rounded-full` on a status chip is decoration, and
+ * this system ships hard edges.
+ */
 export function Badge({ children, variant, risk }: BadgeProps) {
   const resolvedVariant = risk
     ? ({ low: 'success', medium: 'warning', high: 'danger' } as const)[risk]
@@ -14,20 +32,21 @@ export function Badge({ children, variant, risk }: BadgeProps) {
 
   return (
     <span
-      className={clsx('inline-flex items-center rounded-full px-2.5 py-0.5 text-xs font-medium', {
-        'bg-gray-100 text-gray-700 dark:bg-gray-800 dark:text-gray-300':
-          resolvedVariant === 'default',
-        'bg-green-100 text-green-800 dark:bg-green-900/30 dark:text-green-400':
-          resolvedVariant === 'success',
-        'bg-yellow-100 text-yellow-800 dark:bg-yellow-900/30 dark:text-yellow-400':
-          resolvedVariant === 'warning',
-        'bg-red-100 text-red-800 dark:bg-red-900/30 dark:text-red-400':
-          resolvedVariant === 'danger',
-        'bg-blue-100 text-blue-800 dark:bg-blue-900/30 dark:text-blue-400':
-          resolvedVariant === 'info',
-        'bg-orange-100 text-orange-700 dark:bg-orange-900/30 dark:text-orange-400':
-          resolvedVariant === 'mock',
-      })}
+      className={clsx(
+        'inline-flex items-center rounded-sm px-2 py-0.5',
+        'font-mono text-xs font-medium tracking-wide whitespace-nowrap',
+        {
+          'bg-bg-sunken text-secondary-text': resolvedVariant === 'default',
+          'bg-accent-subtle text-status-up': resolvedVariant === 'success',
+          'text-status-unknown ring-status-unknown/40 bg-transparent ring-1':
+            resolvedVariant === 'warning',
+          'text-status-down ring-status-down/40 bg-transparent ring-1':
+            resolvedVariant === 'danger',
+          'bg-bg-sunken text-secondary-text ring-border ring-1': resolvedVariant === 'info',
+          'text-status-unknown ring-status-unknown bg-transparent uppercase ring-1':
+            resolvedVariant === 'mock',
+        }
+      )}
     >
       {children}
     </span>

@@ -1,11 +1,19 @@
 'use client';
 import { useEffect, useRef, useState } from 'react';
+import Link from 'next/link';
 import type { WithdrawStatusValue, Sep24Transaction } from '@/types';
 import { formatDeliveredAmount } from '@/lib/format';
 import { resolveAnchorSupportHref, resolveToml } from '@/lib/stellar/sep1';
+import {
+  terminalErrorMessage,
+  statusExplainer,
+  statusTimeEstimate,
+} from '@/lib/stellar/status-messages';
 import { Timeline } from './Timeline';
 import { STELLAR_EXPERT_URL } from '@/constants';
 import { CopyButton } from '@/components/ui/CopyButton';
+import { useShare } from '@/hooks/useShare';
+import { TransactionReceipt } from './TransactionReceipt';
 
 const PENDING_ANCHOR_STALL_MS = 10 * 60 * 1000;
 
@@ -24,6 +32,8 @@ interface StatusTrackerProps {
   refunds?: Sep24Transaction['refunds'];
   isLoading: boolean;
   error: string | undefined;
+  /** Successful poll count for the current transaction; drives the "still checking" counter. */
+  attemptCount?: number;
   /** Anchor home domain for SEP-1 support contact lookup. */
   anchorHomeDomain?: string;
   onRetryAnchor?: () => void;
@@ -62,20 +72,19 @@ const TERMINAL: WithdrawStatusValue[] = [
 const DISPUTABLE: WithdrawStatusValue[] = ['completed', 'refunded', 'error'];
 
 function statusColor(status: WithdrawStatusValue | undefined): string {
-  if (!status) return 'text-gray-500';
-  if (status === 'completed') return 'text-green-600 dark:text-green-400';
-  if (['error', 'no_market', 'too_small', 'too_large'].includes(status))
-    return 'text-red-600 dark:text-red-400';
-  if (status === 'refunded') return 'text-yellow-600 dark:text-yellow-400';
-  return 'text-blue-600 dark:text-blue-400';
+  if (!status) return 'text-fg-muted';
+  if (status === 'completed') return 'text-status-up';
+  if (['error', 'no_market', 'too_small', 'too_large'].includes(status)) return 'text-status-down';
+  if (status === 'refunded') return 'text-status-unknown';
+  return 'text-accent';
 }
 
 function statusDot(status: WithdrawStatusValue | undefined): string {
-  if (!status) return 'bg-gray-300';
-  if (status === 'completed') return 'bg-green-500';
-  if (['error', 'no_market', 'too_small', 'too_large'].includes(status)) return 'bg-red-500';
-  if (status === 'refunded') return 'bg-yellow-500';
-  return 'bg-blue-500 animate-pulse';
+  if (!status) return 'bg-border';
+  if (status === 'completed') return 'bg-status-up';
+  if (['error', 'no_market', 'too_small', 'too_large'].includes(status)) return 'bg-status-down';
+  if (status === 'refunded') return 'bg-status-unknown';
+  return 'bg-accent animate-pulse';
 }
 
 function isValidStellarTxId(id: string): boolean {
@@ -96,12 +105,16 @@ export function StatusTracker({
   refunds,
   isLoading,
   error,
+  attemptCount = 0,
   anchorHomeDomain,
   onDisputeOpen,
+  onAdjust,
 }: StatusTrackerProps) {
   const isTerminal = status ? TERMINAL.includes(status) : false;
   const isCompleted = status === 'completed';
   const canDispute = isTerminal && status != null && DISPUTABLE.includes(status);
+  const terminalMessage = status ? terminalErrorMessage(status, transactionId) : null;
+  const { share, copied: shareCopied } = useShare();
 
   const [anchorSupportUrl, setAnchorSupportUrl] = useState<string | null>(null);
   const pendingAnchorSinceRef = useRef<number | null>(null);
@@ -153,24 +166,20 @@ export function StatusTracker({
   return (
     <div
       className={`rounded-xl border p-5 transition-colors ${
-        isCompleted
-          ? 'border-green-200 bg-green-50 dark:border-green-800/40 dark:bg-green-950/20'
-          : 'border-gray-200 dark:border-gray-700'
+        isCompleted ? 'border-status-up/40 bg-accent-subtle /40 ' : 'border-border'
       }`}
     >
       <div className="mb-4 flex items-start justify-between">
         <div>
-          <h3 className="text-sm font-semibold text-gray-900 dark:text-white">
-            Transaction Status
-          </h3>
+          <h3 className="text-sm font-semibold text-primary-text">Transaction Status</h3>
           <div className="mt-0.5 flex items-center gap-2">
-            <p className="font-mono text-xs text-gray-400">{transactionId}</p>
+            <p className="font-mono text-xs text-secondary-text">{transactionId}</p>
             <CopyButton text={transactionId} />
           </div>
         </div>
         {!isTerminal && (
-          <span className="flex items-center gap-1 text-xs text-gray-400">
-            <span className="h-1.5 w-1.5 rounded-full bg-blue-500 animate-pulse" />
+          <span className="flex items-center gap-1 text-xs text-secondary-text">
+            <span className="h-1.5 w-1.5 rounded-full bg-accent animate-pulse" />
             Live
           </span>
         )}
@@ -178,10 +187,8 @@ export function StatusTracker({
 
       {isCompleted && amountOut && (
         <div className="mb-4 animate-in fade-in slide-in-from-bottom-2 duration-500">
-          <p className="text-xs font-medium uppercase tracking-wide text-green-600 dark:text-green-400">
-            Delivered
-          </p>
-          <p className="mt-0.5 text-3xl font-bold tabular-nums text-green-700 dark:text-green-300">
+          <p className="text-xs font-medium uppercase tracking-wide text-status-up">Delivered</p>
+          <p className="mt-0.5 text-3xl font-bold tabular-nums text-status-up">
             {formatDeliveredAmount(amountOut, currencyCode)}
           </p>
         </div>
@@ -194,14 +201,44 @@ export function StatusTracker({
         </span>
       </div>
 
+      {status && statusExplainer(status) && (
+        <p className="-mt-3 mb-4 text-xs text-fg-muted">
+          {statusExplainer(status)}
+          {statusTimeEstimate(status) && (
+            <span className="text-secondary-text"> (usually {statusTimeEstimate(status)})</span>
+          )}
+        </p>
+      )}
+
+      {!isTerminal && attemptCount >= 20 && (
+        <p className="mb-4 text-xs text-status-unknown">
+          This is taking longer than usual. Anchor may be experiencing delays.
+        </p>
+      )}
+      {!isTerminal && attemptCount >= 5 && attemptCount < 20 && (
+        <p className="mb-4 text-xs text-secondary-text">
+          (checked {attemptCount} times, still waiting...)
+        </p>
+      )}
+
       {error && (
-        <p className="mb-4 rounded-lg bg-red-50 px-3 py-2 text-xs text-red-600 dark:bg-red-950/30 dark:text-red-400">
-          {error}
+        <p className="mb-4 rounded-lg bg-bg-sunken px-3 py-2 text-xs text-status-down">{error}</p>
+      )}
+
+      {terminalMessage && (
+        <p
+          className={`mb-4 rounded-lg px-3 py-2 text-xs ${
+            status === 'refunded'
+              ? 'bg-bg-sunken text-status-unknown  '
+              : 'bg-bg-sunken text-status-down  '
+          }`}
+        >
+          {terminalMessage}
         </p>
       )}
 
       {showStalledSupport && anchorSupportUrl && (
-        <p className="mb-4 rounded-lg bg-amber-50 px-3 py-2 text-xs text-amber-800 dark:bg-amber-950/30 dark:text-amber-300">
+        <p className="mb-4 rounded-lg bg-bg-sunken px-3 py-2 text-xs text-status-unknown">
           This withdrawal is taking longer than expected.{' '}
           <a
             href={anchorSupportUrl}
@@ -218,25 +255,25 @@ export function StatusTracker({
         <dl className="mb-4 space-y-1.5 text-sm">
           {amountIn && (
             <div className="flex justify-between">
-              <dt className="text-gray-500">Sent</dt>
-              <dd className="font-medium text-gray-900 dark:text-white">
+              <dt className="text-fg-muted">Sent</dt>
+              <dd className="font-medium text-primary-text">
                 {amountIn} {parseAsset(amountInAsset) || 'USDC'}
               </dd>
             </div>
           )}
           {amountFee && (
             <div className="flex justify-between">
-              <dt className="text-gray-500">Fee</dt>
-              <dd className="font-medium text-gray-700 dark:text-gray-300">
+              <dt className="text-fg-muted">Fee</dt>
+              <dd className="font-medium text-secondary-text">
                 {amountFee} {parseAsset(amountInAsset) || 'USDC'}
               </dd>
             </div>
           )}
           {amountOut && (
             <div className="flex justify-between">
-              <dt className="text-gray-500">You receive</dt>
-              <dd className="font-medium text-green-600 dark:text-green-400">
-                {amountOut} {parseAsset(amountOutAsset)}
+              <dt className="text-fg-muted">You receive</dt>
+              <dd className="font-medium text-status-up">
+                {amountOut} {parseAsset(amountOutAsset) || currencyCode}
               </dd>
             </div>
           )}
@@ -244,23 +281,21 @@ export function StatusTracker({
       )}
 
       {status === 'refunded' && refunds && (
-        <div className="mb-4 mt-2 rounded-lg bg-yellow-50 p-4 dark:bg-yellow-900/20">
-          <h4 className="mb-2 text-sm font-semibold text-yellow-800 dark:text-yellow-300">
-            Refund Details
-          </h4>
+        <div className="mb-4 mt-2 rounded-lg bg-bg-sunken p-4">
+          <h4 className="mb-2 text-sm font-semibold text-status-unknown">Refund Details</h4>
           <dl className="space-y-1.5 text-sm">
             {refunds.amount_refunded && (
               <div className="flex justify-between">
-                <dt className="text-yellow-700/80 dark:text-yellow-400/80">Amount Refunded</dt>
-                <dd className="font-medium text-yellow-900 dark:text-yellow-200">
+                <dt className="text-status-unknown/80 /80">Amount Refunded</dt>
+                <dd className="font-medium text-status-unknown dark:text-status-unknown">
                   {refunds.amount_refunded} {parseAsset(amountInAsset) || 'USDC'}
                 </dd>
               </div>
             )}
             {refunds.amount_fee && (
               <div className="flex justify-between">
-                <dt className="text-yellow-700/80 dark:text-yellow-400/80">Refund Fee</dt>
-                <dd className="font-medium text-yellow-900 dark:text-yellow-200">
+                <dt className="text-status-unknown/80 /80">Refund Fee</dt>
+                <dd className="font-medium text-status-unknown dark:text-status-unknown">
                   {refunds.amount_fee} {parseAsset(amountInAsset) || 'USDC'}
                 </dd>
               </div>
@@ -268,29 +303,27 @@ export function StatusTracker({
           </dl>
 
           {refunds.payments && refunds.payments.length > 0 && (
-            <div className="mt-3 pt-3 border-t border-yellow-200/50 dark:border-yellow-700/50">
-              <p className="text-xs font-semibold text-yellow-800 dark:text-yellow-300 mb-2">
-                Refund Payments
-              </p>
+            <div className="mt-3 pt-3 border-t border-status-unknown/40/50 /50">
+              <p className="text-xs font-semibold text-status-unknown mb-2">Refund Payments</p>
               <div className="space-y-2">
                 {refunds.payments.map((p, i) => (
-                  <div key={i} className="text-xs bg-white/50 dark:bg-black/20 rounded p-2">
+                  <div key={i} className="text-xs bg-bg-subtle/50 dark:bg-black/20 rounded p-2">
                     <div className="flex justify-between mb-1">
-                      <span className="text-yellow-700 dark:text-yellow-400">Amount</span>
-                      <span className="font-medium text-yellow-900 dark:text-yellow-200">
+                      <span className="text-status-unknown">Amount</span>
+                      <span className="font-medium text-status-unknown dark:text-status-unknown">
                         {p.amount}
                       </span>
                     </div>
                     {p.fee && (
                       <div className="flex justify-between mb-1">
-                        <span className="text-yellow-700 dark:text-yellow-400">Fee</span>
-                        <span className="font-medium text-yellow-900 dark:text-yellow-200">
+                        <span className="text-status-unknown">Fee</span>
+                        <span className="font-medium text-status-unknown dark:text-status-unknown">
                           {p.fee}
                         </span>
                       </div>
                     )}
-                    <div className="mt-1 pt-1 border-t border-yellow-200/30 dark:border-yellow-700/30">
-                      <span className="text-[10px] font-mono text-yellow-600/80 dark:text-yellow-500/80 break-all">
+                    <div className="mt-1 pt-1 border-t border-status-unknown/40/30 /30">
+                      <span className="text-[10px] font-mono text-status-unknown/80 dark:text-status-unknown break-all">
                         {p.id_type}: {p.id}
                       </span>
                     </div>
@@ -303,24 +336,23 @@ export function StatusTracker({
       )}
 
       {externalTransactionId && (
-        <div className="mt-4 pt-4 border-t border-gray-100 dark:border-gray-800">
-          <p className="text-xs text-gray-500 uppercase tracking-wider font-semibold mb-1">
+        <div className="mt-4 pt-4 border-t border-border">
+          <p className="text-xs text-fg-muted uppercase tracking-wider font-semibold mb-1">
             Bank Transfer ID
           </p>
-          <p className="text-sm font-mono text-gray-600 dark:text-gray-400 break-all">
-            {externalTransactionId}
-          </p>
+          <p className="text-sm font-mono text-secondary-text break-all">{externalTransactionId}</p>
         </div>
       )}
 
       {stellarTransactionId && isValidStellarTxId(stellarTransactionId) && (
-        <p className="text-xs text-gray-500">
+        <p className="text-xs text-fg-muted">
           Stellar tx:{' '}
           <a
             href={`${STELLAR_EXPERT_URL}/tx/${stellarTransactionId}`}
             target="_blank"
             rel="noopener noreferrer"
-            className="font-mono text-blue-600 hover:underline dark:text-blue-400"
+            aria-label={`View transaction ${stellarTransactionId} on Stellar Expert (opens in new tab)`}
+            className="font-mono text-accent hover:underline dark:text-accent"
           >
             {stellarTransactionId.slice(0, 16)}…
           </a>
@@ -329,11 +361,63 @@ export function StatusTracker({
 
       <Timeline status={status} />
 
+      {isCompleted && (
+        <div className="mt-4 flex items-center gap-4 border-t border-border pt-4">
+          {onAdjust && (
+            <button
+              onClick={onAdjust}
+              className="text-xs font-medium text-accent hover:underline dark:text-accent"
+            >
+              Off-ramp another amount
+            </button>
+          )}
+          <Link
+            href="/history"
+            className="text-xs font-medium text-fg-muted hover:underline dark:text-fg-muted"
+          >
+            View transaction history
+          </Link>
+          {amountIn && stellarTransactionId && isValidStellarTxId(stellarTransactionId) && (
+            <button
+              onClick={() =>
+                share({
+                  text: `I just off-ramped ${amountIn} USDC → ${currencyCode} via Stellar Intel.`,
+                  url: `${STELLAR_EXPERT_URL}/tx/${stellarTransactionId}`,
+                })
+              }
+              className="text-xs font-medium text-fg-muted hover:underline dark:text-fg-muted"
+            >
+              {shareCopied ? 'Copied!' : 'Share'}
+            </button>
+          )}
+          <button
+            onClick={() => window.print()}
+            className="text-xs font-medium text-fg-muted hover:underline dark:text-fg-muted"
+          >
+            Download receipt
+          </button>
+        </div>
+      )}
+
+      {isCompleted && (
+        <TransactionReceipt
+          transactionId={transactionId}
+          amountIn={amountIn}
+          amountInAsset={amountInAsset}
+          amountOut={amountOut}
+          amountOutAsset={amountOutAsset}
+          amountFee={amountFee}
+          currencyCode={currencyCode}
+          stellarTransactionId={stellarTransactionId}
+          anchorHomeDomain={anchorHomeDomain}
+        />
+      )}
+
       {canDispute && onDisputeOpen && (
-        <div className="mt-4 pt-4 border-t border-gray-100 dark:border-gray-800">
+        <div className="mt-4 pt-4 border-t border-border">
           <button
             onClick={() => onDisputeOpen(transactionId)}
-            className="text-xs font-medium text-gray-400 hover:text-red-500 dark:hover:text-red-400 underline transition-colors"
+            className="text-xs font-medium text-secondary-text hover:text-status-down dark:hover:text-status-down underline transition-colors"
           >
             Flag incorrect outcome
           </button>
@@ -346,6 +430,7 @@ export function StatusTracker({
 function parseAsset(assetStr: string | undefined): string | null {
   if (!assetStr) return null;
   if (assetStr === 'stellar:native') return 'XLM';
+  if (!assetStr.includes(':')) return assetStr;
   const parts = assetStr.split(':');
-  return parts[1] ?? null;
+  return parts[1] ?? parts[0] ?? null;
 }

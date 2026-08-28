@@ -1,100 +1,98 @@
 'use client';
 
-import { useMemo } from 'react';
-import { ScoreBadge } from '@/components/ui/ScoreBadge';
+import Link from 'next/link';
+import { ANCHORS } from '@/constants/anchors';
 
-export interface AnchorTrustScore {
-  anchorId: string;
-  anchorName: string;
-  logoUrl?: string;
-  compositeScore: number;
-  corridors: string[];
+/**
+ * `docs/NON_CUSTODY.md` has no route — `app/docs/` is a hand-built tree, not a
+ * generic markdown renderer — so this points at the file on GitHub rather than
+ * at a page that would 404.
+ */
+const NON_CUSTODY_HREF =
+  'https://github.com/ezedike-evan/stellar-intel/blob/main/docs/NON_CUSTODY.md';
+
+/** Older than this and "moments ago" would be a lie. */
+const STALE_AFTER_MS = 120_000;
+
+export function formatFreshness(lastFetchedAt: number | null, now: number = Date.now()): string {
+  if (lastFetchedAt === null) return 'not yet loaded';
+
+  const seconds = Math.floor((now - lastFetchedAt) / 1000);
+  if (seconds < 10) return 'just now';
+  if (seconds < 60) return `${seconds}s ago`;
+
+  const minutes = Math.floor(seconds / 60);
+  return `${minutes}m ago`;
+}
+
+export function isStale(lastFetchedAt: number | null, now: number = Date.now()): boolean {
+  return lastFetchedAt !== null && now - lastFetchedAt > STALE_AFTER_MS;
 }
 
 interface TrustBarProps {
-  scores: AnchorTrustScore[];
-  corridor: string;
-  onAnchorClick?: (anchorId: string) => void;
+  /** Epoch ms of the last successful rates fetch, or null before the first. */
+  lastFetchedAt: number | null;
 }
 
-export function TrustBar({ scores, corridor, onAnchorClick }: TrustBarProps) {
-  const topThree = useMemo(
-    () =>
-      scores
-        .filter((s) => s.corridors.includes(corridor))
-        .sort((a, b) => b.compositeScore - a.compositeScore)
-        .slice(0, 3),
-    [scores, corridor]
-  );
-
-  if (topThree.length === 0) return null;
+/**
+ * Three things a reader should be able to check before committing funds (#791).
+ *
+ * Every claim here is one the repository can back. There is deliberately no
+ * "audited" badge and no uptime percentage: no audit has been performed, and an
+ * uptime figure computed over a short probe window would be a number dressed as
+ * evidence. Each item links to the thing that substantiates it, so the bar is
+ * checkable rather than reassuring.
+ */
+export function TrustBar({ lastFetchedAt }: TrustBarProps) {
+  const stale = isStale(lastFetchedAt);
 
   return (
-    <div className="mb-4 rounded-xl border border-gray-200 bg-white p-4 dark:border-gray-700 dark:bg-gray-800/50">
-      <p className="mb-3 text-xs font-semibold uppercase tracking-wide text-gray-500 dark:text-gray-400">
-        Top Anchors by Trust Score
-      </p>
-      <div className="flex gap-3">
-        {topThree.map((score, rank) => (
-          <TrustBarItem
-            key={score.anchorId}
-            score={score}
-            rank={rank + 1}
-            onClick={onAnchorClick}
-          />
-        ))}
-      </div>
-    </div>
-  );
-}
-
-interface TrustBarItemProps {
-  score: AnchorTrustScore;
-  rank: number;
-  onClick?: ((anchorId: string) => void) | undefined;
-}
-
-function TrustBarItem({ score, rank, onClick }: TrustBarItemProps) {
-  const scorePercent = Math.round(score.compositeScore * 100);
-
-  const handleClick = () => {
-    if (onClick) {
-      onClick(score.anchorId);
-    } else {
-      const el = document.getElementById(`anchor-row-${score.anchorId}`);
-      el?.scrollIntoView({ behavior: 'smooth', block: 'center' });
-    }
-  };
-
-  return (
-    <button
-      onClick={handleClick}
-      className="flex flex-1 cursor-pointer items-center gap-3 rounded-lg border border-gray-100 bg-gray-50 p-3 text-left transition-colors hover:border-blue-200 hover:bg-blue-50 dark:border-gray-700 dark:bg-gray-800 dark:hover:border-blue-800 dark:hover:bg-blue-950/20"
+    <section
+      aria-label="Trust and transparency"
+      className="rounded-xl border border-border bg-bg-subtle px-4 py-3"
     >
-      <span className="flex h-6 w-6 shrink-0 items-center justify-center rounded-full bg-blue-100 text-xs font-bold text-blue-700 dark:bg-blue-900/40 dark:text-blue-300">
-        {rank}
-      </span>
-      {score.logoUrl ? (
-        // eslint-disable-next-line @next/next/no-img-element
-        <img
-          src={score.logoUrl}
-          alt={score.anchorName}
-          className="h-7 w-7 shrink-0 rounded-full object-contain"
-        />
-      ) : (
-        <span className="flex h-7 w-7 shrink-0 items-center justify-center rounded-full bg-gray-200 text-xs font-semibold text-gray-600 dark:bg-gray-700 dark:text-gray-300">
-          {score.anchorName.charAt(0).toUpperCase()}
-        </span>
-      )}
-      <div className="min-w-0">
-        <p className="truncate text-sm font-medium text-gray-900 dark:text-white">
-          {score.anchorName}
-        </p>
-        <p className="text-xs text-gray-500 dark:text-gray-400 mt-0.5 flex items-center gap-1.5">
-          <ScoreBadge score={scorePercent} />
-          trust score
-        </p>
-      </div>
-    </button>
+      <ul className="grid gap-3 text-xs sm:grid-cols-3 sm:gap-4">
+        <li className="flex flex-col gap-0.5">
+          <span className="font-medium text-primary-text">Non-custodial</span>
+          <span className="text-secondary-text">
+            You sign every transaction with your own wallet.{' '}
+            <a
+              href={NON_CUSTODY_HREF}
+              target="_blank"
+              rel="noopener noreferrer"
+              className="text-accent underline underline-offset-2"
+            >
+              How it works
+            </a>
+          </span>
+        </li>
+
+        <li className="flex flex-col gap-0.5">
+          <span className="font-medium text-primary-text">{ANCHORS.length} anchors monitored</span>
+          <span className="text-secondary-text">
+            Scored from observed behaviour.{' '}
+            <Link href="/methodology" className="text-accent underline underline-offset-2">
+              Methodology
+            </Link>
+          </span>
+        </li>
+
+        <li className="flex flex-col gap-0.5">
+          <span className="font-medium text-primary-text">Rates</span>
+          <span className="text-secondary-text">
+            Updated{' '}
+            <time
+              // Not a live region: the countdown beside the table already
+              // announces refreshes, and two announcements per cycle is noise.
+              dateTime={lastFetchedAt ? new Date(lastFetchedAt).toISOString() : undefined}
+              data-testid="trust-freshness"
+            >
+              {formatFreshness(lastFetchedAt)}
+            </time>
+            {stale && <span className="text-secondary-text"> — may be out of date</span>}
+          </span>
+        </li>
+      </ul>
+    </section>
   );
 }

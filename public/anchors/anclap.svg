@@ -1,0 +1,10 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 128 128" width="128" height="128">
+  <defs>
+    <linearGradient id="anclapGrad" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" stop-color="#0099FF" />
+      <stop offset="100%" stop-color="#0055EE" />
+    </linearGradient>
+  </defs>
+  <circle cx="64" cy="64" r="56" fill="url(#anclapGrad)" />
+  <path d="M76 46v36 M76 60c-4 6-12 10-20 10-12 0-20-8-20-20s8-20 20-20c8 0 16 4 20 10" stroke="#FFFFFF" stroke-width="9" stroke-linecap="round" stroke-linejoin="round" fill="none" />
+</svg>
