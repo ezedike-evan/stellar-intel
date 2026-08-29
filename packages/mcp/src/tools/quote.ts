@@ -1,6 +1,7 @@
 import type { McpServer } from '@modelcontextprotocol/sdk/server/mcp.js';
 import { z } from 'zod';
 import { getQuote, OfframpToolError, QuoteOutputSchema } from '@/lib/mcp/offramp';
+import { McpToolError, fromOfframpError, upstreamTimeout } from '../errors.js';
 
 export const QUOTE_TOOL_NAME = 'intel.offramp.quote';
 
@@ -28,15 +29,18 @@ export function registerQuoteTool(server: McpServer): void {
           structuredContent: quote,
         };
       } catch (err) {
-        const message =
+        const toolErr =
           err instanceof OfframpToolError
-            ? `${err.code}: ${err.message}`
-            : err instanceof Error
-              ? err.message
-              : 'Unknown error';
+            ? fromOfframpError(err)
+            : err instanceof McpToolError
+              ? err
+              : upstreamTimeout(
+                  err instanceof Error ? err.message : 'Unknown error',
+                  'UNKNOWN_ERROR'
+                );
         return {
           isError: true,
-          content: [{ type: 'text', text: message }],
+          content: [{ type: 'text', text: `${toolErr.category}: ${toolErr.message}` }],
         };
       }
     }
