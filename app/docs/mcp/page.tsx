@@ -10,6 +10,39 @@ export default function McpPage() {
         </p>
       </div>
 
+      {/* Not-yet-published notice */}
+      <section className="rounded-xl border border-amber-500/30 bg-amber-50 p-6 dark:bg-amber-950/20">
+        <h2 className="flex items-center gap-2 text-lg font-semibold text-amber-900 dark:text-amber-200">
+          <svg
+            className="h-5 w-5 shrink-0"
+            viewBox="0 0 24 24"
+            fill="currentColor"
+            aria-hidden="true"
+          >
+            <path d="M12 2L1 21h22L12 2zm1 14h-2v2h2v-2zm0-7h-2v5h2V9z" />
+          </svg>
+          The MCP package is not published yet
+        </h2>
+        <p className="mt-2 text-sm text-amber-800 dark:text-amber-300">
+          <code className="text-xs">@stellarintel/mcp</code> is not yet on npm — running{' '}
+          <code className="text-xs">npm install @stellarintel/mcp</code> returns 404 today. The
+          server is built, and publication is tracked in{' '}
+          <a
+            href="https://github.com/ezedike-evan/stellar-intel/issues/806"
+            target="_blank"
+            rel="noopener noreferrer"
+            className="font-medium underline underline-offset-2"
+          >
+            #806
+          </a>{' '}
+          for status updates. Until it ships, run it from this repository (see{' '}
+          <a href="#installation" className="font-medium underline underline-offset-2">
+            Installation
+          </a>{' '}
+          below).
+        </p>
+      </section>
+
       <section className="space-y-4">
         <h2 className="text-xl font-semibold text-primary-text">Overview</h2>
         <p className="text-secondary-text">
@@ -17,22 +50,31 @@ export default function McpPage() {
           stdio. It reuses the same routing and canonical-hashing logic as the web app.
         </p>
         <p className="text-secondary-text">
-          The server is published on npm as <code className="text-accent">@stellarintel/mcp</code>.
+          The server ships as <code className="text-accent">@stellarintel/mcp</code>, which is not
+          yet published to npm. It runs from this repository today.
         </p>
       </section>
 
-      <section className="space-y-4">
+      <section id="installation" className="space-y-4">
         <h2 className="text-xl font-semibold text-primary-text">Installation</h2>
-        <CodeBlock language="bash" code={`npm install @stellarintel/mcp`} />
+        <p className="text-secondary-text">
+          The package is not on npm yet, so install it from this repository:
+        </p>
+        <CodeBlock
+          language="bash"
+          code={`git clone https://github.com/ezedike-evan/stellar-intel
+cd stellar-intel
+npm install`}
+        />
       </section>
 
       <section className="space-y-4">
         <h2 className="text-xl font-semibold text-primary-text">Running the Server</h2>
         <CodeBlock
           language="bash"
-          code={`# Build and run
-npm run build   # tsc -> dist/
-npm start       # node dist/index.js, stdio transport
+          code={`# Build and run the MCP package over stdio (from the repo root)
+npm run build --workspace=@stellarintel/mcp   # tsc -> dist/
+npm start --workspace=@stellarintel/mcp       # node dist/packages/mcp/src/index.js
 
 # Or use tsx for development (no build step)
 npx tsx scripts/mcp/server.ts`}
@@ -175,12 +217,12 @@ npm run test -- tests/mcp-e2e.spec.ts`}
           </li>
           <li>
             <a
-              href="https://www.npmjs.com/package/@stellarintel/mcp"
+              href="https://github.com/ezedike-evan/stellar-intel/issues/806"
               target="_blank"
               rel="noopener noreferrer"
               className="text-accent hover:underline"
             >
-              @stellarintel/mcp on npm →
+              Publication status tracking issue (#806) →
             </a>
           </li>
           <li>
