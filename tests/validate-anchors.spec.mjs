@@ -1,12 +1,13 @@
 import { readFileSync } from 'node:fs';
 import { join } from 'node:path';
-import { describe, it, expect, vi } from 'vitest';
+import { describe, it, expect, vi, afterEach } from 'vitest';
 import {
   nextHealth,
   applyProbes,
   formatLedgerDigest,
   parseAnchors,
   parseCurrencies,
+  probeDomain,
   resolveExpectedIssuer,
   validateIssuer,
 } from '../scripts/validate-anchors.mjs';
@@ -102,8 +103,8 @@ describe('validate-anchors: parseAnchors', () => {
       export const CORRIDORS = [{ id: 'usdc-ngn', homeDomain: 'should-not-match' }];
     `;
     expect(parseAnchors(source)).toEqual([
-      { id: 'moneygram', domain: 'stellar.moneygram.com' },
-      { id: 'cowrie', domain: 'cowrie.exchange' },
+      { id: 'moneygram', domain: 'stellar.moneygram.com', requiresSep24: false },
+      { id: 'cowrie', domain: 'cowrie.exchange', requiresSep24: false },
     ]);
   });
 
@@ -125,14 +126,80 @@ describe('validate-anchors: parseAnchors', () => {
       ];
     `;
     expect(parseAnchors(source)).toEqual([
-      { id: 'cowrie', domain: 'cowrie.exchange', assetCode: 'USDC', assetIssuerRef: 'USDC_ISSUER' },
+      {
+        id: 'cowrie',
+        domain: 'cowrie.exchange',
+        requiresSep24: false,
+        assetCode: 'USDC',
+        assetIssuerRef: 'USDC_ISSUER',
+      },
       {
         id: 'ntokens',
         domain: 'ntokens.com',
+        requiresSep24: false,
         assetCode: 'BRL',
         assetIssuer: 'GDVKY2GU2DRXWTBEYJJWSFXIGBZV6AZNBVVSUHEPZI54LIS6BA7DVVSP',
       },
     ]);
+  });
+
+  // #1121 — cowrie (seps: ['sep6', 'sep10']) was flagged DEGRADED for lacking
+  // TRANSFER_SERVER_SEP0024, a rail it never registers. requiresSep24 must
+  // only be true for an anchor whose own `seps` lists 'sep24'.
+  it('sets requiresSep24 only for an anchor whose seps includes sep24', () => {
+    const source = `
+      export const ANCHORS: Anchor[] = [
+        {
+          id: 'cowrie',
+          homeDomain: 'cowrie.exchange',
+          seps: ['sep6', 'sep10'],
+        },
+        {
+          id: 'ngnc',
+          homeDomain: 'ngnc.online',
+          seps: ['sep24'],
+        },
+      ];
+    `;
+    const anchors = parseAnchors(source);
+    expect(anchors.find((a) => a.id === 'cowrie')?.requiresSep24).toBe(false);
+    expect(anchors.find((a) => a.id === 'ngnc')?.requiresSep24).toBe(true);
+  });
+});
+
+describe('validate-anchors: probeDomain SEP-24 requirement (#1121)', () => {
+  const originalFetch = global.fetch;
+
+  afterEach(() => {
+    global.fetch = originalFetch;
+  });
+
+  function mockToml(body, status = 200) {
+    global.fetch = vi.fn().mockResolvedValue({
+      ok: status >= 200 && status < 300,
+      status,
+      text: () => Promise.resolve(body),
+    });
+  }
+
+  it('passes an anchor with no SEP-24 line when it does not require SEP-24', async () => {
+    mockToml('SIGNING_KEY = "G..."');
+    const result = await probeDomain('cowrie.exchange', false);
+    expect(result.ok).toBe(true);
+    expect(result.error).toBeNull();
+  });
+
+  it('fails an anchor missing SEP-24 when it does require it', async () => {
+    mockToml('SIGNING_KEY = "G..."');
+    const result = await probeDomain('ngnc.online', true);
+    expect(result.ok).toBe(false);
+    expect(result.error).toBe('missing TRANSFER_SERVER_SEP0024 (SEP-24)');
+  });
+
+  it('passes when SEP-24 is present, regardless of the requirement', async () => {
+    mockToml('TRANSFER_SERVER_SEP0024 = "https://example.com/sep24"');
+    expect((await probeDomain('example.com', true)).ok).toBe(true);
+    expect((await probeDomain('example.com', false)).ok).toBe(true);
   });
 });
 
