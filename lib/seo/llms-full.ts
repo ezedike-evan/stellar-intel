@@ -115,7 +115,8 @@ export const LLMS_FULL_SECTIONS: LlmsFullSection[] = [
 export const EXCLUDED_DOCS: Record<string, string> = {
   'ROADMAP.md':
     'Forward-looking plan. Describes what does not exist yet, which is exactly what a model must not report as behaviour.',
-  'PROPOSAL.md': 'Grant proposal narrative, not product documentation.',
+  'PROPOSAL.md':
+    'Project thesis and sequencing — why the work is ordered as it is, not how the product behaves.',
   'POSITIONING.md':
     'Internal messaging guidance — how to talk about the product, not how it works.',
   'AGENT_POSITIONING.md': 'Comparison memo against another product; opinion rather than reference.',

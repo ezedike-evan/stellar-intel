@@ -7,7 +7,7 @@
 > cooperation. Execution is real, it is in the repository, and its quality is
 > set by anchors this project does not control.
 
-**Last reviewed:** 2026-08-26
+**Last reviewed:** 2026-08-28
 
 |                |                                                                                        |
 | -------------- | -------------------------------------------------------------------------------------- |
@@ -195,25 +195,33 @@ coverage rather than on a date — see §6.
 
 ## 6. Sequencing
 
-Waves, not dates. Full ticket-level expansion is in
+Milestones, not dates. Full ticket-level expansion is in
 [`ROADMAP.md`](ROADMAP.md), which is the authoritative version; this table is
 the shape of it.
 
 The axis is the one from §1 — what works without anyone's cooperation, versus
 what is third-party constrained.
 
-| Wave                    | Theme                              | Depends on                            |
-| ----------------------- | ---------------------------------- | ------------------------------------- |
-| **v1 Executable** ✅    | A correct, demonstrable off-ramp   | nothing external                      |
-| **v2 Observable** ✅    | Reputation as a product surface    | nothing external — probes and a clock |
-| **v3 Guaranteed**       | Intent-level SLAs                  | settlement history to price against   |
-| **v4 Universal**        | SDK + MCP GA, embeddable widget    | consumers, not anchors                |
-| **v5 Institutional**    | Compliance-grade primitives        | counterparties who ask for them       |
-| **v6 Ecosystem Infra.** | Multi-language SDKs, decentralized | third-party readers of the oracle     |
+| Version                 | Theme                              | Depends on                            | Milestones                              |
+| ----------------------- | ---------------------------------- | ------------------------------------- | --------------------------------------- |
+| **v1 Executable**       | A correct, demonstrable off-ramp   | nothing external                      | `v1.0`–`v1.6` — all seven closed        |
+| **v2 Observable**       | Reputation as a product surface    | nothing external — probes and a clock | `v2.0`, `v2.1` closed; `H1 Rung 1` open |
+| **v3 Guaranteed**       | Intent-level SLAs                  | settlement history to price against   | none open                               |
+| **v4 Universal**        | SDK + MCP GA, embeddable widget    | consumers, not anchors                | none open                               |
+| **v5 Institutional**    | Compliance-grade primitives        | counterparties who ask for them       | none open                               |
+| **v6 Ecosystem Infra.** | Multi-language SDKs, decentralized | third-party readers of the oracle     | none open                               |
 
-The first two waves needed nobody's permission, which is why they are done. The
-later ones are gated on parties outside this repository, which is why they are
-sequenced behind rather than promised alongside.
+The milestone column is the honest version of a tick. v1 is done in the sense
+that has a check on it: every milestone under it is closed. **v2 is not** —
+`H1 Rung 1` is open, and what is open inside it is the on-chain half. The rows
+below v2 have no milestone at all, which is the difference between sequenced
+and scheduled.
+
+The first two versions needed nobody's permission, which is why they are the
+ones with milestones. The later ones are gated on parties outside this
+repository, which is why they are sequenced behind rather than promised
+alongside. The wave-by-wave breakdown, and the map from each wave to its
+milestone, is in [`ROADMAP.md` § Milestone map](ROADMAP.md#milestone-map).
 
 **The gate that matters most is not on this table.** A mainnet oracle publish is
 blocked in code on **90 days of continuous probe coverage** — never launch an
