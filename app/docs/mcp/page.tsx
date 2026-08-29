@@ -1,4 +1,11 @@
+import type { Metadata } from 'next';
 import { CodeBlock } from '@/components/docs/CodeBlock';
+
+export const metadata: Metadata = {
+  title: 'MCP Tool Docs',
+  description:
+    'Use Stellar Intel through AI agents via the Model Context Protocol — install @stellarintel/mcp, run the stdio server, and let agents price off-ramp routes without holding signing keys.',
+};
 
 export default function McpPage() {
   return (

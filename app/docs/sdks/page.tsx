@@ -1,4 +1,11 @@
+import type { Metadata } from 'next';
 import { CodeBlock } from '@/components/docs/CodeBlock';
+
+export const metadata: Metadata = {
+  title: 'SDKs & Libraries',
+  description:
+    'Client libraries for integrating Stellar Intel: a published Rust crate for on-chain reputation data, an MCP npm package, and typed fetch wrappers for TypeScript and Python.',
+};
 
 export default function SdksPage() {
   return (

@@ -1,4 +1,11 @@
+import type { Metadata } from 'next';
 import { CodeBlock } from '@/components/docs/CodeBlock';
+
+export const metadata: Metadata = {
+  title: 'Authentication & Rate Limits',
+  description:
+    'Learn how to authenticate with the Stellar Intel API — public endpoints, admin bearer tokens, Ed25519 signed intents — plus per-endpoint rate limits and best practices.',
+};
 
 export default function AuthPage() {
   return (
