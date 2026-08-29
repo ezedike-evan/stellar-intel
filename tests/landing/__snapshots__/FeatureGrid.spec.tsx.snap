@@ -1,0 +1,171 @@
+// Vitest Snapshot v1, https://vitest.dev/guide/snapshot.html
+
+exports[`FeatureGrid > matches the visual snapshot for a fixed feature list 1`] = `
+<section
+  class="rounded-xl border border-border p-4 /50 sm:p-6"
+>
+  <h2
+    class="mb-6 text-lg font-semibold text-primary-text"
+  >
+    How it works
+  </h2>
+  <div
+    class="flex flex-col gap-8 sm:flex-row sm:items-start sm:gap-0"
+  >
+    <div
+      class="flex flex-col items-center px-2 text-center sm:flex-1 sm:px-4"
+    >
+      <div
+        class="mb-3 flex h-12 w-12 items-center justify-center rounded-full bg-accent-subtle/40"
+      >
+        <svg
+          aria-hidden="true"
+          class="lucide lucide-globe h-6 w-6 text-accent"
+          fill="none"
+          height="24"
+          stroke="currentColor"
+          stroke-linecap="round"
+          stroke-linejoin="round"
+          stroke-width="2"
+          viewBox="0 0 24 24"
+          width="24"
+          xmlns="http://www.w3.org/2000/svg"
+        >
+          <circle
+            cx="12"
+            cy="12"
+            r="10"
+          />
+          <path
+            d="M12 2a14.5 14.5 0 0 0 0 20 14.5 14.5 0 0 0 0-20"
+          />
+          <path
+            d="M2 12h20"
+          />
+        </svg>
+      </div>
+      <span
+        class="mb-2 text-xs font-semibold uppercase tracking-wider text-fg-muted"
+      >
+        Step 
+        01
+      </span>
+      <div
+        class="font-medium text-primary-text"
+      >
+        Pick your corridor
+      </div>
+      <div
+        class="mt-1 text-sm text-secondary-text"
+      >
+        Choose a destination and amount.
+      </div>
+    </div>
+    <div
+      class="mt-6 hidden w-8 shrink-0 sm:block"
+    >
+      <div
+        class="h-px w-full bg-bg-sunken"
+      />
+    </div>
+    <div
+      class="flex flex-col items-center px-2 text-center sm:flex-1 sm:px-4"
+    >
+      <div
+        class="mb-3 flex h-12 w-12 items-center justify-center rounded-full bg-accent-subtle/40"
+      >
+        <svg
+          aria-hidden="true"
+          class="lucide lucide-chart-column h-6 w-6 text-accent"
+          fill="none"
+          height="24"
+          stroke="currentColor"
+          stroke-linecap="round"
+          stroke-linejoin="round"
+          stroke-width="2"
+          viewBox="0 0 24 24"
+          width="24"
+          xmlns="http://www.w3.org/2000/svg"
+        >
+          <path
+            d="M3 3v16a2 2 0 0 0 2 2h16"
+          />
+          <path
+            d="M18 17V9"
+          />
+          <path
+            d="M13 17V5"
+          />
+          <path
+            d="M8 17v-3"
+          />
+        </svg>
+      </div>
+      <span
+        class="mb-2 text-xs font-semibold uppercase tracking-wider text-fg-muted"
+      >
+        Step 
+        02
+      </span>
+      <div
+        class="font-medium text-primary-text"
+      >
+        Compare live quotes
+      </div>
+      <div
+        class="mt-1 text-sm text-secondary-text"
+      >
+        We pull live SEP-38 quotes.
+      </div>
+    </div>
+    <div
+      class="mt-6 hidden w-8 shrink-0 sm:block"
+    >
+      <div
+        class="h-px w-full bg-bg-sunken"
+      />
+    </div>
+    <div
+      class="flex flex-col items-center px-2 text-center sm:flex-1 sm:px-4"
+    >
+      <div
+        class="mb-3 flex h-12 w-12 items-center justify-center rounded-full bg-accent-subtle/40"
+      >
+        <svg
+          aria-hidden="true"
+          class="lucide lucide-zap h-6 w-6 text-accent"
+          fill="none"
+          height="24"
+          stroke="currentColor"
+          stroke-linecap="round"
+          stroke-linejoin="round"
+          stroke-width="2"
+          viewBox="0 0 24 24"
+          width="24"
+          xmlns="http://www.w3.org/2000/svg"
+        >
+          <path
+            d="M15.914 4a1.5 1.5 0 00-2.474-1.561l-9 9A1.5 1.5 0 005.5 14h4.002a.5.5 0 01.471.666L8.086 20a1.5 1.5 0 002.475 1.56l9-9A1.5 1.5 0 0018.5 10h-3.997a.5.5 0 01-.472-.667z"
+          />
+        </svg>
+      </div>
+      <span
+        class="mb-2 text-xs font-semibold uppercase tracking-wider text-fg-muted"
+      >
+        Step 
+        03
+      </span>
+      <div
+        class="font-medium text-primary-text"
+      >
+        Execute in one click
+      </div>
+      <div
+        class="mt-1 text-sm text-secondary-text"
+      >
+        Sign once and settle on Stellar.
+      </div>
+    </div>
+  </div>
+</section>
+`;

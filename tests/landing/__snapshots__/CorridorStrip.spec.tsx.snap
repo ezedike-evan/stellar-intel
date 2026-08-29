@@ -1,0 +1,53 @@
+// Vitest Snapshot v1, https://vitest.dev/guide/snapshot.html
+
+exports[`CorridorStrip > matches the visual snapshot for a fixed corridor list 1`] = `
+<section
+  aria-label="Supported corridors"
+>
+  <p
+    class="mb-3 text-xs font-semibold uppercase tracking-wide text-fg-muted"
+  >
+    Supported corridors
+  </p>
+  <ul
+    class="flex flex-wrap gap-2"
+  >
+    <li
+      class="inline-flex items-center gap-2 rounded-full border border-border bg-bg-subtle px-3 py-1.5 text-sm font-medium text-secondary-text"
+    >
+      <span
+        aria-hidden="true"
+        class="text-base leading-none"
+      >
+        🇳🇬
+      </span>
+      <span>
+        NGN
+      </span>
+      <span
+        class="sr-only"
+      >
+        Nigeria
+      </span>
+    </li>
+    <li
+      class="inline-flex items-center gap-2 rounded-full border border-border bg-bg-subtle px-3 py-1.5 text-sm font-medium text-secondary-text"
+    >
+      <span
+        aria-hidden="true"
+        class="text-base leading-none"
+      >
+        🇰🇪
+      </span>
+      <span>
+        KES
+      </span>
+      <span
+        class="sr-only"
+      >
+        Kenya
+      </span>
+    </li>
+  </ul>
+</section>
+`;

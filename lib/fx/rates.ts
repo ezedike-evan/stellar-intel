@@ -4,6 +4,8 @@
 // off-ramp estimates: the firm rate a user receives is always confirmed by the
 // anchor at execution time. USDC is treated as 1:1 with USD for this estimate.
 
+import { fetchWithTimeout } from '@/lib/stellar/http';
+
 interface FxCacheEntry {
   rates: Record<string, number>;
   expiresAt: number;
@@ -25,19 +27,14 @@ async function loadRates(): Promise<Record<string, number>> {
     return cache.rates;
   }
 
-  const controller = new AbortController();
-  const timeout = setTimeout(() => controller.abort(), REQUEST_TIMEOUT_MS);
-
   let res: Response;
   try {
-    res = await fetch(FX_ENDPOINT, { signal: controller.signal });
+    res = await fetchWithTimeout(FX_ENDPOINT, REQUEST_TIMEOUT_MS);
   } catch (err) {
     if ((err as Error).name === 'AbortError') {
       throw new Error(`FX rate request timed out after ${REQUEST_TIMEOUT_MS}ms`);
     }
     throw err;
-  } finally {
-    clearTimeout(timeout);
   }
 
   if (!res.ok) {

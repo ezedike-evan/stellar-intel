@@ -1,0 +1,224 @@
+name: Reputation Cron
+
+on:
+  schedule:
+    - cron: '*/5 * * * *'
+  workflow_dispatch: {}
+
+permissions:
+  contents: read
+  issues: write
+
+# A tick that overruns its 5-minute slot must not race the next one. The
+# in-process lock in lib/reputation/lock.ts cannot enforce this — it is a
+# module-level Map, so two serverless instances hold two independent locks
+# (#911). Until that is durable, this is the only real mutual exclusion.
+concurrency:
+  group: reputation-cron
+  cancel-in-progress: false
+
+jobs:
+  run:
+    runs-on: ubuntu-latest
+    outputs:
+      # `== 'failure'` rather than `!= 'success'`: a step skipped by the
+      # STORE_UNAVAILABLE gate below reports `skipped`, and naming that as the
+      # failing step would misdirect whoever reads the alert.
+      failure_step: ${{ steps.refresh.outcome == 'failure' && 'refresh' || steps.reconcile.outcome == 'failure' && 'reconcile' || steps.tick.outcome == 'failure' && 'publisher tick' || steps.health.outcome == 'failure' && 'publisher health' || 'unknown' }}
+    env:
+      CRON_SECRET: ${{ secrets.CRON_SECRET }}
+    steps:
+      # ─── Why this job is shaped the way it is (#948, #930) ───────────────────
+      #
+      # Every step used to be `curl -fsS "${{ secrets.APP_URL }}/api/..."`, and
+      # every step printed `Redirecting...`. `-f` only fails at >= 400, and
+      # there was no `-L`, so a 3xx made curl print the redirect body and exit
+      # 0. The publisher tick was green and doing nothing, every five minutes,
+      # for at least a day. Nobody noticed because nothing failed — the only
+      # symptom was `jq` choking on HTML in the health step below.
+      #
+      # Three defences, in order of how likely each is to be the actual fix:
+      #   1. strip a trailing slash off APP_URL, so `//api/...` cannot 308
+      #   2. follow redirects, so a platform-level one is survivable
+      #   3. assert the status code, so a non-2xx can never read as success
+      - name: Resolve the app origin
+        run: |
+          set -euo pipefail
+          APP="${{ secrets.APP_URL }}"
+          # A trailing slash yields https://host//api/... which Next.js
+          # normalises with a 308. Cheap to rule out, and the leading suspect.
+          echo "APP=${APP%/}" >> "$GITHUB_ENV"
+
+      - name: Refresh
+        id: refresh
+        run: |
+          set -euo pipefail
+          # --fail-with-body so a 500 body reaches the log instead of vanishing.
+          # -L to follow a redirect; curl forwards Authorization across a
+          # same-host hop and strips it cross-host, which is what we want.
+          # --proto '=https' so a downgrade can never leak CRON_SECRET.
+          CODE=$(curl -sS -L --proto '=https' --fail-with-body \
+            -o /tmp/refresh.out -w '%{http_code}' \
+            -X POST "$APP/api/reputation/refresh" \
+            -H "Authorization: Bearer $CRON_SECRET") || true
+          cat /tmp/refresh.out
+
+          # A deployment with no DATABASE_URL has nowhere to persist, which the
+          # API reports as 503 STORE_UNAVAILABLE. That is a configuration state,
+          # not an incident — the health step below already treats the same
+          # condition (`durable: false`) as a warning, and this run has nothing
+          # to do either way. Flag it so the remaining steps skip instead of
+          # each re-reporting the one missing database.
+          if [ "$CODE" = "503" ] && jq -e '.code == "STORE_UNAVAILABLE"' /tmp/refresh.out >/dev/null 2>&1; then
+            echo "::warning::No durable reputation store configured (DATABASE_URL unset) — nothing to refresh, reconcile or publish"
+            echo "STORE_UNAVAILABLE=1" >> "$GITHUB_ENV"
+            exit 0
+          fi
+
+          case "$CODE" in
+            2*) ;;
+            *) echo "::error::refresh returned HTTP $CODE"; exit 1 ;;
+          esac
+
+      - name: Reconcile
+        id: reconcile
+        if: env.STORE_UNAVAILABLE != '1'
+        run: |
+          set -euo pipefail
+          CODE=$(curl -sS -L --proto '=https' --fail-with-body \
+            -o /tmp/reconcile.out -w '%{http_code}' \
+            "$APP/api/reputation/reconcile" \
+            -H "Authorization: Bearer $CRON_SECRET") || true
+          cat /tmp/reconcile.out
+          case "$CODE" in
+            2*) ;;
+            *) echo "::error::reconcile returned HTTP $CODE"; exit 1 ;;
+          esac
+
+      - name: Publisher tick
+        id: tick
+        if: env.STORE_UNAVAILABLE != '1'
+        run: |
+          set -euo pipefail
+          CODE=$(curl -sS -L --proto '=https' --fail-with-body \
+            -o /tmp/tick.out -w '%{http_code}' \
+            "$APP/api/publisher/tick" \
+            -H "Authorization: Bearer $CRON_SECRET") || true
+          cat /tmp/tick.out
+          case "$CODE" in
+            2*) ;;
+            *) echo "::error::publisher tick returned HTTP $CODE"; exit 1 ;;
+          esac
+
+          # A gate refusal is a 200 by design (#786) — the publisher declining
+          # to write during the 90-day accumulation window is the system
+          # working, not an incident. Surface it so a reader of a green run
+          # knows why nothing was published.
+          if jq -e '.gate.allowed == false' /tmp/tick.out >/dev/null 2>&1; then
+            echo "::notice::Publish gate closed: $(jq -r '.gate.reason' /tmp/tick.out) — $(jq -r '.skipped' /tmp/tick.out) row(s) withheld"
+          fi
+
+      # A green tick is not the same as a healthy publisher: the tick can
+      # succeed while publishing nothing. This asserts the durable signal
+      # instead — rows waiting, and none reaching the oracle for an hour.
+      # Skipped when nothing is pending, so a quiet corridor never pages anyone.
+      - name: Check publisher health
+        id: health
+        run: |
+          set -euo pipefail
+          CODE=$(curl -sS -L --proto '=https' --fail-with-body \
+            -o /tmp/health.out -w '%{http_code}' \
+            "$APP/api/publisher/health") || true
+          BODY=$(cat /tmp/health.out)
+          echo "$BODY"
+
+          case "$CODE" in
+            2*) ;;
+            *) echo "::error::publisher health returned HTTP $CODE"; exit 1 ;;
+          esac
+
+          # Diagnose a non-JSON body directly rather than letting jq's parse
+          # error be the only clue. That error is what #948 actually reported,
+          # and it said nothing about the redirect that caused it.
+          if ! echo "$BODY" | jq -e . >/dev/null 2>&1; then
+            echo "::error::/api/publisher/health did not return JSON. First 200 bytes: $(echo "$BODY" | head -c 200)"
+            exit 1
+          fi
+
+          DURABLE=$(echo "$BODY" | jq -r '.durable')
+          if [ "$DURABLE" != "true" ]; then
+            echo "::warning::Publisher health has no durable backend; skipping staleness check"
+            exit 0
+          fi
+
+          PENDING=$(echo "$BODY" | jq -r '.pendingCount // 0')
+          STALE_MS=$(echo "$BODY" | jq -r '.publishedStaleMs // 0')
+          STALE_LIMIT_MS=3600000
+
+          if [ "$PENDING" -gt 0 ] && [ "$STALE_MS" -gt "$STALE_LIMIT_MS" ]; then
+            echo "::error::$PENDING row(s) pending and nothing published for $((STALE_MS / 60000)) minutes"
+            exit 1
+          fi
+
+          echo "Publisher healthy: pending=$PENDING, last publish ${STALE_MS}ms ago"
+
+  alert:
+    name: Open tracking issue on failure
+    runs-on: ubuntu-latest
+    needs: run
+    if: failure()
+    steps:
+      - uses: actions/github-script@v9
+        env:
+          FAILED_STEP: ${{ needs.run.outputs.failure_step }}
+        with:
+          script: |
+            const today = new Date().toISOString().slice(0, 10);
+            const title = `[publisher] reputation cron failing — ${today}`;
+
+            // One issue per day, commented on rather than duplicated: this
+            // workflow runs every 5 minutes, so an un-deduplicated alert would
+            // file ~288 issues before anyone woke up.
+            const { data: existing } = await github.rest.issues.listForRepo({
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              state: 'open',
+              labels: 'publisher-alert',
+            });
+
+            const failedStep = process.env.FAILED_STEP || 'unknown';
+            const runUrl = `${context.serverUrl}/${context.repo.owner}/${context.repo.repo}/actions/runs/${context.runId}`;
+            const note = `- \`${failedStep}\` failed at ${new Date().toISOString()} — ${runUrl}`;
+
+            const open = existing.find((issue) => issue.title === title);
+            if (open) {
+              await github.rest.issues.createComment({
+                owner: context.repo.owner,
+                repo: context.repo.repo,
+                issue_number: open.number,
+                body: note,
+              });
+              return;
+            }
+
+            await github.rest.issues.create({
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              title,
+              body: [
+                'The reputation cron failed. It runs every 5 minutes, so this issue',
+                'collects the day’s failures rather than opening one per run.',
+                '',
+                note,
+                '',
+                'Check `/api/publisher/health`: `durable: false` means no database is',
+                'configured, `pendingCount > 0` alongside a large `publishedStaleMs`',
+                'means rows are stuck, and `lastError` carries the last in-process',
+                'error (best effort — it resets on a cold start).',
+                '',
+                'If a step log shows `Redirecting...` or a non-2xx status, the',
+                '`APP_URL` secret points somewhere that redirects — check for a',
+                'trailing slash, an `http://` scheme, or an apex/www mismatch.',
+              ].join('\n'),
+              labels: ['publisher-alert', 'module/ops', 'needs-triage'],
+            });

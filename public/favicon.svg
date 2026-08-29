@@ -1,0 +1,31 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 32 32" role="img"
+  aria-label="Stellar Intel icon">
+  <defs>
+    <linearGradient id="fi-accent" x1="0" y1="0" x2="0" y2="1">
+      <stop offset="0"   stop-color="#7c5cff"/>
+      <stop offset="1"   stop-color="#3ad29f"/>
+    </linearGradient>
+    <style>
+      .fi-bg { fill: #ffffff; }
+      @media (prefers-color-scheme: dark) {
+        .fi-bg { fill: #000000; }
+      }
+      :root.dark .fi-bg, .dark .fi-bg { fill: #000000; }
+    </style>
+  </defs>
+
+  <!-- Rounded background square -->
+  <rect width="32" height="32" rx="6" class="fi-bg"/>
+
+  <!--
+    Brand mark: three squares in a vertical column.
+    Each square: 10×10 px, 2 px gap between them.
+    Total column height: 10 + 2 + 10 + 2 + 10 = 34 — centred in 32 px
+    vertically: y_start = (32 - 34) / 2 = -1 → clip, so use 8 px squares:
+    8 + 2 + 8 + 2 + 8 = 28. y_start = (32 - 28) / 2 = 2.
+    Horizontally centred: x = (32 - 8) / 2 = 12.
+  -->
+  <rect x="12" y="2"  width="8" height="8" rx="2"   fill="url(#fi-accent)"/>
+  <rect x="12" y="12" width="8" height="8" rx="2"   fill="url(#fi-accent)" opacity="0.75"/>
+  <rect x="12" y="22" width="8" height="8" rx="2"   fill="url(#fi-accent)" opacity="0.5"/>
+</svg>

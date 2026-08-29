@@ -18,6 +18,7 @@ export async function createServer(): Promise<McpServer> {
   // Dynamic imports so env defaults above are applied before lib/config loads.
   const { registerQuoteTool } = await import('./tools/quote');
   const { registerPrepareTool } = await import('./tools/prepare');
+  const { registerExecuteTool } = await import('./tools/execute');
 
   const server = new McpServer({
     name: 'stellar-intel',
@@ -25,6 +26,7 @@ export async function createServer(): Promise<McpServer> {
   });
   registerQuoteTool(server);
   registerPrepareTool(server);
+  registerExecuteTool(server);
   return server;
 }
 

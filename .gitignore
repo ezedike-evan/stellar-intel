@@ -13,6 +13,8 @@ packages/*/node_modules
 
 # testing
 /coverage
+/playwright-report
+/test-results
 
 # next.js
 /.next/
@@ -20,6 +22,7 @@ packages/*/node_modules
 
 # production
 /build
+packages/*/dist
 
 # misc
 .DS_Store
@@ -44,6 +47,9 @@ next-env.d.ts
 
 # claude
 .claude
+
+# IDE settings
+.vscode/
 
 # local planning artifacts (not shipped)
 /issues-batch-2.md

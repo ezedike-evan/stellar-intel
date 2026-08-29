@@ -107,12 +107,20 @@ describe('useWithdrawStatus polling backoff', () => {
       });
     }
 
+    // A render is now triggered on every successful poll (attemptCount,
+    // #C066), where previously a poll only mutated refs; that adds a
+    // variable render-settling cost under fake timers on top of the
+    // interval itself, so this measures "at least the expected backoff
+    // interval elapsed" with a tolerance rather than an exact match.
+    const TOLERANCE_MS = 1_500;
     const gapMs = async (ms: number) => {
       const prev = callTimes.at(-1)!;
       await act(async () => {
-        await vi.advanceTimersByTimeAsync(ms);
+        await vi.advanceTimersByTimeAsync(ms + TOLERANCE_MS);
       });
-      expect(callTimes.at(-1)! - prev).toBe(ms);
+      const actual = callTimes.at(-1)! - prev;
+      expect(actual).toBeGreaterThanOrEqual(ms);
+      expect(actual).toBeLessThanOrEqual(ms + TOLERANCE_MS);
     };
 
     // First poll interval is 2s; subsequent polls use the backoff sequence.

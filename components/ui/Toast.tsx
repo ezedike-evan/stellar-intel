@@ -12,11 +12,11 @@ function ToastItem({ toast }: { toast: Toast }) {
     <div
       role="alert"
       className={clsx(
-        'flex min-w-[280px] max-w-sm items-start gap-3 rounded-xl px-4 py-3 text-sm font-medium shadow-lg',
+        'flex min-w-[280px] max-w-sm items-start gap-3 rounded-xl px-4 py-3 text-sm font-medium ',
         {
-          'bg-red-600 text-white': toast.variant === 'error',
-          'bg-blue-600 text-white': toast.variant === 'info',
-          'bg-green-600 text-white': toast.variant === 'success',
+          'bg-status-down text-background': toast.variant === 'error',
+          'bg-accent text-background': toast.variant === 'info',
+          'bg-status-up text-background': toast.variant === 'success',
         }
       )}
     >

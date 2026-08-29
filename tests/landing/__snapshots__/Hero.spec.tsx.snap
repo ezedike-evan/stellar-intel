@@ -1,0 +1,129 @@
+// Vitest Snapshot v1, https://vitest.dev/guide/snapshot.html
+
+exports[`Hero > matches the visual snapshot with live rate + leaderboard data 1`] = `
+<section
+  aria-labelledby="hero-heading"
+  class="grid grid-cols-1 items-start gap-x-6 gap-y-12 py-16 lg:grid-cols-12 lg:py-24"
+>
+  <div
+    class="lg:col-span-7"
+  >
+    <p
+      class="text-fg-muted mb-6 flex flex-wrap items-center gap-2 font-mono text-xs tracking-wide"
+    >
+      <span
+        aria-hidden="true"
+        class="bg-control-border inline-block h-px w-6"
+      />
+      probed every 5 minutes · 4 signals
+    </p>
+    <h1
+      class="type-display"
+      id="hero-heading"
+    >
+      <span
+        class="text-secondary-text block"
+      >
+        What anchors say.
+      </span>
+      <span
+        class="block"
+      >
+        What anchors did.
+      </span>
+    </h1>
+    <p
+      class="text-secondary-text measure mt-6 text-base sm:text-lg"
+    >
+      A directory records what an anchor declares about itself, and stays correct until that anchor's deployment changes without the listing changing with it. This is the other half: seven registered off-ramp anchors, probed on a clock, with the scoring method published and small samples labelled as small.
+    </p>
+    <div
+      class="mt-10 flex flex-wrap items-center gap-3"
+    >
+      <a
+        href="/anchors"
+      >
+        See the record
+      </a>
+      <a
+        href="/methodology"
+      >
+        Read the method →
+      </a>
+    </div>
+  </div>
+  <div
+    class="lg:col-span-5 lg:col-start-8"
+  >
+    <div
+      class="border-border bg-bg-subtle rounded-sm border"
+    >
+      <div
+        class="border-border text-fg-muted flex items-center justify-between border-b px-4 py-3 font-mono text-xs tracking-wide"
+      >
+        <span>
+          usdc → ngn
+        </span>
+        <span>
+          100.00 USDC
+        </span>
+      </div>
+      <div
+        class="p-4"
+      >
+        <div
+          class="min-h-[168px]"
+        >
+          <p
+            class="text-fg-muted font-mono text-xs tracking-wide"
+          >
+            best landed value
+          </p>
+          <p
+            class="text-accent mt-2 font-mono text-4xl font-medium tracking-tight tabular-nums"
+          >
+            NGN 154,840.00
+          </p>
+          <dl
+            class="border-border mt-5 space-y-2 border-t pt-4 font-mono text-xs"
+          >
+            <div
+              class="flex justify-between gap-4"
+            >
+              <dt
+                class="text-fg-muted"
+              >
+                anchor
+              </dt>
+              <dd
+                class="text-secondary-text"
+              >
+                Cowrie Exchange
+              </dd>
+            </div>
+            <div
+              class="flex justify-between gap-4"
+            >
+              <dt
+                class="text-fg-muted"
+              >
+                rate
+              </dt>
+              <dd
+                class="text-secondary-text tabular-nums"
+              >
+                1 USDC = 1,580 NGN
+              </dd>
+            </div>
+          </dl>
+          <a
+            href="/offramp"
+          >
+            compare all live rates →
+          </a>
+        </div>
+      </div>
+    </div>
+  </div>
+</section>
+`;

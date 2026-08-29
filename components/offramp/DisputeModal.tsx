@@ -60,17 +60,14 @@ export function DisputeModal({ transactionId, status, onClose, onSubmit }: Dispu
         if (e.target === e.currentTarget) onClose();
       }}
     >
-      <div className="w-full max-w-md rounded-xl bg-white shadow-xl dark:bg-gray-900">
-        <div className="flex items-center justify-between border-b border-gray-200 px-5 py-4 dark:border-gray-700">
-          <h2
-            id="dispute-modal-title"
-            className="text-base font-semibold text-gray-900 dark:text-white"
-          >
+      <div className="w-full max-w-md rounded-xl bg-bg-subtle">
+        <div className="flex items-center justify-between border-b border-border px-5 py-4">
+          <h2 id="dispute-modal-title" className="text-base font-semibold text-primary-text">
             Flag Incorrect Outcome
           </h2>
           <button
             onClick={onClose}
-            className="rounded-lg p-1 text-gray-400 hover:bg-gray-100 hover:text-gray-600 dark:hover:bg-gray-800"
+            className="rounded-lg p-1 text-secondary-text hover:bg-bg-sunken hover:text-secondary-text dark:hover:bg-bg-sunken"
             aria-label="Close"
           >
             <svg
@@ -88,9 +85,9 @@ export function DisputeModal({ transactionId, status, onClose, onSubmit }: Dispu
         <div className="p-5">
           {submitted ? (
             <div className="py-4 text-center">
-              <div className="mx-auto mb-3 flex h-12 w-12 items-center justify-center rounded-full bg-green-100 dark:bg-green-900/30">
+              <div className="mx-auto mb-3 flex h-12 w-12 items-center justify-center rounded-full bg-accent-subtle">
                 <svg
-                  className="h-6 w-6 text-green-600 dark:text-green-400"
+                  className="h-6 w-6 text-status-up"
                   viewBox="0 0 24 24"
                   fill="none"
                   stroke="currentColor"
@@ -99,14 +96,14 @@ export function DisputeModal({ transactionId, status, onClose, onSubmit }: Dispu
                   <path strokeLinecap="round" strokeLinejoin="round" d="M5 13l4 4L19 7" />
                 </svg>
               </div>
-              <p className="text-sm font-medium text-gray-900 dark:text-white">Dispute submitted</p>
-              <p className="mt-1 text-xs text-gray-500 dark:text-gray-400">
+              <p className="text-sm font-medium text-primary-text">Dispute submitted</p>
+              <p className="mt-1 text-xs text-fg-muted">
                 Your report has been queued for review. We&apos;ll follow up via your registered
                 contact.
               </p>
               <button
                 onClick={onClose}
-                className="mt-4 rounded-lg bg-blue-600 px-4 py-2 text-sm font-medium text-white hover:bg-blue-700"
+                className="mt-4 rounded-lg bg-accent px-4 py-2 text-sm font-medium text-background hover:opacity-90"
               >
                 Close
               </button>
@@ -114,21 +111,19 @@ export function DisputeModal({ transactionId, status, onClose, onSubmit }: Dispu
           ) : (
             <form onSubmit={handleSubmit} className="space-y-4">
               <div>
-                <p className="mb-1 text-xs text-gray-500 dark:text-gray-400">Transaction</p>
-                <p className="break-all font-mono text-xs text-gray-700 dark:text-gray-300">
-                  {transactionId}
-                </p>
+                <p className="mb-1 text-xs text-fg-muted">Transaction</p>
+                <p className="break-all font-mono text-xs text-secondary-text">{transactionId}</p>
               </div>
 
               <div>
-                <label className="mb-1.5 block text-sm font-medium text-gray-700 dark:text-gray-300">
-                  Reason <span className="text-red-500">*</span>
+                <label className="mb-1.5 block text-sm font-medium text-secondary-text">
+                  Reason <span className="text-status-down">*</span>
                 </label>
                 <select
                   value={reason}
                   onChange={(e) => setReason(e.target.value as DisputeReason)}
                   required
-                  className="w-full rounded-lg border border-gray-300 bg-white px-3 py-2 text-sm text-gray-900 focus:border-blue-500 focus:outline-none focus:ring-1 focus:ring-blue-500 dark:border-gray-600 dark:bg-gray-800 dark:text-white"
+                  className="w-full rounded-lg border border-control-border bg-bg-subtle px-3 py-2 text-sm text-primary-text focus:border-accent focus:outline-none focus:ring-1 focus:ring-accent"
                 >
                   <option value="">Select a reason…</option>
                   {DISPUTE_REASONS.map((r) => (
@@ -140,7 +135,7 @@ export function DisputeModal({ transactionId, status, onClose, onSubmit }: Dispu
               </div>
 
               <div>
-                <label className="mb-1.5 block text-sm font-medium text-gray-700 dark:text-gray-300">
+                <label className="mb-1.5 block text-sm font-medium text-secondary-text">
                   Additional notes
                 </label>
                 <textarea
@@ -148,12 +143,12 @@ export function DisputeModal({ transactionId, status, onClose, onSubmit }: Dispu
                   onChange={(e) => setNotes(e.target.value)}
                   rows={3}
                   placeholder="Describe what happened…"
-                  className="w-full rounded-lg border border-gray-300 bg-white px-3 py-2 text-sm text-gray-900 placeholder-gray-400 focus:border-blue-500 focus:outline-none focus:ring-1 focus:ring-blue-500 dark:border-gray-600 dark:bg-gray-800 dark:text-white dark:placeholder-gray-500"
+                  className="w-full rounded-lg border border-control-border bg-bg-subtle px-3 py-2 text-sm text-primary-text placeholder:text-secondary-text focus:border-accent focus:outline-none focus:ring-1 focus:ring-accent"
                 />
               </div>
 
               {error && (
-                <p className="rounded-lg bg-red-50 px-3 py-2 text-xs text-red-600 dark:bg-red-950/30 dark:text-red-400">
+                <p className="rounded-lg bg-bg-sunken px-3 py-2 text-xs text-status-down">
                   {error}
                 </p>
               )}
@@ -162,14 +157,14 @@ export function DisputeModal({ transactionId, status, onClose, onSubmit }: Dispu
                 <button
                   type="button"
                   onClick={onClose}
-                  className="flex-1 rounded-lg border border-gray-300 px-4 py-2 text-sm font-medium text-gray-700 hover:bg-gray-50 dark:border-gray-600 dark:text-gray-300 dark:hover:bg-gray-800"
+                  className="flex-1 rounded-lg border border-control-border px-4 py-2 text-sm font-medium text-secondary-text hover:bg-bg-sunken dark:hover:bg-bg-sunken"
                 >
                   Cancel
                 </button>
                 <button
                   type="submit"
                   disabled={!reason || submitting}
-                  className="flex-1 rounded-lg bg-red-600 px-4 py-2 text-sm font-medium text-white hover:bg-red-700 disabled:cursor-not-allowed disabled:opacity-50"
+                  className="flex-1 rounded-lg bg-status-down px-4 py-2 text-sm font-medium text-background hover:opacity-90 disabled:cursor-not-allowed disabled:opacity-50"
                 >
                   {submitting ? 'Submitting…' : 'Submit Dispute'}
                 </button>

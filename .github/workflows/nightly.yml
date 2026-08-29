@@ -18,7 +18,7 @@ jobs:
       summary: ${{ steps.probe.outputs.summary }}
     steps:
       - uses: actions/checkout@v7
-      - uses: actions/setup-node@v6
+      - uses: actions/setup-node@v7
         with:
           node-version: '20'
           cache: 'npm'
@@ -66,54 +66,262 @@ jobs:
             echo "EOF"
           } >> "$GITHUB_OUTPUT"
 
+          # Also surface the report on the run page. Until now it was only
+          # readable inside a failure issue, so a green night — the normal case,
+          # and the one where a slow drift is visible — showed nothing.
+          {
+            echo "### Anchor TOML resolution"
+            echo ''
+            echo '```'
+            echo -e "$REPORT"
+            echo '```'
+            echo ''
+            echo "${FAIL} of ${#DOMAINS[@]} domain(s) failed."
+          } >> "$GITHUB_STEP_SUMMARY"
+
           if [ "$FAIL" -gt 0 ]; then
             echo "::warning::$FAIL anchor domain(s) failed the nightly probe"
           fi
+
+  anchor-health-ledger:
+    name: Anchor health ledger
+    runs-on: ubuntu-latest
+    # Writes constants/anchor-health.json, the per-anchor health ledger read by
+    # lib/stellar/anchors.ts and /api/v1/anchors/:id/health.
+    #
+    # This lives here rather than in data-health.yml deliberately: the ledger
+    # debounces on `thresholdNights`, so it wants one authoritative write per
+    # night, not one per hour. data-health.yml keeps probing hourly, but only to
+    # raise a degradation issue — it stays --dry-run and read-only.
+    permissions:
+      contents: write
+      pull-requests: write
+    # The verdict comes from the run that just probed, not from a checkout.
+    # open-issue-on-failure has no checkout step, and adding one would read
+    # main's constants/anchor-health.json — which is only as fresh as the last
+    # ledger PR to land. Through #989–#1013 those PRs were not landing, so a
+    # checkout-based read would have quoted a ten-night-old ledger (#1015).
+    outputs:
+      ledger: ${{ steps.probe.outputs.ledger }}
+    steps:
+      - uses: actions/checkout@v7
+      - uses: actions/setup-node@v7
+        with:
+          node-version: '20'
+          cache: 'npm'
+      - run: npm ci
+
+      - name: Probe every registered anchor and write the ledger
+        id: probe
+        shell: bash
+        run: |
+          set -euo pipefail
+          # --github-output also appends a per-anchor digest of the ledger to
+          # $GITHUB_OUTPUT as `ledger`, read below through `needs`.
+          node scripts/validate-anchors.mjs --github-output
+
+      # Opens a PR rather than pushing to main. A ruleset on main requires the
+      # `closing-keywords` status check, and a direct push can never satisfy a
+      # required check — every bot push to main is rejected with GH013, which is
+      # exactly what has been happening to anchor-recrawl.yml (see #915).
+      - name: Propose the refreshed ledger
+        shell: bash
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          set -euo pipefail
+
+          # constants/anchor-health.json is tracked, so a plain diff is a valid
+          # emptiness check here (unlike the snapshot case below).
+          if git diff --quiet -- constants/anchor-health.json; then
+            echo "anchor-health.json unchanged; nothing to propose"
+            exit 0
+          fi
+
+          TODAY="$(date -u +%F)"
+          BRANCH="bot/anchor-health-${TODAY}"
+
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+
+          git checkout -b "$BRANCH"
+          git add constants/anchor-health.json
+          git commit -m "chore(anchors): refresh anchor health ledger ${TODAY}"
+          git push --force-with-lease -u origin "$BRANCH"
+
+          # Re-running on the same day updates the existing branch; do not open
+          # a second PR for it.
+          if gh pr view "$BRANCH" --json number >/dev/null 2>&1; then
+            echo "PR already open for ${BRANCH}"
+          else
+            gh pr create \
+              --base main \
+              --head "$BRANCH" \
+              --title "chore(anchors): refresh anchor health ledger ${TODAY}" \
+              --body "Automated nightly refresh of \`constants/anchor-health.json\` from \`scripts/validate-anchors.mjs\`. Review the status transitions before merging."
+          fi
+
+  anchor-survey-snapshot:
+    name: Anchor fleet JSON snapshot
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+      - uses: actions/setup-node@v7
+        with:
+          node-version: '20'
+          cache: 'npm'
+      - run: npm ci
+
+      - name: Run anchor survey (snapshot)
+        shell: bash
+        run: |
+          set -euo pipefail
+          node scripts/anchor-survey.mjs --json > anchors.snapshot.json
+
+      # Artifact only — this job deliberately does not commit.
+      #
+      # It used to try, guarded by `git diff --quiet -- anchors.snapshot.json`.
+      # That file is untracked, so the diff was always clean and the commit
+      # branch was dead code that never ran once.
+      #
+      # Fixing it by tracking the file would be worse, not better: the committed
+      # fleet snapshot is `scripts/anchor-survey.snapshot.json`, owned by
+      # anchor-recrawl.yml, which detects fleet changes by diffing a fresh survey
+      # against it. A nightly job keeping that file current would mean the
+      # monthly re-crawl never sees a change and never opens its tracking issue.
+      #
+      # So: one committed snapshot, refreshed monthly by the re-crawl; this job
+      # publishes a nightly artifact for inspection.
+      - name: Upload anchors snapshot artifact
+        uses: actions/upload-artifact@v7
+        with:
+          name: anchors-snapshot-${{ github.run_id }}
+          path: anchors.snapshot.json
+          if-no-files-found: error
+
+  oracle-read:
+    name: Testnet oracle read
+    runs-on: ubuntu-latest
+    # Warn-only by design (#723). This talks to a third-party testnet RPC, and a
+    # network outage there is not a defect in this repository — a red main
+    # branch that nobody can fix trains people to ignore the signal.
+    continue-on-error: true
+    steps:
+      - uses: actions/checkout@v7
+      - uses: actions/setup-node@v7
+        with:
+          node-version: '20'
+          cache: 'npm'
+      - run: npm ci
+      - name: Read the deployed reputation oracle
+        run: npx tsx scripts/verify-oracle-read.mts
 
   reputation-integrity:
     name: Reputation aggregate integrity
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v7
-      - uses: actions/setup-node@v6
+      - uses: actions/setup-node@v7
         with:
           node-version: '20'
           cache: 'npm'
       - run: npm ci
 
+      # No `if [ -f ]` guard, deliberately. It used to be wrapped in one, and
+      # since the script did not exist the job took the else branch every night
+      # and reported integrity as healthy without checking anything (#962). A
+      # missing or renamed script should fail loudly.
       - name: Run reputation integrity check
-        run: |
-          if [ -f "scripts/reputation-integrity.mjs" ]; then
-            node scripts/reputation-integrity.mjs
-          else
-            echo "No reputation integrity script yet — placeholder for v2."
-            echo "Tracked in the GitHub issue tracker (composite score test vectors)."
-          fi
+        run: npx tsx scripts/reputation-integrity.mts
 
   open-issue-on-failure:
     name: Open tracking issue on failure
     runs-on: ubuntu-latest
-    needs: [anchor-domains, reputation-integrity]
+    needs: [anchor-domains, reputation-integrity, anchor-survey-snapshot, anchor-health-ledger]
     if: failure()
     steps:
       - uses: actions/github-script@v9
+        env:
+          ANCHOR_SUMMARY: ${{ needs.anchor-domains.outputs.summary }}
+          LEDGER_DIGEST: ${{ needs.anchor-health-ledger.outputs.ledger }}
+          RESULT_ANCHOR_DOMAINS: ${{ needs.anchor-domains.result }}
+          RESULT_INTEGRITY: ${{ needs.reputation-integrity.result }}
+          RESULT_SNAPSHOT: ${{ needs.anchor-survey-snapshot.result }}
+          RESULT_HEALTH_LEDGER: ${{ needs.anchor-health-ledger.result }}
         with:
           script: |
-            const title = `[nightly] integrity failure — ${new Date().toISOString().slice(0,10)}`;
+            const today = new Date().toISOString().slice(0, 10);
+            const title = `[nightly] integrity failure — ${today}`;
+            const runUrl = `${context.serverUrl}/${context.repo.owner}/${context.repo.repo}/actions/runs/${context.runId}`;
+
+            // Name the job that actually failed. The previous body only ever
+            // printed the anchor summary, so a failure in any other job read as
+            // "the anchors are fine, and something unstated broke".
+            const results = {
+              'anchor-domains': process.env.RESULT_ANCHOR_DOMAINS,
+              'reputation-integrity': process.env.RESULT_INTEGRITY,
+              'anchor-survey-snapshot': process.env.RESULT_SNAPSHOT,
+              'anchor-health-ledger': process.env.RESULT_HEALTH_LEDGER,
+            };
+            const failed = Object.entries(results)
+              .filter(([, r]) => r === 'failure')
+              .map(([job]) => job);
+
             const body = [
-              'One or more nightly integrity jobs failed.',
+              failed.length
+                ? `Nightly integrity failed in ${failed.map((j) => '`' + j + '`').join(', ')}.`
+                : 'One or more nightly integrity jobs failed.',
               '',
-              `- Workflow run: ${context.serverUrl}/${context.repo.owner}/${context.repo.repo}/actions/runs/${context.runId}`,
+              `- Workflow run: ${runUrl}`,
               '',
-              'Anchor summary (last run):',
+              '| Job | Result |',
+              '| --- | --- |',
+              ...Object.entries(results).map(([job, r]) => `| \`${job}\` | ${r} |`),
+              '',
+              // The health ledger is the anchor verdict; the block below it
+              // only says whether a home domain still serves a TOML naming a
+              // SEP-24 endpoint, which is why the two can disagree (#1015).
+              'Health ledger verdict (this run):',
               '```',
-              `${{ needs.anchor-domains.outputs.summary }}`,
+              process.env.LEDGER_DIGEST || '(anchor-health-ledger did not report)',
               '```',
+              '',
+              'home-domain TOML resolution (this run):',
+              '```',
+              process.env.ANCHOR_SUMMARY || '(anchor-domains did not report)',
+              '```',
+              '',
+              'The block above checks the home domain only: HTTP status and the presence of a `TRANSFER_SERVER_SEP0024` line. It does not resolve the endpoint that line points at, so `HTTP 200 | SEP-24: yes` is not a statement that the anchor is up — read the ledger for that.',
             ].join('\n');
-            await github.rest.issues.create({
+
+            // One issue per day, not one per run. workflow_dispatch plus the
+            // scheduled run can both fail on the same date; filing a second
+            // issue for the same night buries the first under duplicates
+            // instead of adding information to it.
+            const { data: open } = await github.rest.issues.listForRepo({
               owner: context.repo.owner,
               repo: context.repo.repo,
-              title,
-              body,
-              labels: ['bug', 'needs-triage', 'module/ops'],
+              state: 'open',
+              labels: 'nightly-alert',
+              per_page: 100,
             });
+            const existing = open.find((issue) => issue.title === title);
+
+            if (existing) {
+              await github.rest.issues.createComment({
+                owner: context.repo.owner,
+                repo: context.repo.repo,
+                issue_number: existing.number,
+                body,
+              });
+              core.info(`Commented on existing issue #${existing.number}`);
+            } else {
+              const { data: created } = await github.rest.issues.create({
+                owner: context.repo.owner,
+                repo: context.repo.repo,
+                title,
+                body,
+                labels: ['bug', 'needs-triage', 'module/ops', 'nightly-alert'],
+              });
+              core.info(`Opened issue #${created.number}`);
+            }

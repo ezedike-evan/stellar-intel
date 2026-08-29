@@ -91,3 +91,68 @@ export const IntentV1Schema = z.object({
 });
 
 export type IntentV1 = z.infer<typeof IntentV1Schema>;
+
+// ─── Canonical Intent V1 (versioned superset) ─────────────────────────────────
+
+const intentAmountSchema = z
+  .string()
+  .regex(/^\d+(\.\d{1,7})?$/, { message: 'amount must be a positive decimal with up to 7 dp' })
+  .refine((v) => parseFloat(v) > 0, { message: 'amount must be greater than zero' });
+
+const intentBaseSchema = z.object({
+  schemaVersion: z.literal(1).default(1 as const),
+  sourceAsset: z.string().min(1, { message: 'sourceAsset is required' }),
+  destinationAsset: z.string().min(1, { message: 'destinationAsset is required' }),
+  amount: intentAmountSchema,
+  sender: z.string().min(1, { message: 'sender is required' }),
+  recipient: z.string().min(1, { message: 'recipient is required' }),
+});
+
+export const IntentHopAssetSchema = z.object({
+  code: z.string().min(1, { message: 'asset code is required' }),
+  issuer: z.string().optional(),
+});
+export type IntentHopAsset = z.infer<typeof IntentHopAssetSchema>;
+
+export const IntentHopSchema = z.object({
+  kind: z.enum(['on-ramp', 'swap', 'yield']),
+  sellAsset: IntentHopAssetSchema,
+  buyAsset: IntentHopAssetSchema,
+  minReceive: z.string().min(1, { message: 'minReceive is required' }),
+});
+export type IntentHop = z.infer<typeof IntentHopSchema>;
+
+export const IntentScheduleSchema = z.object({
+  /** POSIX cron expression (5 fields). */
+  cron: z.string().min(1, { message: 'cron expression is required' }),
+  /** Maximum number of executions before the schedule is cancelled. */
+  count: z.number().int().positive().optional(),
+  /** RFC 3339 timestamp after which no further executions are triggered. */
+  until: z.iso.datetime().optional(),
+});
+export type IntentSchedule = z.infer<typeof IntentScheduleSchema>;
+
+export const OfframpIntentV1Schema = intentBaseSchema.extend({
+  kind: z.literal('offramp'),
+});
+export type OfframpIntentV1 = z.infer<typeof OfframpIntentV1Schema>;
+
+export const ChainedIntentV1Schema = intentBaseSchema.extend({
+  kind: z.literal('chained'),
+  hops: z.array(IntentHopSchema).min(2, { message: 'chained intent requires at least 2 hops' }),
+});
+export type ChainedIntentV1 = z.infer<typeof ChainedIntentV1Schema>;
+
+export const RecurringIntentV1Schema = intentBaseSchema.extend({
+  kind: z.literal('recurring'),
+  schedule: IntentScheduleSchema,
+});
+export type RecurringIntentV1 = z.infer<typeof RecurringIntentV1Schema>;
+
+/** Versioned discriminated union covering all supported intent kinds. */
+export const CanonicalIntentV1Schema = z.discriminatedUnion('kind', [
+  OfframpIntentV1Schema,
+  ChainedIntentV1Schema,
+  RecurringIntentV1Schema,
+]);
+export type CanonicalIntentV1 = z.infer<typeof CanonicalIntentV1Schema>;

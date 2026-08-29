@@ -1,12 +1,11 @@
+import { STELLAR_PUBKEY_PATTERN } from '@/lib/patterns';
+
 export interface Config {
   stellarNetwork: 'mainnet' | 'testnet' | 'futurenet';
   horizonUrl: string;
   usdcIssuer: string;
   appName: string;
 }
-
-// Asset code for USDC (constant, not environment-dependent)
-export const USDC_ASSET_CODE = 'USDC';
 
 // Network passphrases for Stellar networks
 const NETWORK_PASSPHRASES = {
@@ -55,7 +54,7 @@ function validateEnv(): void {
   }
 
   const issuer = process.env.NEXT_PUBLIC_USDC_ISSUER!;
-  if (!/^G[A-Z0-9]{55}$/.test(issuer)) {
+  if (!STELLAR_PUBKEY_PATTERN.test(issuer)) {
     throw new Error(
       `❌ Invalid NEXT_PUBLIC_USDC_ISSUER: "${issuer}"\n` +
         `   Must be a valid Stellar public key (starts with 'G', 56 characters total)`

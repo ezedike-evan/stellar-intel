@@ -1,5 +1,7 @@
 # FAQ
 
+**Last reviewed:** 2026-08-26
+
 ### Is this custodial? Do you hold my money?
 
 No. Stellar Intel never holds user funds, user keys, fiat, or KYC data. You sign

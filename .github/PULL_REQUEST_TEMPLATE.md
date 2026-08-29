@@ -67,12 +67,29 @@ If you did not add a test, justify it. "Trivial refactor" or "doc-only" are
 valid. "Hard to test" is not.
 -->
 
-**Automated**
+**Automated** — run the block for whatever you touched. See
+[CONTRIBUTING.md § Per-surface checks](../blob/main/CONTRIBUTING.md#per-surface-checks).
 
-- `npm run typecheck` · ⏳ not run / ✅ green / ❌ failing
+_Root (always):_
+
+- `npm run format:check` · ⏳ not run / ✅ green / ❌ failing
 - `npm run lint` · ⏳ not run / ✅ green / ❌ failing
+- `npm run typecheck` · ⏳ not run / ✅ green / ❌ failing
 - `npm run test` · ⏳ not run / ✅ green / ❌ failing
 - `npm run build` · ⏳ not run / ✅ green / ❌ failing
+- `npm run emit-openapi` → no diff, or spec committed · ⏳ / ✅ / ❌ / n-a
+
+_Rust (if `contracts/` or `crates/` changed):_
+
+- `cargo fmt --check` · ⏳ / ✅ / ❌ / n-a
+- `cargo clippy --all-targets -- -D warnings` · ⏳ / ✅ / ❌ / n-a
+- `cargo test --locked` · ⏳ / ✅ / ❌ / n-a
+
+_Python (if `packages/python-sdk/` changed):_
+
+- `pytest` · ⏳ / ✅ / ❌ / n-a
+- `mypy src` · ⏳ / ✅ / ❌ / n-a
+- No generated file hand-edited (only `wrapper.py` is ours) · ⏳ / ✅ / ❌ / n-a
 
 ## **New / modified tests**
 

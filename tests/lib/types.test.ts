@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import type { Sep24Transaction, AnchorRate } from '@/types';
+import { isIndicativeRateSource, type Sep24Transaction, type AnchorRate } from '@/types';
 
 describe('Sep24Transaction', () => {
   it('accepts a valid Sep24Transaction object', () => {
@@ -42,5 +42,21 @@ describe('AnchorRate', () => {
     expect(rate.anchorId).toBe('cowrie');
     // isMock must not exist on the type
     expect('isMock' in rate).toBe(false);
+  });
+});
+
+describe('isIndicativeRateSource', () => {
+  it('treats sep38 as firm, not indicative', () => {
+    expect(isIndicativeRateSource('sep38')).toBe(false);
+  });
+
+  it('treats sep24-fee, sep6-info, and sep6-fee as indicative', () => {
+    expect(isIndicativeRateSource('sep24-fee')).toBe(true);
+    expect(isIndicativeRateSource('sep6-info')).toBe(true);
+    expect(isIndicativeRateSource('sep6-fee')).toBe(true);
+  });
+
+  it('treats unavailable as not indicative (there is no rate to caveat)', () => {
+    expect(isIndicativeRateSource('unavailable')).toBe(false);
   });
 });

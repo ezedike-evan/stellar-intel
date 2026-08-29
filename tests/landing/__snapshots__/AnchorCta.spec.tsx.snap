@@ -1,0 +1,79 @@
+// Vitest Snapshot v1, https://vitest.dev/guide/snapshot.html
+
+exports[`AnchorCta > matches the visual snapshot 1`] = `
+<section
+  class="rounded-xl border border-border bg-accent-subtle p-6 text-center sm:p-8"
+>
+  <div
+    class="mb-3 inline-flex items-center gap-2 rounded-full bg-accent-subtle px-4 py-1.5 text-sm font-medium text-accent"
+  >
+    <svg
+      aria-hidden="true"
+      class="lucide lucide-anchor h-3.5 w-3.5"
+      fill="none"
+      height="24"
+      stroke="currentColor"
+      stroke-linecap="round"
+      stroke-linejoin="round"
+      stroke-width="2"
+      viewBox="0 0 24 24"
+      width="24"
+      xmlns="http://www.w3.org/2000/svg"
+    >
+      <path
+        d="M12 6v16"
+      />
+      <path
+        d="m19 13 2-1a9 9 0 0 1-18 0l2 1"
+      />
+      <path
+        d="M9 11h6"
+      />
+      <circle
+        cx="12"
+        cy="4"
+        r="2"
+      />
+    </svg>
+    For anchors
+  </div>
+  <h2
+    class="mb-2 text-2xl font-bold tracking-tight text-primary-text"
+  >
+    Run a Stellar anchor?
+  </h2>
+  <p
+    class="mx-auto mb-6 max-w-xl text-secondary-text"
+  >
+    Listing is carrot, not stick: no listing fee, no exclusivity, and we never custody user funds. We aggregate your quotes and publish your track record to a public Soroban oracle.
+  </p>
+  <a
+    class="inline-flex items-center gap-2 rounded-lg bg-accent px-5 py-2.5 text-sm font-semibold text-background transition-colors hover:opacity-90 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent focus-visible:ring-offset-2"
+    href="https://github.com/ezedike-evan/stellar-intel/issues/new?template=anchor-onboard.yml"
+    rel="noopener noreferrer"
+    target="_blank"
+  >
+    List your anchor
+    <svg
+      aria-hidden="true"
+      class="lucide lucide-arrow-up-right h-4 w-4"
+      fill="none"
+      height="24"
+      stroke="currentColor"
+      stroke-linecap="round"
+      stroke-linejoin="round"
+      stroke-width="2"
+      viewBox="0 0 24 24"
+      width="24"
+      xmlns="http://www.w3.org/2000/svg"
+    >
+      <path
+        d="M7 7h10v10"
+      />
+      <path
+        d="M7 17 17 7"
+      />
+    </svg>
+  </a>
+</section>
+`;

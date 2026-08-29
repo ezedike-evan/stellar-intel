@@ -68,7 +68,11 @@ describe('append -> reconcile end-to-end (#220 + #221 + #219)', () => {
       }))
     );
 
-    const res = await reconcileGET(new NextRequest('http://localhost/api/reputation/reconcile'));
+    const res = await reconcileGET(
+      new NextRequest('http://localhost/api/reputation/reconcile', {
+        headers: { authorization: `Bearer ${process.env.CRON_SECRET}` },
+      })
+    );
     const summary = await res.json();
     expect(summary.updated).toBe(1);
 

@@ -3,19 +3,23 @@
 [![License: MIT](https://img.shields.io/github/license/Ezedike-Evan/stellar-intel?style=flat-square)](LICENSE)
 [![CI](https://img.shields.io/github/actions/workflow/status/Ezedike-Evan/stellar-intel/ci.yml?branch=main&style=flat-square&label=ci)](https://github.com/Ezedike-Evan/stellar-intel/actions/workflows/ci.yml)
 [![Coverage](https://img.shields.io/codecov/c/github/Ezedike-Evan/stellar-intel?style=flat-square)](https://codecov.io/gh/Ezedike-Evan/stellar-intel)
-[![npm (@stellarintel/sdk)](https://img.shields.io/npm/v/@stellarintel/sdk?style=flat-square&label=%40stellarintel%2Fsdk)](https://www.npmjs.com/package/@stellarintel/sdk)
 [![Deployed on Vercel](https://img.shields.io/badge/deploy-vercel-000?style=flat-square&logo=vercel)](https://stellar-intel.vercel.app)
 [![Conventional Commits](https://img.shields.io/badge/commits-conventional-fe5196?style=flat-square&logo=conventionalcommits)](https://www.conventionalcommits.org)
 
-**Find the best rates on Stellar, in real time.**
+**A public health and reputation record for Stellar off-ramp anchors — with a
+non-custodial execution path built on it.**
 
-Stellar Intel is a rate aggregator for the Stellar ecosystem. It compares
-off-ramp withdrawal rates, on-ramp deposit fees, yield protocol APYs, and
-swap routes across anchors and DeFi protocols — and lets you execute directly
-from the same interface.
+Stellar Intel probes every registered anchor on a five-minute clock and writes
+down what it finds: whether the endpoint answered, whether its `stellar.toml`
+still parses, whether the issuer still matches the asset on-chain, and whether
+a quote was available. Those observations accumulate into a published,
+method-documented reputation score, and the same interface lets you settle an
+off-ramp as a signed intent without this project ever holding your funds.
 
-Built for users sending money home across Africa, Latin America, and Southeast
-Asia via Stellar anchors.
+The record comes first because it is the part that works without anyone's
+cooperation. Built for users sending money home across Africa, Latin America
+and Southeast Asia via Stellar anchors — and for anyone who has to choose an
+anchor and would rather not do it on faith.
 
 <p align="center">
   <em>Live demo → <a href="https://stellar-intel.vercel.app">stellar-intel.vercel.app</a></em>
@@ -45,27 +49,37 @@ later when nothing lands. Every serious stablecoin corridor has the same three
 unsolved problems: **which anchor is actually cheapest right now**, **will it
 honour the quote**, and **is it up**.
 
-Stellar Intel is the **execution layer for stablecoin value on Stellar**. We
-treat an off-ramp as a signed **intent** — _"withdraw $100 USDC to this NGN
-account, at or better than this rate, before this deadline"_ — and route it to
-the anchor that can satisfy it. Three primitives, one product:
+Nobody publishes the answers. An anchor's `stellar.toml` says what it supports;
+it does not say whether that was true this morning. Stellar Intel answers the
+third question directly and the first two as the data allows.
 
-1. **Intent router.** Live SEP-38 quotes across every integrated anchor,
-   ranked by net landed value (gross rate − fees − slippage − historical
-   fill-rate penalty), not headline rate.
-2. **Reputation oracle.** Every quote, fill, failure, and settlement latency
-   is written to an on-chain Soroban contract. Anchors earn a public,
-   user-verifiable track record; consumers read it without our permission.
-3. **Agent surface.** An MCP server exposes the router and oracle to AI
-   agents, so an agent can price, compare, and execute an off-ramp in five
-   lines — the same primitives used by the web UI.
+1. **The record.** Seven registered anchors, probed every five minutes across
+   four signals — uptime, quote availability, issuer mismatch, TOML integrity.
+   Samples accumulate; the scoring method is published in
+   [`docs/ANCHOR_REPUTATION.md`](docs/ANCHOR_REPUTATION.md), and small samples
+   are labelled as small rather than averaged into confidence they have not
+   earned.
+2. **The execution path.** An off-ramp expressed as a signed **intent** —
+   _"withdraw $100 USDC to this NGN account, at or better than this rate,
+   before this deadline"_ — routed to an anchor that can satisfy it and ranked
+   on landed value rather than headline rate.
+3. **The agent surface.** An MCP server exposes the same primitives the web UI
+   uses, so an agent can read the record and execute against it.
 
 Non-custodial by construction: every leg is signed by the user, the anchor
 takes custody under SEP-24, Stellar enforces atomicity. We never touch funds.
 
-The deeper thesis and the grant resubmission case live in
-[**docs/PROPOSAL.md**](docs/PROPOSAL.md); the request/quote/sign/settle flow
-and the Soroban oracle wiring live in
+**One honest caveat, because it changes what (2) means today.** Firm SEP-38
+quotes are scarce on the live network: as of 2026-08-05, one of the seven
+registered anchors advertises a quote server at all, and it does not quote the
+corridor it is registered for. Ranking across firm quotes is a capability that
+becomes real as anchors adopt SEP-38, not one that is real today. The evidence,
+and what is measured in the meantime, is in
+[`docs/POSITIONING.md`](docs/POSITIONING.md).
+
+What this is and is not lives in
+[**docs/POSITIONING.md**](docs/POSITIONING.md); the request/quote/sign/settle
+flow and the Soroban oracle wiring live in
 [**docs/ARCHITECTURE.md**](docs/ARCHITECTURE.md).
 
 ---
@@ -77,7 +91,7 @@ and the Soroban oracle wiring live in
 | Framework     | Next.js 16, React 19, TypeScript |
 | Styling       | Tailwind CSS v4                  |
 | Data fetching | SWR                              |
-| Blockchain    | `@stellar/stellar-sdk` v15       |
+| Blockchain    | `@stellar/stellar-sdk` v16       |
 | Deployment    | Vercel                           |
 
 ---
@@ -122,14 +136,14 @@ Copy `.env.example` to `.env.local` and set the following variables. The server
 validates these at boot in `lib/config.ts` and fails fast on a missing or
 malformed required value.
 
-| Variable                         | Required | Default                                      | Description                                                       |
-| -------------------------------- | -------- | -------------------------------------------- | ----------------------------------------------------------------- |
-| `NEXT_PUBLIC_STELLAR_NETWORK`    | Yes      | `mainnet`                                    | Stellar network (`mainnet` or `testnet`).                         |
-| `NEXT_PUBLIC_HORIZON_URL`        | Yes      | `https://horizon.stellar.org`                | Horizon server URL.                                               |
-| `NEXT_PUBLIC_USDC_ISSUER`        | Yes      | —                                            | USDC issuer public key (`G…`, 56 chars). Validated; no default.   |
-| `NEXT_PUBLIC_STELLAR_EXPERT_URL` | No       | `https://api.stellar.expert/explorer/public` | Stellar Expert API base for transaction links.                    |
-| `NEXT_PUBLIC_APP_NAME`           | No       | `Stellar Intel`                              | Display name used in the UI.                                      |
-| `ADMIN_SECRET_KEY`               | Yes\*    | —                                            | \*Required only to access `/admin/disputes` and admin API routes. |
+| Variable                         | Required | Default                                      | Description                                                               |
+| -------------------------------- | -------- | -------------------------------------------- | ------------------------------------------------------------------------- |
+| `NEXT_PUBLIC_STELLAR_NETWORK`    | Yes      | `mainnet`                                    | Stellar network (`mainnet` or `testnet`).                                 |
+| `NEXT_PUBLIC_HORIZON_URL`        | Yes      | `https://horizon.stellar.org`                | Horizon server URL.                                                       |
+| `NEXT_PUBLIC_USDC_ISSUER`        | Yes      | —                                            | USDC issuer public key (`G…`, 56 chars). Validated; no default.           |
+| `NEXT_PUBLIC_STELLAR_EXPERT_URL` | No       | `https://api.stellar.expert/explorer/public` | Stellar Expert API base for transaction links.                            |
+| `NEXT_PUBLIC_APP_NAME`           | Yes      | —                                            | Display name used in the UI. Validated; no default (boot fails if unset). |
+| `ADMIN_SECRET_KEY`               | Yes\*    | —                                            | \*Required only to access `/admin/disputes` and admin API routes.         |
 
 `NEXT_PUBLIC_USDC_ISSUER` has no default — set it (Circle's canonical USDC issuer
 for mainnet). To point at the Stellar testnet, set:
@@ -141,21 +155,32 @@ NEXT_PUBLIC_HORIZON_URL=https://horizon-testnet.stellar.org
 
 ---
 
+## Developer Portal
+
+The interactive developer portal — with API reference, quickstart guides,
+authentication docs, SDK documentation, and a live API playground — is at
+[**stellar-intel.vercel.app/docs**](https://stellar-intel.vercel.app/docs).
+
 ## Documentation
 
 The full doc surface lives under [`docs/`](docs/). Start with:
 
-| Document                                               | What it covers                                                                       |
-| ------------------------------------------------------ | ------------------------------------------------------------------------------------ |
-| [docs/PROPOSAL.md](docs/PROPOSAL.md)                   | Grant thesis: execution-layer framing, intent primitive, reputation oracle moat.     |
-| [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md)           | System diagram, intent router, Soroban oracle, MCP/agent surface, SEP-10/24/38 flow. |
-| [docs/ROADMAP.md](docs/ROADMAP.md)                     | Milestone waves v1.0 → v5, with tickable per-wave scope.                             |
-| [docs/INTENT_API.md](docs/INTENT_API.md)               | Intent schema, signing rules, replay protection, `curl` + TS snippets.               |
-| [docs/ANCHOR_REPUTATION.md](docs/ANCHOR_REPUTATION.md) | Scoring methodology, composite formula, dispute process.                             |
-| [docs/ORACLE_SPEC.md](docs/ORACLE_SPEC.md)             | Soroban contract interface, consumer examples, publisher whitelist policy.           |
-| [docs/MCP.md](docs/MCP.md)                             | Tool list, `claude mcp add` instructions, example prompts, agent-safety notes.       |
-| [docs/SECURITY.md](docs/SECURITY.md)                   | Non-custodial guarantee, key handling, disclosure email, supply-chain policy.        |
-| [docs/FAQ.md](docs/FAQ.md)                             | "Is this custodial?", "what if an anchor fails?", "how are we different?".           |
+| Document                                               | What it covers                                                                                    |
+| ------------------------------------------------------ | ------------------------------------------------------------------------------------------------- |
+| [docs/POSITIONING.md](docs/POSITIONING.md)             | What this is and is not; ROZO and SDF Anchor Directory, with checkable evidence.                  |
+| [docs/PROPOSAL.md](docs/PROPOSAL.md)                   | Longer-form project thesis: what this is for, what it stopped claiming, and how it is sequenced.  |
+| [docs/PRODUCTION_AUDIT.md](docs/PRODUCTION_AUDIT.md)   | Claim-by-claim: what is enforced in CI, what is only documented, and what is not true yet.        |
+| [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md)           | System diagram, intent router, Soroban oracle, MCP/agent surface, SEP-10/24/38 flow.              |
+| [docs/ROADMAP.md](docs/ROADMAP.md)                     | Milestone waves v1.0 → v5, with tickable per-wave scope.                                          |
+| [docs/INTENT_API.md](docs/INTENT_API.md)               | Intent schema, signing rules, replay protection, `curl` + TS snippets.                            |
+| [docs/GRAPHQL_API.md](docs/GRAPHQL_API.md)             | Additive GraphQL surface over the same REST v1 resources — schema, example queries, error shape.  |
+| [docs/ANCHOR_REPUTATION.md](docs/ANCHOR_REPUTATION.md) | Scoring methodology, composite formula, dispute process.                                          |
+| [docs/ORACLE_SPEC.md](docs/ORACLE_SPEC.md)             | Soroban contract interface, consumer examples, publisher whitelist policy.                        |
+| [docs/ORACLE_MIGRATION.md](docs/ORACLE_MIGRATION.md)   | v1 → v2 corridor storage migration: runbook, idempotency, and the v1 compatibility guarantee.     |
+| [docs/MCP.md](docs/MCP.md)                             | Tool list, `npx tsx scripts/mcp/server.ts` run instructions, example prompts, agent-safety notes. |
+| [docs/AGENT_POSITIONING.md](docs/AGENT_POSITIONING.md) | How agent builders should route between Stellar Intel (anchors/fiat exit) and ROZO (chains).      |
+| [docs/SECURITY.md](docs/SECURITY.md)                   | Non-custodial guarantee, key handling, disclosure email, supply-chain policy.                     |
+| [docs/FAQ.md](docs/FAQ.md)                             | "Is this custodial?", "what if an anchor fails?", "how are we different?".                        |
 
 ---
 

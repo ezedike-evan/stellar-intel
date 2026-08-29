@@ -1,0 +1,114 @@
+// Vitest Snapshot v1, https://vitest.dev/guide/snapshot.html
+
+exports[`StatBar > matches the visual snapshot for a row of stats 1`] = `
+<section
+  aria-label="Key statistics"
+  class="grid grid-cols-1 gap-4 rounded-xl border border-border bg-bg-subtle p-4 sm:grid-cols-3"
+>
+  <div
+    class="flex items-center gap-3"
+  >
+    <span
+      data-testid="icon-anchors"
+    />
+    <div>
+      <div
+        class="text-xl font-bold text-primary-text"
+      >
+        <div>
+          <span
+            class="relative inline-grid tabular-nums"
+          >
+            <span
+              aria-hidden="true"
+              class="invisible"
+            >
+              9
+            </span>
+            <span
+              class="absolute inset-0"
+            >
+              9
+            </span>
+          </span>
+        </div>
+      </div>
+      <div
+        class="text-xs text-secondary-text"
+      >
+        Anchors tracked
+      </div>
+    </div>
+  </div>
+  <div
+    class="flex items-center gap-3"
+  >
+    <span
+      data-testid="icon-corridors"
+    />
+    <div>
+      <div
+        class="text-xl font-bold text-primary-text"
+      >
+        <div>
+          <span
+            class="relative inline-grid tabular-nums"
+          >
+            <span
+              aria-hidden="true"
+              class="invisible"
+            >
+              9
+            </span>
+            <span
+              class="absolute inset-0"
+            >
+              9
+            </span>
+          </span>
+        </div>
+      </div>
+      <div
+        class="text-xs text-secondary-text"
+      >
+        Corridors live
+      </div>
+    </div>
+  </div>
+  <div
+    class="flex items-center gap-3"
+  >
+    <span
+      data-testid="icon-countries"
+    />
+    <div>
+      <div
+        class="text-xl font-bold text-primary-text"
+      >
+        <div>
+          <span
+            class="relative inline-grid tabular-nums"
+          >
+            <span
+              aria-hidden="true"
+              class="invisible"
+            >
+              7
+            </span>
+            <span
+              class="absolute inset-0"
+            >
+              7
+            </span>
+          </span>
+        </div>
+      </div>
+      <div
+        class="text-xs text-secondary-text"
+      >
+        Countries reachable
+      </div>
+    </div>
+  </div>
+</section>
+`;

@@ -1,12 +1,10 @@
 import { z } from 'zod';
 import { OUTCOME_STATUSES, type OutcomeLogRow, type OutcomeStatus } from '@/types/reputation';
+import { SIGNED_AMOUNT_PATTERN, STELLAR_PUBKEY_PATTERN } from '@/lib/patterns';
 
 // ─── Zod schema for the outcome log row (Issue #127 / #218) ────────────────────
 
-const decimalString = z
-  .string()
-  .min(1)
-  .regex(/^-?\d+(\.\d+)?$/, 'must be a decimal string');
+const decimalString = z.string().min(1).regex(SIGNED_AMOUNT_PATTERN, 'must be a decimal string');
 
 /** Validates every persisted/ingested outcome row. */
 export const OutcomeLogRowSchema = z.object({
@@ -22,6 +20,10 @@ export const OutcomeLogRowSchema = z.object({
   createdAt: z.string().datetime({ offset: true }),
   stellarTransactionId: z.string().min(1).nullable(),
   reconciledAt: z.string().datetime({ offset: true }).nullable(),
+  disputed: z.boolean(),
+  disputedReason: z.string().min(1).nullable(),
+  publishedAt: z.string().datetime({ offset: true }).nullable(),
+  oracleTxHash: z.string().min(1).nullable(),
 }) satisfies z.ZodType<OutcomeLogRow>;
 
 /**
@@ -40,6 +42,15 @@ export const AppendOutcomeInputSchema = z.object({
   settleSeconds: z.number().nonnegative().nullish(),
   stellarTransactionId: z.string().min(1).nullish(),
   createdAt: z.string().datetime({ offset: true }).optional(),
+  // Optional attestation: an Ed25519 signature over `intentHash` and the signer's
+  // Stellar public key. When present the append route verifies it and marks the
+  // outcome attested; when absent the row is accepted as unattested telemetry
+  // (#reputation-append hardening). Both must be supplied together.
+  signature: z.string().min(1).optional(),
+  publicKey: z
+    .string()
+    .regex(STELLAR_PUBKEY_PATTERN, 'publicKey must be a Stellar public key')
+    .optional(),
 });
 
 export type AppendOutcomeInput = z.infer<typeof AppendOutcomeInputSchema>;
@@ -59,6 +70,10 @@ export function toOutcomeLogRow(input: AppendOutcomeInput, now = new Date()): Ou
     createdAt: input.createdAt ?? now.toISOString(),
     stellarTransactionId: input.stellarTransactionId ?? null,
     reconciledAt: null,
+    disputed: false,
+    disputedReason: null,
+    publishedAt: null,
+    oracleTxHash: null,
   };
 }
 

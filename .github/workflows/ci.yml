@@ -32,7 +32,7 @@ jobs:
     steps:
       - uses: actions/checkout@v7
 
-      - uses: actions/setup-node@v6
+      - uses: actions/setup-node@v7
         with:
           node-version: ${{ matrix.node }}
           cache: 'npm'
@@ -48,6 +48,25 @@ jobs:
       - name: TypeScript
         run: npm run typecheck
 
+      # public/openapi.json is generated from lib/api/openapi.ts but committed,
+      # so without this gate the two drift silently and the published spec stops
+      # describing the API (#918).
+      - name: OpenAPI spec is in sync
+        run: |
+          npm run emit-openapi
+          git diff --exit-code -- public/openapi.json \
+            || { echo "::error::public/openapi.json is stale — run 'npm run emit-openapi' and commit the result"; exit 1; }
+
+      # lib/seo/llms-full.generated.txt is the corpus served at /llms-full.txt.
+      # It is generated from docs/ but committed, so editing a doc without
+      # regenerating would leave agents reading last month's documentation
+      # (#1064).
+      - name: llms-full.txt is in sync
+        run: |
+          npm run emit-llms-full
+          git diff --exit-code -- lib/seo/llms-full.generated.txt \
+            || { echo "::error::lib/seo/llms-full.generated.txt is stale — run 'npm run emit-llms-full' and commit the result"; exit 1; }
+
       - name: Unit tests (vitest)
         run: npm run test -- --reporter=default --coverage
 
@@ -60,13 +79,26 @@ jobs:
           flags: unit
           name: unit-node20
 
+  # Registry guard — fail if a registered anchor is not transfer-capable per the
+  # survey snapshot (and not allowlisted). Dependency-free, so no `npm ci` needed.
+  registry:
+    name: registry guard
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+      - uses: actions/setup-node@v7
+        with:
+          node-version: '20'
+      - name: Anchor registry ⊆ transfer-capable set
+        run: npm run check:registry
+
   build:
     name: build (node 20)
     needs: check
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v7
-      - uses: actions/setup-node@v6
+      - uses: actions/setup-node@v7
         with:
           node-version: '20'
           cache: 'npm'
@@ -78,3 +110,74 @@ jobs:
           name: next-build
           path: .next
           retention-days: 3
+
+  # Rust consumer SDK — the crate's own test suite (soroban-sdk testutils,
+  # no Soroban CLI / wasm target needed since it never runs as a contract).
+  rust:
+    name: rust (stellar-intel-reputation)
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+      - uses: dtolnay/rust-toolchain@stable
+      - uses: Swatinem/rust-cache@v2
+        with:
+          workspaces: crates/stellar-intel-reputation
+      - name: cargo test
+        run: cargo test --manifest-path crates/stellar-intel-reputation/Cargo.toml --locked
+      - name: cargo doc
+        run: cargo doc --manifest-path crates/stellar-intel-reputation/Cargo.toml --no-deps --locked
+      - name: cargo publish --dry-run
+        run: cargo publish --manifest-path crates/stellar-intel-reputation/Cargo.toml --dry-run --locked
+
+  # The REST half of the Rust SDK (#868). A separate crate rather than a feature
+  # of stellar-intel-reputation: that one is #![no_std] and is linked into
+  # wasm32 contracts, where reqwest and tokio cannot compile at all.
+  rust-client:
+    name: rust (stellar-intel-client)
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+      - uses: dtolnay/rust-toolchain@stable
+        with:
+          components: clippy, rustfmt
+      - uses: Swatinem/rust-cache@v2
+        with:
+          workspaces: crates/stellar-intel-client
+      - name: cargo fmt
+        run: cargo fmt --manifest-path crates/stellar-intel-client/Cargo.toml --check
+      - name: cargo clippy
+        run: cargo clippy --manifest-path crates/stellar-intel-client/Cargo.toml --all-targets --locked -- -D warnings
+      - name: cargo test
+        run: cargo test --manifest-path crates/stellar-intel-client/Cargo.toml --locked
+      - name: cargo doc
+        run: cargo doc --manifest-path crates/stellar-intel-client/Cargo.toml --no-deps --locked
+      - name: cargo publish --dry-run
+        run: cargo publish --manifest-path crates/stellar-intel-client/Cargo.toml --dry-run --locked
+
+  # The Soroban contract itself. Distinct from the `rust` job above, which only
+  # covers the read-only client SDK crate — contracts/reputation was never
+  # compiled or tested by any workflow, and had in fact been failing to build
+  # since #887 without anyone noticing (#908).
+  contract:
+    name: soroban contract (reputation)
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+      - uses: dtolnay/rust-toolchain@stable
+        with:
+          components: rustfmt, clippy
+          targets: wasm32-unknown-unknown
+      - uses: Swatinem/rust-cache@v2
+        with:
+          workspaces: contracts/reputation
+      - name: cargo fmt
+        run: cargo fmt --manifest-path contracts/reputation/Cargo.toml --check
+      - name: cargo clippy
+        run: cargo clippy --manifest-path contracts/reputation/Cargo.toml --all-targets --locked -- -D warnings
+      - name: cargo test
+        run: cargo test --manifest-path contracts/reputation/Cargo.toml --locked
+      # Builds the artifact that actually gets deployed. `stellar contract build`
+      # is the CLI wrapper around exactly this; invoking cargo directly keeps the
+      # job from having to install the Soroban CLI on every run.
+      - name: build deployable wasm
+        run: cargo build --manifest-path contracts/reputation/Cargo.toml --target wasm32-unknown-unknown --release --locked

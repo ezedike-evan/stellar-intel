@@ -1,29 +1,17 @@
-import { StellarToml } from '@stellar/stellar-sdk';
 import type { ResolvedAnchor, Sep1TomlData } from '@/types';
 import { ANCHORS } from './anchors';
+import { getCachedToml, setCachedToml, invalidateCachedToml, clearTomlCache } from './toml-cache';
+import { sleep } from '@/lib/utils';
 
 // ─── Result type ──────────────────────────────────────────────────────────────
 
 export type TomlResult = { ok: true; data: Sep1TomlData } | { ok: false; error: string };
-
-// ─── In-memory cache ──────────────────────────────────────────────────────────
-
-const TTL_MS = 15 * 60 * 1000; // 15 minutes
 
 // ─── Retry policy ─────────────────────────────────────────────────────────────
 
 const TOML_MAX_ATTEMPTS = 3;
 const TOML_RETRY_BASE_MS = 250; // exponential backoff base: 250ms, 500ms, …
 const TOML_RETRY_BUDGET_MS = 5000; // wall-clock budget; stop before exceeding it
-
-const sleep = (ms: number) => new Promise((resolve) => setTimeout(resolve, ms));
-
-interface CacheEntry {
-  data: Sep1TomlData;
-  expiresAt: number;
-}
-
-const cache = new Map<string, CacheEntry>();
 
 // ─── Internal helpers ─────────────────────────────────────────────────────────
 
@@ -74,10 +62,14 @@ function toSep1TomlData(domain: string, raw: Record<string, unknown>): Sep1TomlD
   const webAuthEndpoint = getString(raw, 'WEB_AUTH_ENDPOINT');
   const signingKey = getString(raw, 'SIGNING_KEY');
   const quoteServer = getString(raw, 'ANCHOR_QUOTE_SERVER');
+  const sep6TransferServer = getString(raw, 'TRANSFER_SERVER');
+  const directPaymentServer = getString(raw, 'DIRECT_PAYMENT_SERVER');
 
   return {
     domain,
     TRANSFER_SERVER_SEP0024: transferServer,
+    TRANSFER_SERVER: sep6TransferServer,
+    DIRECT_PAYMENT_SERVER: directPaymentServer,
     ANCHOR_QUOTE_SERVER: quoteServer,
     WEB_AUTH_ENDPOINT: webAuthEndpoint,
     SIGNING_KEY: signingKey,
@@ -92,7 +84,15 @@ function toSep1TomlData(domain: string, raw: Record<string, unknown>): Sep1TomlD
       /** Derived from ANCHOR_QUOTE_SERVER presence — the authoritative source for SEP-38 capability. */
       sep38: Boolean(quoteServer),
       sep12: Boolean(signingKey),
+      sep6: Boolean(sep6TransferServer),
+      sep31: Boolean(directPaymentServer),
     },
+    seps: [
+      ...(sep6TransferServer ? (['sep6'] as const) : []),
+      ...(transferServer ? (['sep24'] as const) : []),
+      ...(quoteServer ? (['sep38'] as const) : []),
+      ...(directPaymentServer ? (['sep31'] as const) : []),
+    ],
   };
 }
 
@@ -156,17 +156,102 @@ export function resolveAnchorSupportHref(toml: Sep1TomlData): string | null {
   return null;
 }
 
+// ─── Toml integrity validation (Issue #D003) ───────────────────────────────────
+//
+// An anchor can silently break its stellar.toml — a malformed field, a missing
+// required key, a rotated signing key — without ever going offline, so uptime
+// alone never catches it. This validates the already-parsed `Sep1TomlData`
+// against the SEP-1 required-field expectations, and optionally against the
+// last known-good snapshot to flag drift (e.g. a changed SIGNING_KEY) without
+// treating drift as fatal — a legitimate key rotation looks identical to a
+// compromised one at this layer, so it's flagged, not silently accepted or
+// auto-rejected.
+
+/** One field-level integrity problem found in a stellar.toml. */
+export interface TomlIntegrityIssue {
+  field: string;
+  reason: string;
+}
+
+/** Outcome of validating one stellar.toml snapshot. */
+export interface TomlIntegrityResult {
+  valid: boolean;
+  issues: TomlIntegrityIssue[];
+}
+
+function isValidHttpsUrl(value: string): boolean {
+  try {
+    return new URL(value).protocol === 'https:';
+  } catch {
+    return false;
+  }
+}
+
+/**
+ * Validates a resolved `Sep1TomlData` against the SEP-1 required-field
+ * expectations: `SIGNING_KEY` must be present, and `TRANSFER_SERVER` /
+ * `TRANSFER_SERVER_SEP0024` (when advertised) must be well-formed HTTPS URLs.
+ * When `previous` (the last known-good snapshot for the same domain) is
+ * supplied, a changed `SIGNING_KEY` is also flagged as drift.
+ */
+export function validateTomlIntegrity(
+  toml: Sep1TomlData,
+  previous?: Sep1TomlData | null
+): TomlIntegrityResult {
+  const issues: TomlIntegrityIssue[] = [];
+
+  if (!toml.SIGNING_KEY) {
+    issues.push({ field: 'SIGNING_KEY', reason: 'missing SIGNING_KEY' });
+  }
+
+  if (toml.TRANSFER_SERVER && !isValidHttpsUrl(toml.TRANSFER_SERVER)) {
+    issues.push({
+      field: 'TRANSFER_SERVER',
+      reason: `malformed URL: "${toml.TRANSFER_SERVER}"`,
+    });
+  }
+
+  if (toml.TRANSFER_SERVER_SEP0024 && !isValidHttpsUrl(toml.TRANSFER_SERVER_SEP0024)) {
+    issues.push({
+      field: 'TRANSFER_SERVER_SEP0024',
+      reason: `malformed URL: "${toml.TRANSFER_SERVER_SEP0024}"`,
+    });
+  }
+
+  if (previous?.SIGNING_KEY && toml.SIGNING_KEY && previous.SIGNING_KEY !== toml.SIGNING_KEY) {
+    issues.push({
+      field: 'SIGNING_KEY',
+      reason: `signing key changed: was "${previous.SIGNING_KEY}", now "${toml.SIGNING_KEY}"`,
+    });
+  }
+
+  return { valid: issues.length === 0, issues };
+}
+
 /**
  * Resolves an anchor stellar.toml file via SEP-1.
- * Results are cached in memory for 15 minutes. Failed resolutions are not cached.
+ *
+ * Results are cached in memory (TTL ~10 min) keyed by home domain. Pass
+ * `{ bypassCache: true }` to force a fresh resolution — used by the nightly
+ * validator so it always checks live anchor data. Failed resolutions are not
+ * cached.
  */
-export async function resolveAnchor(domain: string): Promise<Sep1TomlData> {
+export async function resolveAnchor(
+  domain: string,
+  opts: { bypassCache?: boolean } = {}
+): Promise<Sep1TomlData> {
   const cacheKey = normalizeDomain(domain);
-  const cached = cache.get(cacheKey);
 
-  if (cached && cached.expiresAt > Date.now()) {
-    return cached.data;
+  if (!opts.bypassCache) {
+    const cached = getCachedToml(cacheKey);
+    if (cached) return cached;
   }
+
+  // Dynamic import: @stellar/stellar-sdk ships ESM-flavored types that TS's
+  // Node16 resolution (used by the standalone packages/mcp build) refuses to
+  // `require()`-import statically — see packages/publisher/src/batch.ts for
+  // the same workaround. The package itself is dual CJS/ESM at runtime.
+  const { StellarToml } = await import('@stellar/stellar-sdk');
 
   // Retry transient resolution failures with exponential backoff, bounded by a
   // wall-clock budget so a slow anchor can't stall the caller indefinitely.
@@ -178,7 +263,7 @@ export async function resolveAnchor(domain: string): Promise<Sep1TomlData> {
       const raw = (await StellarToml.Resolver.resolve(cacheKey)) as Record<string, unknown>;
       const data = toSep1TomlData(cacheKey, raw);
 
-      cache.set(cacheKey, { data, expiresAt: Date.now() + TTL_MS });
+      setCachedToml(cacheKey, data);
       return data;
     } catch (err) {
       lastError = err;
@@ -194,7 +279,7 @@ export async function resolveAnchor(domain: string): Promise<Sep1TomlData> {
     }
   }
 
-  cache.delete(cacheKey);
+  invalidateCachedToml(cacheKey);
   throw new Error(
     `Failed to resolve stellar.toml for "${cacheKey}": ${
       lastError instanceof Error ? lastError.message : String(lastError)
@@ -266,10 +351,10 @@ export async function resolveAllAnchors(): Promise<Record<string, ResolvedAnchor
 
 /** Exposed for testing only — clears the in-memory TOML cache. */
 export function _clearTomlCache(): void {
-  cache.clear();
+  clearTomlCache();
 }
 
 /** Exposed for testing only — injects a pre-validated cache entry. */
 export function _seedTomlCache(domain: string, data: Sep1TomlData): void {
-  cache.set(domain, { data, expiresAt: Date.now() + TTL_MS });
+  setCachedToml(domain, data);
 }

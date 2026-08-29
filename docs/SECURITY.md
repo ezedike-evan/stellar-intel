@@ -1,5 +1,7 @@
 # Security Policy
 
+**Last reviewed:** 2026-08-26
+
 ## Reporting a vulnerability
 
 Please **do not** open a public issue for security vulnerabilities. Email the
@@ -31,6 +33,12 @@ for users — losing funds — is structurally out of scope because we never hol
   `NEXT_PUBLIC_*` var). See `lib/config.ts` for env validation.
 - **Publisher keys** (Soroban oracle) are server-held and never shipped to the
   browser. Rotation policy is a roadmap item ([`docs/ROADMAP.md`](ROADMAP.md)).
+- **Contract admin key** — the reputation contract's admin `Address` is
+  currently a single HSM-backed key. The migration path to a community-governed
+  multisig (M-of-N Stellar account) is documented in
+  [`docs/GOVERNANCE.md`](GOVERNANCE.md). The two-step `propose_admin` /
+  `accept_admin` entrypoints on the contract are in place to execute that
+  handoff safely once the signer set is ratified.
 
 ## Network & data integrity
 

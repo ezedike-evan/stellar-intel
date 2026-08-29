@@ -1,0 +1,7 @@
+# Line endings
+#
+# lib/seo/llms-full.generated.txt is written by scripts/emit-llms-full.mts with LF
+# endings and diffed byte-for-byte in CI. Without this, a Windows checkout under
+# core.autocrlf would rewrite it to CRLF and every regeneration would look like a
+# whole-file change.
+lib/seo/llms-full.generated.txt text eol=lf

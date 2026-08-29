@@ -6,6 +6,9 @@ import {
   type OutcomeRow,
 } from '@/lib/reputation/aggregate';
 import { withRequestLogger } from '@/lib/logger';
+import { getReputationStore } from '@/lib/reputation/store';
+import type { OutcomeLogRow } from '@/types/reputation';
+import { enforceRateLimit } from '@/lib/api/response';
 
 // ─── In-memory stores (seed / replace with DB in a later iteration) ───────────
 
@@ -16,6 +19,31 @@ const outcomeStore: OutcomeRow[] = [];
 export function _seedOutcomeStore(rows: OutcomeRow[]): void {
   outcomeStore.length = 0;
   outcomeStore.push(...rows);
+}
+
+function toNullableNumber(value: string | null): number | null {
+  if (value === null) return null;
+  const parsed = Number(value);
+  return Number.isFinite(parsed) ? parsed : null;
+}
+
+function toOutcomeRow(row: OutcomeLogRow): OutcomeRow {
+  const quotedRate = toNullableNumber(row.quotedRate);
+  const deliveredRate = toNullableNumber(row.deliveredRate);
+  const slippage =
+    quotedRate !== null && deliveredRate !== null && quotedRate !== 0
+      ? Math.abs(deliveredRate - quotedRate) / Math.abs(quotedRate)
+      : null;
+  const recordedAt = Date.parse(row.createdAt);
+
+  return {
+    intentHash: row.intentHash,
+    anchorId: row.anchorId,
+    filled: row.outcome === 'completed',
+    settleMs: row.settleSeconds === null ? null : row.settleSeconds * 1000,
+    slippage,
+    recordedAt: Number.isFinite(recordedAt) ? recordedAt : Date.now(),
+  };
 }
 
 // ─── GET /api/reputation/[anchor] ────────────────────────────────────────────
@@ -30,6 +58,12 @@ export async function GET(
   { params }: { params: Promise<{ anchor: string }> | { anchor: string } }
 ): Promise<NextResponse> {
   return withRequestLogger(request, 'api.reputation.anchor', async (logger) => {
+    const limited = await enforceRateLimit(request, {
+      bucket: 'api.reputation.anchor',
+      maxRequests: 120,
+    });
+    if (limited) return limited;
+
     const { anchor } = await params;
 
     if (!anchor || typeof anchor !== 'string') {
@@ -52,7 +86,10 @@ export async function GET(
       });
     }
 
-    const anchorRows = outcomeStore.filter((r) => r.anchorId === anchor);
+    const storedRows = await getReputationStore().query({ anchorId: anchor });
+    const seededRows = outcomeStore.filter((r) => r.anchorId === anchor);
+    const anchorRows = [...seededRows, ...storedRows.map(toOutcomeRow)];
+
     return NextResponse.json({
       anchorId: anchor,
       scorecards: buildScorecards(anchorRows),

@@ -1,0 +1,121 @@
+name: Monthly Anchor Fleet Re-crawl
+
+on:
+  schedule:
+    # 06:00 UTC on the 1st of each month.
+    - cron: '0 6 1 * *'
+  workflow_dispatch:
+
+permissions:
+  contents: write
+  issues: write
+  pull-requests: write
+
+jobs:
+  recrawl:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+
+      - uses: actions/setup-node@v7
+        with:
+          node-version: '20'
+          cache: 'npm'
+
+      - run: npm ci
+
+      - name: Re-run the full anchor fleet survey
+        run: node scripts/anchor-survey.mjs --json > /tmp/anchor-survey.fresh.json
+
+      - name: Diff against the committed snapshot
+        id: diff
+        shell: bash
+        run: |
+          set +e
+          set -o pipefail
+          node scripts/anchor-diff.mjs /tmp/anchor-survey.fresh.json | tee /tmp/anchor-diff.md
+          CHANGED=$?
+          set -e
+          echo "changed=$CHANGED" >> "$GITHUB_OUTPUT"
+
+      - name: Open tracking issue on fleet change
+        if: steps.diff.outputs.changed == '2'
+        uses: actions/github-script@v9
+        env:
+          DIFF_PATH: /tmp/anchor-diff.md
+        with:
+          script: |
+            const fs = require('fs');
+            const today = new Date().toISOString().slice(0, 10);
+            const summary = fs.readFileSync(process.env.DIFF_PATH, 'utf8').trim();
+            const body = [
+              `Monthly anchor fleet re-crawl (${today}) found changes since the last committed snapshot.`,
+              '',
+              summary,
+              '',
+              `- Workflow run: ${context.serverUrl}/${context.repo.owner}/${context.repo.repo}/actions/runs/${context.runId}`,
+              '',
+              'A companion PR refreshing `scripts/anchor-survey.snapshot.json` is opened',
+              'by the next step — check the PR list rather than assuming it merged.',
+              '',
+              'Review new transfer-capable domains as onboarding candidates via',
+              '[`docs/ANCHOR_ONBOARDING.md`](../blob/main/docs/ANCHOR_ONBOARDING.md),',
+              'and read the caveats in',
+              '[`docs/ANCHOR_FLEET_RECHECK.md`](../blob/main/docs/ANCHOR_FLEET_RECHECK.md)',
+              'first — home domain is not service domain, and strict TLS produces false',
+              'negatives, so confirm each row with `curl` before acting on it.',
+            ].join('\n');
+
+            await github.rest.issues.create({
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              title: `[anchor-fleet] monthly re-crawl changes — ${today}`,
+              body,
+              labels: ['anchor-fleet'],
+            });
+
+      # Opens a PR rather than pushing to main. A ruleset on main requires the
+      # `closing-keywords` status check, and a direct push can never satisfy a
+      # required check, so every attempt was rejected:
+      #
+      #   remote: error: GH013: Repository rule violations found for refs/heads/main.
+      #   remote: - Required status check "closing-keywords" is expected.
+      #   ! [remote rejected] main -> main
+      #
+      # That is why this file had exactly one commit despite the job running for
+      # months, and why the whole run was marked failed even when the survey,
+      # the diff and the tracking issue all succeeded (#915).
+      - name: Propose refreshed snapshot
+        if: steps.diff.outputs.changed == '2'
+        shell: bash
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          set -euo pipefail
+          cp /tmp/anchor-survey.fresh.json scripts/anchor-survey.snapshot.json
+
+          if git diff --quiet -- scripts/anchor-survey.snapshot.json; then
+            echo "Snapshot unchanged after copy; nothing to propose"
+            exit 0
+          fi
+
+          TODAY="$(date -u +%F)"
+          BRANCH="bot/anchor-fleet-snapshot-${TODAY}"
+
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+
+          git checkout -b "$BRANCH"
+          git add scripts/anchor-survey.snapshot.json
+          git commit -m "chore(anchors): refresh fleet survey snapshot ${TODAY}"
+          git push --force-with-lease -u origin "$BRANCH"
+
+          if gh pr view "$BRANCH" --json number >/dev/null 2>&1; then
+            echo "PR already open for ${BRANCH}"
+          else
+            gh pr create \
+              --base main \
+              --head "$BRANCH" \
+              --title "chore(anchors): refresh fleet survey snapshot ${TODAY}" \
+              --body "Monthly fleet re-crawl found changes against the committed snapshot. Companion to the \`anchor-fleet\` tracking issue for ${TODAY}; review new transfer-capable domains there before merging."
+          fi

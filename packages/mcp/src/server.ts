@@ -1,22 +1,37 @@
-import { Server } from '@modelcontextprotocol/sdk/server/index.js';
-import { ListToolsRequestSchema } from '@modelcontextprotocol/sdk/types.js';
+import { McpServer } from '@modelcontextprotocol/sdk/server/mcp.js';
 
-export function createServer(): Server {
-  const server = new Server(
-    {
-      name: '@stellarintel/mcp',
-      version: '0.1.0',
-    },
-    {
-      capabilities: {
-        tools: {},
-      },
-    }
-  );
+// lib/config.ts validates these at import time (throws if unset) — they're
+// meaningful defaults for a standalone MCP client, not secrets, so set them
+// before anything transitively pulls lib/config.ts in.
+const MCP_ENV_DEFAULTS: Record<string, string> = {
+  NEXT_PUBLIC_STELLAR_NETWORK: 'mainnet',
+  NEXT_PUBLIC_HORIZON_URL: 'https://horizon.stellar.org',
+  NEXT_PUBLIC_USDC_ISSUER: 'GA5ZSEJYB37JRC5AVCIA5MOP4RHTM335X2KGX3IHOJAPP5RE34K4KZVN',
+  NEXT_PUBLIC_APP_NAME: 'Stellar Intel',
+};
 
-  server.setRequestHandler(ListToolsRequestSchema, async () => {
-    return { tools: [] };
+for (const [key, value] of Object.entries(MCP_ENV_DEFAULTS)) {
+  if (!process.env[key] || process.env[key]?.trim() === '') {
+    process.env[key] = value;
+  }
+}
+
+export async function createServer(): Promise<McpServer> {
+  // Dynamic imports so the env defaults above are applied before lib/config loads.
+  const { registerQuoteTool } = await import('./tools/quote.js');
+  const { registerPrepareTool } = await import('./tools/prepare.js');
+  const { registerExecuteTool } = await import('./tools/execute.js');
+  const { registerAnchorReputationTool } = await import('./tools/anchor-reputation.js');
+  const { registerAnchorHealthTool } = await import('./tools/anchor-health.js');
+
+  const server = new McpServer({
+    name: '@stellarintel/mcp',
+    version: '0.1.0',
   });
-
+  registerQuoteTool(server);
+  registerPrepareTool(server);
+  registerExecuteTool(server);
+  registerAnchorReputationTool(server);
+  registerAnchorHealthTool(server);
   return server;
 }

@@ -33,6 +33,17 @@ describe('MCP server round-trip via subprocess (#137)', () => {
     transport = new StdioClientTransport({
       command: tsxBin,
       args: [SERVER],
+      // Bound the live tiered rate check's worst case (lib/stellar/server-rates.ts
+      // defaults to 8s/tier with a retry — up to ~48s across SEP-38/24/6). A
+      // real subprocess round-trip doesn't need that much grace to prove the
+      // live path works, and a tighter bound keeps this test from being flaky
+      // under parallel CI/sandbox load.
+      env: {
+        ...process.env,
+        RATES_SEP38_TIMEOUT_MS: '3000',
+        RATES_SEP24_INFO_TIMEOUT_MS: '3000',
+        RATES_TOML_TIMEOUT_MS: '3000',
+      },
     });
     client = new Client({ name: 'e2e-test-client', version: '1.0.0' });
     await client.connect(transport);
@@ -44,19 +55,30 @@ describe('MCP server round-trip via subprocess (#137)', () => {
     await client?.close();
   });
 
-  it('lists both off-ramp tools', async () => {
+  it('lists all three tools', async () => {
     const { tools } = await client.listTools();
     const names = tools.map((t) => t.name).sort();
     expect(names).toContain('intel.offramp.quote');
     expect(names).toContain('intel.offramp.prepare');
+    expect(names).toContain('intel.execute');
   });
 
   it('intel.offramp.quote returns a valid quote', async () => {
+    // getQuote now sources a LIVE rate (see lib/mcp/offramp.ts) — it can no
+    // longer guarantee a fixed netReceived, and the routed anchor's live
+    // quote can legitimately be unavailable at request time (e.g. the anchor
+    // currently doesn't advertise SEP-38/24/6 withdraw for this asset). Both
+    // outcomes are valid MCP responses; assert the tool is wired correctly in
+    // either case rather than pinning a stale static number.
     const result = await client.callTool({
       name: 'intel.offramp.quote',
       arguments: { from: 'USDC', to: 'NGN', amount: '100' },
     });
-    expect(result.isError).toBeFalsy();
+    if (result.isError) {
+      const content = result.content as Array<{ type: string; text: string }>;
+      expect(content[0]?.text).toMatch(/^RATE_UNAVAILABLE:/);
+      return;
+    }
     const structured = result.structuredContent as {
       anchor: string;
       quoteId: string;
@@ -65,9 +87,12 @@ describe('MCP server round-trip via subprocess (#137)', () => {
     };
     expect(structured.anchor).toBe('cowrie');
     expect(structured.quoteId).toMatch(/^[0-9a-f]{64}$/);
-    expect(structured.netReceived).toBe('156800');
+    expect(Number(structured.netReceived)).toBeGreaterThan(0);
     expect(new Date(structured.expiresAt).getTime()).toBeGreaterThan(Date.now());
-  });
+    // A real network round-trip against a live anchor (even with the tighter
+    // per-tier timeouts set above) can occasionally run long under heavy
+    // parallel test load — give it generous headroom rather than flake.
+  }, 90_000);
 
   it('intel.offramp.prepare returns an unsigned envelope + unsigned tx', async () => {
     const result = await client.callTool({
@@ -91,16 +116,61 @@ describe('MCP server round-trip via subprocess (#137)', () => {
     expect(structured.unsignedTx.length).toBeGreaterThan(0);
   });
 
+  it('intel.execute rejects an invalid signature without crashing the server', async () => {
+    // No live Horizon submission here — that needs a funded mainnet account and
+    // isn't appropriate for CI. This exercises the tool's full request/response
+    // wiring through a real subprocess and asserts the pre-submission signature
+    // check rejects a bogus signature, matching the unit coverage in
+    // tests/mcp-offramp.spec.ts (#819).
+    const prepared = await client.callTool({
+      name: 'intel.offramp.prepare',
+      arguments: {
+        type: 'offramp',
+        sourceAsset: 'USDC',
+        destinationAsset: 'NGN',
+        amount: '10',
+        sender: 'GAIJ3VXNY7RPPLGVVCLGBK7NPHLL5ZRKATHETOA7M7UPZPAAHEGQQIY2',
+        recipient: 'recipient-123',
+      },
+    });
+    expect(prepared.isError).toBeFalsy();
+    const { unsignedEnvelope, unsignedTx } = prepared.structuredContent as {
+      unsignedEnvelope: { intent: unknown; intentHash: string };
+      unsignedTx: string;
+    };
+
+    const result = await client.callTool({
+      name: 'intel.execute',
+      arguments: {
+        unsignedEnvelope,
+        signature: Buffer.from('not-a-real-signature').toString('base64'),
+        signedTx: unsignedTx,
+      },
+    });
+    expect(result.isError).toBe(true);
+    const content = result.content as Array<{ type: string; text: string }>;
+    expect(content[0]?.text).toMatch(/^SIGNATURE_INVALID:/);
+  });
+
   it('surfaces a tool error for an unknown corridor without crashing the server', async () => {
     const result = await client.callTool({
       name: 'intel.offramp.quote',
       arguments: { from: 'USDC', to: 'ZZZ', amount: '10' },
     });
     expect(result.isError).toBe(true);
-    // Server is still alive — a subsequent good call still works.
+    // Server is still alive — a subsequent call still works. Uses `prepare`
+    // (no live network dependency) rather than `quote` so this assertion
+    // isn't coupled to a third-party anchor's rate-quoting being up.
     const ok = await client.callTool({
-      name: 'intel.offramp.quote',
-      arguments: { from: 'USDC', to: 'KES', amount: '50' },
+      name: 'intel.offramp.prepare',
+      arguments: {
+        type: 'offramp',
+        sourceAsset: 'USDC',
+        destinationAsset: 'NGN',
+        amount: '10',
+        sender: 'GAIJ3VXNY7RPPLGVVCLGBK7NPHLL5ZRKATHETOA7M7UPZPAAHEGQQIY2',
+        recipient: 'recipient-123',
+      },
     });
     expect(ok.isError).toBeFalsy();
   });

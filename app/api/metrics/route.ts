@@ -7,6 +7,7 @@ import {
   type ClientMetricSample,
 } from '@/lib/metrics';
 import type { ApiError } from '@/types';
+import { enforceRateLimit } from '@/lib/api/response';
 
 export const runtime = 'nodejs';
 
@@ -30,6 +31,12 @@ function parseSample(body: unknown): ClientMetricSample | null {
 /** Exposes the in-process metrics snapshot (intent counters + per-anchor p50/p95). */
 export async function GET(request: NextRequest): Promise<NextResponse> {
   return withRequestLogger(request, 'api.metrics', async (logger) => {
+    const limited = await enforceRateLimit(request, {
+      bucket: 'api.metrics',
+      maxRequests: 60,
+    });
+    if (limited) return limited;
+
     const snapshot = getMetricsSnapshot();
     logger.info({
       event: 'metrics_snapshot',

@@ -1,5 +1,7 @@
 # Canonical JSON
 
+**Last reviewed:** 2026-08-26
+
 Intents are hashed and signed over a **canonical** serialization so the same
 logical intent always produces the same bytes, regardless of key order or
 formatting. Without this, two semantically identical intents could hash

@@ -1,0 +1,29 @@
+/* Print-only receipt view. StatusTracker renders a `.receipt` block with the
+   transaction summary; window.print() (triggered by the 'Download receipt'
+   button) uses these rules to hide everything else on the page so only the
+   receipt prints. */
+.receipt {
+  display: none;
+}
+
+@media print {
+  body * {
+    visibility: hidden;
+  }
+
+  /* display:none content isn't affected by visibility, so force it to
+     render before making it (and its children) visible again. */
+  .receipt {
+    display: block !important;
+    visibility: visible;
+    position: absolute;
+    top: 0;
+    left: 0;
+    width: 100%;
+    padding: 24px;
+  }
+
+  .receipt * {
+    visibility: visible;
+  }
+}

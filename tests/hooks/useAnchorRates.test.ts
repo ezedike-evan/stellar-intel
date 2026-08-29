@@ -92,4 +92,38 @@ describe('useAnchorRates', () => {
     expect(result.current.error).toBe('All anchors failed');
     expect(result.current.rates).toBeUndefined();
   });
+
+  it('sets lastFetchedAt after a successful fetch, null before it', async () => {
+    stubFetchResolving({
+      corridorId: 'usdc-ngn',
+      bestRateId: 'cowrie',
+      pending: [],
+      rates: [],
+    });
+
+    const { result } = renderHook(() => useAnchorRates('usdc-ngn', '100'), { wrapper });
+    expect(result.current.lastFetchedAt).toBeNull();
+
+    await waitFor(() => expect(result.current.isLoading).toBe(false), { timeout: 2000 });
+    expect(result.current.lastFetchedAt).not.toBeNull();
+    expect(result.current.lastFetchedAt).toBeLessThanOrEqual(Date.now());
+  });
+
+  it('accepts a revalidateOnFocus override without breaking data loading', async () => {
+    stubFetchResolving({
+      corridorId: 'usdc-ngn',
+      bestRateId: 'cowrie',
+      pending: [],
+      rates: [],
+    });
+
+    const { result } = renderHook(
+      () => useAnchorRates('usdc-ngn', '100', { revalidateOnFocus: false }),
+      { wrapper }
+    );
+
+    await waitFor(() => expect(result.current.isLoading).toBe(false), { timeout: 2000 });
+    expect(result.current.error).toBeUndefined();
+    expect(result.current.rates?.bestRateId).toBe('cowrie');
+  });
 });

@@ -1,5 +1,7 @@
 # Non-Custody Manifesto
 
+**Last reviewed:** 2026-08-26
+
 Stellar Intel is **non-custodial by construction**. This is an architectural
 property, not a policy promise — the system has no code path that could take
 custody.

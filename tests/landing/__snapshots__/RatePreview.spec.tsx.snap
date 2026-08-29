@@ -1,0 +1,239 @@
+// Vitest Snapshot v1, https://vitest.dev/guide/snapshot.html
+
+exports[`RatePreview > matches the visual snapshot in the loading state 1`] = `
+<div
+  class="overflow-hidden rounded-xl border border-border"
+>
+  <table
+    class="w-full text-sm"
+  >
+    <tbody>
+      <tr
+        class="border-border border-t"
+      >
+        <td
+          class="px-4 py-3"
+        >
+          <div
+            class="bg-bg-sunken h-3 animate-pulse rounded-sm"
+          />
+        </td>
+        <td
+          class="px-4 py-3"
+        >
+          <div
+            class="bg-bg-sunken h-3 animate-pulse rounded-sm"
+          />
+        </td>
+        <td
+          class="px-4 py-3"
+        >
+          <div
+            class="bg-bg-sunken h-3 animate-pulse rounded-sm"
+          />
+        </td>
+        <td
+          class="px-4 py-3"
+        >
+          <div
+            class="bg-bg-sunken h-3 animate-pulse rounded-sm"
+          />
+        </td>
+        <td
+          class="px-4 py-3"
+        >
+          <div
+            class="bg-bg-sunken h-3 animate-pulse rounded-sm"
+          />
+        </td>
+      </tr>
+      <tr
+        class="border-border border-t"
+      >
+        <td
+          class="px-4 py-3"
+        >
+          <div
+            class="bg-bg-sunken h-3 animate-pulse rounded-sm"
+          />
+        </td>
+        <td
+          class="px-4 py-3"
+        >
+          <div
+            class="bg-bg-sunken h-3 animate-pulse rounded-sm"
+          />
+        </td>
+        <td
+          class="px-4 py-3"
+        >
+          <div
+            class="bg-bg-sunken h-3 animate-pulse rounded-sm"
+          />
+        </td>
+        <td
+          class="px-4 py-3"
+        >
+          <div
+            class="bg-bg-sunken h-3 animate-pulse rounded-sm"
+          />
+        </td>
+        <td
+          class="px-4 py-3"
+        >
+          <div
+            class="bg-bg-sunken h-3 animate-pulse rounded-sm"
+          />
+        </td>
+      </tr>
+      <tr
+        class="border-border border-t"
+      >
+        <td
+          class="px-4 py-3"
+        >
+          <div
+            class="bg-bg-sunken h-3 animate-pulse rounded-sm"
+          />
+        </td>
+        <td
+          class="px-4 py-3"
+        >
+          <div
+            class="bg-bg-sunken h-3 animate-pulse rounded-sm"
+          />
+        </td>
+        <td
+          class="px-4 py-3"
+        >
+          <div
+            class="bg-bg-sunken h-3 animate-pulse rounded-sm"
+          />
+        </td>
+        <td
+          class="px-4 py-3"
+        >
+          <div
+            class="bg-bg-sunken h-3 animate-pulse rounded-sm"
+          />
+        </td>
+        <td
+          class="px-4 py-3"
+        >
+          <div
+            class="bg-bg-sunken h-3 animate-pulse rounded-sm"
+          />
+        </td>
+      </tr>
+      <tr
+        class="border-border border-t"
+      >
+        <td
+          class="px-4 py-3"
+        >
+          <div
+            class="bg-bg-sunken h-3 animate-pulse rounded-sm"
+          />
+        </td>
+        <td
+          class="px-4 py-3"
+        >
+          <div
+            class="bg-bg-sunken h-3 animate-pulse rounded-sm"
+          />
+        </td>
+        <td
+          class="px-4 py-3"
+        >
+          <div
+            class="bg-bg-sunken h-3 animate-pulse rounded-sm"
+          />
+        </td>
+        <td
+          class="px-4 py-3"
+        >
+          <div
+            class="bg-bg-sunken h-3 animate-pulse rounded-sm"
+          />
+        </td>
+        <td
+          class="px-4 py-3"
+        >
+          <div
+            class="bg-bg-sunken h-3 animate-pulse rounded-sm"
+          />
+        </td>
+      </tr>
+    </tbody>
+  </table>
+</div>
+`;
+
+exports[`RatePreview > matches the visual snapshot with live snapshot data 1`] = `
+<div
+  class="overflow-hidden rounded-xl border border-border"
+>
+  <table
+    class="w-full text-sm"
+  >
+    <thead>
+      <tr
+        class="border-b border-border bg-bg-sunken /50"
+      >
+        <th
+          class="px-4 py-3 text-left font-medium text-secondary-text"
+        >
+          Corridor
+        </th>
+        <th
+          class="px-4 py-3 text-left font-medium text-secondary-text"
+        >
+          Best Anchor
+        </th>
+        <th
+          class="px-4 py-3 text-right font-medium text-secondary-text"
+        >
+          Rate
+        </th>
+        <th
+          class="px-4 py-3 text-right font-medium text-secondary-text"
+        >
+          You Receive
+        </th>
+      </tr>
+    </thead>
+    <tbody>
+      <tr
+        class="border-t border-border"
+      >
+        <td
+          class="px-4 py-3"
+        >
+          <span
+            class="font-medium text-primary-text"
+          >
+            USDC
+            /
+            NGN
+          </span>
+        </td>
+        <td
+          class="px-4 py-3 text-secondary-text"
+        >
+          Cowrie Exchange
+        </td>
+        <td
+          class="px-4 py-3 text-right text-secondary-text"
+        >
+          1,580 NGN
+        </td>
+        <td
+          class="px-4 py-3 text-right font-medium text-primary-text"
+        >
+          154,840 NGN
+        </td>
+      </tr>
+    </tbody>
+  </table>
+</div>
+`;

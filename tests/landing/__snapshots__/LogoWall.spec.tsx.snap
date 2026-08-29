@@ -1,0 +1,79 @@
+// Vitest Snapshot v1, https://vitest.dev/guide/snapshot.html
+
+exports[`LogoWall > matches the visual snapshot for a fixed anchor list 1`] = `
+<section
+  aria-label="Supported anchors"
+>
+  <p
+    class="mb-4 text-xs font-semibold uppercase tracking-wide text-fg-muted"
+  >
+    Supported anchors
+  </p>
+  <ul
+    class="flex flex-wrap items-center gap-x-8 gap-y-5"
+  >
+    <li>
+      <div
+        class="group flex items-center gap-2.5 rounded-lg focus:outline-none focus-visible:ring-2 focus-visible:ring-accent"
+        tabindex="0"
+      >
+        <span
+          class="grayscale opacity-70 transition-all duration-200 group-hover:grayscale-0 group-hover:opacity-100 group-focus-visible:grayscale-0 group-focus-visible:opacity-100"
+        >
+          <span
+            class="border-border bg-bg-sunken text-secondary-text inline-flex shrink-0 items-center justify-center overflow-hidden rounded-full border font-medium saturate-[0.75] transition-[filter] duration-100 ease-out group-hover:saturate-100 group-focus-visible:saturate-100 h-7 w-7 text-xs"
+          >
+            <img
+              alt="MoneyGram logo"
+              class="h-full w-full object-contain"
+              data-nimg="1"
+              decoding="async"
+              height="40"
+              loading="lazy"
+              src="http://localhost:3000/anchors/moneygram.svg"
+              style="color: transparent;"
+              width="40"
+            />
+          </span>
+        </span>
+        <span
+          class="text-sm font-medium text-fg-muted transition-colors duration-200 group-hover:text-primary-text dark:text-fg-muted dark:group-hover:text-white"
+        >
+          MoneyGram
+        </span>
+      </div>
+    </li>
+    <li>
+      <div
+        class="group flex items-center gap-2.5 rounded-lg focus:outline-none focus-visible:ring-2 focus-visible:ring-accent"
+        tabindex="0"
+      >
+        <span
+          class="grayscale opacity-70 transition-all duration-200 group-hover:grayscale-0 group-hover:opacity-100 group-focus-visible:grayscale-0 group-focus-visible:opacity-100"
+        >
+          <span
+            class="border-border bg-bg-sunken text-secondary-text inline-flex shrink-0 items-center justify-center overflow-hidden rounded-full border font-medium saturate-[0.75] transition-[filter] duration-100 ease-out group-hover:saturate-100 group-focus-visible:saturate-100 h-7 w-7 text-xs"
+          >
+            <img
+              alt="Anclap logo"
+              class="h-full w-full object-contain"
+              data-nimg="1"
+              decoding="async"
+              height="40"
+              loading="lazy"
+              src="http://localhost:3000/anchors/anclap.svg"
+              style="color: transparent;"
+              width="40"
+            />
+          </span>
+        </span>
+        <span
+          class="text-sm font-medium text-fg-muted transition-colors duration-200 group-hover:text-primary-text dark:text-fg-muted dark:group-hover:text-white"
+        >
+          Anclap
+        </span>
+      </div>
+    </li>
+  </ul>
+</section>
+`;
