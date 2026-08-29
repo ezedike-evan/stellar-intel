@@ -14,7 +14,12 @@ export default function SdksPage() {
       <section className="space-y-4">
         <div className="flex items-center gap-3">
           <div className="rounded-lg bg-accent-subtle p-2">
-            <svg className="h-6 w-6 text-accent" viewBox="0 0 24 24" fill="currentColor">
+            <svg
+              aria-hidden="true"
+              className="h-6 w-6 text-accent"
+              viewBox="0 0 24 24"
+              fill="currentColor"
+            >
               <path d="M0 12v6.5l12 5.5 12-5.5V12l-12 5.5L0 12zm0-6.5L12 11 24 5.5 12 0 0 5.5z" />
             </svg>
           </div>
@@ -75,7 +80,12 @@ export async function submitOfframpIntent(body: unknown) {
       <section className="space-y-4">
         <div className="flex items-center gap-3">
           <div className="rounded-lg bg-accent-subtle p-2">
-            <svg className="h-6 w-6 text-status-up" viewBox="0 0 24 24" fill="currentColor">
+            <svg
+              aria-hidden="true"
+              className="h-6 w-6 text-status-up"
+              viewBox="0 0 24 24"
+              fill="currentColor"
+            >
               <path d="M11.9 0C10.07 0 8.54.37 7.5 1.12c-1.04.75-1.56 1.78-1.56 3v2.25c0 .87.26 1.48.78 1.86.52.37 1.2.56 2.03.56h3.9c.84 0 1.54.26 2.1.78.56.52.83 1.22.83 2.1v1.5H9.22c-.87 0-1.66.28-2.35.84-.67.56-1.01 1.3-1.01 2.22v4.22c0 .85.33 1.6 1 2.25.67.66 1.47 1.08 2.4 1.28.94.2 1.86.3 2.78.3 1.86 0 3.36-.42 4.52-1.28 1.16-.85 1.74-2 1.74-3.45v-2.06c0-.87-.27-1.56-.8-2.06-.54-.5-1.23-.75-2.08-.75h-4.1c-.86 0-1.57-.28-2.12-.84-.56-.56-.84-1.27-.84-2.1v-1.5h6.75c.87 0 1.6-.24 2.2-.72.6-.48.9-1.2.9-2.16v-4.5c0-.93-.34-1.7-1.03-2.3C15.6.32 14.4 0 12.65 0H11.9zm-.5 2.25c.4 0 .74.14 1.02.42.28.28.42.62.42 1.02 0 .4-.14.74-.42 1.02-.28.28-.64.42-1.04.42-.4 0-.74-.14-1.02-.42a1.38 1.38 0 01-.4-1.02c0-.4.14-.74.42-1.02.28-.28.63-.42 1.03-.42z" />
             </svg>
           </div>
@@ -127,6 +137,7 @@ def get_leaderboard(corridor: str | None = None) -> dict:
         <div className="flex items-center gap-3">
           <div className="rounded-sm bg-bg-sunken p-2">
             <svg
+              aria-hidden="true"
               className="h-6 w-6 text-status-unknown dark:text-status-unknown"
               viewBox="0 0 24 24"
               fill="currentColor"
@@ -191,6 +202,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
         <div className="flex items-center gap-3">
           <div className="rounded-lg bg-bg-sunken p-2 dark:bg-accent-subtle">
             <svg
+              aria-hidden="true"
               className="h-6 w-6 text-accent dark:text-accent"
               viewBox="0 0 24 24"
               fill="currentColor"

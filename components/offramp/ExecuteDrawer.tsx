@@ -557,7 +557,13 @@ function ExecuteDrawerContent({
               aria-label="Close"
               className="rounded-lg p-1 text-secondary-text hover:text-secondary-text disabled:opacity-40 dark:hover:text-secondary-text"
             >
-              <svg className="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+              <svg
+                aria-hidden="true"
+                className="h-5 w-5"
+                fill="none"
+                viewBox="0 0 24 24"
+                stroke="currentColor"
+              >
                 <path
                   strokeLinecap="round"
                   strokeLinejoin="round"
@@ -857,6 +863,7 @@ function StepIndicator({ step }: { step: ExecuteDrawerStep }) {
 function Spinner() {
   return (
     <svg
+      aria-hidden="true"
       className="h-4 w-4 animate-spin"
       xmlns="http://www.w3.org/2000/svg"
       fill="none"
