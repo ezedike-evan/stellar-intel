@@ -26,7 +26,7 @@ function AnchorsContent() {
   if (!activeCorridor) return null;
 
   return (
-    <main className="mx-auto max-w-3xl px-4 py-8">
+    <div className="mx-auto max-w-3xl px-4 py-8">
       <h1 className="mb-6 text-2xl font-semibold text-white">Anchor Leaderboard</h1>
 
       {/* Corridor filter tabs */}
@@ -51,13 +51,13 @@ function AnchorsContent() {
       </p>
 
       <Leaderboard corridor={activeCorridor} />
-    </main>
+    </div>
   );
 }
 
 export default function AnchorsPage() {
   return (
-    <Suspense fallback={<main className="mx-auto max-w-3xl px-4 py-8" />}>
+    <Suspense fallback={<div className="mx-auto max-w-3xl px-4 py-8" />}>
       <AnchorsContent />
     </Suspense>
   );
