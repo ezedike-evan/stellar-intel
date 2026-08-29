@@ -1,4 +1,5 @@
 import { z } from 'zod';
+import { AMOUNT_PATTERN, STELLAR_PUBKEY_PATTERN } from '@/lib/patterns';
 
 // ─── Off-ramp intent payload ───────────────────────────────────────────────────
 
@@ -156,3 +157,121 @@ export const CanonicalIntentV1Schema = z.discriminatedUnion('kind', [
   RecurringIntentV1Schema,
 ]);
 export type CanonicalIntentV1 = z.infer<typeof CanonicalIntentV1Schema>;
+
+// ─── On-ramp intent payload ────────────────────────────────────────────────────
+
+/**
+ * Rails a user can fund a deposit from. Mirrors the SEP-24 deposit `type`
+ * parameter; the off-ramp equivalent is never carried on the intent because the
+ * anchor derives it from the payout `recipient`.
+ */
+export const ONRAMP_DEPOSIT_METHODS = ['bank_transfer', 'cash', 'mobile_money', 'card'] as const;
+export const OnrampDepositMethodSchema = z.enum(ONRAMP_DEPOSIT_METHODS);
+export type OnrampDepositMethod = (typeof ONRAMP_DEPOSIT_METHODS)[number];
+
+/** Stellar memo kinds an anchor may require to attribute an incoming deposit. */
+export const ONRAMP_MEMO_TYPES = ['text', 'id', 'hash'] as const;
+export const OnrampMemoTypeSchema = z.enum(ONRAMP_MEMO_TYPES);
+export type OnrampMemoType = (typeof ONRAMP_MEMO_TYPES)[number];
+
+/** Largest value a Stellar `id` memo can carry (uint64). */
+const MAX_ID_MEMO = 18_446_744_073_709_551_615n;
+
+/**
+ * The inner intent object that describes a single on-ramp (deposit) operation.
+ *
+ * Mirrors the off-ramp intent (`lib/intent/offramp.ts`) wherever the two
+ * directions genuinely agree — `type`, `sourceAsset`, `destinationAsset`,
+ * `amount`, `sender` — and diverges where a deposit is not simply a withdrawal
+ * run backwards:
+ *
+ *  - `sourceAsset` is the fiat currency being paid in and `destinationAsset`
+ *    the Stellar asset being bought. The off-ramp pair reads the other way.
+ *  - `destination` replaces the off-ramp's free-form `recipient`. A deposit
+ *    always settles into a Stellar account, so it is validated as a strkey
+ *    instead of an opaque bank-account string.
+ *  - `depositMethod` names the funding rail. Withdrawals carry no equivalent.
+ *  - `memo`/`memoType` are deposit-only: anchors that credit a pooled account
+ *    need a memo to attribute the incoming payment to this intent.
+ */
+export const OnrampIntentSchema = z
+  .object({
+    type: z.literal('onramp'),
+    /** Fiat currency paid in, e.g. `NGN`. */
+    sourceAsset: z.string().min(1, { message: 'sourceAsset is required' }),
+    /** Stellar asset bought, e.g. `USDC`. */
+    destinationAsset: z.string().min(1, { message: 'destinationAsset is required' }),
+    /** Amount of `sourceAsset` to spend, as a positive decimal string. */
+    amount: z
+      .string()
+      .regex(AMOUNT_PATTERN, { message: 'amount must be a positive decimal string' })
+      .refine((v) => parseFloat(v) > 0, { message: 'amount must be greater than zero' }),
+    /**
+     * Reference for the payer on the fiat rail (bank account, wallet handle,
+     * cash-agent id). Unlike the off-ramp `sender` this is not a Stellar
+     * account, so it stays free-form.
+     */
+    sender: z.string().min(1, { message: 'sender is required' }),
+    /** Stellar account credited when the deposit completes. */
+    destination: z.string().regex(STELLAR_PUBKEY_PATTERN, {
+      message: 'destination must be a valid Stellar public key (G…, 56 chars)',
+    }),
+    /** How the user funds the deposit. */
+    depositMethod: OnrampDepositMethodSchema,
+    /** Memo attributing the incoming payment; required by pooled-account anchors. */
+    memo: z.string().min(1, { message: 'memo must not be empty' }).optional(),
+    /** Kind of `memo`. Must be supplied together with `memo`. */
+    memoType: OnrampMemoTypeSchema.optional(),
+  })
+  .superRefine((intent, ctx) => {
+    if (intent.memo !== undefined && intent.memoType === undefined) {
+      ctx.addIssue({
+        code: 'custom',
+        path: ['memoType'],
+        message: 'memoType is required when memo is present',
+      });
+      return;
+    }
+
+    if (intent.memoType !== undefined && intent.memo === undefined) {
+      ctx.addIssue({
+        code: 'custom',
+        path: ['memo'],
+        message: 'memo is required when memoType is present',
+      });
+      return;
+    }
+
+    if (intent.memo === undefined || intent.memoType === undefined) return;
+
+    // A memo the anchor cannot encode fails at payment time, long after the
+    // intent was accepted — so reject it here, while it is still cheap.
+    if (intent.memoType === 'text' && new TextEncoder().encode(intent.memo).length > 28) {
+      ctx.addIssue({
+        code: 'custom',
+        path: ['memo'],
+        message: 'a text memo must be at most 28 bytes when UTF-8 encoded',
+      });
+    }
+
+    if (
+      intent.memoType === 'id' &&
+      (!/^\d+$/.test(intent.memo) || BigInt(intent.memo) > MAX_ID_MEMO)
+    ) {
+      ctx.addIssue({
+        code: 'custom',
+        path: ['memo'],
+        message: 'an id memo must be an unsigned 64-bit integer',
+      });
+    }
+
+    if (intent.memoType === 'hash' && !/^[0-9a-f]{64}$/.test(intent.memo)) {
+      ctx.addIssue({
+        code: 'custom',
+        path: ['memo'],
+        message: 'a hash memo must be 64 lowercase hex characters',
+      });
+    }
+  });
+
+export type OnrampIntent = z.infer<typeof OnrampIntentSchema>;
