@@ -90,12 +90,38 @@ remains the single most valuable test this repository does not have.
 | Threat model is reviewed on a cadence  | [`THREAT_MODEL.md`](THREAT_MODEL.md) § "Review cadence"    | Documented, not gated |
 | Dependencies are reviewed on every PR  | `.github/workflows/dependency-review.yml`                  | Enforced in CI        |
 | Static analysis runs on every PR       | `.github/workflows/codeql.yml`                             | Enforced in CI        |
-| No secret is committed                 | —                                                          | Not true yet          |
+| No secret is committed                 | `.github/workflows/secret-scan.yml`                        | Enforced in CI        |
 
-The em dash in the last row is the finding: `grep -rn 'gitleaks\|trufflehog'
-.github/workflows/` returns nothing. GitHub's own push protection may apply at
-the platform level, but this repository does not assert it. Tracked in
-[#1148](https://github.com/ezedike-evan/stellar-intel/issues/1148).
+Secret scanning is gitleaks against a committed [`.gitleaks.toml`](../.gitleaks.toml),
+in two jobs answering different questions. The **PR job** scans only the commits
+a change adds and fails the check, so a secret cannot land; it is fast enough to
+run on every pull request. The **scheduled job** scans every commit weekly,
+because a gate can only see forward — a repository whose history was never
+swept is not clean, it is unchecked.
+
+The config extends gitleaks' maintained rule set and adds two the defaults do
+not cover: a literal assignment to one of this repository's own server-side
+secrets (`PUBLISHER_SECRET`, `CRON_SECRET`, `ADMIN_SECRET_KEY`,
+`REVALIDATE_SECRET`), and a Stellar account secret seed (`S…` strkey). Its
+allowlists are scoped: published Stellar identifiers (`G…`, `C…`) and
+documentation placeholders are exempt everywhere, while fabricated fixture
+credentials under `tests/` are exempt only from the generic entropy rules — a
+real seed or a hard-coded `CRON_SECRET` is still a finding in a test file.
+Historical false positives are pinned by fingerprint in
+[`.gitleaksignore`](../.gitleaksignore) with the reasoning attached, rather than
+by widening a rule.
+
+Reproduce either job locally:
+
+```bash
+gitleaks git --config .gitleaks.toml     # full history
+gitleaks dir --config .gitleaks.toml     # working tree
+```
+
+This closes [#1148](https://github.com/ezedike-evan/stellar-intel/issues/1148).
+It does not replace GitHub's platform-level push protection, which acts before a
+commit reaches the remote; the two are complementary, and this one is the part a
+reader can verify from the repository.
 
 ## 3. Rate limiting
 
