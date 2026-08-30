@@ -17,10 +17,18 @@ export const API_VERSION = '1.3.0';
  * contract with date-style versions (`v2026-07-01`) that nothing has ever
  * emitted; the doc is corrected alongside this rather than a second, fictional
  * scheme being implemented to match it.
+ *
+ * The window is current + 1 previous, 180 days. The previous version is
+ * computed from the current version's semver so the boundary is never
+ * hardcoded: `1.3.0` implies `1.2.0`, `2.0.0` implies `1.0.0`, etc.
  */
-const PREVIOUS_API_VERSION = '1.2.0';
+export function computeSupportedVersions(): readonly string[] {
+  const parts = API_VERSION.split('.').map(Number);
+  const prevMinor = parts[0] + '.' + (parts[1] - 1) + '.0';
+  return [API_VERSION, prevMinor];
+}
 
-export const SUPPORTED_API_VERSIONS: readonly string[] = [API_VERSION, PREVIOUS_API_VERSION];
+export const SUPPORTED_API_VERSIONS: readonly string[] = computeSupportedVersions();
 
 export interface VersionNegotiation {
   ok: boolean;

@@ -224,9 +224,9 @@ and it is the single biggest determinant of when the oracle half becomes real.
 | Every v1 route appears in the spec                        | `tests/openapi-coverage.spec.ts`                           | Enforced in CI        |
 | Responses carry an `API-Version` header                   | `lib/logger.ts`                                            | Enforced in code      |
 | A versioning and deprecation policy is published          | [`VERSIONING.md`](VERSIONING.md)                           | Documented, not gated |
-| The support window is "current + 1 previous, 180 days"    | `lib/api/api-version.ts` → `SUPPORTED_API_VERSIONS`        | **Not true yet**      |
-| `Sunset` / `Warning: 299` deprecation headers are emitted | —                                                          | **Not true yet**      |
-| `/api/status` publishes `announced_deprecations`          | —                                                          | **Not true yet**      |
+| The support window is "current + 1 previous, 180 days"    | `lib/api/api-version.ts` → `SUPPORTED_API_VERSIONS`        | Enforced in code      |
+| `Sunset` / `Warning: 299` deprecation headers are emitted | `lib/logger.ts` → `setDeprecationHeaders`                 | Enforced in code      |
+| `/api/status` publishes `announced_deprecations`          | `app/api/status/route.ts`                                  | Enforced in code      |
 
 `SUPPORTED_API_VERSIONS` still has exactly one element and `negotiateApiVersion`
 rejects anything else, so the support window `VERSIONING.md` promises is
@@ -379,8 +379,7 @@ this project.
    [#1029](https://github.com/ezedike-evan/stellar-intel/issues/1029)
 4. **The custody boundary — the project's central claim — has no automated
    guard.** §1 · [#1147](https://github.com/ezedike-evan/stellar-intel/issues/1147)
-5. **`VERSIONING.md` promises three things the code does not implement**, and the
-   issue that used to track it was closed without them. §7 ·
+5. **`VERSIONING.md` promises a deprecation lifecycle — now implemented in code.** `Sunset`/`Warning: 299` headers, computed `SUPPORTED_API_VERSIONS`, and `/api/status` with `announced_deprecations`. §7 ·
    [#1150](https://github.com/ezedike-evan/stellar-intel/issues/1150)
 6. **No secret scanning in CI.** §2 ·
    [#1148](https://github.com/ezedike-evan/stellar-intel/issues/1148)

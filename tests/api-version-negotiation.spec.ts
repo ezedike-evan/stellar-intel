@@ -85,6 +85,46 @@ describe('version pinning through withRequestLogger (#888)', () => {
   });
 });
 
+// ─── Deprecation lifecycle (#1150) ────────────────────────────────────
+//
+// docs/VERSIONING.md promises a deprecation lifecycle: deprecated
+// versions still negotiate and responses carry Sunset + Warning: 299.
+// These tests assert the code implements the policy.
+
+const PREVIOUS_API_VERSION = SUPPORTED_API_VERSIONS[1];
+
+describe('deprecated version negotiation (#1150)', () => {
+  it('accepts the previous (deprecated) version', () => {
+    const result = negotiateApiVersion(new Headers({ 'API-Version': PREVIOUS_API_VERSION }));
+    expect(result.ok).toBe(true);
+    expect(result.requested).toBe(PREVIOUS_API_VERSION);
+  });
+});
+
+describe('deprecation headers (#1150)', () => {
+  it('stamps Sunset and Warning: 299 on responses for a deprecated version', async () => {
+    const response = await withRequestLogger(
+      request({ 'API-Version': PREVIOUS_API_VERSION }),
+      'test',
+      async () => NextResponse.json({ ok: true })
+    );
+
+    expect(response.headers.get('Sunset')).toBeTruthy();
+    expect(response.headers.get('Warning')).toBe('299 - "deprecated"');
+  });
+
+  it('stamps Sunset and Warning: 299 on responses for the current version', async () => {
+    const response = await withRequestLogger(
+      request({ 'API-Version': API_VERSION }),
+      'test',
+      async () => NextResponse.json({ ok: true })
+    );
+
+    expect(response.headers.get('Sunset')).toBeTruthy();
+    expect(response.headers.get('Warning')).toBe('299 - "deprecated"');
+  });
+});
+
 // ─── Doc/code drift guard (#874) ──────────────────────────────────────────────
 //
 // docs/VERSIONING.md's "Version support window" table claimed "current + 1
