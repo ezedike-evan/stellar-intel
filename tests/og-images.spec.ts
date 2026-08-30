@@ -16,7 +16,7 @@ describe('Route OpenGraph images (#1065)', () => {
   it('serves /anchors/[id] OG image naming the anchor for a known anchor', async () => {
     expect(detailSize).toEqual({ width: 1200, height: 630 });
     expect(detailType).toBe('image/png');
-    const res = await AnchorDetailOg({ params: Promise.resolve({ id: 'mykobo' }) });
+    const res = await AnchorDetailOg({ params: Promise.resolve({ id: 'moneygram' }) });
     expect(res).toBeDefined();
   });
 

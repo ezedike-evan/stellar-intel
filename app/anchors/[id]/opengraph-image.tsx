@@ -20,9 +20,11 @@ export default async function AnchorDetailOpengraphImage({
   const { id } = await params;
   const anchor = ANCHORS.find((item) => item.id.toLowerCase() === id.toLowerCase());
   const name = anchor ? anchor.name : id;
-  const currencies = anchor ? anchor.currencies.join(', ') : 'Stellar Corridors';
+  const corridors = anchor?.corridors?.length
+    ? anchor.corridors.map((c) => c.toUpperCase()).join(', ')
+    : 'Stellar Corridors';
   const subtitle = anchor
-    ? `Reliability score, corridor coverage (${currencies}), and live quote health.`
+    ? `Reliability score, corridor coverage (${corridors}), and live quote health.`
     : 'Public health record and reliability metrics for Stellar off-ramp anchors.';
 
   return new ImageResponse(
@@ -77,7 +79,7 @@ export default async function AnchorDetailOpengraphImage({
           STELLAR INTEL
         </div>
         <div style={{ display: 'flex', fontSize: 26, color: ACCENT }}>
-          {anchor?.domain ?? anchor?.website ?? 'Verified Anchor'}
+          {anchor?.homeDomain ?? anchor?.serviceDomain ?? 'Verified Anchor'}
         </div>
       </div>
     </div>,
