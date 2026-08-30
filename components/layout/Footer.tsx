@@ -3,7 +3,6 @@ import { sha, buildTime } from '@/lib/version';
 
 const REPO_URL = 'https://github.com/ezedike-evan/stellar-intel';
 const DISCORD_URL = 'https://discord.gg/stellar';
-      { href: '/terms', label: 'Terms' },
 
 const FOOTER_COLUMNS = [
   {
