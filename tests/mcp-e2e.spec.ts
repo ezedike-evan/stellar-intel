@@ -5,6 +5,20 @@
  *
  * Spawns the MCP server as a child process over stdio and exercises both tools
  * through a real MCP client, asserting valid responses and a clean exit.
+ *
+ * Scope (#1052): this file proves the *live* path — that a tsx subprocess boots,
+ * speaks stdio, and can reach real anchors. It is deliberately no longer the
+ * place the tool contracts are pinned. Spawning a subprocess and calling live
+ * anchors is slow and load-sensitive, so any assertion that lives only here is
+ * an assertion that gets loosened the next time CI is busy (see the
+ * RATE_UNAVAILABLE branch below, which had to accept either outcome).
+ *
+ * The contracts themselves — arguments in, structuredContent out, and the error
+ * text an agent reads — are covered deterministically with the network
+ * unplugged in tests/mcp-tools.spec.ts, and the declared tool surface in
+ * tests/mcp-tool-registry.spec.ts. Put new contract assertions there; add to
+ * this file only when the thing under test is the subprocess or the live anchor
+ * itself.
  */
 import { describe, it, expect, beforeAll, afterAll } from 'vitest';
 import path from 'node:path';
