@@ -14,5 +14,7 @@ export {
   type OfframpIntentResponse,
   type OfframpRoute,
   type AnchorHealth,
+  type AnchorHealthLedgerArtifact,
+  type AnchorHealthLedgerEntry,
   type CorridorVolumeSavings,
 } from './types.js';

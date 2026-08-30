@@ -6,6 +6,7 @@ import {
 } from './errors.js';
 import type {
   AnchorHealth,
+  AnchorHealthLedgerArtifact,
   CorridorVolumeSavings,
   OfframpIntentRequest,
   OfframpIntentResponse,
@@ -148,6 +149,21 @@ export class StellarIntelClient {
     return this.request<AnchorHealth>({
       method: 'GET',
       path: `/api/v1/anchors/${encodeURIComponent(anchorId)}/health`,
+    });
+  }
+
+  /**
+   * The nightly anchor health ledger for one date.
+   *
+   * Omit `date` for the latest. Pass a `YYYY-MM-DD` to get the ledger as it
+   * stood on that date, resolved from the git history of the committed file —
+   * so the series is readable without cloning the repository.
+   */
+  async getAnchorHealthLedger(date?: string): Promise<AnchorHealthLedgerArtifact> {
+    const query = date ? `?date=${encodeURIComponent(date)}` : '';
+    return this.request<AnchorHealthLedgerArtifact>({
+      method: 'GET',
+      path: `/api/v1/anchor-health/ledger${query}`,
     });
   }
 

@@ -638,6 +638,103 @@
           "ratesCache",
           "publisherHealth"
         ]
+      },
+      "AnchorHealthLedgerArtifact": {
+        "type": "object",
+        "properties": {
+          "version": {
+            "type": "string",
+            "description": "The YYYY-MM-DD this ledger describes, taken from its own updatedAt. Two responses with the same version carry the same ledger."
+          },
+          "requestedDate": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "description": "The date that was asked for, or null when the latest was asked for"
+          },
+          "source": {
+            "type": "string",
+            "enum": [
+              "committed",
+              "git-history"
+            ],
+            "description": "committed = the file this deployment was built with (the source of truth); git-history = a past revision of that same file"
+          },
+          "commit": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "description": "Commit the ledger was read from; null for the committed file"
+          },
+          "ledger": {
+            "type": "object",
+            "properties": {
+              "thresholdNights": {
+                "type": "number",
+                "description": "Consecutive nightly failures before an anchor is flagged degraded"
+              },
+              "updatedAt": {
+                "type": [
+                  "string",
+                  "null"
+                ],
+                "description": "ISO timestamp the ledger was written"
+              },
+              "anchors": {
+                "type": "object",
+                "additionalProperties": {
+                  "type": "object",
+                  "properties": {
+                    "consecutiveFailures": {
+                      "type": "number"
+                    },
+                    "degraded": {
+                      "type": "boolean"
+                    },
+                    "lastCheckedAt": {
+                      "type": [
+                        "string",
+                        "null"
+                      ]
+                    },
+                    "lastStatus": {
+                      "type": "string"
+                    },
+                    "lastError": {
+                      "type": [
+                        "string",
+                        "null"
+                      ]
+                    }
+                  },
+                  "required": [
+                    "consecutiveFailures",
+                    "degraded",
+                    "lastCheckedAt",
+                    "lastStatus",
+                    "lastError"
+                  ]
+                },
+                "description": "One health record per tracked anchor, keyed by anchor id"
+              }
+            },
+            "required": [
+              "thresholdNights",
+              "updatedAt",
+              "anchors"
+            ],
+            "description": "The ledger itself, verbatim from constants/anchor-health.json"
+          }
+        },
+        "required": [
+          "version",
+          "requestedDate",
+          "source",
+          "commit",
+          "ledger"
+        ]
       }
     },
     "parameters": {}
@@ -2112,6 +2209,80 @@
           },
           "500": {
             "description": "Oracle read failed",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/anchor-health/ledger": {
+      "get": {
+        "summary": "Get the anchor health ledger for a date",
+        "description": "Publishes the nightly anchor health ledger as a dated artifact. Without `date`, returns the ledger this deployment was built with. With `date` (YYYY-MM-DD), returns the ledger as it stood on that date, resolved from the git history of `constants/anchor-health.json` — so the series is fetchable without cloning the repository. The committed file remains the source of truth; nothing is mirrored server-side. A dated response is immutable and cached as such.",
+        "tags": [
+          "Anchors"
+        ],
+        "parameters": [
+          {
+            "schema": {
+              "type": "string",
+              "pattern": "^\\d{4}-\\d{2}-\\d{2}$",
+              "description": "Ledger date to retrieve, YYYY-MM-DD. Omit for the latest."
+            },
+            "required": false,
+            "description": "Ledger date to retrieve, YYYY-MM-DD. Omit for the latest.",
+            "name": "date",
+            "in": "query"
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "The anchor health ledger for the requested date",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/AnchorHealthLedgerArtifact"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Malformed date",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiError"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "No ledger exists on or before the requested date",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiError"
+                }
+              }
+            }
+          },
+          "429": {
+            "description": "Rate limited",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiError"
+                }
+              }
+            }
+          },
+          "502": {
+            "description": "The ledger history could not be read",
             "content": {
               "application/json": {
                 "schema": {
