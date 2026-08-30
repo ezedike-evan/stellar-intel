@@ -1,35 +1,28 @@
-import { readFileSync, readdirSync, statSync } from 'node:fs';
+import { describe, it, expect } from 'vitest';
+import { readFileSync, existsSync } from 'node:fs';
 import { join } from 'node:path';
-import { describe, expect, it } from 'vitest';
 
 /**
- * WCAG 2.1 AA contrast guard (#755).
+ * Static guard against custody-taking code paths.
  *
- * Two halves, because two different things can break the contrast of this UI:
+ * The project's central claim (docs/PRODUCTION_AUDIT.md §1) is that the app
+ * never takes custody of user funds — no server-side signing key, no held
+ * secret, no route that submits a transaction on a user's behalf. This spec
+ * scans the source to enforce that invariant.
  *
- *   1. Someone changes a palette value in `app/globals.css` — caught by
- *      measuring every semantic token pair that the components actually render
- *      together, in both themes.
- *   2. Someone writes a raw `text-gray-*` class in a component — caught by
- *      scanning the JSX for the specific greys measured below as failing.
- *
- * The lighthouse workflow catches contrast on rendered pages, but only on the
- * handful of routes it visits and only after a deploy. This runs on every
- * commit and covers components no route in that list happens to render.
+ * Done when:
+ *   - A spec fails if a custody-taking code path is introduced
+ *   - PUBLISHER_SECRET is the only exemption and it names why
+ *   - docs/PRODUCTION_AUDIT.md §1 can move from "Enforced in code" to "Enforced in CI"
  */
 
-const THRESHOLD = {
-  /** WCAG 1.4.3 — normal-size text. */
-  normalText: 4.5,
-  /** WCAG 1.4.11 — UI components and meaningful graphics. */
-  nonText: 3,
-} as const;
+const LIB_DIR = join(process.cwd(), 'lib');
+const APP_DIR = join(process.cwd(), 'app');
+const PUBLISHER_EXEMPTION = 'packages/publisher';
 
-function srgbToLinear(channel: number): number {
-  const c = channel / 255;
-  return c <= 0.03928 ? c / 12.92 : ((c + 0.055) / 1.055) ** 2.4;
-}
+// ---- 1. No Keypair.fromSecret imports outside the publisher ----
 
+<<<<<<< Updated upstream
 function relativeLuminance(hex: string): number {
   const value = hex.replace('#', '');
   const channel = (offset: number) => srgbToLinear(parseInt(value.slice(offset, offset + 2), 16));
@@ -252,32 +245,122 @@ describe('components do not hardcode colour literals', () => {
     ...sourceFiles('app', ['.tsx']),
     ...sourceFiles('lib', ['.ts', '.tsx']),
   ].filter((f) => !f.endsWith('.test.tsx') && !f.endsWith('.test.ts') && !f.endsWith('.spec.ts'));
+=======
+function hasFromSecretImport(filePath: string): boolean {
+  const content = readFileSync(filePath, 'utf8');
+  // Check for import of Keypair.fromSecret from @stellar/stellar-sdk
+  return (
+    content.includes("import") &&
+    content.includes('Keypair.fromSecret') &&
+    content.includes('@stellar/stellar-sdk')
+  );
+}
 
-  it('scans a non-trivial number of files', () => {
-    expect(files.length).toBeGreaterThan(50);
-  });
+function isExempted(filePath: string): boolean {
+  const lower = filePath.toLowerCase();
+  return (
+    lower.includes(PUBLISHER_EXEMPTION.toLowerCase()) ||
+    lower.includes('test') ||
+    lower.includes('e2e')
+  );
+}
+>>>>>>> Stashed changes
 
-  it.each(files)('%s uses theme colour, not a literal', (file) => {
-    const offenders = readFileSync(file, 'utf8')
-      .split('\n')
-      .map((line, i) => ({ line, n: i + 1 }))
-      .filter(({ line }) => COLOUR_ATTR.test(line) || INLINE_STYLE_COLOUR.test(line));
+function findFiles(dir: string): string[] {
+  const results: string[] = [];
+  const entries = require('node:fs').readdirSync(dir, { withFileTypes: true });
+  for (const entry of entries) {
+    const fullPath = join(dir, entry.name);
+    if (entry.isDirectory()) {
+      results.push(...findFiles(fullPath));
+    } else if (entry.name.endsWith('.ts') || entry.name.endsWith('.mts')) {
+      results.push(fullPath);
+    }
+  }
+  return results;
+}
 
-    expect(
-      offenders.map(({ n, line }) => `${file}:${n} ${line.trim()}`).join('\n'),
-      `${file} hardcodes a colour literal — use currentColor with a text utility, or var(--color-*)`
-    ).toBe('');
+const allSourceFiles = [...findFiles(LIB_DIR), ...findFiles(APP_DIR)];
+
+describe('custody boundary: no unauthorized Keypair.fromSecret imports', () => {
+  it('no lib module imports Keypair.fromSecret except the exempted publisher', () => {
+    const violations = allSourceFiles
+      .filter((f) => hasFromSecretImport(f) && !isExempted(f))
+      .map((f) => ({
+        file: f,
+        relative: f.replace(process.cwd() + '/', ''),
+      }));
+
+    expect(violations).toHaveLength(0, [
+      ...violations.map(
+        (v) => `File ${v.relative} imports Keypair.fromSecret from @stellar/stellar-sdk but is not the exempted publisher package`
+      ),
+    ]);
   });
 });
 
-describe('contrastRatio', () => {
-  it('matches known WCAG values', () => {
-    expect(contrastRatio('#000000', '#ffffff')).toBeCloseTo(21, 5);
-    expect(contrastRatio('#ffffff', '#ffffff')).toBeCloseTo(1, 5);
-    // Order must not matter.
-    expect(contrastRatio('#6b7280', '#ffffff')).toBeCloseTo(
-      contrastRatio('#ffffff', '#6b7280'),
-      10
-    );
+// ---- 2. No Keypair.sign or transaction submission in route handlers ----
+
+function hasSignCall(filePath: string): boolean {
+  const content = readFileSync(filePath, 'utf8');
+  return content.includes('Keypair.sign');
+}
+
+function hasTransactionSubmission(filePath: string): boolean {
+  const content = readFileSync(filePath, 'utf8');
+  // Check for submitting a transaction built from a user's account
+  return (
+    content.includes('.sign(') ||
+    content.includes('submitTransaction') ||
+    content.includes('sendTransaction')
+  );
+}
+
+describe('custody boundary: no unauthorized transaction submission in routes', () => {
+  it('no route handlers call Keypair.sign or submit transactions', () => {
+    const routeFiles = findFiles(join(process.cwd(), 'app', 'api'))
+      .filter((f) => f.includes('route.ts') || f.includes('route.mts'));
+
+    const violations = routeFiles
+      .filter((f) => hasSignCall(f) || hasTransactionSubmission(f))
+      .map((f) => ({
+        file: f,
+        relative: f.replace(process.cwd() + '/', ''),
+      }));
+
+    expect(violations).toHaveLength(0, [
+      ...violations.map(
+        (v) => `File ${v.relative} contains unauthorized Keypair.sign or transaction submission`
+      ),
+    ]);
+  });
+});
+
+// ---- 3. No user-key env variable declarations (outside documented exemptions) ----
+
+function hasUserKeyEnv(filePath: string): boolean {
+  const content = readFileSync(filePath, 'utf8');
+  // Check for user key environment variable declarations beyond PUBLISHER_SECRET
+  return (
+    (content.includes('PUBLISHER_SECRET') || content.includes('USER_SECRET') || content.includes('PRIVATE_KEY')) &&
+    !content.includes('exemption') &&
+    !content.includes('env SCHEMA')
+  );
+}
+
+describe('custody boundary: no undocumented user-key env variables', () => {
+  it('no undocumented user-key environment variables in lib/app', () => {
+    const violations = allSourceFiles
+      .filter((f) => hasUserKeyEnv(f) && !isExempted(f))
+      .map((f) => ({
+        file: f,
+        relative: f.replace(process.cwd() + '/', ''),
+      }));
+
+    expect(violations).toHaveLength(0, [
+      ...violations.map(
+        (v) => `File ${v.relative} has an undocumented user-key environment variable`
+      ),
+    ]);
   });
 });

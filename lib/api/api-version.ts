@@ -18,7 +18,9 @@ export const API_VERSION = '1.3.0';
  * emitted; the doc is corrected alongside this rather than a second, fictional
  * scheme being implemented to match it.
  */
-export const SUPPORTED_API_VERSIONS: readonly string[] = [API_VERSION];
+const PREVIOUS_API_VERSION = '1.2.0';
+
+export const SUPPORTED_API_VERSIONS: readonly string[] = [API_VERSION, PREVIOUS_API_VERSION];
 
 export interface VersionNegotiation {
   ok: boolean;

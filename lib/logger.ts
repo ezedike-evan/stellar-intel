@@ -4,6 +4,11 @@ import { NextResponse } from 'next/server';
 import type { NextRequest } from 'next/server';
 import { API_VERSION, negotiateApiVersion, SUPPORTED_API_VERSIONS } from './api/api-version';
 
+// Deprecation header constants
+const SUNSET_HEADER = 'Sunset';
+const WARNING_299_HEADER = 'Warning';
+const WARNING_299_VALUE = '299 - "deprecated"';
+
 type LoggerContext = { correlationId: string };
 
 /**
@@ -17,6 +22,14 @@ function setApiVersionHeader(response: NextResponse): void {
   if (!response.headers.has('API-Version')) {
     response.headers.set('API-Version', API_VERSION);
   }
+}
+
+/** Emit Sunset and Warning: 299 deprecation headers on every response. */
+function setDeprecationHeaders(response: NextResponse): void {
+  // Emit Sunset header indicating this version is deprecated
+  response.headers.set(SUNSET_HEADER, 'exprires=180 days');
+  // Emit Warning: 299 per the deprecation policy
+  response.headers.set(WARNING_299_HEADER, WARNING_299_VALUE);
 }
 
 const asyncLocalStorage = new AsyncLocalStorage<LoggerContext>();
@@ -95,6 +108,10 @@ export async function withRequestLogger(
       // files, whereas API-Version previously reached three of them even though
       // the OpenAPI spec documents it as universal (#914).
       setApiVersionHeader(response);
+      // Stamped here rather than per route: this wrapper covers 23 of 29 route
+      // files, whereas API-Version previously reached three of them even though
+      // the OpenAPI spec documents it as universal (#914).
+      setDeprecationHeaders(response);
       logger.info({ event: 'request.end', status: response.status });
       return response;
     } catch (err) {
@@ -128,6 +145,10 @@ export async function withLoggerContext(
       // files, whereas API-Version previously reached three of them even though
       // the OpenAPI spec documents it as universal (#914).
       setApiVersionHeader(response);
+      // Stamped here rather than per route: this wrapper covers 23 of 29 route
+      // files, whereas API-Version previously reached three of them even though
+      // the OpenAPI spec documents it as universal (#914).
+      setDeprecationHeaders(response);
       logger.info({ event: 'request.end', status: response.status });
       return response;
     } catch (err) {

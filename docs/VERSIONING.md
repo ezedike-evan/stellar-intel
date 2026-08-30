@@ -104,7 +104,7 @@ Expedited removals are announced on all channels with the reason.
 
 | Surface                          | Supported versions       | Window                                            |
 | -------------------------------- | ------------------------ | ------------------------------------------------- |
-| HTTP REST API                    | Current only¹            | Intended: current + 1 previous, 180 days          |
+| HTTP REST API                    | Current + 1 previous¹            | Intended: current + 1 previous, 180 days          |
 | Soroban oracle contract          | Current deployed address | Until a migration is announced and executed       |
 | MCP tools                        | Latest npm release only  | Semver within `@stellarintel/mcp`                 |
 | TypeScript SDK                   | Latest npm release only  | Semver within `@stellarintel/sdk`                 |
