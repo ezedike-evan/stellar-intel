@@ -11,12 +11,16 @@ import path from 'node:path';
 import { Client } from '@modelcontextprotocol/sdk/client/index.js';
 import { StdioClientTransport } from '@modelcontextprotocol/sdk/client/stdio.js';
 
+import { pathToFileURL } from 'node:url';
+
 const SERVER = path.resolve(__dirname, '../scripts/mcp/server.ts');
 
-// Spawning a tsx subprocess that compiles TS + loads the Stellar SDK can take a
-// few seconds, especially when the whole suite runs in parallel. Give this
-// file generous timeouts so it is not flaky under load.
-const STARTUP_TIMEOUT = 60_000;
+  // Spawning a tsx subprocess that compiles TS + loads the Stellar SDK can take a
+  // few seconds (or up to 30s+ on cold-starts under full test suite CPU load).
+  // The SDK is now preloaded in the server's initialize phase to absorb this penalty
+  // during setup, preventing the first tool execution from hitting the strict 60s timeout.
+  // Give this setup phase a generous timeout so it is not flaky under load.
+  const STARTUP_TIMEOUT = 60_000;
 
 // Resolve a tsx loader so the TypeScript server can run as a subprocess.
 const tsxBin = path.resolve(
@@ -30,9 +34,10 @@ describe('MCP server round-trip via subprocess (#137)', () => {
   let client: Client;
 
   beforeAll(async () => {
+    const subprocessSetup = pathToFileURL(path.resolve(__dirname, 'msw/subprocess-setup.ts')).toString();
     transport = new StdioClientTransport({
       command: tsxBin,
-      args: [SERVER],
+      args: ['--import', subprocessSetup, SERVER],
       // Bound the live tiered rate check's worst case (lib/stellar/server-rates.ts
       // defaults to 8s/tier with a retry — up to ~48s across SEP-38/24/6). A
       // real subprocess round-trip doesn't need that much grace to prove the
@@ -43,6 +48,7 @@ describe('MCP server round-trip via subprocess (#137)', () => {
         RATES_SEP38_TIMEOUT_MS: '3000',
         RATES_SEP24_INFO_TIMEOUT_MS: '3000',
         RATES_TOML_TIMEOUT_MS: '3000',
+        DATABASE_URL: '', // Prevent slow remote DB queries from fetchReputationScores
       },
     });
     client = new Client({ name: 'e2e-test-client', version: '1.0.0' });
@@ -89,10 +95,15 @@ describe('MCP server round-trip via subprocess (#137)', () => {
     expect(structured.quoteId).toMatch(/^[0-9a-f]{64}$/);
     expect(Number(structured.netReceived)).toBeGreaterThan(0);
     expect(new Date(structured.expiresAt).getTime()).toBeGreaterThan(Date.now());
-    // A real network round-trip against a live anchor (even with the tighter
-    // per-tier timeouts set above) can occasionally run long under heavy
-    // parallel test load — give it generous headroom rather than flake.
-  }, 90_000);
+    // Previously, this test was flaky because it hit live anchor endpoints
+    // (SEP-1, SEP-38, SEP-6/24) over the real network from a subprocess.
+    // When the full test suite ran in parallel, CPU and network contention
+    // caused these live requests to frequently exceed their tight bounds,
+    // resulting in a RATE_UNAVAILABLE error or a test timeout.
+    // We've removed this network dependency by passing an MSW setup script
+    // (`--import msw/subprocess-setup.ts`) to the subprocess, guaranteeing
+    // deterministic, fast responses.
+  }, 30_000);
 
   it('intel.offramp.prepare returns an unsigned envelope + unsigned tx', async () => {
     const result = await client.callTool({
