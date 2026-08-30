@@ -281,3 +281,99 @@ describe('contrastRatio', () => {
     );
   });
 });
+
+// ---- Custody boundary guard (#1147) ----
+//
+// The project's central claim (docs/PRODUCTION_AUDIT.md §1) is that the app
+// never takes custody of user funds — no server-side signing key, no held
+// secret, no route that submits a transaction on a user's behalf. This
+// static source scan enforces that invariant.
+
+const PUBLISHER_EXEMPTION = 'packages/publisher';
+
+function hasFromSecretImport(filePath: string): boolean {
+  const content = readFileSync(filePath, 'utf8');
+  return (
+    content.includes('import') &&
+    content.includes('Keypair.fromSecret') &&
+    content.includes('@stellar/stellar-sdk')
+  );
+}
+
+function isExempted(filePath: string): boolean {
+  const lower = filePath.toLowerCase();
+  return (
+    lower.includes(PUBLISHER_EXEMPTION.toLowerCase()) ||
+    lower.includes('test') ||
+    lower.includes('e2e') ||
+    lower.includes('.spec.') ||
+    lower.includes('.test.')
+  );
+}
+
+function findSourceFiles(dir: string, exts: string[] = ['.ts', '.tsx', '.mts']): string[] {
+  const out: string[] = [];
+  for (const entry of readdirSync(dir)) {
+    if (entry === 'node_modules' || entry === '.next' || entry === '__tests__') continue;
+    const path = join(dir, entry);
+    if (statSync(path).isDirectory()) out.push(...findSourceFiles(path, exts));
+    else if (exts.some((ext) => entry.endsWith(ext))) out.push(path);
+  }
+  return out;
+}
+
+describe('custody boundary: no unauthorized custody-taking code paths', () => {
+  const libFiles = findSourceFiles('lib');
+  const appFiles = findSourceFiles('app');
+  const allSourceFiles = [...libFiles, ...appFiles];
+
+  it('no lib/app module imports Keypair.fromSecret except exempted publisher', () => {
+    const violations = allSourceFiles
+      .filter((f) => hasFromSecretImport(f) && !isExempted(f))
+      .map((f) => f.replace(process.cwd() + '/', ''));
+
+    expect(violations, [
+      ...violations.map(
+        (v) => `File ${v} imports Keypair.fromSecret from @stellar/stellar-sdk but is not the exempted publisher package`
+      ),
+    ]).toHaveLength(0);
+  });
+
+  it('no route handlers call Keypair.sign or submit transactions from user accounts', () => {
+    const routeFiles = findSourceFiles(join(process.cwd(), 'app', 'api'))
+      .filter((f) => f.includes('route.ts') || f.includes('route.mts'));
+
+    const signViolations = routeFiles
+      .filter((f) => {
+        const content = readFileSync(f, 'utf8');
+        return content.includes('Keypair.sign') || content.includes('.sign(');
+      })
+      .map((f) => f.replace(process.cwd() + '/', ''));
+
+    expect(signViolations, [
+      ...signViolations.map(
+        (v) => `File ${v} contains unauthorized Keypair.sign or transaction signing`
+      ),
+    ]).toHaveLength(0);
+  });
+
+  it('no undocumented user-key environment variables in lib/app', () => {
+    const envViolations = allSourceFiles
+      .filter((f) => {
+        const content = readFileSync(f, 'utf8');
+        // Check for user key env vars beyond the documented PUBLISHER_SECRET
+        return (
+          (content.includes('USER_SECRET') || content.includes('PRIVATE_KEY') || content.includes('SECRET_KEY')) &&
+          !content.includes('PUBLISHER_SECRET') &&
+          !isExempted(f)
+        );
+      })
+      .map((f) => f.replace(process.cwd() + '/', ''));
+
+    expect(envViolations, [
+      ...envViolations.map(
+        (v) => `File ${v} has an undocumented user-key environment variable`
+      ),
+    ]).toHaveLength(0);
+  });
+});
