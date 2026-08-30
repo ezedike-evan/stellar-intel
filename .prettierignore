@@ -11,3 +11,4 @@ contracts/**/test_snapshots/
 # and fail the release gate before it checked anything real.
 contracts/**/target/
 crates/**/target/
+examples/**/target/
