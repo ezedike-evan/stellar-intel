@@ -133,7 +133,7 @@ describe('createOnRampHop', () => {
       hopId: 'moneygram-on-ramp',
       input: NGN_INPUT,
       output: { asset: 'stellar:USDC:GISSUER', amount: '99.6666667' },
-      details: {},
+      details: { anchorId: 'moneygram' },
     };
 
     const result = await hop.execute(step, {});
@@ -162,12 +162,35 @@ describe('createOnRampHop', () => {
       hopId: 'moneygram-on-ramp',
       input: NGN_INPUT,
       output: { asset: 'stellar:USDC:GISSUER', amount: '99.6666667' },
-      details: {},
+      details: { anchorId: 'moneygram' },
     };
 
     const result = await hop.execute(step, {});
     expect(result.ok).toBe(false);
     if (result.ok) return;
     expect(result.error).toBe('deposit_initiation_failed');
+  });
+
+  it('fails execution when the step was not planned by this connector', async () => {
+    const hop = createOnRampHop({
+      anchorId: 'moneygram',
+      account: 'GABCDEFGHIJKLMNOPQRSTUVWXYZ',
+      jwt: 'test-jwt',
+    });
+
+    const step: HopStep = {
+      hopType: 'on-ramp',
+      hopId: 'moneygram-on-ramp',
+      input: NGN_INPUT,
+      output: { asset: 'stellar:USDC:GISSUER', amount: '99.6666667' },
+      details: {}, // no anchorId — as if planned by a different anchor's instance, or not planned at all
+    };
+
+    const result = await hop.execute(step, {});
+    expect(result.ok).toBe(false);
+    if (result.ok) return;
+    expect(result.error).toBe('missing_planned_anchor');
+    expect(mockGetResolvedAnchorById).not.toHaveBeenCalled();
+    expect(mockInitiateDeposit).not.toHaveBeenCalled();
   });
 });
