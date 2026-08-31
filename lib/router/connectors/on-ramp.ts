@@ -111,6 +111,22 @@ export function createOnRampHop(params: OnRampHopParams): Hop {
     },
 
     async execute(step: HopStep): Promise<HopExecutionResult> {
+      // Mirrors the same guard swap-soroswap.ts and yield-blend.ts apply
+      // before executing: refuse a step this connector instance did not plan,
+      // rather than silently initiating a deposit against the wrong anchor.
+      // A generic "some connector planned this" check isn't enough here,
+      // since createOnRampHop is instantiated per anchor — the check has to
+      // confirm it was *this* anchor's instance.
+      if (step.details['anchorId'] !== params.anchorId) {
+        return {
+          ok: false,
+          hopId,
+          error: 'missing_planned_anchor',
+          details:
+            'This step was not planned by this connector (anchorId in step.details does not match)',
+        };
+      }
+
       let anchor;
       try {
         anchor = await getResolvedAnchorById(params.anchorId);

@@ -47,6 +47,10 @@ const LEDGER_PATH = new URL('constants/anchor-health.json', ROOT);
  * @typedef {Object} AnchorRef
  * @property {string} id
  * @property {string} domain
+ * @property {boolean} requiresSep24 Whether `seps` in constants/anchors.ts lists
+ *   'sep24' — only anchors that actually register SEP-24 are expected to
+ *   advertise TRANSFER_SERVER_SEP0024 (#1121: cowrie is SEP-6/SEP-10-only and
+ *   was flagged DEGRADED for lacking a rail it never claimed).
  * @property {string} [assetCode] Registered asset code (e.g. "USDC").
  * @property {string} [assetIssuer] Canonical issuer literal, when written inline.
  * @property {string} [assetIssuerRef] Identifier the source assigns to assetIssuer
@@ -124,8 +128,11 @@ export function parseAnchors(source) {
     const domain = service || home;
     if (!domain) continue;
 
+    const sepsList = block.match(/seps:\s*\[([^\]]*)\]/)?.[1] ?? '';
+    const requiresSep24 = /['"]sep24['"]/.test(sepsList);
+
     /** @type {AnchorRef} */
-    const ref = { id, domain };
+    const ref = { id, domain, requiresSep24 };
     const assetCode = block.match(/assetCode:\s*['"]([^'"]+)['"]/)?.[1];
     if (assetCode) ref.assetCode = assetCode;
 
@@ -254,13 +261,17 @@ export function applyProbes(prevLedger, probesById, { threshold, now }) {
 }
 
 /**
- * Probe a single anchor domain's stellar.toml. A 200 response that advertises
- * SEP-24 (`TRANSFER_SERVER_SEP0024`) is a success; anything else is a failure.
+ * Probe a single anchor domain's stellar.toml. A 200 response is a success;
+ * when `requiresSep24` is set, a response that does not also advertise SEP-24
+ * (`TRANSFER_SERVER_SEP0024`) is a failure too — but only then. An anchor that
+ * never registered SEP-24 (e.g. a SEP-6-only anchor) is not missing anything
+ * by not advertising it (#1121).
  *
  * @param {string} domain
+ * @param {boolean} requiresSep24
  * @returns {Promise<ProbeResult>}
  */
-async function probeDomain(domain) {
+export async function probeDomain(domain, requiresSep24) {
   // Validate the host before it reaches fetch: this rejects a malformed registry
   // entry and constrains the file-derived value to a known-safe URL shape.
   if (!HOSTNAME_RE.test(domain)) {
@@ -278,7 +289,7 @@ async function probeDomain(domain) {
     if (!res.ok) return { ok: false, error: `HTTP ${res.status}`, currencies: [] };
     const toml = await res.text();
     const currencies = parseCurrencies(toml);
-    if (!/^\s*TRANSFER_SERVER_SEP0024\s*=/im.test(toml)) {
+    if (requiresSep24 && !/^\s*TRANSFER_SERVER_SEP0024\s*=/im.test(toml)) {
       return { ok: false, error: 'missing TRANSFER_SERVER_SEP0024 (SEP-24)', currencies };
     }
     return { ok: true, error: null, currencies };
@@ -350,7 +361,10 @@ async function main() {
   const now = new Date().toISOString();
 
   // Probe in parallel, then reassemble in source order for deterministic diffs.
-  const entries = anchors.map(async ({ id, domain }) => [id, await probeDomain(domain)]);
+  const entries = anchors.map(async ({ id, domain, requiresSep24 }) => [
+    id,
+    await probeDomain(domain, requiresSep24),
+  ]);
   const probesById = Object.fromEntries(await Promise.all(entries));
   const ledger = applyProbes(prevLedger, probesById, { threshold, now });
 

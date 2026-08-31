@@ -1,0 +1,11 @@
+{
+  "_comment": "Reachability capture (#1095) — not a deposit capture, because the anchor's own declared SEP-24/SEP-6 service domain does not resolve. Captured by hand the same way tests/fixtures/sep38/capability-capture.json was.",
+  "capturedAt": "2026-08-30T00:45:00.000Z",
+  "anchorId": "mykobo",
+  "homeDomain": "mykobo.co",
+  "registeredAssetCode": "EURC",
+  "transferServerSep0024": "https://stellar.mykobo.co/sep24",
+  "reachable": false,
+  "supportsDeposit": null,
+  "reason": "stellar.mykobo.co — the service domain mykobo's own home-domain stellar.toml declares as TRANSFER_SERVER_SEP0024 — does not resolve in DNS at all (curl: 'Could not resolve host'; confirmed separately in #1121, where this is the same outage that keeps this anchor DEGRADED in constants/anchor-health.json). Deposit support cannot be determined while the anchor is unreachable; this is not evidence deposit is unsupported, only that it cannot be checked right now."
+}

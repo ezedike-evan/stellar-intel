@@ -18,18 +18,20 @@ in-repo dev server at
 (see [`docs/MCP.md`](https://github.com/ezedike-evan/stellar-intel/blob/main/docs/MCP.md))
 share the exact same logic:
 
-- `intel.offramp.quote` — live net-received quote for a corridor + amount.
-  The rate is sourced from the routed anchor's own current price (SEP-38
-  firm quote, falling back to SEP-24/SEP-6 fee-adjusted live FX), not a
-  static table — it can return `RATE_UNAVAILABLE` if the anchor can't
-  currently be quoted.
-- `intel.offramp.prepare` — unsigned intent envelope + unsigned Stellar
-  transaction for agent signing.
-- `intel.execute` — carries a prepared, agent-signed intent through to
-  execution. Verifies the signed transaction still matches the intent it was
-  prepared for, then submits it to Horizon; Stellar Intel never signs
-  anything — the calling agent's own wallet signs the intent hash and the
-  transaction before calling this tool.
+- `intel.offramp.quote` (`readOnlyHint`) — live net-received quote for a
+  corridor + amount. The rate is sourced from the routed anchor's own current
+  price (SEP-38 firm quote, falling back to SEP-24/SEP-6 fee-adjusted live
+  FX), not a static table — it can return `RATE_UNAVAILABLE` if the anchor
+  can't currently be quoted.
+- `intel.offramp.prepare` (`readOnlyHint`) — unsigned intent envelope +
+  unsigned Stellar transaction for agent signing. Read-only: nothing is
+  submitted on-chain until `intel.execute` is called.
+- `intel.execute` (`destructiveHint`, `idempotentHint: false`) — carries a
+  prepared, agent-signed intent through to execution. Verifies the signed
+  transaction still matches the intent it was prepared for, then submits it
+  to Horizon; Stellar Intel never signs anything — the calling agent's own
+  wallet signs the intent hash and the transaction before calling this tool.
+  It is the only tool in this server marked destructive in `tools/list`.
 
 ### Build
 

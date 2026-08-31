@@ -1,3 +1,4 @@
+import type { Metadata } from 'next';
 import Link from 'next/link';
 import { Hero } from '@/components/landing/Hero';
 import { AnchorRegistry } from '@/components/landing/AnchorRegistry';
@@ -9,6 +10,36 @@ import { LandingSection } from '@/components/landing/LandingSection';
 import { registryStats } from '@/constants';
 
 const SITE_URL = process.env.NEXT_PUBLIC_SITE_URL ?? 'https://stellar-intel.vercel.app';
+
+// Distinct from app/layout.tsx's site-wide default (#1056) — this page, plus
+// /offramp, /anchors, and /history, previously all inherited that one title.
+const TITLE = 'Stellar Intel — off-ramp anchor health record';
+const DESCRIPTION =
+  'Live health and reputation records for every registered Stellar off-ramp anchor — probed every five minutes and scored on fill rate, slippage, and settlement time.';
+
+export const metadata: Metadata = {
+  title: TITLE,
+  description: DESCRIPTION,
+  openGraph: {
+    type: 'website',
+    title: TITLE,
+    description: DESCRIPTION,
+    url: SITE_URL,
+    images: [
+      {
+        url: new URL('/opengraph-image', SITE_URL).toString(),
+        width: 1200,
+        height: 630,
+        alt: TITLE,
+      },
+    ],
+  },
+  twitter: {
+    card: 'summary_large_image',
+    title: TITLE,
+    description: DESCRIPTION,
+  },
+};
 
 const STRUCTURED_DATA = {
   '@context': 'https://schema.org',

@@ -1,0 +1,21 @@
+{
+  "_comment": "Live SEP-24 GET /info deposit capture (#1095), captured by hand against the anchor's own advertised transfer server the same way tests/fixtures/sep38/capability-capture.json was. Note: the anchor's declared corridor is usdc-zar, but this deposit map (like its SEP-38 capability, tests/fixtures/sep38/capability-capture.json) offers USDC, not ZAR — the same pre-existing corridor-vs-capability mismatch already flagged in constants/anchors.ts.",
+  "capturedAt": "2026-08-30T00:45:00.000Z",
+  "anchorId": "zeam",
+  "homeDomain": "zeam.money",
+  "registeredAssetCode": "USDC",
+  "transferServerSep0024": "https://anchor.zeam.money/sep24",
+  "reachable": true,
+  "supportsDeposit": true,
+  "info": {
+    "deposit": {
+      "USDC": {
+        "enabled": true,
+        "min_amount": 1,
+        "max_amount": 10000,
+        "fee_fixed": 1,
+        "fee_percent": 0.5
+      }
+    }
+  }
+}

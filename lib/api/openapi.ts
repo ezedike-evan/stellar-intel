@@ -1043,6 +1043,91 @@ registry.registerPath({
   },
 });
 
+const AnchorHealthLedgerArtifactSchema = registry.register(
+  'AnchorHealthLedgerArtifact',
+  z.object({
+    version: z
+      .string()
+      .describe(
+        'The YYYY-MM-DD this ledger describes, taken from its own updatedAt. Two responses with the same version carry the same ledger.'
+      ),
+    requestedDate: z
+      .string()
+      .nullable()
+      .describe('The date that was asked for, or null when the latest was asked for'),
+    source: z
+      .enum(['committed', 'git-history'])
+      .describe(
+        'committed = the file this deployment was built with (the source of truth); git-history = a past revision of that same file'
+      ),
+    commit: z
+      .string()
+      .nullable()
+      .describe('Commit the ledger was read from; null for the committed file'),
+    ledger: z
+      .object({
+        thresholdNights: z
+          .number()
+          .describe('Consecutive nightly failures before an anchor is flagged degraded'),
+        updatedAt: z.string().nullable().describe('ISO timestamp the ledger was written'),
+        anchors: z
+          .record(
+            z.string(),
+            z.object({
+              consecutiveFailures: z.number(),
+              degraded: z.boolean(),
+              lastCheckedAt: z.string().nullable(),
+              lastStatus: z.string(),
+              lastError: z.string().nullable(),
+            })
+          )
+          .describe('One health record per tracked anchor, keyed by anchor id'),
+      })
+      .describe('The ledger itself, verbatim from constants/anchor-health.json'),
+  })
+);
+
+registry.registerPath({
+  method: 'get',
+  path: '/api/v1/anchor-health/ledger',
+  summary: 'Get the anchor health ledger for a date',
+  description:
+    'Publishes the nightly anchor health ledger as a dated artifact. Without `date`, returns the ' +
+    'ledger this deployment was built with. With `date` (YYYY-MM-DD), returns the ledger as it ' +
+    'stood on that date, resolved from the git history of `constants/anchor-health.json` — so the ' +
+    'series is fetchable without cloning the repository. The committed file remains the source of ' +
+    'truth; nothing is mirrored server-side. A dated response is immutable and cached as such.',
+  tags: ['Anchors'],
+  request: {
+    query: z.object({
+      date: z
+        .string()
+        .regex(/^\d{4}-\d{2}-\d{2}$/)
+        .optional()
+        .describe('Ledger date to retrieve, YYYY-MM-DD. Omit for the latest.'),
+    }),
+  },
+  responses: {
+    200: {
+      description: 'The anchor health ledger for the requested date',
+      content: { 'application/json': { schema: AnchorHealthLedgerArtifactSchema } },
+    },
+    400: {
+      description: 'Malformed date',
+      content: { 'application/json': { schema: ApiErrorSchema } },
+    },
+    404: {
+      description: 'No ledger exists on or before the requested date',
+      content: { 'application/json': { schema: ApiErrorSchema } },
+    },
+    429: RATE_LIMITED_429,
+    502: {
+      description: 'The ledger history could not be read',
+      content: { 'application/json': { schema: ApiErrorSchema } },
+    },
+  },
+});
+
 registry.registerPath({
   method: 'get',
   path: '/api/reputation/reconcile-volume-savings',

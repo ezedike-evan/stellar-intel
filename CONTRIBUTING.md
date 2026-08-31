@@ -27,6 +27,36 @@ See [README.md](README.md) for full setup instructions and environment variable 
 
 ---
 
+## Issue Assignment
+
+Anyone can pick up an issue labelled `help-wanted` or `good-first-issue`
+without asking first — comment that you're starting it and open a PR when
+it's ready. For anything else, ask to be assigned before you start, so two
+people don't end up duplicating the same work.
+
+### How to ask
+
+Comment on the issue and say what you plan to do. A request that includes a
+short plan — the approach you'll take, which files it touches, how you'll
+verify it — carries more weight than a bare "can I take this?" and gets
+assigned faster, since it shows the issue is understood rather than just
+claimed.
+
+A maintainer assigns the issue to you once your comment makes it clear you
+understand the scope. If nobody responds within a few days, it's fine to
+open the PR directly and reference the issue — a working PR is itself a form
+of claim.
+
+### How long an assignment holds
+
+An assignment is released after **14 days** of inactivity (no commits, no
+linked PR, no update comment). If you're still working on it but need more
+time, a comment saying so before the window closes keeps it yours. Once
+released, the issue reopens to anyone, including you if you want to pick it
+back up.
+
+---
+
 ## Workflow
 
 1. Fork the repository and create a branch from `main`.

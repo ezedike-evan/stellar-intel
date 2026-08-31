@@ -173,22 +173,24 @@ const EXEMPT: Array<{ file: string; reason: string }> = [
   // background. Not "we'll fix it later".
 ];
 
-function tsxFiles(dir: string): string[] {
+function sourceFiles(dir: string, exts: string[] = ['.tsx']): string[] {
   const out: string[] = [];
   for (const entry of readdirSync(dir)) {
-    if (entry === 'node_modules' || entry === '.next') continue;
+    if (entry === 'node_modules' || entry === '.next' || entry === '__tests__') continue;
     const path = join(dir, entry);
-    if (statSync(path).isDirectory()) out.push(...tsxFiles(path));
-    else if (entry.endsWith('.tsx')) out.push(path);
+    if (statSync(path).isDirectory()) out.push(...sourceFiles(path, exts));
+    else if (exts.some((ext) => entry.endsWith(ext))) out.push(path);
   }
   return out;
 }
 
 describe('components do not reintroduce failing raw greys', () => {
   const exemptFiles = new Set(EXEMPT.map((e) => e.file));
-  const files = [...tsxFiles('components'), ...tsxFiles('app')].filter(
-    (f) => !f.endsWith('.test.tsx')
-  );
+  const files = [
+    ...sourceFiles('components', ['.tsx']),
+    ...sourceFiles('app', ['.tsx']),
+    ...sourceFiles('lib', ['.ts', '.tsx']),
+  ].filter((f) => !f.endsWith('.test.tsx') && !f.endsWith('.test.ts') && !f.endsWith('.spec.ts'));
 
   it('scans a non-trivial number of files', () => {
     // Guards against the walker silently returning nothing and the suite going
@@ -245,9 +247,11 @@ describe('components do not hardcode colour literals', () => {
     /(?:stopColor|fill|stroke|color|floodColor|lightingColor)=["'](?:#[0-9a-fA-F]{3,8}|rgba?\(|hsla?\()/;
   const INLINE_STYLE_COLOUR = /style=\{\{[^}]*(?:#[0-9a-fA-F]{3,8}|rgba?\(|hsla?\()/;
 
-  const files = [...tsxFiles('components'), ...tsxFiles('app')].filter(
-    (f) => !f.endsWith('.test.tsx')
-  );
+  const files = [
+    ...sourceFiles('components', ['.tsx']),
+    ...sourceFiles('app', ['.tsx']),
+    ...sourceFiles('lib', ['.ts', '.tsx']),
+  ].filter((f) => !f.endsWith('.test.tsx') && !f.endsWith('.test.ts') && !f.endsWith('.spec.ts'));
 
   it('scans a non-trivial number of files', () => {
     expect(files.length).toBeGreaterThan(50);

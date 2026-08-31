@@ -79,6 +79,35 @@ export interface CorridorVolumeSavings {
   updatedAt: number;
 }
 
+/** One anchor's row in the nightly health ledger. */
+export interface AnchorHealthLedgerEntry {
+  consecutiveFailures: number;
+  degraded: boolean;
+  lastCheckedAt: string | null;
+  lastStatus: string;
+  lastError: string | null;
+}
+
+/**
+ * The nightly anchor health ledger for one date, as published by
+ * `GET /api/v1/anchor-health/ledger`.
+ */
+export interface AnchorHealthLedgerArtifact {
+  /** The `YYYY-MM-DD` this ledger describes. Same version means same ledger. */
+  version: string;
+  /** The date that was asked for, or null when the latest was asked for. */
+  requestedDate: string | null;
+  /** `committed` is the file the deployment was built with; `git-history` is a past revision of it. */
+  source: 'committed' | 'git-history';
+  /** Commit the ledger was read from; null for the committed file. */
+  commit: string | null;
+  ledger: {
+    thresholdNights: number;
+    updatedAt: string | null;
+    anchors: Record<string, AnchorHealthLedgerEntry>;
+  };
+}
+
 /**
  * Every endpoint this SDK calls, as `METHOD path`.
  *
@@ -89,8 +118,10 @@ export const OPERATIONS = {
   getRates: 'GET /api/rates/{corridor}',
   submitOfframpIntent: 'POST /api/v1/intent/offramp',
   getAnchorHealth: 'GET /api/v1/anchors/{id}/health',
+  getAnchorHealthLedger: 'GET /api/v1/anchor-health/ledger',
   getCorridorVolumeSavings: 'GET /api/v1/corridors/{corridor}/volume-savings',
   getHealth: 'GET /api/v1/health',
+  getVolumeSavings: 'GET /api/v1/corridors/{corridor}/volume-savings',
 } as const;
 
 export type OperationName = keyof typeof OPERATIONS;

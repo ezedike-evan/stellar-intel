@@ -1,0 +1,20 @@
+{
+  "_comment": "Live SEP-24 GET /info deposit capture (#1095), captured by hand against the anchor's own advertised transfer server the same way tests/fixtures/sep38/capability-capture.json was.",
+  "capturedAt": "2026-08-30T00:45:00.000Z",
+  "anchorId": "ngnc",
+  "homeDomain": "ngnc.online",
+  "registeredAssetCode": "USDC",
+  "transferServerSep0024": "https://anchor.ngnc.online/sep24",
+  "reachable": true,
+  "supportsDeposit": false,
+  "reason": "The deposit map covers only NGNC, the anchor's own NGN-pegged token — no USDC entry. Same shape as cowrie and anclap: withdraw is advertised for the registered usdc-ngn corridor, deposit is not.",
+  "info": {
+    "deposit": {
+      "NGNC": {
+        "enabled": true,
+        "min_amount": 20000.0,
+        "max_amount": 20000000.0
+      }
+    }
+  }
+}

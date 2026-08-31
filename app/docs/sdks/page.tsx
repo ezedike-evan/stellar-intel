@@ -10,25 +10,65 @@ export default function SdksPage() {
         </p>
       </div>
 
+      {/* Not-yet-published notice */}
+      <section className="rounded-xl border border-amber-500/30 bg-amber-50 p-6 dark:bg-amber-950/20">
+        <h2 className="flex items-center gap-2 text-lg font-semibold text-amber-900 dark:text-amber-200">
+          <svg
+            className="h-5 w-5 shrink-0"
+            viewBox="0 0 24 24"
+            fill="currentColor"
+            aria-hidden="true"
+          >
+            <path d="M12 2L1 21h22L12 2zm1 14h-2v2h2v-2zm0-7h-2v5h2V9z" />
+          </svg>
+          SDK packages are not published yet
+        </h2>
+        <p className="mt-2 text-sm text-amber-800 dark:text-amber-300">
+          None of the SDK packages exist on their registries yet:{' '}
+          <code className="text-xs">@stellarintel/sdk</code>,{' '}
+          <code className="text-xs">@stellarintel/mcp</code>, and{' '}
+          <code className="text-xs">@stellarintel/publisher</code> are not on npm,{' '}
+          <code className="text-xs">stellar-intel</code> is not on PyPI, and{' '}
+          <code className="text-xs">stellar-intel-reputation</code> is not on crates.io — running
+          their install commands returns 404 today. The packages are built, and publication is
+          tracked in{' '}
+          <a
+            href="https://github.com/ezedike-evan/stellar-intel/issues/806"
+            target="_blank"
+            rel="noopener noreferrer"
+            className="font-medium underline underline-offset-2"
+          >
+            #806
+          </a>{' '}
+          for status updates. Until they ship, use the HTTP API directly (examples below).
+        </p>
+      </section>
+
       {/* TypeScript SDK */}
       <section className="space-y-4">
         <div className="flex items-center gap-3">
           <div className="rounded-lg bg-accent-subtle p-2">
-            <svg className="h-6 w-6 text-accent" viewBox="0 0 24 24" fill="currentColor">
+            <svg
+              aria-hidden="true"
+              className="h-6 w-6 text-accent"
+              viewBox="0 0 24 24"
+              fill="currentColor"
+            >
               <path d="M0 12v6.5l12 5.5 12-5.5V12l-12 5.5L0 12zm0-6.5L12 11 24 5.5 12 0 0 5.5z" />
             </svg>
           </div>
           <div>
             <h2 className="text-xl font-semibold text-primary-text">TypeScript / JavaScript</h2>
             <p className="text-sm text-secondary-text">
-              <code className="text-xs">@stellarintel/sdk</code> — Planned (v4)
+              <code className="text-xs">@stellarintel/sdk</code> — Not yet published (npm, v4)
             </p>
           </div>
         </div>
 
         <div className="rounded-xl border border-border bg-accent-subtle p-5 /50">
           <p className="text-sm font-medium text-accent">
-            Status: Planned — The typed SDK is a v4 deliverable.
+            Status: Not published — The typed SDK is built but not yet on npm; it ships as a v4
+            deliverable.
           </p>
           <p className="mt-1 text-sm text-accent dark:text-accent">
             Until it ships, use the HTTP API directly (examples below).
@@ -75,14 +115,19 @@ export async function submitOfframpIntent(body: unknown) {
       <section className="space-y-4">
         <div className="flex items-center gap-3">
           <div className="rounded-lg bg-accent-subtle p-2">
-            <svg className="h-6 w-6 text-status-up" viewBox="0 0 24 24" fill="currentColor">
+            <svg
+              aria-hidden="true"
+              className="h-6 w-6 text-status-up"
+              viewBox="0 0 24 24"
+              fill="currentColor"
+            >
               <path d="M11.9 0C10.07 0 8.54.37 7.5 1.12c-1.04.75-1.56 1.78-1.56 3v2.25c0 .87.26 1.48.78 1.86.52.37 1.2.56 2.03.56h3.9c.84 0 1.54.26 2.1.78.56.52.83 1.22.83 2.1v1.5H9.22c-.87 0-1.66.28-2.35.84-.67.56-1.01 1.3-1.01 2.22v4.22c0 .85.33 1.6 1 2.25.67.66 1.47 1.08 2.4 1.28.94.2 1.86.3 2.78.3 1.86 0 3.36-.42 4.52-1.28 1.16-.85 1.74-2 1.74-3.45v-2.06c0-.87-.27-1.56-.8-2.06-.54-.5-1.23-.75-2.08-.75h-4.1c-.86 0-1.57-.28-2.12-.84-.56-.56-.84-1.27-.84-2.1v-1.5h6.75c.87 0 1.6-.24 2.2-.72.6-.48.9-1.2.9-2.16v-4.5c0-.93-.34-1.7-1.03-2.3C15.6.32 14.4 0 12.65 0H11.9zm-.5 2.25c.4 0 .74.14 1.02.42.28.28.42.62.42 1.02 0 .4-.14.74-.42 1.02-.28.28-.64.42-1.04.42-.4 0-.74-.14-1.02-.42a1.38 1.38 0 01-.4-1.02c0-.4.14-.74.42-1.02.28-.28.63-.42 1.03-.42z" />
             </svg>
           </div>
           <div>
             <h2 className="text-xl font-semibold text-primary-text">Python</h2>
             <p className="text-sm text-secondary-text">
-              <code className="text-xs">stellar-intel</code> — Coming soon
+              <code className="text-xs">stellar-intel</code> — Not yet published (PyPI)
             </p>
           </div>
         </div>
@@ -127,6 +172,7 @@ def get_leaderboard(corridor: str | None = None) -> dict:
         <div className="flex items-center gap-3">
           <div className="rounded-sm bg-bg-sunken p-2">
             <svg
+              aria-hidden="true"
               className="h-6 w-6 text-status-unknown dark:text-status-unknown"
               viewBox="0 0 24 24"
               fill="currentColor"
@@ -137,19 +183,21 @@ def get_leaderboard(corridor: str | None = None) -> dict:
           <div>
             <h2 className="text-xl font-semibold text-primary-text">Rust</h2>
             <p className="text-sm text-secondary-text">
-              <code className="text-xs">stellar-intel-reputation</code> — Published on crates.io
+              <code className="text-xs">stellar-intel-reputation</code> — Not yet published
+              (crates.io)
             </p>
           </div>
         </div>
 
         <p className="text-secondary-text">
           The <code>stellar-intel-reputation</code> crate provides a typed client for reading
-          reputation data from the Soroban oracle contract on-chain.
+          reputation data from the Soroban oracle contract on-chain. It is built but not yet
+          published to crates.io — depend on it from this repository until then:
         </p>
         <CodeBlock
           language="toml"
           code={`[dependencies]
-stellar-intel-reputation = "0.1"
+stellar-intel-reputation = { git = "https://github.com/ezedike-evan/stellar-intel", package = "stellar-intel-reputation" }
 soroban-sdk = "22.0"`}
         />
         <CodeBlock
@@ -191,6 +239,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
         <div className="flex items-center gap-3">
           <div className="rounded-lg bg-bg-sunken p-2 dark:bg-accent-subtle">
             <svg
+              aria-hidden="true"
               className="h-6 w-6 text-accent dark:text-accent"
               viewBox="0 0 24 24"
               fill="currentColor"
@@ -201,15 +250,23 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
           <div>
             <h2 className="text-xl font-semibold text-primary-text">MCP Server (TypeScript)</h2>
             <p className="text-sm text-secondary-text">
-              <code className="text-xs">@stellarintel/mcp</code> — Published on npm
+              <code className="text-xs">@stellarintel/mcp</code> — Not yet published (npm)
             </p>
           </div>
         </div>
 
         <p className="text-secondary-text">
-          The MCP package exposes Stellar Intel&apos;s off-ramp routing to MCP-capable AI agents.
+          The MCP package exposes Stellar Intel&apos;s off-ramp routing to MCP-capable AI agents. It
+          is built but not yet published to npm, so install and run it from this repository:
         </p>
-        <CodeBlock language="bash" code={`npm install @stellarintel/mcp`} />
+        <CodeBlock
+          language="bash"
+          code={`git clone https://github.com/ezedike-evan/stellar-intel
+cd stellar-intel
+npm install
+npm run build --workspace=@stellarintel/mcp
+npm start --workspace=@stellarintel/mcp`}
+        />
         <p className="text-sm text-secondary-text">
           See the{' '}
           <a href="/docs/mcp" className="text-accent hover:underline">
@@ -237,7 +294,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
                 <td className="px-3 py-2 text-secondary-text">TypeScript</td>
                 <td className="px-3 py-2">
                   <span className="rounded-full bg-bg-sunken px-2 py-0.5 text-xs text-status-unknown">
-                    Planned
+                    Not published
                   </span>
                 </td>
                 <td className="px-3 py-2 text-secondary-text">npm (v4)</td>
@@ -246,39 +303,21 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
                 <td className="px-3 py-2 font-mono text-xs text-accent">@stellarintel/mcp</td>
                 <td className="px-3 py-2 text-secondary-text">TypeScript</td>
                 <td className="px-3 py-2">
-                  <span className="rounded-full bg-accent-subtle px-2 py-0.5 text-xs text-status-up">
-                    Published
+                  <span className="rounded-full bg-bg-sunken px-2 py-0.5 text-xs text-status-unknown">
+                    Not published
                   </span>
                 </td>
-                <td className="px-3 py-2">
-                  <a
-                    href="https://www.npmjs.com/package/@stellarintel/mcp"
-                    target="_blank"
-                    rel="noopener noreferrer"
-                    className="text-accent hover:underline"
-                  >
-                    npm
-                  </a>
-                </td>
+                <td className="px-3 py-2 text-secondary-text">npm</td>
               </tr>
               <tr>
                 <td className="px-3 py-2 font-mono text-xs text-accent">@stellarintel/publisher</td>
                 <td className="px-3 py-2 text-secondary-text">TypeScript</td>
                 <td className="px-3 py-2">
-                  <span className="rounded-full bg-accent-subtle px-2 py-0.5 text-xs text-status-up">
-                    Published
+                  <span className="rounded-full bg-bg-sunken px-2 py-0.5 text-xs text-status-unknown">
+                    Not published
                   </span>
                 </td>
-                <td className="px-3 py-2">
-                  <a
-                    href="https://www.npmjs.com/package/@stellarintel/publisher"
-                    target="_blank"
-                    rel="noopener noreferrer"
-                    className="text-accent hover:underline"
-                  >
-                    npm
-                  </a>
-                </td>
+                <td className="px-3 py-2 text-secondary-text">npm</td>
               </tr>
               <tr>
                 <td className="px-3 py-2 font-mono text-xs text-accent">
@@ -286,30 +325,21 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
                 </td>
                 <td className="px-3 py-2 text-secondary-text">Rust</td>
                 <td className="px-3 py-2">
-                  <span className="rounded-full bg-accent-subtle px-2 py-0.5 text-xs text-status-up">
-                    Published
+                  <span className="rounded-full bg-bg-sunken px-2 py-0.5 text-xs text-status-unknown">
+                    Not published
                   </span>
                 </td>
-                <td className="px-3 py-2">
-                  <a
-                    href="https://crates.io/crates/stellar-intel-reputation"
-                    target="_blank"
-                    rel="noopener noreferrer"
-                    className="text-accent hover:underline"
-                  >
-                    crates.io
-                  </a>
-                </td>
+                <td className="px-3 py-2 text-secondary-text">crates.io</td>
               </tr>
               <tr>
                 <td className="px-3 py-2 font-mono text-xs text-accent">stellar-intel (Python)</td>
                 <td className="px-3 py-2 text-secondary-text">Python</td>
                 <td className="px-3 py-2">
                   <span className="rounded-full bg-bg-sunken px-2 py-0.5 text-xs text-status-unknown">
-                    Planned
+                    Not published
                   </span>
                 </td>
-                <td className="px-3 py-2 text-secondary-text">PyPI (v4)</td>
+                <td className="px-3 py-2 text-secondary-text">PyPI</td>
               </tr>
             </tbody>
           </table>

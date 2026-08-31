@@ -83,23 +83,82 @@ function apiKey(): string {
   return key;
 }
 
+export interface SoroswapConfig {
+  timeoutMs: number;
+  retryAttempts: number;
+}
+
+export const soroswapConfig: SoroswapConfig = {
+  timeoutMs: parseInt(process.env.RATES_TIMEOUT_MS || '8000', 10),
+  retryAttempts: parseInt(process.env.RATES_MAX_RETRIES || '2', 10),
+};
+
+function isTransientError(err: unknown): boolean {
+  if (err instanceof SoroswapApiError) {
+    return err.status >= 500 || err.status === 408 || err.status === 429;
+  }
+  if (err instanceof SoroswapConfigError) {
+    return false;
+  }
+  if (err instanceof Error) {
+    const msg = err.message.toLowerCase();
+    return (
+      err.name === 'AbortError' ||
+      err.name === 'TimeoutError' ||
+      msg.includes('timed out') ||
+      msg.includes('timeout') ||
+      msg.includes('fetch failed') ||
+      msg.includes('network error') ||
+      msg.includes('econnrefused') ||
+      msg.includes('econnreset') ||
+      msg.includes('unreachable')
+    );
+  }
+  return false;
+}
+
 async function post<T>(path: string, network: SoroswapNetwork, body: unknown): Promise<T> {
   const url = `${SOROSWAP_API_BASE}${path}?network=${network}`;
-  const res = await fetch(url, {
-    method: 'POST',
-    headers: {
-      Authorization: `Bearer ${apiKey()}`,
-      'Content-Type': 'application/json',
-    },
-    body: JSON.stringify(body),
-  });
+  let lastError: unknown;
 
-  if (!res.ok) {
-    const errBody: unknown = await res.json().catch(() => null);
-    throw new SoroswapApiError(res.status, errBody);
+  for (let attempt = 0; attempt <= soroswapConfig.retryAttempts; attempt++) {
+    const controller = new AbortController();
+    const timer = setTimeout(() => {
+      controller.abort(
+        new Error(`Soroswap API request timed out after ${soroswapConfig.timeoutMs}ms`)
+      );
+    }, soroswapConfig.timeoutMs);
+
+    try {
+      const res = await fetch(url, {
+        method: 'POST',
+        headers: {
+          Authorization: `Bearer ${apiKey()}`,
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify(body),
+        signal: controller.signal,
+      });
+
+      clearTimeout(timer);
+
+      if (!res.ok) {
+        const errBody: unknown = await res.json().catch(() => null);
+        throw new SoroswapApiError(res.status, errBody);
+      }
+
+      return (await res.json()) as T;
+    } catch (err) {
+      clearTimeout(timer);
+      lastError = err;
+
+      if (attempt >= soroswapConfig.retryAttempts || !isTransientError(err)) {
+        throw err;
+      }
+    }
   }
 
-  return (await res.json()) as T;
+  throw lastError;
 }
 
 /** POSTs to /quote: the best price across Soroswap, Phoenix, Aqua, and SDEX. */

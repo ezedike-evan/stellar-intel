@@ -19,6 +19,7 @@ export function registerQuoteTool(server: McpServer): void {
         'Returns the live net-received quote for a corridor + amount (anchor, quoteId, netReceived, expiresAt).',
       inputSchema: inputShape,
       outputSchema: QuoteOutputSchema,
+      annotations: { readOnlyHint: true },
     },
     async (args) => {
       try {

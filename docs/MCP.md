@@ -47,7 +47,8 @@ so an agent does not need the web app's `.env` to invoke it.
 
 ### `intel.offramp.quote` (#135)
 
-Returns the best net-received quote for a corridor + amount.
+Returns the best net-received quote for a corridor + amount. Annotated
+`readOnlyHint: true` — it never submits anything.
 
 - **Input:** `{ from: string, to: string, amount: string }`
 - **Output:** `{ anchor, quoteId, netReceived, expiresAt }`
@@ -68,6 +69,8 @@ Returns the best net-received quote for a corridor + amount.
 
 Returns an **unsigned** intent envelope plus an unsigned Stellar transaction for
 an agent to sign. The `intentHash` is the canonical SHA-256 the agent signs.
+Annotated `readOnlyHint: true` — nothing is submitted on-chain until
+`intel.execute` is called.
 
 - **Input:** an off-ramp intent without a signature
   `{ type: "offramp", sourceAsset, destinationAsset, amount, sender, recipient }`
@@ -75,7 +78,10 @@ an agent to sign. The `intentHash` is the canonical SHA-256 the agent signs.
 
 ### `intel.execute` (#819)
 
-Carries a prepared intent through to signed execution. **Stellar Intel never
+Annotated `destructiveHint: true, idempotentHint: false` — it is the only
+tool in this server's `tools/list` marked destructive, since it is the one
+that actually submits a transaction to Horizon. Carries a prepared intent
+through to signed execution. **Stellar Intel never
 signs anything here** — the non-custodial invariant holds all the way through:
 the calling agent signs `unsignedEnvelope.intentHash` (an off-chain attestation
 of consent) and the `unsignedTx` from `intel.offramp.prepare` (a real Stellar

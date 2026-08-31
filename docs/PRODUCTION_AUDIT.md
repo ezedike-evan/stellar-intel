@@ -1,12 +1,17 @@
 # Production Audit
 
-**Last reviewed:** 2026-08-26
+**Last reviewed:** 2026-08-28
 
 A claim-by-claim audit of what this repository actually enforces, what it only
 documents, and what is not true yet. It follows the method
 [`POSITIONING.md`](POSITIONING.md) sets out — _a positioning document that cannot
 be falsified is marketing_ — so every row names where the evidence lives and
 what command reproduces it.
+
+**Open findings are linked, not restated.** Every gap below points at the issue
+that tracks it, and the [findings index](#findings-index) collects them in one
+place. A finding with no issue is a finding nobody owns, so it does not appear
+here without one.
 
 ## How to read the status column
 
@@ -20,16 +25,45 @@ what command reproduces it.
 The third and fourth categories are the point of this document. An audit that
 lists only the green rows is a marketing page with a table in it.
 
+## Findings index
+
+Every open finding, in the section it belongs to, with the issue that owns it.
+This table is the audit's contract: if a row here has no issue number, the
+finding is untracked and that is itself the bug.
+
+| §   | Finding                                                                      | Tracked in                                                         |
+| --- | ---------------------------------------------------------------------------- | ------------------------------------------------------------------ |
+| §1  | The custody boundary has no CI guard                                         | [#1147](https://github.com/ezedike-evan/stellar-intel/issues/1147) |
+| §2  | No secret scanning in CI                                                     | [#1148](https://github.com/ezedike-evan/stellar-intel/issues/1148) |
+| §6  | Deployed testnet contract predates `main`; no upgrade path; zero anchors     | [#1149](https://github.com/ezedike-evan/stellar-intel/issues/1149) |
+| §6  | Probe-derived signals are not published on chain                             | [#785](https://github.com/ezedike-evan/stellar-intel/issues/785)   |
+| §7  | `VERSIONING.md` promises a deprecation lifecycle the code does not implement | [#1150](https://github.com/ezedike-evan/stellar-intel/issues/1150) |
+| §9  | Browser tests never run for a fork PR, and never run on `main`               | [#1029](https://github.com/ezedike-evan/stellar-intel/issues/1029) |
+| §9  | Playwright's `testDir` hygiene                                               | [#1027](https://github.com/ezedike-evan/stellar-intel/issues/1027) |
+| §9  | Live-anchor calls on the merge path                                          | [#1034](https://github.com/ezedike-evan/stellar-intel/issues/1034) |
+| §9  | `leaderboard-api` hits real anchors and times out                            | [#1032](https://github.com/ezedike-evan/stellar-intel/issues/1032) |
+| §9  | `mcp-e2e` quote test times out under full-suite load                         | [#1035](https://github.com/ezedike-evan/stellar-intel/issues/1035) |
+| §9  | `format:check` scans cargo artifacts and fails the local release gate        | [#1036](https://github.com/ezedike-evan/stellar-intel/issues/1036) |
+| §10 | `lib/**/*.ts` is invisible to the contrast guard                             | [#968](https://github.com/ezedike-evan/stellar-intel/issues/968)   |
+| §10 | No check that images and icon-only controls carry accessible names           | [#1069](https://github.com/ezedike-evan/stellar-intel/issues/1069) |
+| §11 | Every published package is a 404; the docs still print install commands      | [#1072](https://github.com/ezedike-evan/stellar-intel/issues/1072) |
+
 ## Reproducing this audit
 
 ```bash
-npm run test:release      # format:check + lint + typecheck + vitest + build
+npm run test:release      # typecheck + lint + format:check + vitest + build
 npm run emit-openapi && git diff --exit-code -- public/openapi.json
+npm run emit-llms-full && git diff --exit-code -- lib/seo/llms-full.generated.txt
 npm run check:registry
 cargo test --manifest-path contracts/reputation/Cargo.toml --locked
 cargo clippy --manifest-path contracts/reputation/Cargo.toml --all-targets -- -D warnings
-npx tsx scripts/verify-oracle-read.mts
+npx tsx --tsconfig tsconfig.scripts.json scripts/verify-oracle-read.mts
+npx playwright test --list
+curl -s https://stellar-intel.vercel.app/api/reputation/probe-coverage
 ```
+
+The last two are new to this revision, and both are read-only. Between them
+they produce §9's and §6's headline numbers.
 
 ---
 
@@ -44,8 +78,9 @@ npx tsx scripts/verify-oracle-read.mts
 
 The custody boundary is architectural: there is no code path that could take
 custody, which is a stronger statement than a policy. It is **not** gated in CI —
-nothing would fail if a future change introduced one. That is a real gap and is
-the single most valuable test this repository does not have.
+nothing would fail if a future change introduced one. Tracked in
+[#1147](https://github.com/ezedike-evan/stellar-intel/issues/1147), and it
+remains the single most valuable test this repository does not have.
 
 ## 2. Security posture
 
@@ -53,31 +88,41 @@ the single most valuable test this repository does not have.
 | -------------------------------------- | ---------------------------------------------------------- | --------------------- |
 | A vulnerability disclosure path exists | [`SECURITY.md`](SECURITY.md) § "Reporting a vulnerability" | Documented, not gated |
 | Threat model is reviewed on a cadence  | [`THREAT_MODEL.md`](THREAT_MODEL.md) § "Review cadence"    | Documented, not gated |
-| Dependencies are reviewed on every PR  | `.github/workflows/ci.yml` → `dependency-review`           | Enforced in CI        |
-| Static analysis runs on every PR       | CodeQL (`Analyze (javascript-typescript)`)                 | Enforced in CI        |
+| Dependencies are reviewed on every PR  | `.github/workflows/dependency-review.yml`                  | Enforced in CI        |
+| Static analysis runs on every PR       | `.github/workflows/codeql.yml`                             | Enforced in CI        |
 | No secret is committed                 | —                                                          | Not true yet          |
 
-**"No secret is committed" has no gate.** There is no secret-scanning step in
-CI. GitHub's own push protection may apply at the platform level, but this
-repository does not assert it.
+The em dash in the last row is the finding: `grep -rn 'gitleaks\|trufflehog'
+.github/workflows/` returns nothing. GitHub's own push protection may apply at
+the platform level, but this repository does not assert it. Tracked in
+[#1148](https://github.com/ezedike-evan/stellar-intel/issues/1148).
 
 ## 3. Rate limiting
 
-| Claim                                      | Evidence                                                             | Status                |
-| ------------------------------------------ | -------------------------------------------------------------------- | --------------------- |
-| Public read routes are rate limited        | [`RATE_LIMIT_AUDIT.md`](RATE_LIMIT_AUDIT.md) § "Coverage table"      | Documented, not gated |
-| Rate-limit headers are on the v1 API       | `lib/api/v1.ts` → `rateLimitHeaders`                                 | Enforced in code      |
-| Write and expensive routes are all covered | [`RATE_LIMIT_AUDIT.md`](RATE_LIMIT_AUDIT.md) § "Flagged for `#D047`" | Not true yet          |
+| Claim                                      | Evidence                                                                                   | Status           |
+| ------------------------------------------ | ------------------------------------------------------------------------------------------ | ---------------- |
+| Public read routes are rate limited        | `enforceRateLimit` / `withV1` on every public handler                                      | Enforced in code |
+| Rate-limit headers are on the v1 API       | `lib/api/v1.ts` → `rateLimitHeaders`                                                       | Enforced in code |
+| Write and expensive routes are all covered | `#D047` ([#733](https://github.com/ezedike-evan/stellar-intel/issues/733)), closed by #929 | Enforced in code |
+| Coverage does not regress                  | `tests/rate-limit-coverage.spec.ts`; 429 paths in the v1 suites                            | Enforced in CI   |
 
-The audit document maintains its own flagged list of uncovered routes. That list
-is non-empty, and this row exists so the gap is visible from here rather than
-only from inside that file.
+**This section has changed since the last revision, and in the right
+direction.** The previous audit listed coverage as **Not true yet** against a
+non-empty flagged list. `#929` closed that list: of the 31 route handlers under
+`app/api` and `app/v1`, the four without a per-caller limit are
+`publisher/tick`, `reputation/reconcile`, `reputation/reconcile-volume-savings`
+and `reputation/refresh` — all four `CRON_SECRET`-gated, which is a different
+control rather than a missing one.
+
+[`RATE_LIMIT_AUDIT.md`](RATE_LIMIT_AUDIT.md) still reports "1 of 16 routes
+covered". Its tables predate `#929` and are wrong now; it needs the same refresh
+this document just had.
 
 ## 4. SEP conformance
 
 | Claim                                             | Evidence                                                                   | Status                     |
 | ------------------------------------------------- | -------------------------------------------------------------------------- | -------------------------- |
-| SEP-1 / SEP-10 / SEP-24 are implemented           | [`SEP_COMPLIANCE.md`](SEP_COMPLIANCE.md) § "What Stellar Intel implements" | Documented, not gated      |
+| SEP-1 / SEP-6 / SEP-10 / SEP-24 are implemented   | [`SEP_COMPLIANCE.md`](SEP_COMPLIANCE.md) § "What Stellar Intel implements" | Documented, not gated      |
 | Per-anchor SEP support is recorded and current    | [`SEP_COMPLIANCE.md`](SEP_COMPLIANCE.md) § "Per-anchor SEP support matrix" | Documented, not gated      |
 | Every registered anchor is transfer-capable       | `scripts/check-registry.mjs`, CI job `registry guard`                      | Enforced in CI             |
 | Anchor reachability is checked nightly            | `.github/workflows/nightly.yml` → `anchor-domains`                         | Enforced in CI (warn-only) |
@@ -85,8 +130,13 @@ only from inside that file.
 
 **One of seven registered anchors advertises `ANCHOR_QUOTE_SERVER` at all**, and
 it does not quote the corridor it is registered for. Ranking across firm quotes
-is not possible today. This is the single largest gap between what the product
-is shaped for and what the network currently supports.
+is not possible today.
+
+This one carries no issue on purpose, and it is the only such row in the
+document. It is not a defect in this repository — it is a fact about the live
+network, and it becomes true as anchors adopt SEP-38 rather than as anyone here
+writes code. The gap it creates in the product's shape is real and is stated in
+`POSITIONING.md`; there is nothing to assign.
 
 `anchor-domains` is deliberately warn-only: it probes third-party domains, and a
 red `main` nobody can fix trains people to ignore the signal.
@@ -114,8 +164,12 @@ Covered by the unit suite, which CI runs on node 20 and node 22.
 | The upgrade-admin role can be rotated                     | `contracts/reputation/src/upgrade.rs`                                                | **Not true yet**      |
 | The deployed bytecode matches current `main`              | `scripts/verify-oracle-read.mts`                                                     | **Not true yet**      |
 | Anchors are registered on the deployed contract           | `scripts/init-oracle-registry.ts`                                                    | **Not true yet**      |
+| Probe-derived signals are published on chain              | `packages/publisher` writes `outcome_log` only                                       | **Not true yet**      |
 
-Reading the live deployment on 2026-08-05:
+### The live read
+
+Reading the deployment on **2026-08-28** — unchanged in substance from the
+2026-08-05 reading the previous revision recorded, which is itself the finding:
 
 ```
 Oracle contract : CCZ54NTEOVL2DKWCGJA5XHTHOGRDS7JHFKYWEC6QH2IMZLYNM3FBFKDG
@@ -125,25 +179,48 @@ Admin           : GAZW2PQFFJGH7RH6PB5VQASJIRAGEMZCID72CXYHRM27QYP4R5YRY777
 Upgrade admin   : (unset)
 ::warning::Deployed contract is missing pending_admin, upgrade_admin — the on-chain
 bytecode predates the current source.
+::warning::Operational admin and upgrade admin are not two distinct accounts.
+::warning::contract_version() is 0 — init_upgrade was never called.
 Registered anchors (0): (none)
 ```
 
-Three findings follow, and they are the most consequential in this document:
+The upgrade-admin rotation in `contracts/reputation/src/upgrade.rs` is on `main`
+and is not on chain. Everything reading the oracle is reading a seven-week-old
+contract with an empty anchor list. Tracked in
+[#1149](https://github.com/ezedike-evan/stellar-intel/issues/1149); extending the
+publisher past `outcome_log` is [#785](https://github.com/ezedike-evan/stellar-intel/issues/785).
 
-1. **`contract_version()` returns `0` and the upgrade admin is unset**, so
-   `init_upgrade` was never called. There is no in-place upgrade path from the
-   currently deployed bytecode — a new entrypoint requires a fresh deploy.
-2. **The deployed bytecode predates the current source** by enough that
-   `pending_admin` and `upgrade_admin` are missing. Testnet is not a stale copy
-   of `main`; it is a different contract.
-3. **Zero anchors are registered**, so a third party reading the contract today
-   gets an empty list. The "ripped out" test does not pass.
+### The 90-day gate, and where it stands
+
+`GET /api/reputation/probe-coverage` on **2026-08-29T00:30Z**:
+
+| Field                     | Value                     |
+| ------------------------- | ------------------------- |
+| `thresholdDays`           | 90                        |
+| `fleetThresholdMet`       | `false`                   |
+| `daysUntilFleetThreshold` | **76**                    |
+| `continuousDays`          | **14**, all seven anchors |
+| First probe day           | 2026-08-15                |
+
+**This is not a finding and it has no issue.** The gate is working exactly as
+designed — `evaluatePublishGate` refuses a mainnet publish below the threshold,
+and `coverage: null` is a refusal rather than "unknown, proceed". It is recorded
+here because a reader deciding whether to depend on the oracle needs the number:
+mainnet is **76 days away at the earliest**, and any interruption in probing
+resets the streak rather than pausing it. All seven anchors currently show a
+one-day gap at the head of the window, which is the report counting the
+in-progress day.
+
+Anything that reads the on-chain record before then is reading an empty
+contract. That is the point of the gate — never launch an empty credit bureau —
+and it is the single biggest determinant of when the oracle half becomes real.
 
 ## 7. API stability
 
 | Claim                                                     | Evidence                                                   | Status                |
 | --------------------------------------------------------- | ---------------------------------------------------------- | --------------------- |
 | The committed OpenAPI spec matches the code               | CI step `OpenAPI spec is in sync` (`git diff --exit-code`) | Enforced in CI        |
+| The committed docs corpus matches `docs/`                 | CI step `llms-full.txt is in sync`                         | Enforced in CI        |
 | Every v1 route appears in the spec                        | `tests/openapi-coverage.spec.ts`                           | Enforced in CI        |
 | Responses carry an `API-Version` header                   | `lib/logger.ts`                                            | Enforced in code      |
 | A versioning and deprecation policy is published          | [`VERSIONING.md`](VERSIONING.md)                           | Documented, not gated |
@@ -151,13 +228,16 @@ Three findings follow, and they are the most consequential in this document:
 | `Sunset` / `Warning: 299` deprecation headers are emitted | —                                                          | **Not true yet**      |
 | `/api/status` publishes `announced_deprecations`          | —                                                          | **Not true yet**      |
 
-`SUPPORTED_API_VERSIONS` has exactly one element, and `negotiateApiVersion`
-rejects anything else — so the support window `VERSIONING.md` promises is
-contradicted by the code that enforces it. The deprecation lifecycle and the
-status endpoint have zero implementation: `grep` for `sunset`, `Deprecation:`
-and `announced_deprecations` across `lib/` and `app/` returns nothing.
+`SUPPORTED_API_VERSIONS` still has exactly one element and `negotiateApiVersion`
+rejects anything else, so the support window `VERSIONING.md` promises is
+contradicted by the code that enforces it. `grep` for `sunset`, `Deprecation:`
+and `announced_deprecations` across `lib/` and `app/` returns only the generated
+docs corpus.
 
-Tracked in #874.
+The previous revision pointed at #874. **That issue is closed** — the policy
+half landed in #827 and the code half did not — so the gap had no open tracker
+until now. Tracked in
+[#1150](https://github.com/ezedike-evan/stellar-intel/issues/1150).
 
 ## 8. Trust boundaries
 
@@ -179,6 +259,7 @@ Every row here fails a merge to `main` if it stops holding.
 | Types                      | `npm run typecheck` (`tsc --noEmit`)                                      |
 | Unit suite + coverage      | `npm run test -- --coverage`, on node 20 **and** 22                       |
 | OpenAPI drift              | `npm run emit-openapi` + `git diff --exit-code`                           |
+| Docs-corpus drift          | `npm run emit-llms-full` + `git diff --exit-code`                         |
 | Anchor registry            | `npm run check:registry`                                                  |
 | Production build           | `next build`                                                              |
 | Rust consumer crate        | `cargo test`, `cargo doc`, `cargo publish --dry-run`                      |
@@ -187,16 +268,54 @@ Every row here fails a merge to `main` if it stops holding.
 | One closing keyword per PR | `.github/workflows/one-issue-per-pr.yml`                                  |
 | WCAG AA contrast           | `tests/contrast.spec.ts`                                                  |
 
-Counts as of this audit: **56** `#[test]` functions across 13 integration test
-files in `contracts/reputation/tests/`, **7** in the consumer crate, and **~1,890**
-vitest assertions across ~170 spec files.
+Counts as of this audit: **69** `#[test]` functions across 14 integration test
+files in `contracts/reputation/tests/`, **11** in the consumer crate, and
+**~3,860** vitest assertions across ~228 spec files.
+
+### The suite the gate cannot run
+
+The browser suite exists and, since #1131, it collects: `npx playwright test
+--list` reports **36 tests in 9 files**. It still does not protect a merge.
+
+- **It never runs for a contributor.** The `Playwright smoke` job is gated on
+  `needs.deploy.outputs.preview-url != ''`, and the `deploy` job that produces
+  that URL is gated on `github.event.pull_request.head.repo.full_name ==
+github.repository`. Every fork PR skips it. Nothing runs it on `main` after
+  merge either. [#1029](https://github.com/ezedike-evan/stellar-intel/issues/1029)
+- **`testDir` hygiene is still open** as
+  [#1027](https://github.com/ezedike-evan/stellar-intel/issues/1027), though its
+  body predates the conversion — the nine files it names are Playwright specs
+  today. Worth re-reading before working it.
+- **There is no npm script for it.** `npx playwright install chromium` followed
+  by `npx playwright test` is the only entry point, which is why "run the
+  browser tests" is not in anyone's muscle memory.
+
+### The release gate depends on the network
+
+`npm run test:release` is the documented one-liner and it is not reliably
+runnable offline or on a bad day:
+
+- Parts of the unit suite call live anchors, so a slow third party fails a
+  merge a contributor cannot fix.
+  [#1034](https://github.com/ezedike-evan/stellar-intel/issues/1034) moves those
+  checks off the merge path;
+  [#1032](https://github.com/ezedike-evan/stellar-intel/issues/1032) stubs
+  `leaderboard-api`, and
+  [#1035](https://github.com/ezedike-evan/stellar-intel/issues/1035) covers the
+  `mcp-e2e` timeout that only appears under full-suite load.
+- `format:check` runs first and scans `contracts/**/target/`, so any local
+  `cargo build` makes the whole gate exit 1 before running anything useful.
+  [#1036](https://github.com/ezedike-evan/stellar-intel/issues/1036) — one line
+  in `.prettierignore`.
 
 ### Gates that do not exist
 
-- **No secret scanning.**
-- **No end-to-end test in the merge gate.** Playwright smoke exists but is
-  skipped on PRs.
-- **No custody-boundary test.** §1's central claim is unguarded.
+- **No secret scanning.** §2,
+  [#1148](https://github.com/ezedike-evan/stellar-intel/issues/1148).
+- **No end-to-end test in the merge gate.** Above,
+  [#1029](https://github.com/ezedike-evan/stellar-intel/issues/1029).
+- **No custody-boundary test.** §1's central claim is unguarded,
+  [#1147](https://github.com/ezedike-evan/stellar-intel/issues/1147).
 - **No link checker**, so a doc can reference a file that does not exist.
 
 ## 10. Accessibility
@@ -205,12 +324,40 @@ vitest assertions across ~170 spec files.
 | --------------------------------------------- | --------------------------------------------------------- | ---------------- |
 | Palette contrast meets WCAG AA in both themes | `tests/contrast.spec.ts`, parsed from `app/globals.css`   | Enforced in CI   |
 | Components avoid measured-failing grey values | Same file, raw-grey scanner over `components/` and `app/` | Enforced in CI   |
+| Images and controls carry accessible names    | —                                                         | **Not true yet** |
 | Every surface uses the palette tokens         | —                                                         | **Not true yet** |
 
-`components/offramp/*`, `app/anchors`, `app/admin` and `lib/prose.ts` still use
-raw Tailwind colours. `lib/prose.ts` is invisible to the guard entirely — the
-walker only scans `.tsx` under `components/` and `app/`. Tracked in #967 and
-#968.
+**Improved since the last revision.** `components/offramp/*`, `app/anchors` and
+`app/admin` are clean — #967 tokenized them — and `lib/prose.ts` no longer holds
+a raw grey either. The scanner's blind spot is what remains: it walks `.tsx`
+under `components/` and `app/` only, and `lib/oracle/freshness.ts:166-168` sits
+outside it with `text-gray-400` in the dark theme, one of the values
+`contrast.spec.ts` bans by name. Tracked in
+[#968](https://github.com/ezedike-evan/stellar-intel/issues/968), which is
+scoped to exactly this: extend the guard to `lib/**/*.ts`.
+
+Contrast is also the only accessibility property with a gate. Nothing checks
+that an image carries `alt` or that an icon-only button carries an accessible
+name — a control that renders and clicks is invisible to the suite and unusable
+to anyone who cannot see the icon. Tracked in
+[#1069](https://github.com/ezedike-evan/stellar-intel/issues/1069).
+
+## 11. Distribution
+
+| Claim                                    | Evidence                                      | Status           |
+| ---------------------------------------- | --------------------------------------------- | ---------------- |
+| The publish workflows exist              | `.github/workflows/publish-*.yml`             | Documented       |
+| `@stellarintel/sdk` is installable       | `npm view @stellarintel/sdk` → **E404**       | **Not true yet** |
+| `@stellarintel/mcp` is installable       | `npm view @stellarintel/mcp` → **E404**       | **Not true yet** |
+| `@stellarintel/publisher` is installable | `npm view @stellarintel/publisher` → **E404** | **Not true yet** |
+
+Three publish workflows exist and are trigger-gated on release tags. The
+repository has no release tags, so none of them has ever run, and every install
+command the docs print fails. `/docs/sdks` and `/docs/mcp` still print them.
+Tracked in [#1072](https://github.com/ezedike-evan/stellar-intel/issues/1072).
+
+This is a section the previous revision did not have, and it is the finding a
+reader is most likely to hit first: the quickstart is the first page they open.
 
 ---
 
@@ -219,21 +366,49 @@ walker only scans `.tsx` under `components/` and `app/`. Tracked in #967 and
 Ordered by how much they would matter to someone deciding whether to depend on
 this project.
 
-1. **The deployed testnet contract predates `main`, has no upgrade path, and has
-   no anchors registered.** Everything that reads the oracle is reading an empty
-   contract. §6.
-2. **Firm SEP-38 quotes do not exist across the fleet**, so quote-ranking claims
-   cannot be true yet. §4.
-3. **`VERSIONING.md` promises four things the code does not implement.** §7.
+1. **The oracle is empty and the deployment is stale.** The contract on testnet
+   predates `main`, has no upgrade path, and has zero anchors registered — and
+   the mainnet publish that would fix the emptiness is **76 days away** behind
+   the probe gate. §6 ·
+   [#1149](https://github.com/ezedike-evan/stellar-intel/issues/1149) ·
+   [#785](https://github.com/ezedike-evan/stellar-intel/issues/785)
+2. **Nothing you can install exists.** Every package is a 404 and the docs still
+   print the install command. §11 ·
+   [#1072](https://github.com/ezedike-evan/stellar-intel/issues/1072)
+3. **No browser test protects a merge**, and none runs on `main`. §9 ·
+   [#1029](https://github.com/ezedike-evan/stellar-intel/issues/1029)
 4. **The custody boundary — the project's central claim — has no automated
-   guard.** §1.
-5. **No secret scanning in CI.** §2.
-6. **Rate-limit coverage is incomplete** and tracked in its own flagged list. §3.
-7. **Half the UI bypasses the palette tokens.** §10.
+   guard.** §1 · [#1147](https://github.com/ezedike-evan/stellar-intel/issues/1147)
+5. **`VERSIONING.md` promises three things the code does not implement**, and the
+   issue that used to track it was closed without them. §7 ·
+   [#1150](https://github.com/ezedike-evan/stellar-intel/issues/1150)
+6. **No secret scanning in CI.** §2 ·
+   [#1148](https://github.com/ezedike-evan/stellar-intel/issues/1148)
+7. **The release gate is network-dependent and locally fragile.** §9 ·
+   [#1034](https://github.com/ezedike-evan/stellar-intel/issues/1034) ·
+   [#1036](https://github.com/ezedike-evan/stellar-intel/issues/1036)
+8. **Firm SEP-38 quotes do not exist across the fleet**, so quote-ranking claims
+   cannot be true yet. §4 — no issue, because there is nothing here to assign.
+9. **Accessibility is guarded for contrast and nothing else.** §10 ·
+   [#1069](https://github.com/ezedike-evan/stellar-intel/issues/1069) ·
+   [#968](https://github.com/ezedike-evan/stellar-intel/issues/968)
 
-None of these is hidden elsewhere in the repository; each is stated in the
-document that owns the subject. This audit exists so they are visible in one
-place, with the same status vocabulary, to a reader who has not read all of them.
+### What improved since the last revision
+
+Recorded because an audit that only accumulates is one nobody believes.
+
+- **Rate-limit coverage went from one route to every public route** (#929). §3
+  was the previous revision's sixth-ranked gap and is now closed.
+- **The palette sweep landed** (#967): three of the four surfaces named in §10
+  are clean.
+- **The browser suite collects again** (#1131). It does not gate a merge, which
+  is a different problem, but "no browser test has ever run" is no longer the
+  accurate sentence.
+
+### Adjacent documents that need the same treatment
+
+- [`RATE_LIMIT_AUDIT.md`](RATE_LIMIT_AUDIT.md) — its coverage table predates
+  #929 and now understates reality by a wide margin.
 
 ---
 
