@@ -8,6 +8,10 @@ const rootDir = path.dirname(fileURLToPath(import.meta.url));
 export default defineConfig({
   plugins: [react()],
   test: {
+    // teardownTimeout is a NonProjectOptions field in vitest ≥ 4 and cannot
+    // appear inside a project's test block.  Set it once at the top level so
+    // it applies to every project in the workspace.
+    teardownTimeout: 15000,
     // ── Projects ────────────────────────────────────────────────────────────
     //
     // Two named projects separate the mocked unit suite from any future tests
@@ -46,12 +50,11 @@ export default defineConfig({
           environment: 'happy-dom',
           setupFiles: ['./tests/setup.ts'],
           globals: true,
-          // Bound every test/hook/teardown so an unmocked network call or stray
+          // Bound every test/hook so an unmocked network call or stray
           // open handle fails fast instead of hanging the whole suite (and CI)
-          // forever.
+          // forever.  teardownTimeout is set at the top level (NonProjectOptions).
           testTimeout: 15000,
           hookTimeout: 15000,
-          teardownTimeout: 10000,
           // Exclude Playwright specs, worktree checkouts, and live-anchor tests.
           exclude: [
             ...configDefaults.exclude,
@@ -90,9 +93,9 @@ export default defineConfig({
           setupFiles: ['./tests/setup.ts'],
           globals: true,
           // Live network calls need more headroom than the 15 s unit ceiling.
+          // teardownTimeout is set at the top level (NonProjectOptions).
           testTimeout: 60000,
           hookTimeout: 30000,
-          teardownTimeout: 15000,
           include: ['tests/**/*.{spec,test}.{ts,mts,mjs,tsx}'],
           exclude: [
             ...configDefaults.exclude,
