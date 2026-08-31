@@ -2,7 +2,6 @@
 
 import { useRouter, useSearchParams } from 'next/navigation';
 import { Suspense, useCallback } from 'react';
-import Link from 'next/link';
 import { ANCHORS, CORRIDORS } from '@/constants';
 import { AnchorCard } from '@/components/anchors/AnchorCard';
 import { Leaderboard } from '@/components/offramp/Leaderboard';
@@ -28,31 +27,36 @@ function AnchorsContent() {
   if (!activeCorridor) return null;
 
   return (
-    <div className="mx-auto max-w-3xl px-4 py-8">
-      <h1 className="mb-6 text-2xl font-semibold text-white">Anchor Leaderboard</h1>
-
-      {/* Corridor filter tabs */}
-      <div className="mb-6 flex flex-wrap gap-2">
-        {CORRIDORS.map((corridor) => (
-          <button
-            key={corridor.id}
-            onClick={() => selectCorridor(corridor.id)}
-            className={
-              corridor.id === activeCorridor.id
-                ? 'rounded-full bg-blue-600 px-4 py-1.5 text-sm font-medium text-white'
-                : 'rounded-full border border-gray-300 px-4 py-1.5 text-sm font-medium text-gray-700 transition-colors hover:bg-gray-100 dark:border-gray-600 dark:text-gray-300 dark:hover:bg-gray-800'
-            }
-          >
-            reputation standings &rarr;
-          </Link>
-        </div>
+    <div className="mx-auto max-w-6xl px-4 py-8">
+      <header className="mb-8">
+        <h1 className="text-2xl font-semibold text-white">Anchor Leaderboard</h1>
       </header>
 
+      <section aria-label="Filter leaderboard by corridor" className="mb-8">
+        <div className="flex flex-wrap gap-2">
+          {CORRIDORS.map((corridor) => {
+            const selected = corridor.id === activeCorridor.id;
+            return (
+              <button
+                key={corridor.id}
+                type="button"
+                onClick={() => selectCorridor(corridor.id)}
+                aria-pressed={selected}
+                className={
+                  selected
+                    ? 'rounded-full bg-blue-600 px-4 py-1.5 text-sm font-medium text-white'
+                    : 'rounded-full border border-gray-300 px-4 py-1.5 text-sm font-medium text-gray-700 transition-colors hover:bg-gray-100 dark:border-gray-600 dark:text-gray-300 dark:hover:bg-gray-800'
+                }
+              >
+                {corridor.from}/{corridor.to}
+              </button>
+            );
+          })}
+        </div>
+      </section>
+
       <section className="mt-16" aria-labelledby="anchor-scorecards-heading">
-        <h2
-          id="anchor-scorecards-heading"
-          className="text-fg-muted font-mono text-xs tracking-wide"
-        >
+        <h2 id="anchor-scorecards-heading" className="text-fg-muted font-mono text-xs tracking-wide">
           scorecards
         </h2>
         <div className="mt-6 grid gap-4 sm:grid-cols-2">
@@ -71,35 +75,8 @@ function AnchorsContent() {
           not answer is listed as unavailable rather than dropped.
         </p>
 
-        {/* Corridor filter. Square controls, not pills — and the selected one is
-            marked by surface and border rather than a filled accent, so the
-            accent stays available for the result that matters. */}
-        <div
-          className="mt-8 flex flex-wrap gap-2"
-          role="group"
-          aria-label="Filter leaderboard by corridor"
-        >
-          {CORRIDORS.map((corridor) => {
-            const selected = corridor.id === activeCorridor.id;
-            return (
-              <button
-                key={corridor.id}
-                type="button"
-                onClick={() => selectCorridor(corridor.id)}
-                aria-pressed={selected}
-                className={
-                  selected
-                    ? 'border-control-border bg-bg-subtle text-primary-text focus-visible:ring-accent focus-visible:ring-offset-background inline-flex h-11 items-center rounded-sm border px-4 font-mono text-xs tracking-wide focus-visible:ring-2 focus-visible:ring-offset-2 focus-visible:outline-none'
-                    : 'border-border text-secondary-text hover:text-primary-text hover:border-control-border focus-visible:ring-accent focus-visible:ring-offset-background inline-flex h-11 items-center rounded-sm border px-4 font-mono text-xs tracking-wide transition-colors duration-100 ease-out focus-visible:ring-2 focus-visible:ring-offset-2 focus-visible:outline-none'
-                }
-              >
-                {corridor.from}/{corridor.to}
-              </button>
-            );
-          })}
-        </div>
-
-      <Leaderboard corridor={activeCorridor} />
+        <Leaderboard corridor={activeCorridor} />
+      </section>
     </div>
   );
 }

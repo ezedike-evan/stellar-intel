@@ -17,25 +17,35 @@ vi.mock('next/navigation', () => ({
   useSearchParams: () => new URLSearchParams(),
 }));
 
-vi.mock('@/constants', () => ({
-  CORRIDORS: [
-    { id: 'usdc-ngn', from: 'USDC', to: 'NGN' },
-    { id: 'usdc-kes', from: 'USDC', to: 'KES' },
-  ],
-  KNOWN_ANCHORS: [{ id: 'anchor-a' }, { id: 'anchor-b' }, { id: 'anchor-c' }],
-}));
+vi.mock('@/constants', async (importOriginal) => {
+  const actual = await importOriginal<typeof import('@/constants')>();
+  return {
+    ...actual,
+    CORRIDORS: [
+      { id: 'usdc-ngn', from: 'USDC', to: 'NGN', countryCode: 'NG', countryName: 'Nigeria' },
+      { id: 'usdc-kes', from: 'USDC', to: 'KES', countryCode: 'KE', countryName: 'Kenya' },
+    ],
+    KNOWN_ANCHORS: [{ id: 'anchor-a' }, { id: 'anchor-b' }, { id: 'anchor-c' }],
+  };
+});
 
-vi.mock('@/hooks/useAnchorRates', () => ({
-  useAnchorRates: () => ({
-    rates: { rates: [], pending: [], bestRateId: null },
-    isLoading: false,
-    error: undefined,
-    mutate: vi.fn(),
-    refreshInflight: false,
-    pauseRefresh: vi.fn(),
-    resumeRefresh: vi.fn(),
-  }),
-}));
+vi.mock('@/hooks/useAnchorRates', async (importOriginal) => {
+  const actual = await importOriginal<typeof import('@/hooks/useAnchorRates')>();
+  return {
+    ...actual,
+    useAnchorRates: () => ({
+      rates: { rates: [], pending: [], bestRateId: null },
+      isLoading: false,
+      error: undefined,
+      mutate: vi.fn(),
+      refreshInflight: false,
+      pauseRefresh: vi.fn(),
+      resumeRefresh: vi.fn(),
+      anchorErrors: [],
+      lastFetchedAt: null,
+    }),
+  };
+});
 
 vi.mock('@/hooks/useWithdrawStatus', () => ({
   useWithdrawStatus: () => ({
