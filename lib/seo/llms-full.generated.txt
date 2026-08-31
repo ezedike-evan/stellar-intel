@@ -2340,13 +2340,15 @@ It prints the admin, the upgrade admin, the pending admin and the contract
 version, and warns when the two authorities are the same account — one
 compromised key that can both forge data and replace the code.
 
-> **Current testnet state (checked 2026-08-04).** `contract_version` is `0`, the
-> upgrade admin is unset, and `pending_admin` / `upgrade_admin` are not
-> implemented at all: the deployed bytecode predates them. That also means it
-> predates the authorization fixes in #907, so **the live testnet contract still
-> has the unauthenticated `set_corridor_metrics` write path**. Re-deploy before
+> **Current testnet state (checked 2026-08-28, tracked in #1149).**
+> `contract_version` is `0` and the upgrade admin is unset: the deployed
+> bytecode is seven weeks old and predates both the constructor-based
+> `__constructor(admin, upgrade_admin)` binding (see "Fresh deploy" below) and
+> the authorization fixes in #907, so **the live testnet contract still has the
+> unauthenticated `set_corridor_metrics` write path**. Re-deploy before
 > treating testnet reads as trustworthy. The anchor registry is also empty, so
-> every score read returns "no data".
+> every score read returns "no data". `scripts/deploy-oracle-testnet.ts` and
+> `scripts/init-oracle-registry.ts` are ready to do this — see "Fresh deploy".
 
 ### Who can write what
 
@@ -2378,8 +2380,10 @@ read helper and JS/Python example consumers are roadmap deliverables (Wave 2.1).
 ```bash
 cd contracts/reputation
 cargo test                                          # runs tests/basic.rs
-npx tsx scripts/deploy-oracle-testnet.ts             # build + deploy to testnet
 ```
+
+Deploying is its own section below — `scripts/deploy-oracle-testnet.ts` needs
+two address env vars set first.
 
 ## Storage versions
 
@@ -2400,10 +2404,53 @@ is in [`ORACLE_MIGRATION.md`](ORACLE_MIGRATION.md).
 ## Upgrade & governance
 
 Publisher whitelist management and a two-step admin transfer are implemented;
-see [`GOVERNANCE.md`](GOVERNANCE.md) for the custody runbook. The upgrade path
-exists (`init_upgrade` / `upgrade`) but has **no rotation** — once the upgrade
-admin is bound it cannot be changed (#963). Treat the deployed contract
-(testnet) as admin-controlled and not yet production-governed.
+see [`GOVERNANCE.md`](GOVERNANCE.md) for the custody runbook. The upgrade
+authority (`upgrade_admin`) is bound by the constructor at deploy time — see
+"Fresh deploy" below — and, since #963, **can be rotated** via
+`propose_upgrade_admin` / `accept_upgrade_admin` (two-step, mirroring the
+operational admin's `propose_admin` / `accept_admin`; see
+[`GOVERNANCE.md`](GOVERNANCE.md) § "Contract upgrade governance"). Treat the
+deployed contract (testnet) as admin-controlled and not yet
+production-governed.
+
+## Fresh deploy
+
+There is no in-place way to bind `admin`/`upgrade_admin` after the fact, or to
+seed a version stamp onto an already-deployed contract — both happen once,
+atomically, in `__constructor`, at the moment `stellar contract deploy` runs.
+So "the deployed contract is missing an authority" (#1149) is fixed by
+deploying a new contract instance, not by invoking anything on the old one.
+This necessarily means abandoning whatever on-chain state (outcomes, the
+anchor registry) the old contract held — there is no migration path between
+two different contract IDs.
+
+```bash
+export ORACLE_ADMIN_ADDRESS=G...          # operational admin
+export ORACLE_UPGRADE_ADMIN_ADDRESS=G...  # upgrade admin — a *different* account (see "Custody" above)
+export SOROBAN_SOURCE_ACCOUNT=...         # funded deployer, or set ADMIN_SECRET_KEY
+
+npx tsx --tsconfig tsconfig.scripts.json scripts/deploy-oracle-testnet.ts
+```
+
+If `.deployments/testnet.json` already names a contract, the script refuses to
+overwrite it unless `FORCE_REDEPLOY=true` is also set — the abandonment above
+is deliberate and not the default.
+
+Then, in order:
+
+```bash
+# Seed the anchor registry (constants/anchors.ts) on the new contract.
+ORACLE_CONTRACT_ID=<new contract ID> ADMIN_SECRET_KEY=... \
+  npx tsx --tsconfig tsconfig.scripts.json scripts/init-oracle-registry.ts
+
+# Confirm no ::warning:: lines remain.
+npx tsx scripts/verify-oracle-read.mts
+```
+
+`verify-oracle-read.mts` succeeding with no warnings and a non-empty anchor
+list is the acceptance bar #1149 sets — `contract_version()` non-zero,
+`upgrade_admin` set to an account distinct from `admin`, and the registry
+non-empty.
 
 ## Related
 
