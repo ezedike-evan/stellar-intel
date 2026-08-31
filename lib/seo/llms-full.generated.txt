@@ -1226,13 +1226,13 @@ The following are **not** breaking:
 
 ## Deprecation process
 
-> **Not yet implemented.** The lifecycle below is the intended policy, not a
-> description of running code. Grepping `lib/` and `app/` for `sunset`,
-> `Deprecation:` or `Warning: 299` returns nothing — there is no helper, no
-> middleware, and no route emitting these headers. `lib/logger.ts` stamps
-> `API-Version` on every response and nothing else. Treat this section as the
-> contract a future implementation must satisfy; see the tracking issue in
-> [`CHANGELOG.md`](../CHANGELOG.md).
+`lib/api/deprecation.ts` computes `Sunset` and `Warning: 299` for a pinned
+version once it has actually been superseded, and `lib/logger.ts` stamps both
+on every response at the same call site as `API-Version` — see
+`computeDeprecationHeaders` and `tests/api-version-negotiation.spec.ts`. No
+version has been retired yet, so no live response carries either header
+today; the mechanism is exercised in that test suite against synthetic
+history rather than waiting on a real deprecation to prove it out.
 
 Every breaking change follows a four-phase lifecycle:
 
@@ -1261,20 +1261,24 @@ Expedited removals are announced on all channels with the reason.
 
 | Surface                          | Supported versions       | Window                                            |
 | -------------------------------- | ------------------------ | ------------------------------------------------- |
-| HTTP REST API                    | Current only¹            | Intended: current + 1 previous, 180 days          |
+| HTTP REST API                    | Current only¹            | Current + 1 previous, 180 days (computed)         |
 | Soroban oracle contract          | Current deployed address | Until a migration is announced and executed       |
 | MCP tools                        | Latest npm release only  | Semver within `@stellarintel/mcp`                 |
 | TypeScript SDK                   | Latest npm release only  | Semver within `@stellarintel/sdk`                 |
 | Web UI (`app.stellar-intel.com`) | Latest only              | No version guarantee — always use the current URL |
 
-¹ **The stated window is not yet what the code enforces.**
-`SUPPORTED_API_VERSIONS` in `lib/api/api-version.ts` contains exactly one
-element, and `negotiateApiVersion` rejects anything else with a 400. So there is
-no "previous" version to fall back to, and the 180-day window has never been
-exercised. It becomes true the first time a version ships and the outgoing one
-is appended to that array — which is the mechanical change required, not a
-rewrite. `tests/api-version-negotiation.spec.ts` asserts this row against the
-array so the two cannot drift apart again.
+¹ **The stated window is not yet what the code enforces**, in the sense that
+`SUPPORTED_API_VERSIONS` in `lib/api/api-version.ts` currently contains
+exactly one element — not because the 180-day rule is unimplemented, but
+because only one version has ever shipped, so there is nothing to retire yet.
+`computeSupportedApiVersions` computes the window from
+`API_VERSION_HISTORY` (each entry's `supersededAt` plus `SUPPORT_WINDOW_DAYS`)
+rather than a hardcoded array, and `tests/api-version-negotiation.spec.ts`
+exercises the 180-day boundary itself against synthetic history — a version
+retired 179 days ago stays in the window, 181 days ago it doesn't. The row
+above becomes "current + 1 previous" for real the first time a version ships
+and the outgoing one is recorded in `API_VERSION_HISTORY` with a
+`supersededAt` — an entry, not a rewrite.
 
 REST API consumers should specify an `API-Version` header to lock their
 integration to a known surface. Unsigned requests default to the latest
@@ -1291,12 +1295,14 @@ Deprecations and breaking changes are announced on:
    `https://github.com/ezedike-evan/stellar-intel/releases`.
 2. **CHANGELOG.md** — the `[Unreleased]` section lists pending deprecations;
    dated sections record shipped ones.
-3. **API response headers** _(not yet implemented)_ — deprecated endpoints will
-   return `Sunset` and `Warning` headers (see deprecation process above).
-4. **Status page** _(not yet implemented)_ — there is no `app/api/status/route.ts`,
-   and `announced_deprecations` appears nowhere in `lib/` or `app/`. The intent
-   is that `https://stellar-intel.vercel.app/api/status` returns it as a JSON
-   array.
+3. **API response headers** — a deprecated-but-still-supported pin returns
+   `Sunset` and `Warning: 299` on every response (see deprecation process
+   above). No endpoint is deprecated today, so no live response carries
+   either header yet.
+4. **Status page** — `GET /api/status` (`app/api/status/route.ts`) returns
+   `version`, `supported_versions`, and `announced_deprecations` as a JSON
+   array. The array is empty today for the same reason: nothing has been
+   deprecated yet.
 5. **Mailing list** — subscribe at
    `https://stellar-intel.vercel.app/updates` (planned).
 
