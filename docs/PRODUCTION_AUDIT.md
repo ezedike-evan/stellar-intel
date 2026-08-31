@@ -69,18 +69,26 @@ they produce §9's and §6's headline numbers.
 
 ## 1. Custody
 
-| Claim                                              | Evidence                                                                      | Status                |
-| -------------------------------------------------- | ----------------------------------------------------------------------------- | --------------------- |
-| The app never takes custody of user funds          | [`NON_CUSTODY.md`](NON_CUSTODY.md) § "How the boundary is enforced"           | Enforced in code      |
-| No private key is ever held server-side for a user | [`SECURITY.md`](SECURITY.md) § "Custody boundary", § "Key & secret handling"  | Enforced in code      |
-| Every payment leg is signed in the user's wallet   | [`NON_CUSTODY.md`](NON_CUSTODY.md) § "What Stellar Intel never holds"         | Enforced in code      |
-| The publisher holds a signing key                  | `PUBLISHER_SECRET`, used only to write reputation outcomes — never user funds | Documented, not gated |
+| Claim                                              | Evidence                                                                                                       | Status                |
+| -------------------------------------------------- | -------------------------------------------------------------------------------------------------------------- | --------------------- |
+| The app never takes custody of user funds          | [`NON_CUSTODY.md`](NON_CUSTODY.md) § "How the boundary is enforced", `tests/custody-boundary.spec.ts`          | Enforced in CI        |
+| No private key is ever held server-side for a user | [`SECURITY.md`](SECURITY.md) § "Custody boundary", § "Key & secret handling", `tests/custody-boundary.spec.ts` | Enforced in CI        |
+| Every payment leg is signed in the user's wallet   | [`NON_CUSTODY.md`](NON_CUSTODY.md) § "What Stellar Intel never holds"                                          | Enforced in code      |
+| The publisher holds a signing key                  | `PUBLISHER_SECRET`, used only to write reputation outcomes — never user funds                                  | Documented, not gated |
 
 The custody boundary is architectural: there is no code path that could take
-custody, which is a stronger statement than a policy. It is **not** gated in CI —
-nothing would fail if a future change introduced one. Tracked in
-[#1147](https://github.com/ezedike-evan/stellar-intel/issues/1147), and it
-remains the single most valuable test this repository does not have.
+custody, which is a stronger statement than a policy. As of
+[#1147](https://github.com/ezedike-evan/stellar-intel/issues/1147),
+`tests/custody-boundary.spec.ts` gates the first two rows in CI — a source
+scan (same shape as `tests/contrast.spec.ts`'s raw-grey scanner) failing if
+`lib/` or `app/` ever constructs a `Keypair` from a raw secret, or the
+client-facing env schema (`lib/env.ts`) ever declares a variable that looks
+like one. `packages/publisher` is the one exemption, and the suite asserts
+both that it still needs it and that it's the only exemption — a future
+custody-taking change now merges red, not green. The third row (every payment
+leg signed client-side) is a claim about UI code paths this scan does not
+reach, so it stays "Enforced in code" rather than "in CI" until something
+checks it too.
 
 ## 2. Security posture
 
