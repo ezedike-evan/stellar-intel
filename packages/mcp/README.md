@@ -33,6 +33,8 @@ share the exact same logic:
   wallet signs the intent hash and the transaction before calling this tool.
   It is the only tool in this server marked destructive in `tools/list`.
 
+<<<<<<< HEAD
+
 ### Resources
 
 - `stellarintel://anchor-health/ledger` (`application/json`) — the nightly
@@ -46,6 +48,35 @@ share the exact same logic:
   document fetch into a live network dependency. The payload carries the
   ledger's `version` (`YYYY-MM-DD`, from its own `updatedAt`) alongside it: two
   reads returning the same version returned the same ledger.
+  =======
+
+### Rate limiting
+
+Every tool call is counted against a per-client bucket before the handler runs,
+so one agent in a loop cannot exhaust anchor quotas for everyone — the cost of a
+tool call is paid at the anchor, not here.
+
+The limiter is the one the REST surface already uses
+([`lib/api/rate-limit.ts`](https://github.com/ezedike-evan/stellar-intel/blob/main/lib/api/rate-limit.ts)),
+not a second implementation: same fixed windows, same Postgres-backed shared
+state, same per-instance fallback when no database is configured.
+
+- **Client identity** — the Streamable HTTP session id where there is one,
+  otherwise the forwarded client IP, otherwise a single local key. A stdio
+  server is a subprocess of exactly one client, so per-client and per-process
+  are the same thing there.
+- **Buckets** — `mcp.tools:<tool name>`, so one tool being exhausted does not
+  throttle the others, and MCP traffic is counted separately from the `v1.*`
+  REST buckets.
+- **Limits** — `MCP_RATE_LIMIT_MAX` (default 60) requests per
+  `MCP_RATE_LIMIT_WINDOW_MS` (default 60000).
+- **When the limit is hit** — the call is refused _before_ the handler runs, so
+  it never reaches an anchor. The result is `isError` with a text body leading
+  `RATE_LIMITED:` (the same `CODE: message` shape the other tools use) and a
+  structured payload under the `stellarintel/rateLimit` `_meta` key carrying
+  `code`, `tool`, `retryAfter`, `limit`, `resetAt` and `shared` — so a client
+  can tell "you were throttled" from "the anchor is down" without parsing prose.
+  > > > > > > > pr1186
 
 ### Build
 
