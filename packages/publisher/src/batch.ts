@@ -2,6 +2,29 @@ import { createHash } from 'crypto';
 import { evaluatePublishGate, type GateDecision, type ProbeCoverageSummary } from './gate';
 import type { StellarNetwork } from './network';
 
+// Local copy of ProbeLedgerRow to avoid a monorepo path alias that the
+// publisher package's standalone tsconfig does not resolve. Mirrors
+// `types/reputation.ts` exactly; keep in sync when that type evolves.
+export type ProbeKind = 'uptime' | 'quote' | 'issuer-mismatch' | 'toml-integrity';
+export type ProbeFailureType =
+  | 'dns'
+  | 'tls'
+  | 'http'
+  | 'timeout'
+  | 'mismatch'
+  | 'integrity'
+  | 'unknown';
+export interface ProbeLedgerRow {
+  domain: string;
+  kind: ProbeKind;
+  corridor: string | null;
+  reachable: boolean;
+  latencyMs: number;
+  failureType: ProbeFailureType | null;
+  error: string | null;
+  probedAt: string;
+}
+
 export type QueryExecutor = (
   sql: string,
   params?: unknown[]
@@ -86,9 +109,27 @@ export interface BatchConfig {
    * nothing — and so it can read the same rows the batch just wrote.
    */
   loadCorridorRates?: () => Promise<readonly CorridorRateInput[]>;
+  /**
+   * Probe-derived signals to publish alongside outcomes (#D070 / #785).
+   * Optional: omitting it publishes exactly as before (outcomes only).
+   *
+   * `loadProbeSamples` is a thunk so a tick that publishes nothing never pays
+   * for a probe query. When omitted, the batch queries `probe_samples` via the
+   * same executor over a configurable window. `windowDays` defaults to 7.
+   * `domainToAnchorId` maps probe `domain` (e.g. homeDomain/serviceDomain) to
+   * the canonical anchor id surfaced in `ProbeSignals`.
+   */
+  probeSignals?: {
+    windowDays?: number;
+    domainToAnchorId?: Record<string, string>;
+    loadProbeSamples?: () => Promise<readonly ProbeLedgerRow[]>;
+  };
 }
 
 export const DEFAULT_BATCH_SIZE = 100;
+
+/** Default window for probe-derived aggregation (#D070). */
+export const DEFAULT_PROBE_WINDOW_DAYS = 7;
 
 export interface OutcomeRow {
   intentHash: string;
@@ -103,6 +144,33 @@ export interface OutcomeRow {
   savingsUsdc?: number;
 }
 
+export interface ProbeSignals {
+  /** Anchor ID these signals correspond to. */
+  anchorId: string;
+  /** Uptime ratio: fraction of reachable samples [0, 1], null when no samples. */
+  uptimeRatio: number | null;
+  /** Latency p50 in milliseconds, null when no reachable samples. */
+  p50LatencyMs: number | null;
+  /** Latency p95 in milliseconds, null when no reachable samples. */
+  p95LatencyMs: number | null;
+  /** Number of drift flags for this anchor. */
+  driftFlagCount: number;
+}
+
+/** Versioned payload sent to the oracle contract. */
+export interface ProbeSignalsPayload {
+  /** Payload shape version — increment when the on-chain schema changes. */
+  version: 1;
+  /** Per-anchor probe-derived signals. */
+  signals: readonly ProbeSignals[];
+}
+
+/** Outcome row augmented with probe signals for on-chain publish. */
+export interface OutcomeWithProbeSignals {
+  row: OutcomeRow;
+  signals: ProbeSignals;
+}
+
 export interface BatchResult {
   submitted: number;
   skipped: number;
@@ -114,6 +182,164 @@ export interface BatchResult {
   gate?: GateDecision;
   /** Corridor rates written on-chain this tick (#961). */
   corridorRatesPublished?: number;
+  /** Probe-derived signals written on-chain this tick (#D070). */
+  probeSignalsPublished?: number;
+  /** Whether probe signals were skipped due to empty probe data (#D070). */
+  probeSignalsSkipped?: boolean;
+  /** Versioned probe payload that was published, when any (#D070). */
+  probePayload?: ProbeSignalsPayload | null;
+}
+
+// ─── Probe-derived signals (D070 / #785) ─────────────────────────────────────
+
+function percentileNearestRank(sortedValues: number[], p: number): number | null {
+  if (sortedValues.length === 0) return null;
+  const rank = Math.ceil((p / 100) * sortedValues.length) - 1;
+  const index = Math.min(Math.max(rank, 0), sortedValues.length - 1);
+  return sortedValues[index]!;
+}
+
+function isDriftFlag(row: ProbeLedgerRow): boolean {
+  // Drift flags are not a dedicated ProbeKind today (drift lives in a
+  // separate store). For the ledger rows we do have, treat a flagged drift as:
+  // - an explicit `drift` kind (future-proof), or
+  // - a failureType of `mismatch`/`integrity`, or
+  // - an error message that mentions drift.
+  const kind = row.kind as string;
+  if (kind === 'drift') return true;
+  if (row.failureType === 'mismatch' || row.failureType === 'integrity') return false; // those are distinct dims, not drift per #D006
+  if (row.error && row.error.toLowerCase().includes('drift')) return true;
+  // Also accept a loosely-typed `flagged` field if a caller passes DriftSample-like rows.
+  const flagged = (row as unknown as Record<string, unknown>)['flagged'];
+  if (flagged === true) return true;
+  return false;
+}
+
+function mapProbeRowRecord(r: Record<string, unknown>): ProbeLedgerRow {
+  const domain = String(r['domain'] ?? r['Domain'] ?? '');
+  const kindRaw = (r['kind'] ?? r['Kind'] ?? 'uptime') as string;
+  const kind = kindRaw as ProbeKind;
+  const corridorRaw = r['corridor'] ?? r['Corridor'] ?? r['corridor_id'] ?? null;
+  const corridor = corridorRaw == null ? null : String(corridorRaw);
+  const reachableRaw = r['reachable'] ?? r['Reachable'];
+  const reachable =
+    reachableRaw === 1 || reachableRaw === true || reachableRaw === 'true' || reachableRaw === 't';
+  // latency: postgres `latency_ms`, sqlite `latencyMs`
+  const latencyRaw = r['latency_ms'] ?? r['latencyMs'] ?? r['LatencyMs'] ?? 0;
+  const latencyMs = Number(latencyRaw);
+  const failureTypeRaw = r['failure_type'] ?? r['failureType'] ?? r['FailureType'] ?? null;
+  const failureType = (failureTypeRaw as ProbeLedgerRow['failureType']) ?? null;
+  const errorRaw = r['error'] ?? r['Error'] ?? null;
+  const error = errorRaw == null ? null : String(errorRaw);
+  const probedAtRaw = r['probed_at'] ?? r['probedAt'] ?? r['ProbedAt'] ?? new Date().toISOString();
+  const probedAt = String(probedAtRaw);
+  return { domain, kind, corridor, reachable, latencyMs, failureType, error, probedAt };
+}
+
+/**
+ * Fetches probe samples from `probe_samples` over a rolling window.
+ *
+ * Uses the same `QueryExecutor` as `fetchPendingOutcomes` so the publisher CLI
+ * and `/api/publisher/tick` share one code path. A missed table (fresh DB
+ * before the first probe run) is treated as empty, not a failure — that is the
+ * empty-data case in #785 / lumenwatch/stellar-intel#7.
+ */
+export async function fetchProbeSamples(
+  executor: QueryExecutor,
+  windowDays: number = DEFAULT_PROBE_WINDOW_DAYS,
+  now: Date = new Date()
+): Promise<ProbeLedgerRow[]> {
+  const cutoff = new Date(now.getTime() - windowDays * 86400000).toISOString();
+  let rows: Record<string, unknown>[] = [];
+  try {
+    const result = await executor(
+      `SELECT domain, kind, corridor, reachable, latency_ms, failure_type, error, probed_at
+         FROM probe_samples
+        WHERE probed_at >= $1
+        ORDER BY probed_at ASC`,
+      [cutoff]
+    );
+    rows = result.rows;
+  } catch {
+    // Fallback for SQLite-named columns or a missing table (fresh DB).
+    try {
+      const result = await executor(`SELECT * FROM probe_samples ORDER BY probed_at ASC`, []);
+      rows = result.rows;
+      // Filter in JS when the WHERE above failed or used a different column name.
+      rows = rows.filter((r) => {
+        const at = String(r['probed_at'] ?? r['probedAt'] ?? r['probedAt'] ?? '');
+        return at >= cutoff;
+      });
+    } catch {
+      return [];
+    }
+  }
+  const mapped = rows.map(mapProbeRowRecord);
+  // Ensure window still applies when the first query succeeded without filtering (mock).
+  return mapped.filter((r) => r.probedAt >= cutoff);
+}
+
+/**
+ * Aggregates per-anchor probe-derived signals over the supplied rows.
+ *
+ * Intended to run over the output of `fetchProbeSamples` — i.e. already
+ * windowed — but also accepts a `now`/`windowDays` pair to window again
+ * defensively. Pure, clock-injectable, and mock-free for tests.
+ *
+ * - `uptimeRatio`: reachable / total for `kind === 'uptime'` (null when none)
+ * - `p50LatencyMs` / `p95LatencyMs`: nearest-rank percentiles over reachable
+ *   `kind === 'quote'` samples (null when none)
+ * - `driftFlagCount`: flagged drift rows per anchor (see `isDriftFlag`)
+ */
+export function aggregateProbeSignals(
+  rows: readonly ProbeLedgerRow[],
+  options: {
+    windowDays?: number;
+    now?: Date;
+    domainToAnchorId?: Record<string, string>;
+  } = {}
+): ProbeSignalsPayload {
+  const { windowDays, now, domainToAnchorId } = options;
+  let filtered: readonly ProbeLedgerRow[] = rows;
+  if (windowDays !== undefined && now !== undefined) {
+    const cutoff = new Date(now.getTime() - windowDays * 86400000).toISOString();
+    filtered = rows.filter((r) => r.probedAt >= cutoff);
+  } else if (windowDays !== undefined) {
+    const cutoff = new Date(Date.now() - windowDays * 86400000).toISOString();
+    filtered = rows.filter((r) => r.probedAt >= cutoff);
+  }
+
+  const domains = [...new Set(filtered.map((r) => r.domain))].sort();
+  const signals: ProbeSignals[] = domains.map((domain) => {
+    const anchorId = domainToAnchorId?.[domain] ?? domain;
+    const domainRows = filtered.filter((r) => r.domain === domain);
+
+    const uptimeRows = domainRows.filter((r) => r.kind === 'uptime');
+    const uptimeRatio =
+      uptimeRows.length === 0
+        ? null
+        : uptimeRows.filter((r) => r.reachable).length / uptimeRows.length;
+
+    const quoteReachable = domainRows.filter((r) => r.kind === 'quote' && r.reachable);
+    const latencies = quoteReachable.map((r) => r.latencyMs).sort((a, b) => a - b);
+    const p50LatencyMs = percentileNearestRank(latencies, 50);
+    const p95LatencyMs = percentileNearestRank(latencies, 95);
+
+    const driftFlagCount = domainRows.filter(isDriftFlag).length;
+
+    return { anchorId, uptimeRatio, p50LatencyMs, p95LatencyMs, driftFlagCount };
+  });
+
+  return { version: 1, signals };
+}
+
+/**
+ * Builds a versioned payload from an already-aggregated signal list.
+ * Exists so callers that already hold a `ProbeSignals[]` (e.g. from a
+ * ReputationStore thunk) can wrap it without re-aggregating.
+ */
+export function buildProbeSignalsPayload(signals: readonly ProbeSignals[]): ProbeSignalsPayload {
+  return { version: 1, signals: [...signals] };
 }
 
 export async function fetchPendingOutcomes(
@@ -360,6 +586,18 @@ interface OracleSubmitClient {
     volume_delta: bigint;
     savings_delta: bigint;
   }): AssembledTx;
+
+  /**
+   * Probe-derived signals (D070 / #785).
+   *
+   * Not every deployment's contract has this entrypoint yet — the publisher
+   * treats a missing method as a no-op rather than a failure, so a rollout can
+   * ship the off-chain publisher before the on-chain upgrade lands.
+   */
+  publish_probe_signals?: (args: { publisher: string; payload: string }) => AssembledTx;
+
+  /** Legacy alias some local deploys expose. */
+  set_probe_signals?: (args: { publisher: string; payload: string }) => AssembledTx;
 }
 
 /**
@@ -574,6 +812,89 @@ function calculateSavingsUsdc(row: OutcomeRow, medianRate?: number): number {
   return Math.max(0, savings);
 }
 
+/**
+ * Publishes probe-derived signals (#D070 / #785).
+ *
+ * A **third phase**, after outcomes and corridor rates: best-effort, never
+ * throws. A missing contract method is treated as "not yet deployed" rather
+ * than a failure, so the publisher can ship before the on-chain upgrade.
+ * The payload is JSON-stringified with `version: 1` so the consumer crate can
+ * distinguish shapes.
+ *
+ * Returns the number of anchor signals written (0 when skipped or unsupported).
+ */
+export async function publishProbeSignals(
+  payload: ProbeSignalsPayload,
+  config: Pick<
+    BatchConfig,
+    'oracleContractId' | 'networkPassphrase' | 'publisherSecret' | 'rpcUrl' | 'retry' | 'onAlert'
+  >
+): Promise<number> {
+  if (payload.signals.length === 0) return 0;
+
+  let client: OracleSubmitClient;
+  let publisherPublicKey: string;
+  try {
+    const { contract, Keypair } = await import('@stellar/stellar-sdk');
+    const publisherKeypair = Keypair.fromSecret(config.publisherSecret);
+    publisherPublicKey = publisherKeypair.publicKey();
+    const { signTransaction } = contract.basicNodeSigner(
+      publisherKeypair,
+      config.networkPassphrase
+    );
+    client = (await contract.Client.from({
+      contractId: config.oracleContractId,
+      rpcUrl: config.rpcUrl,
+      networkPassphrase: config.networkPassphrase,
+      publicKey: publisherPublicKey,
+      signTransaction,
+    })) as unknown as OracleSubmitClient;
+  } catch {
+    // If the SDK cannot be loaded (test mocks without the method), treat as
+    // non-fatal — outcomes already landed.
+    return 0;
+  }
+
+  const publishFn =
+    client.publish_probe_signals ??
+    client.set_probe_signals ??
+    // Mock-friendly fallback: some test doubles expose a generic `publish_probe_signals` under a different key.
+    (client as unknown as Record<string, unknown>)['publish_probe_signals'] ??
+    (client as unknown as Record<string, unknown>)['set_probe_signals'];
+
+  if (typeof publishFn !== 'function') {
+    // Contract does not yet expose the entrypoint — log and skip.
+    // eslint-disable-next-line no-console
+    console.log(
+      '[publisher] probe signals skipped — contract has no publish_probe_signals entrypoint'
+    );
+    return 0;
+  }
+
+  const payloadJson = JSON.stringify(payload);
+
+  try {
+    const assembled = await withRetry(
+      async () => {
+        const tx = await (
+          publishFn as (a: { publisher: string; payload: string }) => AssembledTx
+        ).call(client, {
+          publisher: publisherPublicKey,
+          payload: payloadJson,
+        });
+        return tx.signAndSend();
+      },
+      { onAlert: config.onAlert, options: config.retry }
+    );
+    if (assembled.sendTransactionResponse?.hash) return payload.signals.length;
+    return 0;
+  } catch {
+    // withRetry has already alerted. Probe signals are overwritten next tick,
+    // so one failure must not fail the batch that already published outcomes.
+    return 0;
+  }
+}
+
 export async function runBatch(config: BatchConfig): Promise<BatchResult> {
   const rows = await fetchPendingOutcomes(config.executor, config.batchSize);
 
@@ -646,11 +967,68 @@ export async function runBatch(config: BatchConfig): Promise<BatchResult> {
     corridorRatesPublished = await publishCorridorRates(rates, config);
   }
 
+  // Third phase — probe-derived signals (D070 / #785). Best-effort and never
+  // throws: a probe publish failure must not un-mark outcomes that already
+  // landed, and an empty probe ledger must not block the outcome batch.
+  // Only wired when `probeSignals` is present so existing callers retain the
+  // exact pre-D070 behavior unless they opt in (the app tick opts in; the CLI
+  // and unit tests with no probe config do not).
+  let probeSignalsPublished: number | undefined;
+  let probeSignalsSkipped: boolean | undefined;
+  let probePayload: ProbeSignalsPayload | null | undefined;
+  if (config.probeSignals !== undefined) {
+    const windowDays = config.probeSignals.windowDays ?? DEFAULT_PROBE_WINDOW_DAYS;
+    let probeRows: readonly ProbeLedgerRow[] = [];
+    try {
+      if (config.probeSignals.loadProbeSamples) {
+        probeRows = await config.probeSignals.loadProbeSamples();
+      } else {
+        probeRows = await fetchProbeSamples(config.executor, windowDays);
+      }
+    } catch {
+      // A store that is down fails closed for the gate but must not fail the
+      // batch for probes — probes are supplementary, outcomes are the durable thing.
+      probeRows = [];
+    }
+
+    if (probeRows.length === 0) {
+      // Empty-data case (#785): probes not yet running or window has no samples.
+      // Publish execution outcomes only, log that probe signals were skipped.
+      // eslint-disable-next-line no-console
+      console.log(
+        '[publisher] probe signals skipped — no probe_samples in window (probes not yet running)'
+      );
+      probeSignalsSkipped = true;
+      probeSignalsPublished = 0;
+      probePayload = null;
+    } else {
+      const payload = aggregateProbeSignals(probeRows, {
+        ...(config.probeSignals.domainToAnchorId !== undefined
+          ? { domainToAnchorId: config.probeSignals.domainToAnchorId }
+          : {}),
+      });
+      probePayload = payload;
+      if (payload.signals.length === 0) {
+        // No domains in window — treat as empty, not a publish.
+        // eslint-disable-next-line no-console
+        console.log('[publisher] probe signals skipped — aggregated to zero anchors');
+        probeSignalsSkipped = true;
+        probeSignalsPublished = 0;
+      } else {
+        probeSignalsPublished = await publishProbeSignals(payload, config);
+        probeSignalsSkipped = false;
+      }
+    }
+  }
+
   return {
     submitted,
     skipped: rows.length - submitted,
     txHash,
     ...(gateDecision ? { gate: gateDecision } : {}),
     ...(corridorRatesPublished !== undefined ? { corridorRatesPublished } : {}),
+    ...(probeSignalsPublished !== undefined ? { probeSignalsPublished } : {}),
+    ...(probeSignalsSkipped !== undefined ? { probeSignalsSkipped } : {}),
+    ...(probePayload !== undefined ? { probePayload } : {}),
   };
 }
