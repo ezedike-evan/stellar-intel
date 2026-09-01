@@ -45,6 +45,7 @@ export const ANCHORS: Anchor[] = [
     id: 'cowrie',
     name: 'Cowrie Exchange',
     homeDomain: 'cowrie.exchange',
+    serviceDomain: 'api.cowrie.exchange',
     corridors: ['usdc-ngn'],
     seps: ['sep6', 'sep10'],
     assetCode: 'USDC',
@@ -72,14 +73,13 @@ export const ANCHORS: Anchor[] = [
     seps: ['sep24'],
   },
   // mykobo.co: EUR fiat corridor — SEP-6, SEP-24, SEP-31 enabled, issues EURC (EUR-pegged 1:1).
-  // Verified 2026-06-29. TOML: TRANSFER_SERVER_SEP0024 = https://stellar.mykobo.co/sep24
-  // SEP-6: TRANSFER_SERVER = https://stellar.mykobo.co/sep6.
+  // Verified 2026-08-28. The home domain publishes the SEP-24 endpoint; use it
+  // for discovery because the legacy stellar.mykobo.co host no longer resolves.
   // /info: withdraw.EURC.enabled = true. Serves USDC→EUR corridor.
   {
     id: 'mykobo',
     name: 'MyKobo',
     homeDomain: 'mykobo.co',
-    serviceDomain: 'stellar.mykobo.co',
     corridors: ['usdc-eur'],
     assetCode: 'EURC',
     assetIssuer: 'GAQRF3UGHBT6JYQZ7YSUYCIYWAF4T2SAA5237Q5LIQYJOHHFAWDXZ7NM',
@@ -104,7 +104,8 @@ export const ANCHORS: Anchor[] = [
     seps: ['sep6', 'sep24', 'sep31'],
   },
   // zeam.money: ZAR fiat corridor — SEP-24 withdraw/deposit enabled.
-  // Verified 2026-06-28. TOML: TRANSFER_SERVER_SEP0024 = https://anchor.zeam.money/sep24
+  // Verified 2026-08-28. The home domain publishes the SEP-24 endpoint; the
+  // legacy anchor.zeam.money service host returns 404 for stellar.toml.
   // /info: deposit/withdraw for USDC enabled.
   //
   // Re-probed 2026-08-04 (#720): also declares
@@ -121,7 +122,6 @@ export const ANCHORS: Anchor[] = [
     id: 'zeam',
     name: 'Zeam Money',
     homeDomain: 'zeam.money',
-    serviceDomain: 'anchor.zeam.money',
     corridors: ['usdc-zar'],
     assetCode: 'USDC',
     assetIssuer: USDC_ISSUER,

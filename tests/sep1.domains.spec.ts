@@ -127,7 +127,7 @@ describe('SEP-1 Home-Domain vs Service-Domain Resolution', () => {
       expect(resolved.capabilities.sep10).toBe(true);
     });
 
-    it('resolves other anchors without serviceDomain using homeDomain', async () => {
+    it('resolves Cowrie using its API service domain', async () => {
       const cowrieTomlResponse = {
         TRANSFER_SERVER_SEP0024: 'https://api.cowrie.exchange/sep24',
         WEB_AUTH_ENDPOINT: 'https://api.cowrie.exchange/auth',
@@ -135,7 +135,7 @@ describe('SEP-1 Home-Domain vs Service-Domain Resolution', () => {
       };
 
       vi.spyOn(StellarToml.Resolver, 'resolve').mockImplementation(async (domain: string) => {
-        if (domain === 'cowrie.exchange') {
+        if (domain === 'api.cowrie.exchange') {
           return cowrieTomlResponse as any;
         }
         throw new Error(`Unexpected domain: ${domain}`);

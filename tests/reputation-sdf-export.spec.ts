@@ -16,6 +16,7 @@ const ANCHOR: Anchor = {
   id: 'cowrie',
   name: 'Cowrie Exchange',
   homeDomain: 'cowrie.exchange',
+  serviceDomain: 'api.cowrie.exchange',
   corridors: ['usdc-ngn'],
   assetCode: 'USDC',
   assetIssuer: 'ISSUER',
@@ -75,12 +76,12 @@ describe('buildSdfAnchorDirectoryExport', () => {
     };
     const probeRows = new Map([
       [
-        'cowrie.exchange',
+        'api.cowrie.exchange',
         [
-          uptimeRow('cowrie.exchange', true, 100),
-          uptimeRow('cowrie.exchange', true, 200),
-          uptimeRow('cowrie.exchange', false, 0),
-          quoteRow('cowrie.exchange', 'usdc-ngn', 300),
+          uptimeRow('api.cowrie.exchange', true, 100),
+          uptimeRow('api.cowrie.exchange', true, 200),
+          uptimeRow('api.cowrie.exchange', false, 0),
+          quoteRow('api.cowrie.exchange', 'usdc-ngn', 300),
         ],
       ],
     ]);
@@ -127,7 +128,7 @@ describe('GET /api/reputation/sdf-export', () => {
     const store = new InMemoryReputationStore();
     _setReputationStore(store);
 
-    await store.recordProbeSample(uptimeRow('cowrie.exchange', true, 50));
+    await store.recordProbeSample(uptimeRow('api.cowrie.exchange', true, 50));
     await store.recordProbeSample(uptimeRow('stellar.moneygram.com', true, 80));
 
     const res = await GET(new NextRequest('http://localhost/api/reputation/sdf-export'));

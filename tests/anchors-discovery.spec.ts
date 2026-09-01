@@ -32,8 +32,8 @@ describe('discoverAnchorsForCorridor', () => {
     expect(result).toEqual([
       expect.objectContaining({
         id: 'cowrie',
-        TRANSFER_SERVER_SEP0024: 'https://cowrie.exchange/sep24',
-        WEB_AUTH_ENDPOINT: 'https://cowrie.exchange/auth',
+        TRANSFER_SERVER_SEP0024: 'https://api.cowrie.exchange/sep24',
+        WEB_AUTH_ENDPOINT: 'https://api.cowrie.exchange/auth',
       }),
       expect.objectContaining({
         id: 'ngnc',

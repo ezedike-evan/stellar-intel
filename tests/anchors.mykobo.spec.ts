@@ -12,8 +12,8 @@ describe('mykobo.co triage (B028)', () => {
     expect(mykobo?.homeDomain).toBe('mykobo.co');
   });
 
-  it('has correct service domain for SEP endpoints', () => {
-    expect(mykobo?.serviceDomain).toBe('stellar.mykobo.co');
+  it('uses the resolvable home domain for SEP endpoint discovery', () => {
+    expect(mykobo?.serviceDomain).toBeUndefined();
   });
 
   it('anchors EURC with the correct issuer', () => {

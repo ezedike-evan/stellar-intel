@@ -108,6 +108,21 @@ describe('validate-anchors: parseAnchors', () => {
     ]);
   });
 
+  it('uses the corrected live service hosts in the production registry', () => {
+    const source = readFileSync(join(process.cwd(), 'constants/anchors.ts'), 'utf8');
+    const domains = Object.fromEntries(
+      parseAnchors(source)
+        .filter(({ id }) => ['cowrie', 'mykobo', 'zeam'].includes(id))
+        .map(({ id, domain }) => [id, domain])
+    );
+
+    expect(domains).toEqual({
+      cowrie: 'api.cowrie.exchange',
+      mykobo: 'mykobo.co',
+      zeam: 'zeam.money',
+    });
+  });
+
   it('captures assetCode and a literal vs referenced assetIssuer', () => {
     const source = `
       export const ANCHORS: Anchor[] = [
