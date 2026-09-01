@@ -10,8 +10,17 @@ import { GET } from '@/app/api/reputation/probe-coverage/route';
 import { InMemoryReputationStore, _setReputationStore } from '@/lib/reputation/store';
 import type { ProbeLedgerRow } from '@/types/reputation';
 import { getProbeCoverage } from '@/packages/mcp/src/tools/probe-coverage';
+import { ANCHORS } from '@/constants/anchors';
+import { anchorProbeDomains } from '@/lib/reputation/aggregate';
 
 const NOW = new Date('2026-08-26T12:00:00.000Z');
+
+// Derived, not hardcoded: an anchor's probe domain is its serviceDomain when it
+// declares one and its homeDomain otherwise, so pinning a literal here silently
+// stops seeding the anchor the moment its registry entry gains a serviceDomain.
+const COWRIE_PROBE_DOMAIN = anchorProbeDomains(ANCHORS).find(
+  (a) => a.anchorId === 'cowrie'
+)!.domain;
 
 function uptimeRow(domain: string, at: Date): ProbeLedgerRow {
   return {
@@ -39,8 +48,8 @@ describe('intel.probe.coverage (#1046)', () => {
     const today = new Date(NOW);
     const yesterday = new Date(NOW);
     yesterday.setUTCDate(yesterday.getUTCDate() - 1);
-    await store.recordProbeSample(uptimeRow('cowrie.exchange', yesterday));
-    await store.recordProbeSample(uptimeRow('cowrie.exchange', today));
+    await store.recordProbeSample(uptimeRow(COWRIE_PROBE_DOMAIN, yesterday));
+    await store.recordProbeSample(uptimeRow(COWRIE_PROBE_DOMAIN, today));
 
     vi.useFakeTimers();
     vi.setSystemTime(NOW);
