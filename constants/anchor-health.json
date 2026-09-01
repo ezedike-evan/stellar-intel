@@ -1,53 +1,53 @@
 {
   "thresholdNights": 3,
-  "updatedAt": "2026-08-30T09:58:13.768Z",
+  "updatedAt": "2026-09-01T09:25:46.008Z",
   "anchors": {
     "moneygram": {
       "consecutiveFailures": 0,
       "degraded": false,
-      "lastCheckedAt": "2026-08-30T09:58:13.768Z",
+      "lastCheckedAt": "2026-09-01T09:25:46.008Z",
       "lastStatus": "ok",
       "lastError": null
     },
     "cowrie": {
       "consecutiveFailures": 0,
       "degraded": false,
-      "lastCheckedAt": "2026-08-30T09:58:13.768Z",
+      "lastCheckedAt": "2026-09-01T09:25:46.008Z",
       "lastStatus": "ok",
       "lastError": null
     },
     "anclap": {
       "consecutiveFailures": 0,
       "degraded": false,
-      "lastCheckedAt": "2026-08-30T09:58:13.768Z",
+      "lastCheckedAt": "2026-09-01T09:25:46.008Z",
       "lastStatus": "ok",
       "lastError": null
     },
     "ngnc": {
       "consecutiveFailures": 0,
       "degraded": false,
-      "lastCheckedAt": "2026-08-30T09:58:13.768Z",
+      "lastCheckedAt": "2026-09-01T09:25:46.008Z",
       "lastStatus": "ok",
       "lastError": null
     },
     "mykobo": {
-      "consecutiveFailures": 3,
+      "consecutiveFailures": 4,
       "degraded": true,
-      "lastCheckedAt": "2026-08-30T09:58:13.768Z",
+      "lastCheckedAt": "2026-09-01T09:25:46.008Z",
       "lastStatus": "fail",
       "lastError": "TypeError:ENOTFOUND"
     },
     "ntokens": {
       "consecutiveFailures": 0,
       "degraded": false,
-      "lastCheckedAt": "2026-08-30T09:58:13.768Z",
+      "lastCheckedAt": "2026-09-01T09:25:46.008Z",
       "lastStatus": "ok",
       "lastError": null
     },
     "zeam": {
-      "consecutiveFailures": 3,
+      "consecutiveFailures": 4,
       "degraded": true,
-      "lastCheckedAt": "2026-08-30T09:58:13.768Z",
+      "lastCheckedAt": "2026-09-01T09:25:46.008Z",
       "lastStatus": "fail",
       "lastError": "HTTP 404"
     }
