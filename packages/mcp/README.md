@@ -33,6 +33,20 @@ share the exact same logic:
   wallet signs the intent hash and the transaction before calling this tool.
   It is the only tool in this server marked destructive in `tools/list`.
 
+### Resources
+
+- `stellarintel://anchor-health/ledger` (`application/json`) — the nightly
+  anchor health ledger, verbatim from
+  [`constants/anchor-health.json`](https://github.com/ezedike-evan/stellar-intel/blob/main/constants/anchor-health.json):
+  the consecutive-failure threshold it was evaluated against, when it was
+  written, and one record per tracked anchor. It is a document rather than an
+  action, so it is a resource, not a tool — a client reads it whole. The read is
+  served from the committed file (the same value `/api/v1/anchor-health/ledger`
+  publishes) rather than probing anchors, so `resources/read` never turns a
+  document fetch into a live network dependency. The payload carries the
+  ledger's `version` (`YYYY-MM-DD`, from its own `updatedAt`) alongside it: two
+  reads returning the same version returned the same ledger.
+
 ### Build
 
 This package's `tsc` build reaches across the workspace into the main app's
