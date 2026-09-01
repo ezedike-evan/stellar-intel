@@ -1966,6 +1966,75 @@
         }
       }
     },
+    "/api/status": {
+      "get": {
+        "summary": "API version and deprecation status",
+        "description": "Current API version, the supported version window, and any announced deprecations — the \"Status page\" announcement channel in docs/VERSIONING.md.",
+        "tags": [
+          "System"
+        ],
+        "responses": {
+          "200": {
+            "description": "Status snapshot",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "version": {
+                      "type": "string"
+                    },
+                    "supported_versions": {
+                      "type": "array",
+                      "items": {
+                        "type": "string"
+                      }
+                    },
+                    "announced_deprecations": {
+                      "type": "array",
+                      "items": {
+                        "type": "object",
+                        "properties": {
+                          "version": {
+                            "type": "string"
+                          },
+                          "supersededAt": {
+                            "type": "string"
+                          },
+                          "sunsetAt": {
+                            "type": "string"
+                          }
+                        },
+                        "required": [
+                          "version",
+                          "supersededAt",
+                          "sunsetAt"
+                        ]
+                      }
+                    }
+                  },
+                  "required": [
+                    "version",
+                    "supported_versions",
+                    "announced_deprecations"
+                  ]
+                }
+              }
+            }
+          },
+          "429": {
+            "description": "Rate limited",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
     "/api/reputation/actuarial": {
       "get": {
         "summary": "Actuarial progress report",

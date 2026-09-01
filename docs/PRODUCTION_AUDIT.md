@@ -249,19 +249,23 @@ and it is the single biggest determinant of when the oracle half becomes real.
 | Every v1 route appears in the spec                        | `tests/openapi-coverage.spec.ts`                           | Enforced in CI        |
 | Responses carry an `API-Version` header                   | `lib/logger.ts`                                            | Enforced in code      |
 | A versioning and deprecation policy is published          | [`VERSIONING.md`](VERSIONING.md)                           | Documented, not gated |
-| The support window is "current + 1 previous, 180 days"    | `lib/api/api-version.ts` → `SUPPORTED_API_VERSIONS`        | **Not true yet**      |
-| `Sunset` / `Warning: 299` deprecation headers are emitted | —                                                          | **Not true yet**      |
-| `/api/status` publishes `announced_deprecations`          | —                                                          | **Not true yet**      |
+| The support window is "current + 1 previous, 180 days"    | `lib/api/api-version.ts` → `computeSupportedApiVersions`   | Enforced in code¹     |
+| `Sunset` / `Warning: 299` deprecation headers are emitted | `lib/api/deprecation.ts`, `lib/logger.ts`                  | Enforced in code¹     |
+| `/api/status` publishes `announced_deprecations`          | `app/api/status/route.ts`                                  | Enforced in code      |
 
-`SUPPORTED_API_VERSIONS` still has exactly one element and `negotiateApiVersion`
-rejects anything else, so the support window `VERSIONING.md` promises is
-contradicted by the code that enforces it. `grep` for `sunset`, `Deprecation:`
-and `announced_deprecations` across `lib/` and `app/` returns only the generated
-docs corpus.
+¹ The window and the headers it unlocks are both computed from
+`API_VERSION_HISTORY` and exercised in
+`tests/api-version-negotiation.spec.ts` against synthetic history (a version
+retired 179 days ago stays in the window, 181 days ago it doesn't) — but real
+production history has exactly one version, since none has ever been
+retired. So `SUPPORTED_API_VERSIONS` still has one element and no live
+response carries `Sunset`/`Warning` today. That is expected, not a gap: the
+mechanism is real and tested; it has simply never had a reason to produce a
+second entry. It does the first time a version ships and the outgoing one is
+recorded with a `supersededAt`.
 
 The previous revision pointed at #874. **That issue is closed** — the policy
-half landed in #827 and the code half did not — so the gap had no open tracker
-until now. Tracked in
+half landed in #827 and the code half did not, until
 [#1150](https://github.com/ezedike-evan/stellar-intel/issues/1150).
 
 ## 8. Trust boundaries

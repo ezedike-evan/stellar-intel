@@ -924,6 +924,36 @@ registry.registerPath({
 
 registry.registerPath({
   method: 'get',
+  path: '/api/status',
+  summary: 'API version and deprecation status',
+  description:
+    'Current API version, the supported version window, and any announced deprecations — the "Status page" announcement channel in docs/VERSIONING.md.',
+  tags: ['System'],
+  responses: {
+    200: {
+      description: 'Status snapshot',
+      content: {
+        'application/json': {
+          schema: z.object({
+            version: z.string(),
+            supported_versions: z.array(z.string()),
+            announced_deprecations: z.array(
+              z.object({
+                version: z.string(),
+                supersededAt: z.string(),
+                sunsetAt: z.string(),
+              })
+            ),
+          }),
+        },
+      },
+    },
+    429: RATE_LIMITED_429,
+  },
+});
+
+registry.registerPath({
+  method: 'get',
   path: '/api/reputation/actuarial',
   summary: 'Actuarial progress report',
   description:
