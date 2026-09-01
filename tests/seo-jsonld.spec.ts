@@ -7,15 +7,22 @@
  *   - The generated JSON-LD conforms to the schema.org Dataset shape.
  *   - The insufficiency notice is emitted when totalSamples < threshold.
  *   - temporalCoverage is omitted when null.
+ *   - FAQPage JSON-LD is generated from docs/FAQ.md (#1061).
  *   - serializeJsonLd escapes < to prevent script-injection.
  */
 
 import { describe, expect, it } from 'vitest';
+import { readFileSync } from 'node:fs';
+import { join } from 'node:path';
 import {
   buildDatasetJsonLd,
   serializeJsonLd,
   JSONLD_MIN_SUFFICIENT_SAMPLES,
   type DatasetJsonLdOptions,
+  FaqJsonLdError,
+  parseFaqMarkdown,
+  readFaqMarkdown,
+  buildFaqPageJsonLd,
 } from '@/lib/seo/jsonld';
 
 // ─── Fixtures ─────────────────────────────────────────────────────────────────
@@ -30,6 +37,16 @@ const SUFFICIENT_OPTS: DatasetJsonLdOptions = {
   license: 'https://creativecommons.org/licenses/by/4.0/',
   dateModified: '2026-08-28T00:00:00.000Z',
 };
+
+const FAQ_PATH = join(process.cwd(), 'docs/FAQ.md');
+const FAQ_SOURCE = readFileSync(FAQ_PATH, 'utf-8');
+
+function headingsFrom(source: string): string[] {
+  return source
+    .split('\n')
+    .filter((line) => line.startsWith('### '))
+    .map((line) => line.slice(4).trim());
+}
 
 // ─── Schema shape ─────────────────────────────────────────────────────────────
 
@@ -134,6 +151,90 @@ describe('buildDatasetJsonLd — insufficiency notice', () => {
   });
 });
 
+describe('parseFaqMarkdown (#1061)', () => {
+  it('extracts every ### heading from docs/FAQ.md as a question', () => {
+    const entries = parseFaqMarkdown(FAQ_SOURCE);
+    const headings = headingsFrom(FAQ_SOURCE);
+
+    expect(headings.length).toBeGreaterThan(0);
+    expect(entries.map((entry) => entry.question)).toEqual(headings);
+  });
+
+  it('keeps non-empty answers for every real FAQ item', () => {
+    for (const entry of parseFaqMarkdown(FAQ_SOURCE)) {
+      expect(entry.answer.length).toBeGreaterThan(0);
+    }
+  });
+
+  it('strips markdown links, bold, and backticks from JSON-LD text', () => {
+    const source = [
+      '### Is [`docs/NON_CUSTODY.md`](NON_CUSTODY.md) the source?',
+      '',
+      'See **before** you choose. Call the `HTTP API`.',
+    ].join('\n');
+
+    const [entry] = parseFaqMarkdown(source);
+    expect(entry?.question).toBe('Is docs/NON_CUSTODY.md the source?');
+    expect(entry?.answer).toBe('See before you choose. Call the HTTP API.');
+  });
+
+  it('throws FaqJsonLdError when there are no questions', () => {
+    expect(() => parseFaqMarkdown('# FAQ\n\nNo questions here.\n')).toThrow(FaqJsonLdError);
+  });
+
+  it('throws FaqJsonLdError when a question has no answer', () => {
+    expect(() => parseFaqMarkdown('### Orphan question?\n')).toThrow(FaqJsonLdError);
+  });
+
+  it('throws FaqJsonLdError when a question exceeds 300 characters', () => {
+    const question = 'Q'.repeat(301);
+    expect(() => parseFaqMarkdown(`### ${question}\n\nA short answer.\n`)).toThrow(FaqJsonLdError);
+  });
+
+  it('throws FaqJsonLdError when an answer exceeds 8000 characters', () => {
+    const answer = 'A'.repeat(8001);
+    expect(() => parseFaqMarkdown(`### Short question?\n\n${answer}\n`)).toThrow(FaqJsonLdError);
+  });
+
+  it('throws FaqJsonLdError when there are more than 50 questions', () => {
+    const body = Array.from({ length: 51 }, (_, i) => `### Q${i}?\n\nA${i}.\n`).join('\n');
+    expect(() => parseFaqMarkdown(body)).toThrow(FaqJsonLdError);
+  });
+});
+
+describe('readFaqMarkdown (#1061)', () => {
+  it('reads docs/FAQ.md from the repo root', () => {
+    expect(readFaqMarkdown()).toContain('### Is this custodial?');
+  });
+
+  it('throws FaqJsonLdError when the file is missing', () => {
+    expect(() => readFaqMarkdown('docs/FAQ-does-not-exist.md')).toThrow(FaqJsonLdError);
+  });
+});
+
+describe('buildFaqPageJsonLd (#1061)', () => {
+  it('emits schema.org FAQPage / Question / Answer from docs/FAQ.md', () => {
+    const graph = buildFaqPageJsonLd(parseFaqMarkdown(FAQ_SOURCE));
+    const headings = headingsFrom(FAQ_SOURCE);
+
+    expect(graph['@context']).toBe('https://schema.org');
+    expect(graph['@type']).toBe('FAQPage');
+    expect(graph.mainEntity).toHaveLength(headings.length);
+
+    for (const [i, heading] of headings.entries()) {
+      const entity = graph.mainEntity[i];
+      expect(entity?.['@type']).toBe('Question');
+      expect(entity?.name).toBe(heading);
+      expect(entity?.acceptedAnswer['@type']).toBe('Answer');
+      expect(entity?.acceptedAnswer.text.length).toBeGreaterThan(0);
+    }
+  });
+
+  it('throws FaqJsonLdError when given no entries', () => {
+    expect(() => buildFaqPageJsonLd([])).toThrow(FaqJsonLdError);
+  });
+});
+
 // ─── serializeJsonLd ──────────────────────────────────────────────────────────
 
 describe('serializeJsonLd', () => {
@@ -150,5 +251,12 @@ describe('serializeJsonLd', () => {
     const serialized = serializeJsonLd(jsonLd);
     expect(serialized).not.toContain('<script>');
     expect(serialized).toContain('\\u003c');
+  });
+
+  it('escapes < so the payload cannot break out of a script tag', () => {
+    const payload = serializeJsonLd({ text: '<script>alert(1)</script>' });
+    expect(payload).not.toContain('<');
+    expect(payload).toContain('\\u003c');
+    expect(JSON.parse(payload)).toEqual({ text: '<script>alert(1)</script>' });
   });
 });
