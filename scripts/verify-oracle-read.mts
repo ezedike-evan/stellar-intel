@@ -73,9 +73,11 @@ async function main(): Promise<void> {
     // entrypoint and still be unupgradeable (#872, #785).
     if (gov.contractVersion === 0) {
       console.log(
-        '::warning::contract_version() is 0 — init_upgrade was never called, so ' +
-          'upgrade() would panic. Any new entrypoint requires a fresh deploy, not ' +
-          'an in-place upgrade. See docs/ORACLE_MIGRATION.md.'
+        '::warning::contract_version() is 0 — the deployed bytecode predates the ' +
+          'constructor-based __constructor(admin, upgrade_admin) that binds both ' +
+          'authorities at deploy time, so upgrade() would panic. There is no ' +
+          'in-place fix; only a fresh deploy sets this. See docs/ORACLE_SPEC.md ' +
+          '§ "Fresh deploy".'
       );
     }
   } catch (err) {
