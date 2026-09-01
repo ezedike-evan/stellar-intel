@@ -34,7 +34,6 @@ finding is untracked and that is itself the bug.
 | §   | Finding                                                                      | Tracked in                                                         |
 | --- | ---------------------------------------------------------------------------- | ------------------------------------------------------------------ |
 | §1  | The custody boundary has no CI guard                                         | [#1147](https://github.com/ezedike-evan/stellar-intel/issues/1147) |
-| §2  | No secret scanning in CI                                                     | [#1148](https://github.com/ezedike-evan/stellar-intel/issues/1148) |
 | §6  | Deployed testnet contract predates `main`; no upgrade path; zero anchors     | [#1149](https://github.com/ezedike-evan/stellar-intel/issues/1149) |
 | §6  | Probe-derived signals are not published on chain                             | [#785](https://github.com/ezedike-evan/stellar-intel/issues/785)   |
 | §7  | `VERSIONING.md` promises a deprecation lifecycle the code does not implement | [#1150](https://github.com/ezedike-evan/stellar-intel/issues/1150) |
@@ -90,12 +89,38 @@ remains the single most valuable test this repository does not have.
 | Threat model is reviewed on a cadence  | [`THREAT_MODEL.md`](THREAT_MODEL.md) § "Review cadence"    | Documented, not gated |
 | Dependencies are reviewed on every PR  | `.github/workflows/dependency-review.yml`                  | Enforced in CI        |
 | Static analysis runs on every PR       | `.github/workflows/codeql.yml`                             | Enforced in CI        |
-| No secret is committed                 | —                                                          | Not true yet          |
+| No secret is committed                 | `.github/workflows/secret-scan.yml`                        | Enforced in CI        |
 
-The em dash in the last row is the finding: `grep -rn 'gitleaks\|trufflehog'
-.github/workflows/` returns nothing. GitHub's own push protection may apply at
-the platform level, but this repository does not assert it. Tracked in
-[#1148](https://github.com/ezedike-evan/stellar-intel/issues/1148).
+Secret scanning is gitleaks against a committed [`.gitleaks.toml`](../.gitleaks.toml),
+in two jobs answering different questions. The **PR job** scans only the commits
+a change adds and fails the check, so a secret cannot land; it is fast enough to
+run on every pull request. The **scheduled job** scans every commit weekly,
+because a gate can only see forward — a repository whose history was never
+swept is not clean, it is unchecked.
+
+The config extends gitleaks' maintained rule set and adds two the defaults do
+not cover: a literal assignment to one of this repository's own server-side
+secrets (`PUBLISHER_SECRET`, `CRON_SECRET`, `ADMIN_SECRET_KEY`,
+`REVALIDATE_SECRET`), and a Stellar account secret seed (`S…` strkey). Its
+allowlists are scoped: published Stellar identifiers (`G…`, `C…`) and
+documentation placeholders are exempt everywhere, while fabricated fixture
+credentials under `tests/` are exempt only from the generic entropy rules — a
+real seed or a hard-coded `CRON_SECRET` is still a finding in a test file.
+Historical false positives are pinned by fingerprint in
+[`.gitleaksignore`](../.gitleaksignore) with the reasoning attached, rather than
+by widening a rule.
+
+Reproduce either job locally:
+
+```bash
+gitleaks git --config .gitleaks.toml     # full history
+gitleaks dir --config .gitleaks.toml     # working tree
+```
+
+This closes [#1148](https://github.com/ezedike-evan/stellar-intel/issues/1148).
+It does not replace GitHub's platform-level push protection, which acts before a
+commit reaches the remote; the two are complementary, and this one is the part a
+reader can verify from the repository.
 
 ## 3. Rate limiting
 
@@ -310,8 +335,6 @@ runnable offline or on a bad day:
 
 ### Gates that do not exist
 
-- **No secret scanning.** §2,
-  [#1148](https://github.com/ezedike-evan/stellar-intel/issues/1148).
 - **No end-to-end test in the merge gate.** Playwright smoke exists on PRs but
   is skipped for fork PRs (the preview deploy it depends on requires the PR to
   come from this repository), so no contributor PR is browser-verified before
@@ -388,14 +411,12 @@ this project.
 5. **`VERSIONING.md` promises three things the code does not implement**, and the
    issue that used to track it was closed without them. §7 ·
    [#1150](https://github.com/ezedike-evan/stellar-intel/issues/1150)
-6. **No secret scanning in CI.** §2 ·
-   [#1148](https://github.com/ezedike-evan/stellar-intel/issues/1148)
-7. **The release gate is network-dependent and locally fragile.** §9 ·
+6. **The release gate is network-dependent and locally fragile.** §9 ·
    [#1034](https://github.com/ezedike-evan/stellar-intel/issues/1034) ·
    [#1036](https://github.com/ezedike-evan/stellar-intel/issues/1036)
-8. **Firm SEP-38 quotes do not exist across the fleet**, so quote-ranking claims
+7. **Firm SEP-38 quotes do not exist across the fleet**, so quote-ranking claims
    cannot be true yet. §4 — no issue, because there is nothing here to assign.
-9. **Accessibility is guarded for contrast and nothing else.** §10 ·
+8. **Accessibility is guarded for contrast and nothing else.** §10 ·
    [#1069](https://github.com/ezedike-evan/stellar-intel/issues/1069) ·
    [#968](https://github.com/ezedike-evan/stellar-intel/issues/968)
 

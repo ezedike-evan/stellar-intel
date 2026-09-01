@@ -1,0 +1,89 @@
+# Secret-scanning configuration (#1148).
+#
+# Consumed by .github/workflows/secret-scan.yml, which runs gitleaks on every
+# pull request (diff only, so it stays fast) and on a weekly schedule over the
+# full history (so anything predating the job is still found).
+#
+# The config is committed rather than left implicit so a reader can see exactly
+# what is scanned and what is exempted, and so a local run matches CI:
+#
+#   gitleaks git   --config .gitleaks.toml     # full history
+#   gitleaks dir   --config .gitleaks.toml     # working tree
+#
+# Adding an allowlist entry is a security decision. Each one below says why it
+# is not a secret, not merely that it fired.
+
+# Start from gitleaks' maintained rule set rather than hand-rolling patterns:
+# provider tokens change shape, and a local copy would silently rot.
+[extend]
+useDefault = true
+
+[[rules]]
+id = "stellar-intel-app-secret-env"
+description = "Hard-coded value for one of this app's own server-side secrets"
+# The four names README and docs/THREAT_MODEL.md call out as server-side:
+# a literal assignment to any of them in tracked source is the mistake this
+# job exists to catch, and no default rule knows these names.
+regex = '''(?i)\b(PUBLISHER_SECRET|CRON_SECRET|ADMIN_SECRET_KEY|REVALIDATE_SECRET)\s*[:=]\s*['"]?([A-Za-z0-9_\-\/+=]{16,})['"]?'''
+secretGroup = 2
+keywords = [
+  "publisher_secret",
+  "cron_secret",
+  "admin_secret_key",
+  "revalidate_secret",
+]
+
+[[rules]]
+id = "stellar-secret-seed"
+description = "Stellar account secret seed (S… strkey)"
+# A Stellar secret seed is 56 chars of base32 starting with S. Losing one costs
+# the account, and no default gitleaks rule covers strkeys.
+regex = '''\bS[A-Z2-7]{55}\b'''
+keywords = ["S"]
+
+# Global allowlist: values that are public by construction, everywhere.
+[[allowlists]]
+description = "Public identifiers and documented placeholders"
+
+paths = [
+  # Placeholders only — the file exists to document variable names. Its values
+  # are things like "stellar_public_key_here".
+  '''^\.env\.example$''',
+  # Lockfiles carry integrity hashes, which are high-entropy by design.
+  '''package-lock\.json$''',
+  '''(^|/)Cargo\.lock$''',
+  # Generated corpora and build output: derived from tracked sources that are
+  # themselves scanned, so scanning the derivative only duplicates findings.
+  '''^lib/seo/llms-full\.generated\.txt$''',
+  '''^public/openapi\.json$''',
+]
+
+regexes = [
+  # Stellar PUBLIC keys (G…) and contract addresses (C…) are published
+  # identifiers — issuer accounts, anchor accounts, deployed contracts. They
+  # appear throughout the anchor directory and docs on purpose.
+  '''\bG[A-Z2-7]{55}\b''',
+  '''\bC[A-Z2-7]{55}\b''',
+  # Documentation placeholders: the docs show the SHAPE of a credential without
+  # being one. `YOUR_CRON_SECRET` in a curl example is the instruction, not the
+  # value.
+  '''(?i)your[-_]?[a-z0-9_]*(secret|token|key)''',
+  '''(?i)[-_](secret|token|key)[-_]?here''',
+  '''<[A-Za-z0-9_\- ]*(secret|token|key)[A-Za-z0-9_\- ]*>''',
+]
+
+# Scoped allowlist: fabricated fixture credentials under tests/.
+#
+# `targetRules` is the point — this exemption applies ONLY to the generic
+# entropy rules that cannot tell a fake JWT from a real one. The two rules that
+# matter most here, `stellar-intel-app-secret-env` and `stellar-secret-seed`,
+# are deliberately NOT listed: a real account seed or a hard-coded
+# CRON_SECRET is still a leak when it lands in a test file.
+[[allowlists]]
+description = "Fixture credentials in the test suite"
+targetRules = ["generic-api-key", "curl-auth-header", "jwt", "jwt-base64"]
+paths = [
+  '''^tests/''',
+  '''(^|/)__tests__/''',
+  '''\.(spec|test)\.[jt]sx?$''',
+]
