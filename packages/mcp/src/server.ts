@@ -21,6 +21,7 @@ export async function createServer(): Promise<McpServer> {
   const { registerQuoteTool } = await import('./tools/quote.js');
   const { registerPrepareTool } = await import('./tools/prepare.js');
   const { registerExecuteTool } = await import('./tools/execute.js');
+  const { registerProbeCoverageTool } = await import('./tools/probe-coverage.js');
   const { registerAnchorReputationTool } = await import('./tools/anchor-reputation.js');
   const { registerAnchorHealthTool } = await import('./tools/anchor-health.js');
 
@@ -31,6 +32,7 @@ export async function createServer(): Promise<McpServer> {
   registerQuoteTool(server);
   registerPrepareTool(server);
   registerExecuteTool(server);
+  registerProbeCoverageTool(server);
   registerAnchorReputationTool(server);
   registerAnchorHealthTool(server);
   return server;
