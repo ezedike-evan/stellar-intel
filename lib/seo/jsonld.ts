@@ -314,6 +314,58 @@ export function buildDatasetJsonLd(options: DatasetJsonLdOptions): Record<string
  * The `<` → `\u003c` replacement prevents script-injection via embedded
  * close-tags (same guard used across the rest of the codebase).
  */
-export function serializeJsonLd(jsonLd: Record<string, unknown> | FaqPageJsonLd): string {
+export function serializeJsonLd(
+  jsonLd: Record<string, unknown> | FaqPageJsonLd | BreadcrumbListJsonLd
+): string {
   return JSON.stringify(jsonLd).replace(/</g, '\\u003c');
+}
+
+// ─── BreadcrumbList (#1062) ───────────────────────────────────────────────────
+
+export interface BreadcrumbItem {
+  name: string;
+  url: string;
+}
+
+export interface BreadcrumbListJsonLd {
+  '@context': 'https://schema.org';
+  '@type': 'BreadcrumbList';
+  itemListElement: Array<{
+    '@type': 'ListItem';
+    position: number;
+    name: string;
+    item: string;
+  }>;
+}
+
+/**
+ * Builds a `BreadcrumbList` for the `/docs/*` and `/anchors/*` trails (#1062).
+ * Positions are 1-based, as schema.org requires.
+ */
+export function buildBreadcrumbList(items: BreadcrumbItem[]): BreadcrumbListJsonLd {
+  return {
+    '@context': 'https://schema.org',
+    '@type': 'BreadcrumbList',
+    itemListElement: items.map((item, index) => ({
+      '@type': 'ListItem',
+      position: index + 1,
+      name: item.name,
+      item: item.url,
+    })),
+  };
+}
+
+/**
+ * Props for a `<script type="application/ld+json">` tag. The payload goes
+ * through `serializeJsonLd`, so the `<` escaping that stops an embedded
+ * `</script>` from closing the tag early lives in exactly one place.
+ */
+export function jsonLdScriptProps(data: Record<string, unknown> | BreadcrumbListJsonLd): {
+  type: 'application/ld+json';
+  dangerouslySetInnerHTML: { __html: string };
+} {
+  return {
+    type: 'application/ld+json',
+    dangerouslySetInnerHTML: { __html: serializeJsonLd(data) },
+  };
 }

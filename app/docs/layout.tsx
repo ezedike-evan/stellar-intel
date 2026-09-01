@@ -3,9 +3,27 @@ import Link from 'next/link';
 import { usePathname } from 'next/navigation';
 import { clsx } from 'clsx';
 import { BookOpen, ChevronRight, Search } from 'lucide-react';
-import { DOCS_SECTIONS } from './nav';
+import { DOCS_ROUTES, DOCS_SECTIONS } from './nav';
 import { useEffect, useState } from 'react';
 import { DocsSearch } from '@/components/docs/DocsSearch';
+import { buildBreadcrumbList, jsonLdScriptProps, type BreadcrumbItem } from '@/lib/seo/jsonld';
+
+const SITE_URL = process.env.NEXT_PUBLIC_SITE_URL ?? 'https://stellar-intel.vercel.app';
+
+// Mirrors DOCS_ROUTES (app/docs/nav.ts) — the same list that drives the
+// sidebar — so the emitted BreadcrumbList can never name a page the sidebar
+// doesn't also link to (#1062's "matches the visible navigation").
+function buildDocsBreadcrumbItems(pathname: string | null): BreadcrumbItem[] {
+  const items: BreadcrumbItem[] = [
+    { name: 'Home', url: SITE_URL },
+    { name: 'Docs', url: `${SITE_URL}/docs` },
+  ];
+  const current = DOCS_ROUTES.find((route) => route.href === pathname);
+  if (current && current.href !== '/docs') {
+    items.push({ name: current.label, url: `${SITE_URL}${current.href}` });
+  }
+  return items;
+}
 
 export default function DocsLayout({ children }: { children: React.ReactNode }) {
   const pathname = usePathname();
@@ -25,6 +43,11 @@ export default function DocsLayout({ children }: { children: React.ReactNode }) 
 
   return (
     <div className="flex min-h-[calc(100vh-4rem)]">
+      <script
+        // eslint-disable-next-line react/no-danger
+        {...jsonLdScriptProps(buildBreadcrumbList(buildDocsBreadcrumbItems(pathname)))}
+      />
+
       {/* Mobile sidebar toggle */}
       <button
         type="button"
