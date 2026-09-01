@@ -1,17 +1,16 @@
 {
-  "$comment": "Committed snapshot of `node scripts/anchor-survey.mjs --json`. Consumed by scripts/check-registry.mjs to guard that every anchor in constants/anchors.ts is transfer-capable (SEP-6 or SEP-24) or explicitly allowlisted. Regenerate with: node scripts/anchor-survey.mjs --json > scripts/anchor-survey.snapshot.json (then re-trim, or keep full output). The transferCapable count is a FLOOR — the public directory lists some anchors by issuer domain, not their live service subdomain (e.g. MoneyGram), and a strict TLS client sees fewer than a curl crawl.",
-  "generatedAt": "2026-06-25T23:08:26.806Z",
+  "generatedAt": "2026-09-01T11:03:37.128Z",
   "source": "https://api.stellar.expert/explorer/public/directory?tag[]=anchor&limit=200",
   "totals": {
-    "tagged": 92,
-    "reachable": 32,
-    "unreachable": 60,
-    "transferCapable": 9,
-    "issuerOnly": 23,
-    "sep6": 7,
+    "tagged": 94,
+    "reachable": 36,
+    "unreachable": 58,
+    "transferCapable": 10,
+    "issuerOnly": 26,
+    "sep6": 8,
     "sep24": 6,
     "both": 4,
-    "only6": 3,
+    "only6": 4,
     "only24": 2,
     "sep38": 1,
     "sep31": 4
@@ -19,6 +18,7 @@
   "transferCapableDomains": [
     "anclap.com",
     "cowrie.exchange",
+    "dead.apay.io",
     "mykobo.co",
     "naobtc.com",
     "ngnc.online",
@@ -35,7 +35,10 @@
     "bitbondsto.com",
     "centre.io",
     "cryptotari.io",
+    "gratz.io",
     "heir.io",
+    "ixinium.io",
+    "luxpayband.io",
     "mgusd.moneygram.com",
     "mobius.network",
     "nafuloo.com",
@@ -47,8 +50,8 @@
     "tempocrypto.com",
     "thefutbolcoin.io",
     "traxalt.com",
+    "vnx.io",
     "www.anchorusd.com",
-    "www.factrpay.io",
     "ximcoin.com",
     "xirkle.com"
   ],
@@ -68,7 +71,7 @@
     "citystatesm.com",
     "clickpesa.com",
     "cryptomover.com",
-    "dead.apay.io",
+    "decaf.so",
     "equid.co",
     "fchain.io",
     "flutterwave.com",
@@ -77,14 +80,11 @@
     "funtracker.site",
     "glitzkoin.com",
     "goodx.network",
-    "gratz.io",
     "hotoken.io",
     "irene.energy",
-    "ixinium.io",
     "jetmint.org",
     "levelg.net",
     "luckybird.io",
-    "luxpayband.io",
     "merge.lobstr.co",
     "moni.com",
     "nezly.com",
@@ -112,6 +112,587 @@
     "vcbear.net",
     "winsome.gift",
     "wirexapp.com",
+    "www.factrpay.io",
     "x.token.io"
+  ],
+  "results": [
+    {
+      "domain": "afreum.com",
+      "reachable": true,
+      "sep6": false,
+      "sep24": false,
+      "sep38": false,
+      "sep31": false
+    },
+    {
+      "domain": "anchormxn.com",
+      "reachable": false,
+      "reason": "TypeError:UND_ERR_CONNECT_TIMEOUT"
+    },
+    {
+      "domain": "anclap.com",
+      "reachable": true,
+      "sep6": true,
+      "sep24": true,
+      "sep38": false,
+      "sep31": false
+    },
+    {
+      "domain": "anclax.com",
+      "reachable": false,
+      "reason": "TypeError:UND_ERR_CONNECT_TIMEOUT"
+    },
+    {
+      "domain": "apay.io",
+      "reachable": false,
+      "reason": "HTTP 404"
+    },
+    {
+      "domain": "apiscapitalfunds.com",
+      "reachable": false,
+      "reason": "HTTP 403"
+    },
+    {
+      "domain": "app.phoenix-hub.io",
+      "reachable": true,
+      "sep6": false,
+      "sep24": false,
+      "sep38": false,
+      "sep31": false
+    },
+    {
+      "domain": "aps.money",
+      "reachable": true,
+      "sep6": false,
+      "sep24": false,
+      "sep38": false,
+      "sep31": false
+    },
+    {
+      "domain": "aqua.network",
+      "reachable": true,
+      "sep6": false,
+      "sep24": false,
+      "sep38": false,
+      "sep31": false
+    },
+    {
+      "domain": "astral9.io",
+      "reachable": false,
+      "reason": "TypeError:UND_ERR_CONNECT_TIMEOUT"
+    },
+    {
+      "domain": "atlantisblue.org",
+      "reachable": false,
+      "reason": "HTTP 403"
+    },
+    {
+      "domain": "auskunft.de",
+      "reachable": false,
+      "reason": "TypeError:UND_ERR_CONNECT_TIMEOUT"
+    },
+    {
+      "domain": "bac.gold",
+      "reachable": false,
+      "reason": "TypeError:UND_ERR_CONNECT_TIMEOUT"
+    },
+    {
+      "domain": "bitbondsto.com",
+      "reachable": true,
+      "sep6": false,
+      "sep24": false,
+      "sep38": false,
+      "sep31": false
+    },
+    {
+      "domain": "bitx.tk",
+      "reachable": false,
+      "reason": "TypeError:UND_ERR_CONNECT_TIMEOUT"
+    },
+    {
+      "domain": "bostravel.online",
+      "reachable": false,
+      "reason": "TypeError:UND_ERR_CONNECT_TIMEOUT"
+    },
+    {
+      "domain": "centre.io",
+      "reachable": true,
+      "sep6": false,
+      "sep24": false,
+      "sep38": false,
+      "sep31": false
+    },
+    {
+      "domain": "charnatoken.top",
+      "reachable": false,
+      "reason": "TypeError:UND_ERR_CONNECT_TIMEOUT"
+    },
+    {
+      "domain": "citron.cash",
+      "reachable": false,
+      "reason": "TypeError:UND_ERR_CONNECT_TIMEOUT"
+    },
+    {
+      "domain": "citystatesm.com",
+      "reachable": false,
+      "reason": "TypeError:UND_ERR_CONNECT_TIMEOUT"
+    },
+    {
+      "domain": "clickpesa.com",
+      "reachable": false,
+      "reason": "HTTP 404"
+    },
+    {
+      "domain": "cowrie.exchange",
+      "reachable": true,
+      "sep6": true,
+      "sep24": false,
+      "sep38": false,
+      "sep31": true
+    },
+    {
+      "domain": "cryptomover.com",
+      "reachable": false,
+      "reason": "TypeError:UND_ERR_CONNECT_TIMEOUT"
+    },
+    {
+      "domain": "cryptotari.io",
+      "reachable": true,
+      "sep6": false,
+      "sep24": false,
+      "sep38": false,
+      "sep31": false
+    },
+    {
+      "domain": "dead.apay.io",
+      "reachable": true,
+      "sep6": true,
+      "sep24": false,
+      "sep38": false,
+      "sep31": false
+    },
+    {
+      "domain": "decaf.so",
+      "reachable": false,
+      "reason": "TypeError:UND_ERR_CONNECT_TIMEOUT"
+    },
+    {
+      "domain": "equid.co",
+      "reachable": false,
+      "reason": "TypeError:UND_ERR_CONNECT_TIMEOUT"
+    },
+    {
+      "domain": "fchain.io",
+      "reachable": false,
+      "reason": "TypeError:UND_ERR_CONNECT_TIMEOUT"
+    },
+    {
+      "domain": "flutterwave.com",
+      "reachable": false,
+      "reason": "TypeError:UND_ERR_CONNECT_TIMEOUT"
+    },
+    {
+      "domain": "frasindo.com",
+      "reachable": false,
+      "reason": "TypeError:UND_ERR_CONNECT_TIMEOUT"
+    },
+    {
+      "domain": "freight-coin.com",
+      "reachable": false,
+      "reason": "TypeError:UND_ERR_CONNECT_TIMEOUT"
+    },
+    {
+      "domain": "funtracker.site",
+      "reachable": false,
+      "reason": "TypeError:UND_ERR_CONNECT_TIMEOUT"
+    },
+    {
+      "domain": "glitzkoin.com",
+      "reachable": false,
+      "reason": "TypeError:UND_ERR_CONNECT_TIMEOUT"
+    },
+    {
+      "domain": "goodx.network",
+      "reachable": false,
+      "reason": "TypeError:UND_ERR_CONNECT_TIMEOUT"
+    },
+    {
+      "domain": "gratz.io",
+      "reachable": true,
+      "sep6": false,
+      "sep24": false,
+      "sep38": false,
+      "sep31": false
+    },
+    {
+      "domain": "heir.io",
+      "reachable": true,
+      "sep6": false,
+      "sep24": false,
+      "sep38": false,
+      "sep31": false
+    },
+    {
+      "domain": "hotoken.io",
+      "reachable": false,
+      "reason": "TypeError:UND_ERR_CONNECT_TIMEOUT"
+    },
+    {
+      "domain": "irene.energy",
+      "reachable": false,
+      "reason": "HTTP 404"
+    },
+    {
+      "domain": "ixinium.io",
+      "reachable": true,
+      "sep6": false,
+      "sep24": false,
+      "sep38": false,
+      "sep31": false
+    },
+    {
+      "domain": "jetmint.org",
+      "reachable": false,
+      "reason": "TypeError:CERT_HAS_EXPIRED"
+    },
+    {
+      "domain": "levelg.net",
+      "reachable": false,
+      "reason": "HTTP 404"
+    },
+    {
+      "domain": "luckybird.io",
+      "reachable": false,
+      "reason": "TypeError:UND_ERR_CONNECT_TIMEOUT"
+    },
+    {
+      "domain": "luxpayband.io",
+      "reachable": true,
+      "sep6": false,
+      "sep24": false,
+      "sep38": false,
+      "sep31": false
+    },
+    {
+      "domain": "merge.lobstr.co",
+      "reachable": false,
+      "reason": "HTTP 404"
+    },
+    {
+      "domain": "mgusd.moneygram.com",
+      "reachable": true,
+      "sep6": false,
+      "sep24": false,
+      "sep38": false,
+      "sep31": false
+    },
+    {
+      "domain": "mobius.network",
+      "reachable": true,
+      "sep6": false,
+      "sep24": false,
+      "sep38": false,
+      "sep31": false
+    },
+    {
+      "domain": "moni.com",
+      "reachable": false,
+      "reason": "HTTP 404"
+    },
+    {
+      "domain": "mykobo.co",
+      "reachable": true,
+      "sep6": true,
+      "sep24": true,
+      "sep38": false,
+      "sep31": true
+    },
+    {
+      "domain": "nafuloo.com",
+      "reachable": true,
+      "sep6": false,
+      "sep24": false,
+      "sep38": false,
+      "sep31": false
+    },
+    {
+      "domain": "naobtc.com",
+      "reachable": true,
+      "sep6": true,
+      "sep24": false,
+      "sep38": false,
+      "sep31": false
+    },
+    {
+      "domain": "nezly.com",
+      "reachable": false,
+      "reason": "TypeError:ERR_SSL_SSLV3_ALERT_HANDSHAKE_FAILURE"
+    },
+    {
+      "domain": "ngnc.online",
+      "reachable": true,
+      "sep6": false,
+      "sep24": true,
+      "sep38": false,
+      "sep31": false
+    },
+    {
+      "domain": "ntokens.com",
+      "reachable": true,
+      "sep6": true,
+      "sep24": true,
+      "sep38": false,
+      "sep31": true
+    },
+    {
+      "domain": "nydro.energy",
+      "reachable": false,
+      "reason": "TypeError:ENOTFOUND"
+    },
+    {
+      "domain": "old.repocoin.io",
+      "reachable": false,
+      "reason": "TypeError:ENOTFOUND"
+    },
+    {
+      "domain": "old.sureremit.co",
+      "reachable": false,
+      "reason": "TypeError:ENOTFOUND"
+    },
+    {
+      "domain": "papayabot.com",
+      "reachable": true,
+      "sep6": false,
+      "sep24": false,
+      "sep38": false,
+      "sep31": false
+    },
+    {
+      "domain": "pedity.com",
+      "reachable": true,
+      "sep6": false,
+      "sep24": false,
+      "sep38": false,
+      "sep31": false
+    },
+    {
+      "domain": "photon.center",
+      "reachable": false,
+      "reason": "HTTP 404"
+    },
+    {
+      "domain": "pigzbe.com",
+      "reachable": false,
+      "reason": "HTTP 404"
+    },
+    {
+      "domain": "piiko.co",
+      "reachable": false,
+      "reason": "TypeError:UND_ERR_CONNECT_TIMEOUT"
+    },
+    {
+      "domain": "pr.network",
+      "reachable": true,
+      "sep6": false,
+      "sep24": false,
+      "sep38": false,
+      "sep31": false
+    },
+    {
+      "domain": "repocoin.io",
+      "reachable": false,
+      "reason": "TypeError:UND_ERR_CONNECT_TIMEOUT"
+    },
+    {
+      "domain": "ripplefox.com",
+      "reachable": true,
+      "sep6": false,
+      "sep24": false,
+      "sep38": false,
+      "sep31": false
+    },
+    {
+      "domain": "six.network",
+      "reachable": false,
+      "reason": "HTTP 404"
+    },
+    {
+      "domain": "smartlands.io",
+      "reachable": false,
+      "reason": "HTTP 404"
+    },
+    {
+      "domain": "stablex.cloud",
+      "reachable": false,
+      "reason": "TypeError:ENOTFOUND"
+    },
+    {
+      "domain": "stably.io",
+      "reachable": false,
+      "reason": "HTTP 400"
+    },
+    {
+      "domain": "steemanchor.com",
+      "reachable": false,
+      "reason": "TypeError:ENOTFOUND"
+    },
+    {
+      "domain": "steiiarusa.vip",
+      "reachable": false,
+      "reason": "TypeError:ENOTFOUND"
+    },
+    {
+      "domain": "stellarport.io",
+      "reachable": true,
+      "sep6": true,
+      "sep24": false,
+      "sep38": false,
+      "sep31": false
+    },
+    {
+      "domain": "stemchain.io",
+      "reachable": false,
+      "reason": "HTTP 404"
+    },
+    {
+      "domain": "stronghold.co",
+      "reachable": true,
+      "sep6": false,
+      "sep24": false,
+      "sep38": false,
+      "sep31": false
+    },
+    {
+      "domain": "superlumen.org",
+      "reachable": false,
+      "reason": "TypeError:ENOTFOUND"
+    },
+    {
+      "domain": "sureremit.co",
+      "reachable": false,
+      "reason": "HTTP 403"
+    },
+    {
+      "domain": "tempocrypto.com",
+      "reachable": true,
+      "sep6": false,
+      "sep24": false,
+      "sep38": false,
+      "sep31": false
+    },
+    {
+      "domain": "ternio.io",
+      "reachable": false,
+      "reason": "HTTP 404"
+    },
+    {
+      "domain": "thefutbolcoin.io",
+      "reachable": true,
+      "sep6": false,
+      "sep24": false,
+      "sep38": false,
+      "sep31": false
+    },
+    {
+      "domain": "thewwallet.com",
+      "reachable": false,
+      "reason": "TypeError:ERR_TLS_CERT_ALTNAME_INVALID"
+    },
+    {
+      "domain": "tonaira.com",
+      "reachable": false,
+      "reason": "AbortError"
+    },
+    {
+      "domain": "tontinetrust.com",
+      "reachable": false,
+      "reason": "HTTP 404"
+    },
+    {
+      "domain": "traxalt.com",
+      "reachable": true,
+      "sep6": false,
+      "sep24": false,
+      "sep38": false,
+      "sep31": false
+    },
+    {
+      "domain": "uhuruwallet.co.za",
+      "reachable": false,
+      "reason": "HTTP 404"
+    },
+    {
+      "domain": "ultracapital.xyz",
+      "reachable": true,
+      "sep6": true,
+      "sep24": true,
+      "sep38": false,
+      "sep31": false
+    },
+    {
+      "domain": "vcbear.net",
+      "reachable": false,
+      "reason": "TypeError:UND_ERR_CONNECT_TIMEOUT"
+    },
+    {
+      "domain": "vnx.io",
+      "reachable": true,
+      "sep6": false,
+      "sep24": false,
+      "sep38": false,
+      "sep31": false
+    },
+    {
+      "domain": "winsome.gift",
+      "reachable": false,
+      "reason": "TypeError:ENOTFOUND"
+    },
+    {
+      "domain": "wirexapp.com",
+      "reachable": false,
+      "reason": "HTTP 400"
+    },
+    {
+      "domain": "www.anchorusd.com",
+      "reachable": true,
+      "sep6": false,
+      "sep24": false,
+      "sep38": false,
+      "sep31": false
+    },
+    {
+      "domain": "www.factrpay.io",
+      "reachable": false,
+      "reason": "HTTP 404"
+    },
+    {
+      "domain": "x.token.io",
+      "reachable": false,
+      "reason": "TypeError:EAI_AGAIN"
+    },
+    {
+      "domain": "ximcoin.com",
+      "reachable": true,
+      "sep6": false,
+      "sep24": false,
+      "sep38": false,
+      "sep31": false
+    },
+    {
+      "domain": "xirkle.com",
+      "reachable": true,
+      "sep6": false,
+      "sep24": false,
+      "sep38": false,
+      "sep31": false
+    },
+    {
+      "domain": "zeam.money",
+      "reachable": true,
+      "sep6": false,
+      "sep24": true,
+      "sep38": true,
+      "sep31": true
+    }
   ]
 }
