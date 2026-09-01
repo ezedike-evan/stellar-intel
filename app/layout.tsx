@@ -10,6 +10,7 @@ import { TestnetBanner } from '@/components/layout/TestnetBanner';
 import { WalletProvider } from '@/contexts/WalletContext';
 import { ToastProvider } from '@/contexts/ToastContext';
 import { ToastPortal } from '@/components/ui/Toast';
+import { getRootJsonLd, serializeJsonLd } from '@/lib/seo/jsonld';
 
 const SITE_URL = process.env.NEXT_PUBLIC_SITE_URL ?? 'https://stellar-intel.vercel.app';
 const SITE_NAME = 'Stellar Intel';
@@ -64,6 +65,12 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
   return (
     <html lang="en" suppressHydrationWarning>
       <head>
+        <script
+          type="application/ld+json"
+          dangerouslySetInnerHTML={{
+            __html: serializeJsonLd(getRootJsonLd(SITE_URL)),
+          }}
+        />
         {process.env.NEXT_PUBLIC_PLAUSIBLE_DOMAIN && (
           <script
             defer

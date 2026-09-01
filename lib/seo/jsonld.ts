@@ -369,3 +369,89 @@ export function jsonLdScriptProps(data: Record<string, unknown> | BreadcrumbList
     dangerouslySetInnerHTML: { __html: serializeJsonLd(data) },
   };
 }
+
+// ─── Organization / WebSite (#1059) ───────────────────────────────────────────
+
+export const DEFAULT_SITE_URL = 'https://stellar-intel.vercel.app';
+export const GITHUB_ORG_URL = 'https://github.com/ezedike-evan';
+export const GITHUB_REPO_URL = 'https://github.com/ezedike-evan/stellar-intel';
+// Same Discord invite the footer links (components/layout/Footer.tsx).
+export const DISCORD_URL = 'https://discord.gg/stellar';
+
+export interface OrganizationSchema {
+  '@context': 'https://schema.org';
+  '@type': 'Organization';
+  name: string;
+  url: string;
+  logo: string;
+  description: string;
+  sameAs: string[];
+}
+
+export interface WebSiteSchema {
+  '@context': 'https://schema.org';
+  '@type': 'WebSite';
+  name: string;
+  url: string;
+  description: string;
+  publisher: {
+    '@type': 'Organization';
+    name: string;
+    url: string;
+  };
+  potentialAction: {
+    '@type': 'SearchAction';
+    target: {
+      '@type': 'EntryPoint';
+      urlTemplate: string;
+    };
+    'query-input': string;
+  };
+}
+
+export function getOrganizationJsonLd(siteUrl: string = DEFAULT_SITE_URL): OrganizationSchema {
+  const url = siteUrl.replace(/\/+$/, '');
+  return {
+    '@context': 'https://schema.org',
+    '@type': 'Organization',
+    name: 'Stellar Intel',
+    url,
+    logo: `${url}/favicons/icon-512x512.png`,
+    description:
+      'A public health record for Stellar off-ramp anchors — probing uptime, quote availability, issuer mismatch, and TOML integrity.',
+    sameAs: [GITHUB_ORG_URL, GITHUB_REPO_URL, DISCORD_URL],
+  };
+}
+
+export function getWebSiteJsonLd(siteUrl: string = DEFAULT_SITE_URL): WebSiteSchema {
+  const url = siteUrl.replace(/\/+$/, '');
+  return {
+    '@context': 'https://schema.org',
+    '@type': 'WebSite',
+    name: 'Stellar Intel',
+    url,
+    description:
+      'Every registered Stellar off-ramp anchor, probed every five minutes across four signals — uptime, quote availability, issuer mismatch, TOML integrity.',
+    publisher: {
+      '@type': 'Organization',
+      name: 'Stellar Intel',
+      url,
+    },
+    potentialAction: {
+      '@type': 'SearchAction',
+      target: {
+        '@type': 'EntryPoint',
+        urlTemplate: `${url}/anchors?search={search_term_string}`,
+      },
+      'query-input': 'required name=search_term_string',
+    },
+  };
+}
+
+/** Both root-level schemas in one `@graph`, for the root layout's single script tag. */
+export function getRootJsonLd(siteUrl: string = DEFAULT_SITE_URL) {
+  return {
+    '@context': 'https://schema.org',
+    '@graph': [getOrganizationJsonLd(siteUrl), getWebSiteJsonLd(siteUrl)],
+  };
+}

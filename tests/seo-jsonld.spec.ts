@@ -17,6 +17,9 @@ import { join } from 'node:path';
 import {
   buildDatasetJsonLd,
   serializeJsonLd,
+  getOrganizationJsonLd,
+  getWebSiteJsonLd,
+  getRootJsonLd,
   JSONLD_MIN_SUFFICIENT_SAMPLES,
   type DatasetJsonLdOptions,
   FaqJsonLdError,
@@ -258,5 +261,47 @@ describe('serializeJsonLd', () => {
     expect(payload).not.toContain('<');
     expect(payload).toContain('\\u003c');
     expect(JSON.parse(payload)).toEqual({ text: '<script>alert(1)</script>' });
+  });
+});
+
+// ─── Organization & WebSite JSON-LD ──────────────────────────────────────────
+
+describe('getOrganizationJsonLd', () => {
+  it('emits schema.org Organization with correct name, logo, and sameAs links', () => {
+    const org = getOrganizationJsonLd('https://stellar-intel.vercel.app');
+    expect(org['@context']).toBe('https://schema.org');
+    expect(org['@type']).toBe('Organization');
+    expect(org.name).toBe('Stellar Intel');
+    expect(org.url).toBe('https://stellar-intel.vercel.app');
+    expect(org.logo).toBe('https://stellar-intel.vercel.app/favicons/icon-512x512.png');
+    expect(Array.isArray(org.sameAs)).toBe(true);
+    expect(org.sameAs).toContain('https://github.com/ezedike-evan');
+    expect(org.sameAs).toContain('https://github.com/ezedike-evan/stellar-intel');
+  });
+});
+
+describe('getWebSiteJsonLd', () => {
+  it('emits schema.org WebSite with SearchAction potentialAction', () => {
+    const website = getWebSiteJsonLd('https://stellar-intel.vercel.app');
+    expect(website['@context']).toBe('https://schema.org');
+    expect(website['@type']).toBe('WebSite');
+    expect(website.name).toBe('Stellar Intel');
+    expect(website.url).toBe('https://stellar-intel.vercel.app');
+    expect(website.publisher['@type']).toBe('Organization');
+    expect(website.potentialAction['@type']).toBe('SearchAction');
+    expect(website.potentialAction.target['@type']).toBe('EntryPoint');
+    expect(website.potentialAction.target.urlTemplate).toContain('/anchors?search=');
+  });
+});
+
+describe('getRootJsonLd', () => {
+  it('combines Organization and WebSite into a @graph', () => {
+    const root = getRootJsonLd('https://stellar-intel.vercel.app');
+    expect(root['@context']).toBe('https://schema.org');
+    expect(Array.isArray(root['@graph'])).toBe(true);
+    expect(root['@graph']).toHaveLength(2);
+    const graph = root['@graph'] as Array<{ '@type': string }>;
+    expect(graph[0]?.['@type']).toBe('Organization');
+    expect(graph[1]?.['@type']).toBe('WebSite');
   });
 });
