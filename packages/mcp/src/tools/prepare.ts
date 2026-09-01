@@ -1,6 +1,7 @@
 import type { McpServer } from '@modelcontextprotocol/sdk/server/mcp.js';
 import { z } from 'zod';
 import { prepareIntent, OfframpToolError, PrepareOutputSchema } from '@/lib/mcp/offramp';
+import { McpToolError, fromOfframpError, upstreamTimeout } from '../errors.js';
 
 export const PREPARE_TOOL_NAME = 'intel.offramp.prepare';
 
@@ -32,15 +33,18 @@ export function registerPrepareTool(server: McpServer): void {
           structuredContent: result,
         };
       } catch (err) {
-        const message =
+        const toolErr =
           err instanceof OfframpToolError
-            ? `${err.code}: ${err.message}`
-            : err instanceof Error
-              ? err.message
-              : 'Unknown error';
+            ? fromOfframpError(err)
+            : err instanceof McpToolError
+              ? err
+              : upstreamTimeout(
+                  err instanceof Error ? err.message : 'Unknown error',
+                  'UNKNOWN_ERROR'
+                );
         return {
           isError: true,
-          content: [{ type: 'text', text: message }],
+          content: [{ type: 'text', text: `${toolErr.category}: ${toolErr.message}` }],
         };
       }
     }
