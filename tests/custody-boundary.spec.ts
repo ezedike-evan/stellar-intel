@@ -137,6 +137,39 @@ describe('custody boundary: no server-held user signing key (#1147)', () => {
     ).toBe(true);
   });
 
+  it('no API route handler signs a transaction', () => {
+    // Ported from #1194 (@escaprt), which caught a leg this spec did not:
+    // `Keypair.fromSecret` catches *obtaining* a signer, but a route could
+    // sign with one it was handed. This catches *using* one on a request path.
+    //
+    // Signing is the banned verb, not submitting. Submitting is the documented
+    // non-custodial flow — `lib/stellar/horizon.ts` relays a transaction the
+    // sender's own wallet already signed, and docs/NON_CUSTODY.md describes
+    // exactly that. A guard on submission would fail on correct code.
+    //
+    // Narrow by design: a bare `.sign(` would match any method named `sign`
+    // (an HMAC helper, a webhook signature), so this matches signing applied
+    // to a transaction-shaped receiver, plus the SDK's own signer entry points.
+    const SIGN_PATTERN =
+      /\b(?:transaction|tx|envelope|builtTx|xdrTx)\s*\.\s*sign\s*\(|\bKeypair\s*\.\s*sign\s*\(|\bsignTransaction\s*\(|\bbasicNodeSigner\s*\(/;
+
+    const routeFiles = sourceFiles(join('app', 'api')).filter((file) =>
+      /(^|\/)route\.(ts|tsx|mts)$/.test(file)
+    );
+
+    // A scan that silently found no files would pass forever.
+    expect(routeFiles.length).toBeGreaterThan(20);
+
+    const offenders = routeFiles.filter((file) => SIGN_PATTERN.test(readFileSync(file, 'utf8')));
+
+    expect(
+      offenders,
+      `These API route handlers sign a transaction: ${offenders.join(', ')}. ` +
+        'Routes may relay material the sender already signed, but must never ' +
+        'produce a signature themselves — see docs/NON_CUSTODY.md.'
+    ).toEqual([]);
+  });
+
   it('declares no user-facing secret-key variable in the client env schema', () => {
     // lib/env.ts validates NEXT_PUBLIC_* variables, which are inlined into
     // client JavaScript at build time and shipped to every visitor's browser.
