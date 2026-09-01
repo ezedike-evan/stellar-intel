@@ -24,7 +24,12 @@ export default defineConfig({
   webServer: {
     command: webServerCommand,
     url: baseURL,
-    reuseExistingServer: !process.env.CI,
+    // The post-merge Playwright run (.github/workflows/postmerge-playwright.yml)
+    // builds and starts the app itself via `next start` before invoking Playwright,
+    // so it needs webServer to attach to that already-running server instead of
+    // racing it for the port — hence the PW_REUSE_SERVER escape hatch from CI's
+    // normal "always start a fresh server" default.
+    reuseExistingServer: !process.env.CI || process.env.PW_REUSE_SERVER === 'true',
     timeout: 120_000,
   },
 });

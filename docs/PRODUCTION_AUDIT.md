@@ -312,7 +312,13 @@ runnable offline or on a bad day:
 
 - **No secret scanning.** §2,
   [#1148](https://github.com/ezedike-evan/stellar-intel/issues/1148).
-- **No end-to-end test in the merge gate.** Above,
+- **No end-to-end test in the merge gate.** Playwright smoke exists on PRs but
+  is skipped for fork PRs (the preview deploy it depends on requires the PR to
+  come from this repository), so no contributor PR is browser-verified before
+  merge. `.github/workflows/postmerge-playwright.yml` closes half the gap: it
+  runs the full Playwright suite against `main` after every merge, against a
+  locally built `next start`, independent of who opened the PR — so `main`
+  itself is never left unverified, but no PR is blocked by it.
   [#1029](https://github.com/ezedike-evan/stellar-intel/issues/1029).
 - **No custody-boundary test.** §1's central claim is unguarded,
   [#1147](https://github.com/ezedike-evan/stellar-intel/issues/1147).
