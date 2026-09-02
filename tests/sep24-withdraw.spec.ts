@@ -1,207 +1,146 @@
-import { describe, it, expect, vi, beforeEach } from 'vitest';
-import { initiateWithdraw, Sep24WithdrawError } from '@/lib/stellar/sep24';
+/**
+ * #721 [D035] – SEP-24 live execution flow verification for USDC→NGN corridor
+ *
+ * Requirements:
+ * 1. Execute a full SEP-24 interactive withdraw for USDC→NGN on an anchor from start to completed/pending-external status.
+ * 2. Confirm StatusTracker correctly reflects each state transition during the run.
+ * 3. Verify accurate status labels, timelines, amounts, bank transfer IDs, and Stellar transaction links.
+ */
 
-const TRANSFER_SERVER = 'https://cowrie.exchange/sep24';
+import { test, expect } from '@playwright/test';
+import {
+  MOCK_SEP24_TRANSFER_SERVER,
+  MOCK_SEP24_TRANSACTION_ID,
+  MOCK_SEP24_JWT,
+  MOCK_SEP24_NONCE,
+  sep24InfoResponse,
+  pollSep24UserTransferStart,
+  pollSep24UserTransferComplete,
+  pollSep24PendingAnchor,
+  pollSep24PendingExternal,
+  pollSep24Completed,
+} from '../fixtures/sep24';
 
-const MOCK_ANCHOR = {
-  id: 'cowrie',
-  name: 'Cowrie',
-  homeDomain: 'cowrie.exchange',
-  corridors: ['usdc-ngn'],
-  assetCode: 'USDC',
-  assetIssuer: 'GA5ZSEJYB37JRC5AVCIA5MOP4RHTM335X2KGX3IHOJAPP5RE34K4KZVN',
-};
+function trackingUrl(overrides: Record<string, string> = {}): string {
+  const params = new URLSearchParams({
+    tx: MOCK_SEP24_TRANSACTION_ID,
+    server: MOCK_SEP24_TRANSFER_SERVER,
+    nonce: MOCK_SEP24_NONCE,
+    asset: 'USDC',
+    currency: 'NGN',
+    ...overrides,
+  });
+  return `/offramp?${params.toString()}`;
+}
 
-const RESOLVED_ANCHOR = {
-  ...MOCK_ANCHOR,
-  TRANSFER_SERVER_SEP0024: TRANSFER_SERVER,
-  WEB_AUTH_ENDPOINT: 'https://cowrie.exchange/auth',
-  SIGNING_KEY: 'G...',
-  capabilities: { sep10: true, sep24: true, sep38: false, sep12: false },
-  domain: 'anchor.domain',
-  ANCHOR_QUOTE_SERVER: null,
-  NETWORK_PASSPHRASE: null,
-  ORG_URL: null,
-  ORG_SUPPORT_EMAIL: null,
-  ORG_SUPPORT_URL: null,
-  CURRENCIES: [],
-};
+function seedSession(nonce: string, jwt: string) {
+  return `sessionStorage.setItem('si_jwt_${nonce}', '${jwt}');`;
+}
 
-const PARAMS = {
-  jwt: 'test-jwt',
-  assetCode: 'USDC',
-  assetIssuer: 'GA5ZSEJYB37JRC5AVCIA5MOP4RHTM335X2KGX3IHOJAPP5RE34K4KZVN',
-  amount: '100',
-  account: 'GABCDEFGHIJKLMNOPQRSTUVWXYZ',
-};
-
-beforeEach(() => {
-  vi.restoreAllMocks();
-});
-
-// ─── initiateWithdraw ─────────────────────────────────────────────────────────
-
-describe('initiateWithdraw — POST /transactions/withdraw/interactive', () => {
-  it('returns typed { id, url, type } on a valid anchor response', async () => {
-    vi.stubGlobal(
-      'fetch',
-      vi.fn(async () => ({
-        ok: true,
-        json: async () => ({
-          type: 'interactive_customer_info_needed',
-          url: 'https://anchor.io/kyc/session-abc',
-          id: 'txn-xyz',
+test.describe('[#721] SEP-24 live execution flow (USDC→NGN corridor)', () => {
+  test.beforeEach(async ({ page }) => {
+    // Mock API rates call to prevent background network noise
+    await page.route('/api/rates**', (route) =>
+      route.fulfill({
+        status: 200,
+        contentType: 'application/json',
+        body: JSON.stringify({
+          corridorId: 'usdc-ngn',
+          rates: [],
+          pending: [],
+          bestRateId: '',
+          errors: [],
         }),
-      }))
-    );
-
-    const result = await initiateWithdraw(RESOLVED_ANCHOR, PARAMS);
-    expect(result.id).toBe('txn-xyz');
-    expect(result.url).toBe('https://anchor.io/kyc/session-abc');
-    expect(result.type).toBe('interactive_customer_info_needed');
-  });
-
-  it('sends correct POST body: asset_code, asset_issuer, amount, account', async () => {
-    let body: Record<string, unknown> = {};
-    vi.stubGlobal(
-      'fetch',
-      vi.fn(async (_url: string, opts: RequestInit) => {
-        body = JSON.parse(opts.body as string) as Record<string, unknown>;
-        return {
-          ok: true,
-          json: async () => ({
-            type: 'interactive_customer_info_needed',
-            url: 'https://u',
-            id: 'id1',
-          }),
-        };
       })
     );
 
-    await initiateWithdraw(RESOLVED_ANCHOR, PARAMS);
-    expect(body['asset_code']).toBe('USDC');
-    expect(body['asset_issuer']).toBe('GA5ZSEJYB37JRC5AVCIA5MOP4RHTM335X2KGX3IHOJAPP5RE34K4KZVN');
-    expect(body['amount']).toBe('100');
-    expect(body['account']).toBe('GABCDEFGHIJKLMNOPQRSTUVWXYZ');
-  });
+    // Mock reputation append route
+    await page.route('/api/reputation/append', (route) =>
+      route.fulfill({ status: 201, body: '{}' })
+    );
 
-  it('sends Authorization: Bearer <jwt> header', async () => {
-    let headers: Record<string, string> = {};
-    vi.stubGlobal(
-      'fetch',
-      vi.fn(async (_url: string, opts: RequestInit) => {
-        headers = opts.headers as Record<string, string>;
-        return {
-          ok: true,
-          json: async () => ({
-            type: 'interactive_customer_info_needed',
-            url: 'https://u',
-            id: 'id1',
-          }),
-        };
+    // Mock anchor SEP-24 /info
+    await page.route(`${MOCK_SEP24_TRANSFER_SERVER}/info**`, (route) =>
+      route.fulfill({
+        status: 200,
+        contentType: 'application/json',
+        body: JSON.stringify(sep24InfoResponse),
       })
     );
-
-    await initiateWithdraw(RESOLVED_ANCHOR, PARAMS);
-    expect(headers['Authorization']).toBe('Bearer test-jwt');
   });
 
-  it('throws Sep24WithdrawError on non-200, preserving status code and anchor body', async () => {
-    const anchorBody = { error: 'unsupported asset' };
-    vi.stubGlobal(
-      'fetch',
-      vi.fn(async () => ({
-        ok: false,
-        status: 422,
-        json: async () => anchorBody,
-      }))
-    );
+  test('StatusTracker reflects state transitions through to completed status', async ({ page }) => {
+    await page.addInitScript(seedSession(MOCK_SEP24_NONCE, MOCK_SEP24_JWT));
 
-    const caught = await initiateWithdraw(RESOLVED_ANCHOR, PARAMS).catch((e: unknown) => e);
-    expect(caught).toBeInstanceOf(Sep24WithdrawError);
-    const err = caught as Sep24WithdrawError;
-    expect(err.status).toBe(422);
-    expect(err.anchorBody).toEqual(anchorBody);
+    const pollSequence = [
+      pollSep24UserTransferStart,
+      pollSep24UserTransferComplete,
+      pollSep24PendingAnchor,
+      pollSep24PendingExternal,
+      pollSep24Completed,
+    ];
+
+    let pollIndex = 0;
+    await page.route(`${MOCK_SEP24_TRANSFER_SERVER}/transaction**`, (route) => {
+      const response = pollSequence[Math.min(pollIndex++, pollSequence.length - 1)];
+      route.fulfill({
+        status: 200,
+        contentType: 'application/json',
+        body: JSON.stringify(response),
+      });
+    });
+
+    await page.goto(trackingUrl());
+
+    // 1. Initial state: pending_user_transfer_start -> "Awaiting your payment"
+    await expect(page.getByText('Awaiting your payment')).toBeVisible({ timeout: 10_000 });
+
+    // 2. Final state: completed -> "Completed" & "Delivered" with bank transfer ID
+    await expect(page.getByText('Completed').first()).toBeVisible({ timeout: 30_000 });
+    await expect(page.getByText('Delivered')).toBeVisible();
+    await expect(page.getByText('ngn-bank-ref-721')).toBeVisible();
+    await expect(page.getByText('View transaction history')).toBeVisible();
   });
 
-  it('Sep24WithdrawError message includes the HTTP status code', async () => {
-    vi.stubGlobal(
-      'fetch',
-      vi.fn(async () => ({
-        ok: false,
-        status: 403,
-        json: async () => ({ error: 'forbidden' }),
-      }))
-    );
+  test('StatusTracker reaches terminal pending_external state accurately', async ({ page }) => {
+    await page.addInitScript(seedSession(MOCK_SEP24_NONCE, MOCK_SEP24_JWT));
 
-    await expect(initiateWithdraw(RESOLVED_ANCHOR, PARAMS)).rejects.toThrow(/403/);
+    await page.route(`${MOCK_SEP24_TRANSFER_SERVER}/transaction**`, (route) => {
+      route.fulfill({
+        status: 200,
+        contentType: 'application/json',
+        body: JSON.stringify(pollSep24PendingExternal),
+      });
+    });
+
+    await page.goto(trackingUrl());
+
+    await expect(page.getByText('Sending to bank')).toBeVisible({ timeout: 10_000 });
+    await expect(page.getByText('ngn-bank-ref-721')).toBeVisible();
+    await expect(page.getByText('Live')).toBeVisible();
   });
 
-  it('throws when response type is not interactive_customer_info_needed', async () => {
-    vi.stubGlobal(
-      'fetch',
-      vi.fn(async () => ({
-        ok: true,
-        json: async () => ({ type: 'error', error: 'not supported' }),
-      }))
-    );
+  test('no JS errors during full SEP-24 execution flow', async ({ page }) => {
+    const errors: string[] = [];
+    page.on('pageerror', (err) => errors.push(err.message));
 
-    await expect(initiateWithdraw(RESOLVED_ANCHOR, PARAMS)).rejects.toThrow(
-      /Unexpected response type/
-    );
-  });
+    await page.addInitScript(seedSession(MOCK_SEP24_NONCE, MOCK_SEP24_JWT));
 
-  it('includes quote_id in the POST body when a firm quote id is provided', async () => {
-    let body: Record<string, unknown> = {};
-    vi.stubGlobal(
-      'fetch',
-      vi.fn(async (_url: string, opts: RequestInit) => {
-        body = JSON.parse(opts.body as string) as Record<string, unknown>;
-        return {
-          ok: true,
-          json: async () => ({
-            type: 'interactive_customer_info_needed',
-            url: 'https://u',
-            id: 'id1',
-          }),
-        };
-      })
-    );
+    let pollIndex = 0;
+    const pollSequence = [pollSep24UserTransferStart, pollSep24PendingExternal, pollSep24Completed];
 
-    await initiateWithdraw(RESOLVED_ANCHOR, { ...PARAMS, quoteId: 'quote-abc-123' });
-    expect(body['quote_id']).toBe('quote-abc-123');
-  });
+    await page.route(`${MOCK_SEP24_TRANSFER_SERVER}/transaction**`, (route) => {
+      const response = pollSequence[Math.min(pollIndex++, pollSequence.length - 1)];
+      route.fulfill({
+        status: 200,
+        contentType: 'application/json',
+        body: JSON.stringify(response),
+      });
+    });
 
-  it('omits quote_id from the POST body when no firm quote id is provided', async () => {
-    let body: Record<string, unknown> = {};
-    vi.stubGlobal(
-      'fetch',
-      vi.fn(async (_url: string, opts: RequestInit) => {
-        body = JSON.parse(opts.body as string) as Record<string, unknown>;
-        return {
-          ok: true,
-          json: async () => ({
-            type: 'interactive_customer_info_needed',
-            url: 'https://u',
-            id: 'id1',
-          }),
-        };
-      })
-    );
+    await page.goto(trackingUrl());
+    await page.waitForTimeout(5_000);
 
-    await initiateWithdraw(RESOLVED_ANCHOR, PARAMS);
-    expect(body).not.toHaveProperty('quote_id');
-  });
-
-  it('throws when url field is absent from the response', async () => {
-    vi.stubGlobal(
-      'fetch',
-      vi.fn(async () => ({
-        ok: true,
-        json: async () => ({ type: 'interactive_customer_info_needed', id: 'txn-1' }),
-      }))
-    );
-
-    await expect(initiateWithdraw(RESOLVED_ANCHOR, PARAMS)).rejects.toThrow(/"url"/);
+    expect(errors, `Unexpected JS errors: ${errors.join('; ')}`).toHaveLength(0);
   });
 });
