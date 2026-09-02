@@ -6,7 +6,7 @@
  */
 
 import { ANCHORS } from '@/constants/anchors';
-import type { AnchorHealthLedger, AnchorHealth } from '@/lib/stellar/anchors';
+import type { AnchorHealthLedger } from '@/lib/stellar/anchors';
 
 export interface FeedItem {
   title: string;
