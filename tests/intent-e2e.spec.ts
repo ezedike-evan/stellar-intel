@@ -57,7 +57,10 @@ describe('Intent end-to-end round trip', () => {
         ).toBe(true);
         expect(parsed.operations).toHaveLength(1);
         expect(parsed.operations[0]!.type).toBe('payment');
-        expect(parsed.memo.value?.toString()).toBe(INTENT_FIXTURE.memo);
+        // Uint8Array.toString() joins the bytes with commas; decode it instead.
+        expect(Buffer.from(parsed.memo.value as Uint8Array).toString('utf8')).toBe(
+          INTENT_FIXTURE.memo
+        );
 
         return {
           successful: true,
@@ -68,7 +71,7 @@ describe('Intent end-to-end round trip', () => {
 
     const tx = await buildWithdrawPayment(INTENT_FIXTURE);
     expect(tx.operations[0]!.type).toBe('payment');
-    expect(tx.memo.value?.toString()).toBe(INTENT_FIXTURE.memo);
+    expect(Buffer.from(tx.memo.value as Uint8Array).toString('utf8')).toBe(INTENT_FIXTURE.memo);
 
     const result = await signAndSubmitPayment(tx);
     expect(result.successful).toBe(true);
