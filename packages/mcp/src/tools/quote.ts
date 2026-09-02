@@ -41,7 +41,7 @@ export function registerQuoteTool(server: McpServer): void {
                 );
         return {
           isError: true,
-          content: [{ type: 'text', text: `${toolErr.category}: ${toolErr.message}` }],
+          content: [{ type: 'text', text: `${toolErr.code}: ${toolErr.message}` }],
         };
       }
     }

@@ -3,8 +3,14 @@ import { OfframpToolError } from '@/lib/mcp/offramp';
 /**
  * Typed error taxonomy for MCP tools (#1051).
  *
- * An agent receiving a tool error can inspect `McpToolError.category` to
- * decide how to react without parsing the human-readable message:
+ * Two levels, and the distinction matters: `category` is the coarse reaction
+ * (retry / don't retry), `code` is the specific cause. The tools prefix their
+ * error text with `code`, not `category`, because four categories cannot tell
+ * an agent whether to fix its signature or pick another corridor — both are
+ * BAD_INPUT. `code` falls back to `category` when no sub-code is set, so the
+ * prefix is never less informative than the category alone.
+ *
+ * The categories, and how an agent should react to each:
  *
  *   BAD_INPUT          — The caller passed invalid arguments.  Do not retry;
  *                        fix the input first.
