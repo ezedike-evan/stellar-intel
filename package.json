@@ -41,7 +41,7 @@
     ]
   },
   "dependencies": {
-    "@asteasolutions/zod-to-openapi": "^8.5.0",
+    "@asteasolutions/zod-to-openapi": "^9.1.0",
     "@blend-capital/blend-sdk": "^3.3.0",
     "@modelcontextprotocol/sdk": "^1.29.0",
     "@stellar/freighter-api": "^6.0.1",
