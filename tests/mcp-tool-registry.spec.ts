@@ -47,6 +47,10 @@ const EXPECTED_TOOLS: Record<string, { required: string[]; structured: boolean }
   'intel.execute': { required: ['unsignedEnvelope', 'signature', 'signedTx'], structured: true },
   'intel.anchor.health': { required: ['domain'], structured: true },
   'intel.anchor.reputation': { required: ['anchor'], structured: true },
+  // Nullary tools: they enumerate a fixed registry, so there is nothing to pass.
+  'intel.corridors': { required: [], structured: true },
+  'intel.leaderboard': { required: [], structured: false },
+  'intel.probe.coverage': { required: [], structured: false },
 };
 
 describe('MCP tool registry (#1052)', () => {
@@ -105,8 +109,10 @@ describe('MCP tool registry (#1052)', () => {
 
   it('documents every argument it accepts', () => {
     for (const tool of tools) {
+      // A nullary tool documents itself through its description; the contract
+      // here is that any argument a tool *does* take is described, not that
+      // every tool takes one.
       const properties = Object.entries(tool.inputSchema.properties ?? {});
-      expect(properties.length, `${tool.name} declares no arguments`).toBeGreaterThan(0);
 
       for (const [argument, schema] of properties) {
         const described = (schema as { description?: string }).description;

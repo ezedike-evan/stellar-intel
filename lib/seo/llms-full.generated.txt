@@ -163,6 +163,12 @@ There is no wallet we control in the value path, no held key, and no autonomous
 spend — including from the [MCP agent surface](MCP.md), where every executing call
 must be signed by the user's wallet.
 
+`tests/custody-boundary.spec.ts` gates this in CI: it fails if anything under
+`lib/` or `app/` ever constructs a Stellar signer from a raw secret, or if the
+client-facing env schema ever declares a variable that looks like one.
+`packages/publisher`'s own signing key (`PUBLISHER_SECRET`, below) is the one
+named exemption.
+
 ## What we do hold
 
 - Public, non-sensitive data: anchor outcomes (fill rate, slippage, settle latency)
@@ -1226,13 +1232,13 @@ The following are **not** breaking:
 
 ## Deprecation process
 
-> **Not yet implemented.** The lifecycle below is the intended policy, not a
-> description of running code. Grepping `lib/` and `app/` for `sunset`,
-> `Deprecation:` or `Warning: 299` returns nothing — there is no helper, no
-> middleware, and no route emitting these headers. `lib/logger.ts` stamps
-> `API-Version` on every response and nothing else. Treat this section as the
-> contract a future implementation must satisfy; see the tracking issue in
-> [`CHANGELOG.md`](../CHANGELOG.md).
+`lib/api/deprecation.ts` computes `Sunset` and `Warning: 299` for a pinned
+version once it has actually been superseded, and `lib/logger.ts` stamps both
+on every response at the same call site as `API-Version` — see
+`computeDeprecationHeaders` and `tests/api-version-negotiation.spec.ts`. No
+version has been retired yet, so no live response carries either header
+today; the mechanism is exercised in that test suite against synthetic
+history rather than waiting on a real deprecation to prove it out.
 
 Every breaking change follows a four-phase lifecycle:
 
@@ -1261,20 +1267,24 @@ Expedited removals are announced on all channels with the reason.
 
 | Surface                          | Supported versions       | Window                                            |
 | -------------------------------- | ------------------------ | ------------------------------------------------- |
-| HTTP REST API                    | Current only¹            | Intended: current + 1 previous, 180 days          |
+| HTTP REST API                    | Current only¹            | Current + 1 previous, 180 days (computed)         |
 | Soroban oracle contract          | Current deployed address | Until a migration is announced and executed       |
 | MCP tools                        | Latest npm release only  | Semver within `@stellarintel/mcp`                 |
 | TypeScript SDK                   | Latest npm release only  | Semver within `@stellarintel/sdk`                 |
 | Web UI (`app.stellar-intel.com`) | Latest only              | No version guarantee — always use the current URL |
 
-¹ **The stated window is not yet what the code enforces.**
-`SUPPORTED_API_VERSIONS` in `lib/api/api-version.ts` contains exactly one
-element, and `negotiateApiVersion` rejects anything else with a 400. So there is
-no "previous" version to fall back to, and the 180-day window has never been
-exercised. It becomes true the first time a version ships and the outgoing one
-is appended to that array — which is the mechanical change required, not a
-rewrite. `tests/api-version-negotiation.spec.ts` asserts this row against the
-array so the two cannot drift apart again.
+¹ **The stated window is not yet what the code enforces**, in the sense that
+`SUPPORTED_API_VERSIONS` in `lib/api/api-version.ts` currently contains
+exactly one element — not because the 180-day rule is unimplemented, but
+because only one version has ever shipped, so there is nothing to retire yet.
+`computeSupportedApiVersions` computes the window from
+`API_VERSION_HISTORY` (each entry's `supersededAt` plus `SUPPORT_WINDOW_DAYS`)
+rather than a hardcoded array, and `tests/api-version-negotiation.spec.ts`
+exercises the 180-day boundary itself against synthetic history — a version
+retired 179 days ago stays in the window, 181 days ago it doesn't. The row
+above becomes "current + 1 previous" for real the first time a version ships
+and the outgoing one is recorded in `API_VERSION_HISTORY` with a
+`supersededAt` — an entry, not a rewrite.
 
 REST API consumers should specify an `API-Version` header to lock their
 integration to a known surface. Unsigned requests default to the latest
@@ -1291,12 +1301,14 @@ Deprecations and breaking changes are announced on:
    `https://github.com/ezedike-evan/stellar-intel/releases`.
 2. **CHANGELOG.md** — the `[Unreleased]` section lists pending deprecations;
    dated sections record shipped ones.
-3. **API response headers** _(not yet implemented)_ — deprecated endpoints will
-   return `Sunset` and `Warning` headers (see deprecation process above).
-4. **Status page** _(not yet implemented)_ — there is no `app/api/status/route.ts`,
-   and `announced_deprecations` appears nowhere in `lib/` or `app/`. The intent
-   is that `https://stellar-intel.vercel.app/api/status` returns it as a JSON
-   array.
+3. **API response headers** — a deprecated-but-still-supported pin returns
+   `Sunset` and `Warning: 299` on every response (see deprecation process
+   above). No endpoint is deprecated today, so no live response carries
+   either header yet.
+4. **Status page** — `GET /api/status` (`app/api/status/route.ts`) returns
+   `version`, `supported_versions`, and `announced_deprecations` as a JSON
+   array. The array is empty today for the same reason: nothing has been
+   deprecated yet.
 5. **Mailing list** — subscribe at
    `https://stellar-intel.vercel.app/updates` (planned).
 
@@ -2482,13 +2494,15 @@ It prints the admin, the upgrade admin, the pending admin and the contract
 version, and warns when the two authorities are the same account — one
 compromised key that can both forge data and replace the code.
 
-> **Current testnet state (checked 2026-08-04).** `contract_version` is `0`, the
-> upgrade admin is unset, and `pending_admin` / `upgrade_admin` are not
-> implemented at all: the deployed bytecode predates them. That also means it
-> predates the authorization fixes in #907, so **the live testnet contract still
-> has the unauthenticated `set_corridor_metrics` write path**. Re-deploy before
+> **Current testnet state (checked 2026-08-28, tracked in #1149).**
+> `contract_version` is `0` and the upgrade admin is unset: the deployed
+> bytecode is seven weeks old and predates both the constructor-based
+> `__constructor(admin, upgrade_admin)` binding (see "Fresh deploy" below) and
+> the authorization fixes in #907, so **the live testnet contract still has the
+> unauthenticated `set_corridor_metrics` write path**. Re-deploy before
 > treating testnet reads as trustworthy. The anchor registry is also empty, so
-> every score read returns "no data".
+> every score read returns "no data". `scripts/deploy-oracle-testnet.ts` and
+> `scripts/init-oracle-registry.ts` are ready to do this — see "Fresh deploy".
 
 ### Who can write what
 
@@ -2520,8 +2534,10 @@ read helper and JS/Python example consumers are roadmap deliverables (Wave 2.1).
 ```bash
 cd contracts/reputation
 cargo test                                          # runs tests/basic.rs
-npx tsx scripts/deploy-oracle-testnet.ts             # build + deploy to testnet
 ```
+
+Deploying is its own section below — `scripts/deploy-oracle-testnet.ts` needs
+two address env vars set first.
 
 ## Storage versions
 
@@ -2542,10 +2558,53 @@ is in [`ORACLE_MIGRATION.md`](ORACLE_MIGRATION.md).
 ## Upgrade & governance
 
 Publisher whitelist management and a two-step admin transfer are implemented;
-see [`GOVERNANCE.md`](GOVERNANCE.md) for the custody runbook. The upgrade path
-exists (`init_upgrade` / `upgrade`) but has **no rotation** — once the upgrade
-admin is bound it cannot be changed (#963). Treat the deployed contract
-(testnet) as admin-controlled and not yet production-governed.
+see [`GOVERNANCE.md`](GOVERNANCE.md) for the custody runbook. The upgrade
+authority (`upgrade_admin`) is bound by the constructor at deploy time — see
+"Fresh deploy" below — and, since #963, **can be rotated** via
+`propose_upgrade_admin` / `accept_upgrade_admin` (two-step, mirroring the
+operational admin's `propose_admin` / `accept_admin`; see
+[`GOVERNANCE.md`](GOVERNANCE.md) § "Contract upgrade governance"). Treat the
+deployed contract (testnet) as admin-controlled and not yet
+production-governed.
+
+## Fresh deploy
+
+There is no in-place way to bind `admin`/`upgrade_admin` after the fact, or to
+seed a version stamp onto an already-deployed contract — both happen once,
+atomically, in `__constructor`, at the moment `stellar contract deploy` runs.
+So "the deployed contract is missing an authority" (#1149) is fixed by
+deploying a new contract instance, not by invoking anything on the old one.
+This necessarily means abandoning whatever on-chain state (outcomes, the
+anchor registry) the old contract held — there is no migration path between
+two different contract IDs.
+
+```bash
+export ORACLE_ADMIN_ADDRESS=G...          # operational admin
+export ORACLE_UPGRADE_ADMIN_ADDRESS=G...  # upgrade admin — a *different* account (see "Custody" above)
+export SOROBAN_SOURCE_ACCOUNT=...         # funded deployer, or set ADMIN_SECRET_KEY
+
+npx tsx --tsconfig tsconfig.scripts.json scripts/deploy-oracle-testnet.ts
+```
+
+If `.deployments/testnet.json` already names a contract, the script refuses to
+overwrite it unless `FORCE_REDEPLOY=true` is also set — the abandonment above
+is deliberate and not the default.
+
+Then, in order:
+
+```bash
+# Seed the anchor registry (constants/anchors.ts) on the new contract.
+ORACLE_CONTRACT_ID=<new contract ID> ADMIN_SECRET_KEY=... \
+  npx tsx --tsconfig tsconfig.scripts.json scripts/init-oracle-registry.ts
+
+# Confirm no ::warning:: lines remain.
+npx tsx scripts/verify-oracle-read.mts
+```
+
+`verify-oracle-read.mts` succeeding with no warnings and a non-empty anchor
+list is the acceptance bar #1149 sets — `contract_version()` non-zero,
+`upgrade_admin` set to an account distinct from `admin`, and the registry
+non-empty.
 
 ## Related
 

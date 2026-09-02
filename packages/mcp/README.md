@@ -33,8 +33,6 @@ share the exact same logic:
   wallet signs the intent hash and the transaction before calling this tool.
   It is the only tool in this server marked destructive in `tools/list`.
 
-<<<<<<< HEAD
-
 ### Resources
 
 - `stellarintel://anchor-health/ledger` (`application/json`) — the nightly
@@ -48,7 +46,6 @@ share the exact same logic:
   document fetch into a live network dependency. The payload carries the
   ledger's `version` (`YYYY-MM-DD`, from its own `updatedAt`) alongside it: two
   reads returning the same version returned the same ledger.
-  =======
 
 ### Rate limiting
 

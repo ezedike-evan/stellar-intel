@@ -68,18 +68,26 @@ they produce §9's and §6's headline numbers.
 
 ## 1. Custody
 
-| Claim                                              | Evidence                                                                      | Status                |
-| -------------------------------------------------- | ----------------------------------------------------------------------------- | --------------------- |
-| The app never takes custody of user funds          | [`NON_CUSTODY.md`](NON_CUSTODY.md) § "How the boundary is enforced"           | Enforced in code      |
-| No private key is ever held server-side for a user | [`SECURITY.md`](SECURITY.md) § "Custody boundary", § "Key & secret handling"  | Enforced in code      |
-| Every payment leg is signed in the user's wallet   | [`NON_CUSTODY.md`](NON_CUSTODY.md) § "What Stellar Intel never holds"         | Enforced in code      |
-| The publisher holds a signing key                  | `PUBLISHER_SECRET`, used only to write reputation outcomes — never user funds | Documented, not gated |
+| Claim                                              | Evidence                                                                                                       | Status                |
+| -------------------------------------------------- | -------------------------------------------------------------------------------------------------------------- | --------------------- |
+| The app never takes custody of user funds          | [`NON_CUSTODY.md`](NON_CUSTODY.md) § "How the boundary is enforced", `tests/custody-boundary.spec.ts`          | Enforced in CI        |
+| No private key is ever held server-side for a user | [`SECURITY.md`](SECURITY.md) § "Custody boundary", § "Key & secret handling", `tests/custody-boundary.spec.ts` | Enforced in CI        |
+| Every payment leg is signed in the user's wallet   | [`NON_CUSTODY.md`](NON_CUSTODY.md) § "What Stellar Intel never holds"                                          | Enforced in code      |
+| The publisher holds a signing key                  | `PUBLISHER_SECRET`, used only to write reputation outcomes — never user funds                                  | Documented, not gated |
 
 The custody boundary is architectural: there is no code path that could take
-custody, which is a stronger statement than a policy. It is **not** gated in CI —
-nothing would fail if a future change introduced one. Tracked in
-[#1147](https://github.com/ezedike-evan/stellar-intel/issues/1147), and it
-remains the single most valuable test this repository does not have.
+custody, which is a stronger statement than a policy. As of
+[#1147](https://github.com/ezedike-evan/stellar-intel/issues/1147),
+`tests/custody-boundary.spec.ts` gates the first two rows in CI — a source
+scan (same shape as `tests/contrast.spec.ts`'s raw-grey scanner) failing if
+`lib/` or `app/` ever constructs a `Keypair` from a raw secret, or the
+client-facing env schema (`lib/env.ts`) ever declares a variable that looks
+like one. `packages/publisher` is the one exemption, and the suite asserts
+both that it still needs it and that it's the only exemption — a future
+custody-taking change now merges red, not green. The third row (every payment
+leg signed client-side) is a claim about UI code paths this scan does not
+reach, so it stays "Enforced in code" rather than "in CI" until something
+checks it too.
 
 ## 2. Security posture
 
@@ -249,19 +257,23 @@ and it is the single biggest determinant of when the oracle half becomes real.
 | Every v1 route appears in the spec                        | `tests/openapi-coverage.spec.ts`                           | Enforced in CI        |
 | Responses carry an `API-Version` header                   | `lib/logger.ts`                                            | Enforced in code      |
 | A versioning and deprecation policy is published          | [`VERSIONING.md`](VERSIONING.md)                           | Documented, not gated |
-| The support window is "current + 1 previous, 180 days"    | `lib/api/api-version.ts` → `SUPPORTED_API_VERSIONS`        | **Not true yet**      |
-| `Sunset` / `Warning: 299` deprecation headers are emitted | —                                                          | **Not true yet**      |
-| `/api/status` publishes `announced_deprecations`          | —                                                          | **Not true yet**      |
+| The support window is "current + 1 previous, 180 days"    | `lib/api/api-version.ts` → `computeSupportedApiVersions`   | Enforced in code¹     |
+| `Sunset` / `Warning: 299` deprecation headers are emitted | `lib/api/deprecation.ts`, `lib/logger.ts`                  | Enforced in code¹     |
+| `/api/status` publishes `announced_deprecations`          | `app/api/status/route.ts`                                  | Enforced in code      |
 
-`SUPPORTED_API_VERSIONS` still has exactly one element and `negotiateApiVersion`
-rejects anything else, so the support window `VERSIONING.md` promises is
-contradicted by the code that enforces it. `grep` for `sunset`, `Deprecation:`
-and `announced_deprecations` across `lib/` and `app/` returns only the generated
-docs corpus.
+¹ The window and the headers it unlocks are both computed from
+`API_VERSION_HISTORY` and exercised in
+`tests/api-version-negotiation.spec.ts` against synthetic history (a version
+retired 179 days ago stays in the window, 181 days ago it doesn't) — but real
+production history has exactly one version, since none has ever been
+retired. So `SUPPORTED_API_VERSIONS` still has one element and no live
+response carries `Sunset`/`Warning` today. That is expected, not a gap: the
+mechanism is real and tested; it has simply never had a reason to produce a
+second entry. It does the first time a version ships and the outgoing one is
+recorded with a `supersededAt`.
 
 The previous revision pointed at #874. **That issue is closed** — the policy
-half landed in #827 and the code half did not — so the gap had no open tracker
-until now. Tracked in
+half landed in #827 and the code half did not, until
 [#1150](https://github.com/ezedike-evan/stellar-intel/issues/1150).
 
 ## 8. Trust boundaries

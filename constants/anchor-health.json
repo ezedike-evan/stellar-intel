@@ -1,55 +1,55 @@
 {
   "thresholdNights": 3,
-  "updatedAt": "2026-08-30T09:58:13.768Z",
+  "updatedAt": "2026-09-02T08:48:14.512Z",
   "anchors": {
     "moneygram": {
       "consecutiveFailures": 0,
       "degraded": false,
-      "lastCheckedAt": "2026-08-30T09:58:13.768Z",
+      "lastCheckedAt": "2026-09-02T08:48:14.512Z",
       "lastStatus": "ok",
       "lastError": null
     },
     "cowrie": {
       "consecutiveFailures": 0,
       "degraded": false,
-      "lastCheckedAt": "2026-08-30T09:58:13.768Z",
+      "lastCheckedAt": "2026-09-02T08:48:14.512Z",
       "lastStatus": "ok",
       "lastError": null
     },
     "anclap": {
       "consecutiveFailures": 0,
       "degraded": false,
-      "lastCheckedAt": "2026-08-30T09:58:13.768Z",
+      "lastCheckedAt": "2026-09-02T08:48:14.512Z",
       "lastStatus": "ok",
       "lastError": null
     },
     "ngnc": {
       "consecutiveFailures": 0,
       "degraded": false,
-      "lastCheckedAt": "2026-08-30T09:58:13.768Z",
+      "lastCheckedAt": "2026-09-02T08:48:14.512Z",
       "lastStatus": "ok",
       "lastError": null
     },
     "mykobo": {
-      "consecutiveFailures": 3,
-      "degraded": true,
-      "lastCheckedAt": "2026-08-30T09:58:13.768Z",
-      "lastStatus": "fail",
-      "lastError": "TypeError:ENOTFOUND"
+      "consecutiveFailures": 0,
+      "degraded": false,
+      "lastCheckedAt": "2026-09-02T08:48:14.512Z",
+      "lastStatus": "ok",
+      "lastError": null
     },
     "ntokens": {
       "consecutiveFailures": 0,
       "degraded": false,
-      "lastCheckedAt": "2026-08-30T09:58:13.768Z",
+      "lastCheckedAt": "2026-09-02T08:48:14.512Z",
       "lastStatus": "ok",
       "lastError": null
     },
     "zeam": {
-      "consecutiveFailures": 3,
-      "degraded": true,
-      "lastCheckedAt": "2026-08-30T09:58:13.768Z",
-      "lastStatus": "fail",
-      "lastError": "HTTP 404"
+      "consecutiveFailures": 0,
+      "degraded": false,
+      "lastCheckedAt": "2026-09-02T08:48:14.512Z",
+      "lastStatus": "ok",
+      "lastError": null
     }
   }
 }
