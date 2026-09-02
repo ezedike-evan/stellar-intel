@@ -50,7 +50,9 @@ describe('Intent end-to-end round trip', () => {
       .spyOn(horizonServer, 'submitTransaction')
       .mockImplementation(async (signedTx: any) => {
         const parsed = TransactionBuilder.fromXDR(signedTx.toXDR(), Networks.PUBLIC) as Transaction;
-        const signature = (parsed.signatures[0] as any).signature();
+        // sdk 17: DecoratedSignature.signature is an XDR Signature wrapper rather
+        // than a method, and its .value holds the 64 raw bytes.
+        const signature = Buffer.from((parsed.signatures[0] as any).signature.value as Uint8Array);
         expect(signature).toBeDefined();
         expect(
           Keypair.fromPublicKey(sourceKeypair.publicKey()).verify(parsed.hash(), signature)
