@@ -78,7 +78,7 @@
     "@typescript-eslint/parser": "^8.62.0",
     "@vitejs/plugin-react": "^6.0.1",
     "@vitest/coverage-v8": "^4.1.9",
-    "better-sqlite3": "^12.10.0",
+    "better-sqlite3": "^13.0.3",
     "eslint": "^10",
     "eslint-config-next": "16.2.9",
     "eslint-config-prettier": "^10.1.8",
