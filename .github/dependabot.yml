@@ -46,6 +46,12 @@ updates:
       # Allow lock-step manual bumps on Tailwind v4; it is under active change.
       - dependency-name: 'tailwindcss'
         update-types: ['version-update:semver-major']
+      # typescript-eslint pins `typescript@>=4.8.4 <6.1.0`, so a TypeScript major
+      # cannot install alongside the lint toolchain. Grouped into `tooling`, it
+      # takes the other eleven packages down with it (ERESOLVE, #1203). Bump it
+      # by hand once typescript-eslint widens the peer range.
+      - dependency-name: 'typescript'
+        update-types: ['version-update:semver-major']
 
   - package-ecosystem: 'github-actions'
     directory: '/'
