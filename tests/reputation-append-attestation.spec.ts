@@ -41,7 +41,7 @@ function req(body: unknown): NextRequest {
 describe('POST /api/reputation/append — optional attestation', () => {
   it('accepts and marks attested when the signature is valid', async () => {
     const kp = Keypair.random();
-    const signature = kp.sign(Buffer.from(HASH, 'hex')).toString('base64');
+    const signature = Buffer.from(kp.sign(Buffer.from(HASH, 'hex'))).toString('base64');
     const res = await appendPOST(req(base({ signature, publicKey: kp.publicKey() })));
     expect(res.status).toBe(201);
     expect((await res.json()).attested).toBe(true);
@@ -50,7 +50,7 @@ describe('POST /api/reputation/append — optional attestation', () => {
 
   it('rejects a forged (wrong-key) signature with 403 and writes nothing', async () => {
     const claimed = Keypair.random();
-    const forged = Keypair.random().sign(Buffer.from(HASH, 'hex')).toString('base64');
+    const forged = Buffer.from(Keypair.random().sign(Buffer.from(HASH, 'hex'))).toString('base64');
     const res = await appendPOST(req(base({ signature: forged, publicKey: claimed.publicKey() })));
     expect(res.status).toBe(403);
     expect(await store.query({})).toHaveLength(0);

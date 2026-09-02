@@ -247,9 +247,11 @@ describe('MCP tool contracts, offline (#1052)', () => {
 
       // The memo is what ties the on-chain payment back to the intent that
       // authorised it; without it the settlement record is unattributable.
-      const memo = 'memo' in tx ? (tx.memo as { type: string; value: Buffer }) : undefined;
+      // stellar-sdk 17 types the hash memo value as Uint8Array rather than Buffer.
+      const memo =
+        'memo' in tx ? (tx.memo as unknown as { type: string; value: Uint8Array }) : undefined;
       expect(memo?.type).toBe('hash');
-      expect(memo?.value.toString('hex')).toBe(unsignedEnvelope.intentHash);
+      expect(memo && Buffer.from(memo.value).toString('hex')).toBe(unsignedEnvelope.intentHash);
     });
 
     it('is deterministic — the same intent hashes the same way twice', async () => {
@@ -291,9 +293,9 @@ describe('MCP tool contracts, offline (#1052)', () => {
         unsignedTx: string;
       };
 
-      const signature = SENDER.sign(Buffer.from(unsignedEnvelope.intentHash, 'utf8')).toString(
-        'base64'
-      );
+      const signature = Buffer.from(
+        SENDER.sign(Buffer.from(unsignedEnvelope.intentHash, 'utf8'))
+      ).toString('base64');
       const tx = TransactionBuilder.fromXDR(unsignedTx, Networks.PUBLIC);
       tx.sign(SENDER);
 
@@ -366,9 +368,9 @@ describe('MCP tool contracts, offline (#1052)', () => {
         name: 'intel.execute',
         arguments: {
           unsignedEnvelope,
-          signature: SENDER.sign(Buffer.from(unsignedEnvelope.intentHash, 'utf8')).toString(
-            'base64'
-          ),
+          signature: Buffer.from(
+            SENDER.sign(Buffer.from(unsignedEnvelope.intentHash, 'utf8'))
+          ).toString('base64'),
           signedTx: unsignedTx,
         },
       });

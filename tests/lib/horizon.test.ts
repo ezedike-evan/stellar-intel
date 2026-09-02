@@ -66,7 +66,8 @@ describe('buildWithdrawPayment', () => {
       assetIssuer: USDC_ISSUER,
     });
 
-    expect(tx.memo.value).toBe('abc123');
+    // sdk 17 exposes a text memo's value as a Uint8Array rather than a string.
+    expect(Buffer.from(tx.memo.value as Uint8Array).toString('utf8')).toBe('abc123');
   });
 
   it('uses the correct USDC asset code and issuer', async () => {

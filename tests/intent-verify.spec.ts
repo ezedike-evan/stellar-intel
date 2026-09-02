@@ -6,7 +6,7 @@ import { verifyIntentSignature } from '@/lib/intent/verify';
 const INTENT_HASH = 'a'.repeat(64);
 
 function sign(hashHex: string, kp: Keypair): string {
-  return kp.sign(Buffer.from(hashHex, 'hex')).toString('base64');
+  return Buffer.from(kp.sign(Buffer.from(hashHex, 'hex'))).toString('base64');
 }
 
 describe('verifyIntentSignature', () => {
