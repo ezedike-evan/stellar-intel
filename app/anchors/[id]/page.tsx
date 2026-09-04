@@ -144,13 +144,13 @@ export default async function AnchorDetailPage({
   };
 
   return (
-    <main className="mx-auto max-w-5xl space-y-8 px-4 py-8">
+    <div className="mx-auto max-w-5xl space-y-8 px-4 py-8">
       <AnchorProfile data={profileData} />
       <ScorecardCard
         anchorId={anchor.id}
         window="30d"
         latestOracleTxHash={lastPublished?.oracleTxHash ?? undefined}
       />
-    </main>
+    </div>
   );
 }

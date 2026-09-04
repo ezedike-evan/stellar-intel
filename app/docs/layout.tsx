@@ -120,9 +120,9 @@ export default function DocsLayout({ children }: { children: React.ReactNode }) 
       </aside>
 
       {/* Main content */}
-      <main className="min-w-0 flex-1 px-4 py-8 md:px-8 lg:px-12">
+      <div className="min-w-0 flex-1 px-4 py-8 md:px-8 lg:px-12">
         <div className="mx-auto max-w-3xl">{children}</div>
-      </main>
+      </div>
 
       <DocsSearch open={searchOpen} onClose={() => setSearchOpen(false)} />
     </div>

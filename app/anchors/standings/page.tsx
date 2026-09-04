@@ -153,19 +153,16 @@ export default async function StandingsPage() {
   });
 
   return (
-    <>
-      <script
-        type="application/ld+json"
-        // eslint-disable-next-line react/no-danger
-        dangerouslySetInnerHTML={{ __html: serializeJsonLd(jsonLd) }}
-      />
-      <main className="mx-auto max-w-5xl px-4 py-12 sm:py-16">
-        <header>
-          <h1 className="type-title">Anchor standings</h1>
-          <p className="text-secondary-text measure mt-4 text-base">
-            Reputation ranking across every registered anchor, over a 30-day rolling window,
-            refreshed every five minutes. Top-ranked anchors receive order-flow priority in the
-            routing engine.
+    <div className="mx-auto max-w-5xl px-4 py-12 sm:py-16">
+      <header>
+        <h1 className="type-title">Anchor standings</h1>
+        <p className="text-secondary-text measure mt-4 text-base">
+          Reputation ranking across every registered anchor, over a 30-day rolling window, refreshed
+          every five minutes. Top-ranked anchors receive order-flow priority in the routing engine.
+        </p>
+        <div className="mt-6 flex flex-wrap items-center gap-x-4 gap-y-2">
+          <p className="text-fg-muted font-mono text-xs tracking-wide">
+            {measured.length} of {standings.length} measured
           </p>
           <div className="mt-6 flex flex-wrap items-center gap-x-4 gap-y-2">
             <p className="text-fg-muted font-mono text-xs tracking-wide">
@@ -309,13 +306,12 @@ export default async function StandingsPage() {
           </table>
         </div>
 
-        <p className="text-fg-muted measure mt-6 text-sm">
-          Scores reflect only on-chain settled transactions recorded in the Stellar Intel reputation
-          store. An anchor with zero samples is unranked rather than ranked last — absence of a
-          record is not evidence of poor performance, and treating it as such is how a monitor turns
-          into a rumour.
-        </p>
-      </main>
-    </>
+      <p className="text-fg-muted measure mt-6 text-sm">
+        Scores reflect only on-chain settled transactions recorded in the Stellar Intel reputation
+        store. An anchor with zero samples is unranked rather than ranked last — absence of a record
+        is not evidence of poor performance, and treating it as such is how a monitor turns into a
+        rumour.
+      </p>
+    </div>
   );
 }
