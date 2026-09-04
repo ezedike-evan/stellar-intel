@@ -18,9 +18,6 @@
  *     consumers know the scores are preliminary.
  */
 
-import { readFileSync } from 'node:fs';
-import { isAbsolute, resolve } from 'node:path';
-
 const SITE_URL = process.env.NEXT_PUBLIC_SITE_URL ?? 'https://stellar-intel.vercel.app';
 
 /**
@@ -42,6 +39,10 @@ export const MAX_FAQ_ITEMS = 50;
 export const MAX_QUESTION_CHARS = 300;
 export const MAX_ANSWER_CHARS = 8000;
 export const FAQ_MARKDOWN_REL_PATH = 'docs/FAQ.md';
+
+// `readFaqMarkdown` lives in lib/seo/faq-source.ts: this module is imported by
+// client components, and a top-level `node:fs` import here reaches the browser
+// chunking context and fails the Turbopack build on /anchors/page.
 
 export class FaqJsonLdError extends Error {
   constructor(message: string) {
@@ -107,13 +108,6 @@ export interface DatasetJsonLdOptions {
   dateModified: string;
 }
 
-function errorCode(err: unknown): string | undefined {
-  if (err && typeof err === 'object' && 'code' in err && typeof err.code === 'string') {
-    return err.code;
-  }
-  return undefined;
-}
-
 /** Collapse markdown to the plain text that belongs in JSON-LD. */
 export function stripMarkdown(text: string): string {
   return text
@@ -169,33 +163,6 @@ export function parseFaqMarkdown(source: string): FaqEntry[] {
   }
 
   return entries;
-}
-
-export function readFaqMarkdown(relPath: string = FAQ_MARKDOWN_REL_PATH): string {
-  const root = resolve(process.cwd());
-  const allowed = resolve(root, FAQ_MARKDOWN_REL_PATH);
-  const filePath = isAbsolute(relPath) ? resolve(relPath) : resolve(root, relPath);
-
-  if (filePath !== allowed) {
-    throw new FaqJsonLdError(`FAQ source path is not allowed: ${relPath}`);
-  }
-
-  let source: string;
-  try {
-    source = readFileSync(filePath, 'utf-8');
-  } catch (err) {
-    if (errorCode(err) === 'ENOENT') {
-      throw new FaqJsonLdError(`FAQ source not found: ${filePath}`);
-    }
-    const message = err instanceof Error ? err.message : String(err);
-    throw new FaqJsonLdError(`Failed to read FAQ source ${filePath}: ${message}`);
-  }
-
-  if (Buffer.byteLength(source, 'utf-8') > MAX_FAQ_BYTES) {
-    throw new FaqJsonLdError(`FAQ source exceeds ${MAX_FAQ_BYTES} bytes: ${filePath}`);
-  }
-
-  return source;
 }
 
 export function buildFaqPageJsonLd(entries: FaqEntry[]): FaqPageJsonLd {
