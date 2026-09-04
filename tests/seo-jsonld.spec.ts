@@ -24,9 +24,9 @@ import {
   type DatasetJsonLdOptions,
   FaqJsonLdError,
   parseFaqMarkdown,
-  readFaqMarkdown,
   buildFaqPageJsonLd,
 } from '@/lib/seo/jsonld';
+import { readFaqMarkdown } from '@/lib/seo/faq-source';
 
 // ─── Fixtures ─────────────────────────────────────────────────────────────────
 

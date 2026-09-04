@@ -1,12 +1,8 @@
 import { marked } from 'marked';
 import type { Metadata } from 'next';
 import { PROSE_CLASSES } from '@/lib/prose';
-import {
-  buildFaqPageJsonLd,
-  parseFaqMarkdown,
-  readFaqMarkdown,
-  serializeJsonLd,
-} from '@/lib/seo/jsonld';
+import { buildFaqPageJsonLd, parseFaqMarkdown, serializeJsonLd } from '@/lib/seo/jsonld';
+import { readFaqMarkdown } from '@/lib/seo/faq-source';
 
 const SITE_URL = process.env.NEXT_PUBLIC_SITE_URL ?? 'https://stellar-intel.vercel.app';
 const TITLE = 'FAQ — Stellar Intel';
