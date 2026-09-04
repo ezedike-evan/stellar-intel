@@ -886,6 +886,7 @@ the hardening contract (see `lib/api/v1.ts`):
   - [`GET /api/admin/disputes`](#get-apiadmindisputes)
   - [`POST /api/admin/disputes`](#post-apiadmindisputes)
 - **Anchors**
+  - [`GET /api/v1/anchor-health/ledger`](#get-apiv1anchor-healthledger)
   - [`GET /api/v1/anchors/{id}/health`](#get-apiv1anchorsidhealth)
 - **Intent**
   - [`POST /api/intent`](#post-apiintent)
@@ -917,6 +918,7 @@ the hardening contract (see `lib/api/v1.ts`):
   - [`GET /api/reputation/reconcile`](#get-apireputationreconcile)
   - [`GET /api/reputation/reconcile-volume-savings`](#get-apireputationreconcile-volume-savings)
   - [`POST /api/reputation/refresh`](#post-apireputationrefresh)
+  - [`GET /api/status`](#get-apistatus)
   - [`GET /api/v1/health`](#get-apiv1health)
   - [`GET /api/webhooks/failures`](#get-apiwebhooksfailures)
   - [`GET /api/webhooks/subscriptions`](#get-apiwebhookssubscriptions)
@@ -967,6 +969,30 @@ Accepts or rejects a dispute. Requires admin authentication.
 ---
 
 ## Anchors
+
+### `GET /api/v1/anchor-health/ledger`
+
+**Summary:** Get the anchor health ledger for a date  
+
+Publishes the nightly anchor health ledger as a dated artifact. Without `date`, returns the ledger this deployment was built with. With `date` (YYYY-MM-DD), returns the ledger as it stood on that date, resolved from the git history of `constants/anchor-health.json` — so the series is fetchable without cloning the repository. The committed file remains the source of truth; nothing is mirrored server-side. A dated response is immutable and cached as such.
+
+#### Parameters
+
+| Name | In | Type | Required | Description |
+| :--- | :--- | :--- | :--- | :--- |
+| `date` | `query` | `string` | No | Ledger date to retrieve, YYYY-MM-DD. Omit for the latest. |
+
+#### Responses
+
+| Status | Description | Content-Type | Schema |
+| :--- | :--- | :--- | :--- |
+| `200` | The anchor health ledger for the requested date | `application/json` | `AnchorHealthLedgerArtifact` |
+| `400` | Malformed date | `application/json` | `ApiError` |
+| `404` | No ledger exists on or before the requested date | `application/json` | `ApiError` |
+| `429` | Rate limited | `application/json` | `ApiError` |
+| `502` | The ledger history could not be read | `application/json` | `ApiError` |
+
+---
 
 ### `GET /api/v1/anchors/{id}/health`
 
@@ -1481,6 +1507,21 @@ Cron-triggered. Probes every registered anchor across all four dimensions and pe
 | `401` | Missing or invalid credentials | `application/json` | `ApiError` |
 | `409` | A refresh is already in progress | - | - |
 | `500` | Sweep persisted no samples | `application/json` | `ApiError` |
+
+---
+
+### `GET /api/status`
+
+**Summary:** API version and deprecation status  
+
+Current API version, the supported version window, and any announced deprecations — the "Status page" announcement channel in docs/VERSIONING.md.
+
+#### Responses
+
+| Status | Description | Content-Type | Schema |
+| :--- | :--- | :--- | :--- |
+| `200` | Status snapshot | `application/json` | `object` |
+| `429` | Rate limited | `application/json` | `ApiError` |
 
 ---
 

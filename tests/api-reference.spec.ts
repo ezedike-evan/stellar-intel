@@ -39,6 +39,43 @@ describe('API reference documentation generator (#1078)', () => {
     }
   });
 
+  it('keeps a description containing pipes, backslashes or newlines inside its table cell', () => {
+    const nasty: OpenApiSpec = {
+      ...spec,
+      paths: {
+        '/api/v1/escape-check': {
+          get: {
+            summary: 'Escape check',
+            parameters: [
+              {
+                name: 'mode',
+                in: 'query',
+                required: false,
+                // A backslash immediately before a pipe is the case escaping
+                // only `|` gets wrong: it emits `\\|`, which renders as a
+                // backslash plus a real cell break.
+                description: 'Either `a\\|b` or\ntwo | three',
+                schema: { type: 'string' },
+              },
+            ],
+            responses: { '200': { description: 'OK | fine' } },
+          },
+        },
+      },
+    };
+
+    const generated = generateApiReferenceMarkdown(nasty);
+    const rows = generated.split('\n').filter((line) => line.startsWith('| `mode`'));
+    expect(rows).toHaveLength(1);
+
+    // Five columns => six `|` delimiters. Any unescaped pipe from the
+    // description would add another, and a newline would split the row.
+    const delimiters = (rows[0]!.match(/(?<!\\)\|/g) ?? []).length;
+    expect(delimiters).toBe(6);
+    expect(rows[0]).toContain('\\\\\\|');
+    expect(rows[0]).not.toMatch(/\n/);
+  });
+
   it('detects drift when OpenAPI spec is altered', () => {
     const modifiedSpec: OpenApiSpec = {
       ...spec,

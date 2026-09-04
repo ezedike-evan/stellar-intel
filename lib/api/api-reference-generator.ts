@@ -72,6 +72,21 @@ export interface OpenApiSpec {
   };
 }
 
+/**
+ * Escape a spec-supplied string for use inside a Markdown table cell.
+ *
+ * `|` ends a cell and a newline ends the row, so both have to go.  The
+ * backslash has to be escaped *first*: escaping only the pipe (CodeQL
+ * js/incomplete-sanitization) turns a description that already contains a
+ * literal `\|` into `\\|`, which renders as a backslash followed by a real
+ * cell break — the exact table break the escaping was meant to prevent.
+ */
+function escapeTableCell(text: string | undefined): string {
+  if (!text) return '-';
+  const escaped = text.replace(/\\/g, '\\\\').replace(/\|/g, '\\|').replace(/\r?\n/g, ' ').trim();
+  return escaped || '-';
+}
+
 function resolveSchemaTypeName(schema?: Record<string, unknown>): string {
   if (!schema) return 'any';
   if (schema.$ref && typeof schema.$ref === 'string') {
@@ -211,7 +226,7 @@ export function generateApiReferenceMarkdown(spec: OpenApiSpec): string {
         for (const param of op.parameters) {
           const typeName = param.schema ? resolveSchemaTypeName(param.schema) : 'string';
           const req = param.required ? '**Yes**' : 'No';
-          const desc = param.description ? param.description.replace(/\|/g, '\\|') : '-';
+          const desc = escapeTableCell(param.description);
           lines.push(
             `| \`${param.name}\` | \`${param.in}\` | \`${typeName}\` | ${req} | ${desc} |`
           );
@@ -239,7 +254,7 @@ export function generateApiReferenceMarkdown(spec: OpenApiSpec): string {
               lines.push('| :--- | :--- | :--- | :--- |');
               for (const prop of props) {
                 const req = prop.required ? '**Yes**' : 'No';
-                const desc = prop.description ? prop.description.replace(/\|/g, '\\|') : '-';
+                const desc = escapeTableCell(prop.description);
                 lines.push(`| \`${prop.name}\` | \`${prop.type}\` | ${req} | ${desc} |`);
               }
               lines.push('');
@@ -255,7 +270,7 @@ export function generateApiReferenceMarkdown(spec: OpenApiSpec): string {
         lines.push('| Status | Description | Content-Type | Schema |');
         lines.push('| :--- | :--- | :--- | :--- |');
         for (const [code, resp] of Object.entries(op.responses)) {
-          const desc = resp.description ? resp.description.replace(/\|/g, '\\|') : '-';
+          const desc = escapeTableCell(resp.description);
           if (resp.content && Object.keys(resp.content).length > 0) {
             for (const [cType, mType] of Object.entries(resp.content)) {
               const schemaName = mType.schema ? resolveSchemaTypeName(mType.schema) : '-';
