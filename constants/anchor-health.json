@@ -1,53 +1,53 @@
 {
   "thresholdNights": 3,
-  "updatedAt": "2026-09-02T08:48:14.512Z",
+  "updatedAt": "2026-09-04T08:57:47.230Z",
   "anchors": {
     "moneygram": {
       "consecutiveFailures": 0,
       "degraded": false,
-      "lastCheckedAt": "2026-09-02T08:48:14.512Z",
+      "lastCheckedAt": "2026-09-04T08:57:47.230Z",
       "lastStatus": "ok",
       "lastError": null
     },
     "cowrie": {
       "consecutiveFailures": 0,
       "degraded": false,
-      "lastCheckedAt": "2026-09-02T08:48:14.512Z",
+      "lastCheckedAt": "2026-09-04T08:57:47.230Z",
       "lastStatus": "ok",
       "lastError": null
     },
     "anclap": {
       "consecutiveFailures": 0,
       "degraded": false,
-      "lastCheckedAt": "2026-09-02T08:48:14.512Z",
+      "lastCheckedAt": "2026-09-04T08:57:47.230Z",
       "lastStatus": "ok",
       "lastError": null
     },
     "ngnc": {
       "consecutiveFailures": 0,
       "degraded": false,
-      "lastCheckedAt": "2026-09-02T08:48:14.512Z",
+      "lastCheckedAt": "2026-09-04T08:57:47.230Z",
       "lastStatus": "ok",
       "lastError": null
     },
     "mykobo": {
       "consecutiveFailures": 0,
       "degraded": false,
-      "lastCheckedAt": "2026-09-02T08:48:14.512Z",
+      "lastCheckedAt": "2026-09-04T08:57:47.230Z",
       "lastStatus": "ok",
       "lastError": null
     },
     "ntokens": {
       "consecutiveFailures": 0,
       "degraded": false,
-      "lastCheckedAt": "2026-09-02T08:48:14.512Z",
+      "lastCheckedAt": "2026-09-04T08:57:47.230Z",
       "lastStatus": "ok",
       "lastError": null
     },
     "zeam": {
       "consecutiveFailures": 0,
       "degraded": false,
-      "lastCheckedAt": "2026-09-02T08:48:14.512Z",
+      "lastCheckedAt": "2026-09-04T08:57:47.230Z",
       "lastStatus": "ok",
       "lastError": null
     }
