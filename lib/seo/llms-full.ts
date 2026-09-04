@@ -68,7 +68,13 @@ export const LLMS_FULL_SECTIONS: LlmsFullSection[] = [
   {
     title: 'API reference',
     blurb: 'The HTTP and GraphQL surfaces, their version guarantees, and their wire formats.',
-    files: ['INTENT_API.md', 'GRAPHQL_API.md', 'VERSIONING.md', 'CANONICAL_JSON.md'],
+    files: [
+      'API_REFERENCE.md',
+      'INTENT_API.md',
+      'GRAPHQL_API.md',
+      'VERSIONING.md',
+      'CANONICAL_JSON.md',
+    ],
   },
   {
     title: 'Integration guides',
