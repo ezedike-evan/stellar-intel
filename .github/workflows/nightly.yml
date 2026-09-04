@@ -50,12 +50,37 @@ jobs:
           REPORT=""
           for D in "${DOMAINS[@]}"; do
             URL="https://${D}/.well-known/stellar.toml"
-            CODE=$(curl -s -o /tmp/toml -w "%{http_code}" --max-time 15 "$URL" || echo "000")
+            # curl prints 000 via -w when the connection never happens, and
+            # also exits non-zero -- `|| echo 000` would append a second 000
+            # and render "HTTP 000000". Swallow the status, normalise empties.
+            CODE=$(curl -s -o /tmp/toml -w "%{http_code}" --max-time 15 "$URL" || true)
+            [ -n "$CODE" ] || CODE="000"
             HAS_TRANSFER=$(grep -Eq '^TRANSFER_SERVER_SEP0024' /tmp/toml && echo yes || echo no)
-            LINE="$D | HTTP $CODE | SEP-24: $HAS_TRANSFER"
+
+            # A TOML that advertises SEP-24 is not evidence that anything is
+            # serving it. mykobo.co publishes a valid document naming
+            # https://stellar.mykobo.co/sep24, but that host CNAMEs into a load
+            # balancer that no longer exists. Follow the advertised URL to the
+            # mandatory /info endpoint so a dead service behind a healthy TOML
+            # is visible here, not only in the health ledger.
+            SEP_CODE="n/a"
+            if [ "$HAS_TRANSFER" = "yes" ]; then
+              SEP_URL=$(sed -nE 's/^TRANSFER_SERVER_SEP0024[[:space:]]*=[[:space:]]*"?([^"[:space:]]+)"?.*/\1/p' /tmp/toml | head -n 1)
+              SEP_URL="${SEP_URL%/}"
+              if [ -n "$SEP_URL" ]; then
+                SEP_CODE=$(curl -s -o /dev/null -w "%{http_code}" --max-time 15 "${SEP_URL}/info" || true)
+                [ -n "$SEP_CODE" ] || SEP_CODE="000"
+              else
+                SEP_CODE="000"
+              fi
+            fi
+
+            LINE="$D | HTTP $CODE | SEP-24: $HAS_TRANSFER | SEP-24 endpoint: HTTP $SEP_CODE"
             echo "$LINE"
             REPORT="${REPORT}${LINE}\n"
-            if [ "$CODE" != "200" ] || [ "$HAS_TRANSFER" != "yes" ]; then
+            # A 200 TOML advertising a SEP-24 server that does not answer is
+            # still a failing anchor -- that is the whole point of the probe.
+            if [ "$CODE" != "200" ] || [ "$HAS_TRANSFER" != "yes" ] || [ "$SEP_CODE" != "200" ]; then
               FAIL=$((FAIL + 1))
             fi
           done
@@ -79,8 +104,12 @@ jobs:
             echo "${FAIL} of ${#DOMAINS[@]} domain(s) failed."
           } >> "$GITHUB_STEP_SUMMARY"
 
+          # Warning-only meant this job reported `success` on every night it
+          # ever ran, including nights it counted failures, so its row in the
+          # alert's job table carried no information. Fail instead.
           if [ "$FAIL" -gt 0 ]; then
-            echo "::warning::$FAIL anchor domain(s) failed the nightly probe"
+            echo "::error::$FAIL anchor domain(s) failed the nightly probe"
+            exit 1
           fi
 
   anchor-health-ledger:
@@ -279,8 +308,8 @@ jobs:
               ...Object.entries(results).map(([job, r]) => `| \`${job}\` | ${r} |`),
               '',
               // The health ledger is the anchor verdict; the block below it
-              // only says whether a home domain still serves a TOML naming a
-              // SEP-24 endpoint, which is why the two can disagree (#1015).
+              // reaches the home domain and the SEP-24 endpoint it advertises,
+              // and nothing deeper, which is why the two can disagree (#1015).
               'Health ledger verdict (this run):',
               '```',
               process.env.LEDGER_DIGEST || '(anchor-health-ledger did not report)',
@@ -291,7 +320,7 @@ jobs:
               process.env.ANCHOR_SUMMARY || '(anchor-domains did not report)',
               '```',
               '',
-              'The block above checks the home domain only: HTTP status and the presence of a `TRANSFER_SERVER_SEP0024` line. It does not resolve the endpoint that line points at, so `HTTP 200 | SEP-24: yes` is not a statement that the anchor is up — read the ledger for that.',
+              'The block above checks reachability only: the home domain TOML, the `TRANSFER_SERVER_SEP0024` line in it, and an unauthenticated `GET /info` against the endpoint that line names. An anchor answering all three can still be degraded — read the ledger for the verdict.',
             ].join('\n');
 
             // One issue per day, not one per run. workflow_dispatch plus the
