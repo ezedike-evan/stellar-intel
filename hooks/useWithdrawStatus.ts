@@ -71,6 +71,11 @@ export function useWithdrawStatus(
   _protocol: 'sep24' | 'sep6' = 'sep24'
 ): UseWithdrawStatusResult {
   const pollIntervalMsRef = useRef(WITHDRAW_POLL_INITIAL_MS);
+  // Mirrored into state so SWR is handed a plain number it re-arms on: passing
+  // `refreshInterval` as a function stopped the poll dead after the first
+  // response (measured: two requests, then silence), which meant a withdrawal
+  // could reach `completed` without this page ever showing it.
+  const [pollIntervalMs, setPollIntervalMs] = useState(WITHDRAW_POLL_INITIAL_MS);
   const lastStatusRef = useRef<WithdrawStatusValue | undefined>(undefined);
   const abortRef = useRef<AbortController | null>(null);
   const appendedRef = useRef(false);
@@ -82,8 +87,14 @@ export function useWithdrawStatus(
       ? ([transferServer, transactionId, jwt] as [string, string, string])
       : null;
 
+  const applyPollInterval = useCallback((ms: number) => {
+    pollIntervalMsRef.current = ms;
+    setPollIntervalMs(ms);
+  }, []);
+
   useEffect(() => {
     pollIntervalMsRef.current = WITHDRAW_POLL_INITIAL_MS;
+    setPollIntervalMs(WITHDRAW_POLL_INITIAL_MS);
     lastStatusRef.current = undefined;
     abortRef.current = new AbortController();
     appendedRef.current = false;
@@ -101,18 +112,20 @@ export function useWithdrawStatus(
   );
 
   const { data, error, isLoading } = useSWR<Sep24Transaction, Error>(key, fetcher, {
-    refreshInterval(latestData) {
-      if (!latestData) return WITHDRAW_POLL_INITIAL_MS;
-      return TERMINAL_STATES.has(latestData.status) ? 0 : pollIntervalMsRef.current;
-    },
+    refreshInterval: pollIntervalMs,
     onSuccess(data) {
       setAttemptCount((c) => c + 1);
-      if (lastStatusRef.current !== data.status) {
-        lastStatusRef.current = data.status;
-        pollIntervalMsRef.current = WITHDRAW_POLL_INITIAL_MS;
+      // 0 stops the poll, which is what a terminal state should do.
+      if (TERMINAL_STATES.has(data.status)) {
+        applyPollInterval(0);
         return;
       }
-      pollIntervalMsRef.current = computeNextWithdrawPollIntervalMs(pollIntervalMsRef.current);
+      if (lastStatusRef.current !== data.status) {
+        lastStatusRef.current = data.status;
+        applyPollInterval(WITHDRAW_POLL_INITIAL_MS);
+        return;
+      }
+      applyPollInterval(computeNextWithdrawPollIntervalMs(pollIntervalMsRef.current));
     },
     revalidateOnFocus: false,
   });
