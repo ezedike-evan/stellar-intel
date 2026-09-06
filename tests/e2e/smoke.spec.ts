@@ -34,8 +34,10 @@ test.describe('Landing page smoke test', () => {
   test('"See the record" CTA navigates to /anchors', async ({ page }) => {
     await page.getByRole('link', { name: 'See the record' }).click();
     // Generous timeout: a route visited for the first time against a local
-    // `next dev` server compiles on demand, which can exceed the default 5s.
-    await page.waitForURL(/\/anchors/, { timeout: 15000 });
+    // `next dev` server compiles on demand. /offramp needed more than the 15s
+    // this used to allow, so both navigations get the same headroom; against a
+    // prebuilt server (CI, preview) they resolve immediately either way.
+    await page.waitForURL(/\/anchors/, { timeout: 60000 });
   });
 
   test('the off-ramp comparator is reachable from the landing page', async ({ page }) => {
@@ -45,6 +47,6 @@ test.describe('Landing page smoke test', () => {
     // is always present, so that is what this smoke test guards.
     const nav = page.getByRole('navigation', { name: 'Main navigation' });
     await nav.getByRole('link', { name: 'Off-ramp' }).click();
-    await page.waitForURL(/\/offramp/, { timeout: 15000 });
+    await page.waitForURL(/\/offramp/, { timeout: 60000 });
   });
 });
