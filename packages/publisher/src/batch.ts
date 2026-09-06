@@ -7,13 +7,7 @@ import type { StellarNetwork } from './network';
 // `types/reputation.ts` exactly; keep in sync when that type evolves.
 export type ProbeKind = 'uptime' | 'quote' | 'issuer-mismatch' | 'toml-integrity';
 export type ProbeFailureType =
-  | 'dns'
-  | 'tls'
-  | 'http'
-  | 'timeout'
-  | 'mismatch'
-  | 'integrity'
-  | 'unknown';
+  'dns' | 'tls' | 'http' | 'timeout' | 'mismatch' | 'integrity' | 'unknown';
 export interface ProbeLedgerRow {
   domain: string;
   kind: ProbeKind;
