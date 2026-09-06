@@ -10,7 +10,11 @@ import { test, expect } from '@playwright/test';
 test.describe('[#104] keyboard-only navigation', () => {
   test.beforeEach(async ({ page }) => {
     await page.goto('/offramp');
-    await page.waitForLoadState('networkidle');
+    // /offramp polls Freighter every 5s and refreshes rates on a timer, so the
+    // network never goes idle — wait for the heading, as smoke.spec.ts does.
+    await expect(
+      page.getByRole('heading', { name: 'Off-ramp Comparator', level: 1 })
+    ).toBeVisible();
   });
 
   // ── Tab order: first stop ───────────────────────────────────────────────────

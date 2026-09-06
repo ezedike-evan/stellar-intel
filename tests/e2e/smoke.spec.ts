@@ -19,23 +19,32 @@ test.describe('Landing page smoke test', () => {
   });
 
   test('renders the hero heading and headline stats', async ({ page }) => {
-    await expect(page.getByRole('heading', { level: 1 })).toContainText(
-      'Health and reputation monitoring'
-    );
-    await expect(page.getByText('Anchors tracked')).toBeVisible();
-    await expect(page.getByText('Corridors live')).toBeVisible();
-    await expect(page.getByText('Countries reachable')).toBeVisible();
+    const hero = page.getByRole('heading', { level: 1 });
+    await expect(hero).toContainText('What anchors say.');
+    await expect(hero).toContainText('What anchors did.');
+
+    // Scoped to the coverage <section>: these three terms are ordinary words
+    // that also occur in the body copy further down the page.
+    const coverage = page.getByRole('region', { name: 'Registry coverage' });
+    await expect(coverage.getByText('anchors', { exact: true })).toBeVisible();
+    await expect(coverage.getByText('corridors', { exact: true })).toBeVisible();
+    await expect(coverage.getByText('countries', { exact: true })).toBeVisible();
   });
 
-  test('"Off-ramp now" CTA navigates to /offramp', async ({ page }) => {
-    await page.getByRole('link', { name: 'Off-ramp now' }).click();
+  test('"See the record" CTA navigates to /anchors', async ({ page }) => {
+    await page.getByRole('link', { name: 'See the record' }).click();
     // Generous timeout: a route visited for the first time against a local
     // `next dev` server compiles on demand, which can exceed the default 5s.
-    await page.waitForURL(/\/offramp/, { timeout: 15000 });
+    await page.waitForURL(/\/anchors/, { timeout: 15000 });
   });
 
-  test('"View anchors" CTA navigates to /anchors', async ({ page }) => {
-    await page.getByRole('link', { name: 'View anchors' }).click();
-    await page.waitForURL(/\/anchors/, { timeout: 15000 });
+  test('the off-ramp comparator is reachable from the landing page', async ({ page }) => {
+    // The hero's "compare all live rates" link only renders once a live rate
+    // resolves — when the rate path is down the hero falls back to a variant
+    // carrying no /offramp link at all. The header nav is the entry point that
+    // is always present, so that is what this smoke test guards.
+    const nav = page.getByRole('navigation', { name: 'Main navigation' });
+    await nav.getByRole('link', { name: 'Off-ramp' }).click();
+    await page.waitForURL(/\/offramp/, { timeout: 15000 });
   });
 });

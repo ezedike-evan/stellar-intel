@@ -99,16 +99,21 @@ test.describe('[#455] SEP-6 withdraw happy path', () => {
     );
 
     await page.goto(trackingUrl());
-    await page.waitForLoadState('networkidle');
-
-    // StatusTracker renders when trackingTransactionId is set
+    // /offramp polls Freighter every 5s and refreshes rates on a timer, so the
+    // network never goes idle — wait for the heading, as smoke.spec.ts does.
     await expect(
-      page
-        .locator(
-          '[data-testid="status-tracker"], .status-tracker, [aria-label*="status" i], [aria-label*="transaction" i]'
-        )
-        .or(page.getByText(/pending|processing|stellar/i))
-    ).toBeVisible({ timeout: 10_000 });
+      page.getByRole('heading', { name: 'Off-ramp Comparator', level: 1 })
+    ).toBeVisible();
+
+    // StatusTracker renders when trackingTransactionId is set. Anchor on its own
+    // heading: the previous selector union matched the site wordmark, the page
+    // subtitle and the footer copy too, so it died in strict mode against 11
+    // elements instead of ever checking that the tracker mounted.
+    await expect(page.getByRole('heading', { name: 'Transaction Status' })).toBeVisible({
+      timeout: 10_000,
+    });
+    // pollPendingStellar -> status `pending_stellar` -> STATUS_LABELS entry.
+    await expect(page.getByText('Confirming on Stellar')).toBeVisible();
   });
 
   // ── Status tracker progresses to completed ────────────────────────────────────

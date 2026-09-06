@@ -66,7 +66,11 @@ test.describe('[#106] Freighter not installed', () => {
     page,
   }) => {
     await page.goto('/offramp');
-    await page.waitForLoadState('networkidle');
+    // /offramp polls Freighter every 5s and refreshes rates on a timer, so the
+    // network never goes idle — wait for the heading, as smoke.spec.ts does.
+    await expect(
+      page.getByRole('heading', { name: 'Off-ramp Comparator', level: 1 })
+    ).toBeVisible();
 
     const installLink = page.getByRole('link', { name: /install freighter/i });
     const connectBtn = page.getByRole('button', { name: /connect wallet/i });
@@ -113,7 +117,11 @@ test.describe('[#106] Freighter not installed', () => {
     });
 
     await page.goto('/offramp');
-    await page.waitForLoadState('networkidle');
+    // /offramp polls Freighter every 5s and refreshes rates on a timer, so the
+    // network never goes idle — wait for the heading, as smoke.spec.ts does.
+    await expect(
+      page.getByRole('heading', { name: 'Off-ramp Comparator', level: 1 })
+    ).toBeVisible();
 
     // In headless Chrome without the extension the hook's catch fires;
     // WalletButton must show install guidance rather than crashing.
@@ -145,7 +153,11 @@ test.describe('[#106] Freighter not installed', () => {
     page,
   }) => {
     await page.goto('/offramp');
-    await page.waitForLoadState('networkidle');
+    // /offramp polls Freighter every 5s and refreshes rates on a timer, so the
+    // network never goes idle — wait for the heading, as smoke.spec.ts does.
+    await expect(
+      page.getByRole('heading', { name: 'Off-ramp Comparator', level: 1 })
+    ).toBeVisible();
 
     await expect(page.getByRole('heading', { name: /off-ramp comparator/i })).toBeVisible();
     await expect(page.locator('select').first()).toBeVisible();
@@ -156,7 +168,11 @@ test.describe('[#106] Freighter not installed', () => {
     page,
   }) => {
     await page.goto('/offramp');
-    await page.waitForLoadState('networkidle');
+    // /offramp polls Freighter every 5s and refreshes rates on a timer, so the
+    // network never goes idle — wait for the heading, as smoke.spec.ts does.
+    await expect(
+      page.getByRole('heading', { name: 'Off-ramp Comparator', level: 1 })
+    ).toBeVisible();
 
     const installLink = page.getByRole('link', { name: /install freighter/i });
     const connectBtn = page.getByRole('button', { name: /connect wallet/i });
