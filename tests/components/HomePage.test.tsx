@@ -67,15 +67,15 @@ describe('HomePage', () => {
 
   it('subcopy leads with the probe/reputation framing', () => {
     const { getByText } = render(<HomePage />);
-    expect(getByText(/seven registered off-ramp anchors, probed on a clock/i)).toBeTruthy();
+    expect(getByText(/registered off-ramp anchors, probed on a clock/i)).toBeTruthy();
   });
 
   it('keeps no intent framing above the fold', () => {
     const { getByRole, getByText } = render(<HomePage />);
     expect(getByRole('heading', { level: 1 }).textContent).not.toMatch(/intent/i);
-    expect(
-      getByText(/seven registered off-ramp anchors, probed on a clock/i).textContent
-    ).not.toMatch(/intent/i);
+    expect(getByText(/registered off-ramp anchors, probed on a clock/i).textContent).not.toMatch(
+      /intent/i
+    );
   });
 
   it('keeps the intent framing further down the page', () => {

@@ -72,19 +72,15 @@ export const ANCHORS: Anchor[] = [
     assetIssuer: USDC_ISSUER,
     seps: ['sep24'],
   },
-  // mykobo.co: EUR fiat corridor — SEP-6, SEP-24, SEP-31 enabled, issues EURC (EUR-pegged 1:1).
-  // Verified 2026-08-28. The home domain publishes the SEP-24 endpoint; use it
-  // for discovery because the legacy stellar.mykobo.co host no longer resolves.
-  // /info: withdraw.EURC.enabled = true. Serves USDC→EUR corridor.
-  {
-    id: 'mykobo',
-    name: 'MyKobo',
-    homeDomain: 'mykobo.co',
-    corridors: ['usdc-eur'],
-    assetCode: 'EURC',
-    assetIssuer: 'GAQRF3UGHBT6JYQZ7YSUYCIYWAF4T2SAA5237Q5LIQYJOHHFAWDXZ7NM',
-    seps: ['sep6', 'sep24', 'sep31'],
-  },
+  // mykobo.co: DELISTED 2026-09-06. Its stellar.toml still advertises both
+  // TRANSFER_SERVER and TRANSFER_SERVER_SEP0024 on stellar.mykobo.co, and that
+  // host has no A or AAAA record — every SEP-6 and SEP-24 call fails to connect.
+  // The TOML itself still serves 200, so a check that stops at the TOML reads
+  // this anchor as healthy; the nightly probe follows the advertised endpoint
+  // and does not. Nothing here is fixable from our side: re-list when MyKobo
+  // publishes a transfer server that resolves. Was: EURC issuer
+  // GAQRF3UGHBT6JYQZ7YSUYCIYWAF4T2SAA5237Q5LIQYJOHHFAWDXZ7NM, usdc-eur,
+  // seps sep6/sep24/sep31.
   // ultracapital.xyz: NOT integrated — crypto yield-token platform, no fiat off-ramp.
   // Verified 2026-06-29. TOML present (SEP-6 + SEP-24). SEP-24 /info withdraw assets: ETH,
   // yUSDC, BTC, yBTC, yXLM, yETH. anchor_asset_type = "crypto" throughout — no fiat corridor.
@@ -229,7 +225,16 @@ export const CORRIDORS: Corridor[] = [
  * in CORRIDORS but excluded from VISIBLE_CORRIDORS until the flag is enabled and
  * at least one anchor serves them.
  */
-export const V11_CORRIDOR_IDS: ReadonlySet<string> = new Set(['usdc-zar', 'usdc-xof']);
+export const V11_CORRIDOR_IDS: ReadonlySet<string> = new Set([
+  'usdc-zar',
+  'usdc-xof',
+  // usdc-eur is not a v1.1 scaffold -- it was live until mykobo, its only
+  // anchor, was delisted above. It sits here because this set is what
+  // VISIBLE_CORRIDORS checks anchor coverage against, so listing it keeps the
+  // corridor resolvable for lookups while hiding it from selectors until an
+  // anchor serves it again. Same state it was in before mykobo onboarded.
+  'usdc-eur',
+]);
 
 /**
  * Maintainer-set "typical" USDC amounts per corridor, used to seed the
@@ -276,6 +281,30 @@ export interface RegistryStats {
   /** Distinct destination countries reachable through those corridors. */
   countries: number;
 }
+
+const COUNT_WORDS = [
+  'zero',
+  'one',
+  'two',
+  'three',
+  'four',
+  'five',
+  'six',
+  'seven',
+  'eight',
+  'nine',
+  'ten',
+  'eleven',
+  'twelve',
+] as const;
+
+/**
+ * The registry size, spelled out, for prose that names the count. Copy on the
+ * home page and in llms.txt used to hard-code "seven" and went stale the moment
+ * an anchor was delisted -- on a page whose own comment says it "cannot drift
+ * from the registry it describes". Falls back to digits past twelve.
+ */
+export const ANCHOR_COUNT_WORD: string = COUNT_WORDS[ANCHORS.length] ?? String(ANCHORS.length);
 
 /**
  * Derive headline counts from the registry (#B074). Corridors and countries are

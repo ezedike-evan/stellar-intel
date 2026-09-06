@@ -112,13 +112,12 @@ describe('validate-anchors: parseAnchors', () => {
     const source = readFileSync(join(process.cwd(), 'constants/anchors.ts'), 'utf8');
     const domains = Object.fromEntries(
       parseAnchors(source)
-        .filter(({ id }) => ['cowrie', 'mykobo', 'zeam'].includes(id))
+        .filter(({ id }) => ['cowrie', 'zeam'].includes(id))
         .map(({ id, domain }) => [id, domain])
     );
 
     expect(domains).toEqual({
       cowrie: 'api.cowrie.exchange',
-      mykobo: 'mykobo.co',
       zeam: 'zeam.money',
     });
   });

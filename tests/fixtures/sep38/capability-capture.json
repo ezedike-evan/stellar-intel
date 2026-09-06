@@ -24,11 +24,6 @@
       "tomlHttp": 200,
       "anchorQuoteServer": null
     },
-    "mykobo": {
-      "homeDomain": "mykobo.co",
-      "tomlHttp": 200,
-      "anchorQuoteServer": null
-    },
     "ntokens": {
       "homeDomain": "ntokens.com",
       "tomlHttp": 200,

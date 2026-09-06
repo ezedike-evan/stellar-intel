@@ -2,6 +2,7 @@
 
 import Link from 'next/link';
 import { useAnchorRates } from '@/hooks/useAnchorRates';
+import { ANCHOR_COUNT_WORD } from '@/constants/anchors';
 import { formatCurrency, formatRate } from '@/lib/utils';
 import { Skeleton } from '@/components/ui/Skeleton';
 
@@ -50,8 +51,8 @@ export function Hero() {
         <p className="text-secondary-text measure mt-6 text-base sm:text-lg">
           A directory records what an anchor declares about itself, and stays correct until that
           anchor&apos;s deployment changes without the listing changing with it. This is the other
-          half: seven registered off-ramp anchors, probed on a clock, with the scoring method
-          published and small samples labelled as small.
+          half: {ANCHOR_COUNT_WORD} registered off-ramp anchors, probed on a clock, with the scoring
+          method published and small samples labelled as small.
         </p>
 
         <div className="mt-10 flex flex-wrap items-center gap-3">
@@ -109,7 +110,7 @@ function RatePreview({
           href="/anchors?corridor=usdc-ngn"
           className="text-secondary-text hover:text-primary-text mt-6 inline-block font-mono text-xs tracking-wide underline underline-offset-4"
         >
-          see all seven anchors &rarr;
+          see all {ANCHOR_COUNT_WORD} anchors &rarr;
         </Link>
       </div>
     );

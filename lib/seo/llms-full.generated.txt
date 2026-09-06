@@ -3513,7 +3513,6 @@ Registered anchors ([`constants/anchors.ts`](../constants/anchors.ts)). Capabili
 | Cowrie Exchange (`cowrie.exchange`) |  ✅   |  ✅   |   ✅   |   ❌   |   ❌   |   ❌   |   ❌   | NGN                     |
 | Anclap (`anclap.com`)               |  ✅   |  ✅   |   ✅   |   ❌   |   ✅   |   ❌   |   ❌   | ARS, PEN                |
 | NGNC (`ngnc.online`)                |  ✅   |  ❌   |   ✅   |   ❌   |   ✅   |   ❌   |   ❌   | NGN                     |
-| MyKobo (`mykobo.co`)                |  ✅   |  ✅   |   ✅   |   ❌   |   ✅   |   ✅   |   ❌   | EUR                     |
 | nTokens (`ntokens.com`)             |  ✅   |  ✅   |   ✅   |   ❌   |   ✅   |   ✅   |   ❌   | BRL                     |
 | **Zeam Money** (`zeam.money`)       |  ✅   |  ❌   |   ✅   |   ❌   |   ✅   |   ✅   | **✅** | ZAR (see note)          |
 
@@ -3521,8 +3520,15 @@ Registered anchors ([`constants/anchors.ts`](../constants/anchors.ts)). Capabili
 >
 > **Live-probed 2026-08-04** (#720) with `npx tsx scripts/probe-sep38.mts`; capture committed at
 > [`tests/fixtures/sep38/capability-capture.json`](../tests/fixtures/sep38/capability-capture.json).
-> The previous version of this table listed four of the seven registered anchors and recorded no
-> SEP-38 support anywhere, which was wrong.
+> The previous version of this table listed four of the then-seven registered anchors and recorded
+> no SEP-38 support anywhere, which was wrong.
+>
+> **MyKobo (`mykobo.co`) was delisted 2026-09-06** and is no longer in the matrix above. It
+> advertised SEP-1/6/10/24/31 for EUR, but its `stellar.toml` publishes both `TRANSFER_SERVER` and
+> `TRANSFER_SERVER_SEP0024` on `stellar.mykobo.co`, a host with no A or AAAA record — so every
+> SEP-6 and SEP-24 call to it fails to connect. The TOML itself still returns 200, which is why a
+> capability read that stops at the TOML kept scoring it as supported. EUR has no anchor now and
+> the `usdc-eur` corridor is hidden from selectors until one serves it.
 
 ### SEP-38 availability, in one line
 

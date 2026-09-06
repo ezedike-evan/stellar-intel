@@ -1,50 +1,47 @@
 import { describe, it, expect } from 'vitest';
-import { ANCHORS, CORRIDORS, ANCHOR_HOME_DOMAINS } from '@/constants/anchors';
+import {
+  ANCHORS,
+  CORRIDORS,
+  VISIBLE_CORRIDORS,
+  V11_CORRIDOR_IDS,
+  ANCHOR_HOME_DOMAINS,
+} from '@/constants/anchors';
 
-describe('mykobo.co triage (B028)', () => {
-  const mykobo = ANCHORS.find((a) => a.id === 'mykobo');
-
-  it('is included in ANCHORS — has EUR off-ramp capability', () => {
-    expect(mykobo).toBeDefined();
+/**
+ * mykobo.co triage (B028) — delisted 2026-09-06.
+ *
+ * MyKobo's own stellar.toml advertises both TRANSFER_SERVER and
+ * TRANSFER_SERVER_SEP0024 on stellar.mykobo.co, and that host has no A or AAAA
+ * record, so every SEP-6 and SEP-24 call to it fails to connect. The TOML still
+ * returns 200, which is why a check that stops at the TOML read this anchor as
+ * healthy for as long as it did.
+ *
+ * These assertions are the inverse of the ones this file used to make. They
+ * exist so a re-list is a deliberate act with a passing endpoint behind it,
+ * rather than something that happens by accident.
+ */
+describe('mykobo.co triage (B028) — delisted', () => {
+  it('is not in the registry', () => {
+    expect(ANCHORS.find((a) => a.id === 'mykobo')).toBeUndefined();
   });
 
-  it('has correct home domain', () => {
-    expect(mykobo?.homeDomain).toBe('mykobo.co');
+  it('has no home-domain entry', () => {
+    expect(ANCHOR_HOME_DOMAINS['mykobo']).toBeUndefined();
   });
 
-  it('uses the resolvable home domain for SEP endpoint discovery', () => {
-    expect(mykobo?.serviceDomain).toBeUndefined();
+  it('leaves no anchor serving usdc-eur', () => {
+    expect(ANCHORS.filter((a) => a.corridors.includes('usdc-eur'))).toEqual([]);
   });
 
-  it('anchors EURC with the correct issuer', () => {
-    expect(mykobo?.assetCode).toBe('EURC');
-    expect(mykobo?.assetIssuer).toBe('GAQRF3UGHBT6JYQZ7YSUYCIYWAF4T2SAA5237Q5LIQYJOHHFAWDXZ7NM');
-  });
-
-  it('serves the usdc-eur corridor', () => {
-    expect(mykobo?.corridors).toContain('usdc-eur');
-  });
-
-  it('declares sep6 capability', () => {
-    expect(mykobo?.seps).toContain('sep6');
-  });
-
-  it('declares sep24 capability', () => {
-    expect(mykobo?.seps).toContain('sep24');
-  });
-
-  it('declares sep31 capability', () => {
-    expect(mykobo?.seps).toContain('sep31');
-  });
-
-  it('usdc-eur corridor is defined in CORRIDORS', () => {
+  it('keeps the usdc-eur corridor defined so lookups still resolve', () => {
     const corridor = CORRIDORS.find((c) => c.id === 'usdc-eur');
     expect(corridor).toBeDefined();
     expect(corridor?.from).toBe('USDC');
     expect(corridor?.to).toBe('EUR');
   });
 
-  it('mykobo home domain is registered in ANCHOR_HOME_DOMAINS', () => {
-    expect(ANCHOR_HOME_DOMAINS['mykobo']).toBe('mykobo.co');
+  it('hides usdc-eur from selectors while it has no anchor', () => {
+    expect(V11_CORRIDOR_IDS.has('usdc-eur')).toBe(true);
+    expect(VISIBLE_CORRIDORS.map((c) => c.id)).not.toContain('usdc-eur');
   });
 });

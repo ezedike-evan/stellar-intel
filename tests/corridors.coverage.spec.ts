@@ -2,10 +2,14 @@ import { describe, expect, it } from 'vitest';
 import { ANCHORS, CORRIDORS } from '@/constants/anchors';
 import type { Anchor, Corridor } from '@/types';
 
-// usdc-eur was flagged off until mykobo.co (#639) started serving it.
 // usdc-zar was flagged off until zeam.money (#465) started serving it.
 const FLAGGED_OFF_CORRIDORS = {
   'usdc-xof': 'v1.1 target corridor, gated behind v11Corridors until an anchor serves it.',
+  // usdc-eur was flagged off until mykobo.co (#639) started serving it, and is
+  // flagged off again: mykobo was delisted 2026-09-06 when stellar.mykobo.co,
+  // the host its own TOML advertises for both SEP-6 and SEP-24, stopped
+  // resolving. No other anchor serves EUR.
+  'usdc-eur': 'Orphaned again by the mykobo delisting; no anchor serves EUR.',
 } as const satisfies Record<string, string>;
 
 function anchorIdsByCorridor(anchors: readonly Anchor[]): Map<string, string[]> {
