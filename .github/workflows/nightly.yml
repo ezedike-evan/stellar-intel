@@ -28,27 +28,45 @@ jobs:
         id: probe
         run: |
           # Extract anchor domains from constants/anchors.ts so we do not drift
-          # from the app's source of truth.
-          mapfile -t DOMAINS < <(node -e "
-            const path = require('path');
+          # from the app's source of truth. Each entry also carries the SEP list
+          # it is registered for: demanding SEP-24 from an anchor that is only
+          # registered for SEP-6 (cowrie.exchange) made this job unfixable, so
+          # the expectation now comes from the registry rather than being
+          # assumed for every domain.
+          mapfile -t ENTRIES < <(node -e "
             const fs = require('fs');
             const src = fs.readFileSync('constants/anchors.ts', 'utf8');
-            const re = /homeDomain:\s*['\"]([^'\"]+)['\"]/g;
-            const seen = new Set();
+            // Registry entries are flat object literals -- no nested braces --
+            // so each one can be matched whole and read for both fields.
+            const re = /\{[^{}]*homeDomain:\s*['\"]([^'\"]+)['\"][^{}]*\}/g;
+            const wants = new Map();
             let m;
-            while ((m = re.exec(src))) seen.add(m[1]);
-            for (const d of seen) console.log(d);
+            while ((m = re.exec(src))) {
+              const sep24 = /seps:\s*\[[^\]]*['\"]sep24['\"]/.test(m[0]);
+              wants.set(m[1], (wants.get(m[1]) || false) || sep24);
+            }
+            for (const [d, s] of wants) console.log(d + '\t' + (s ? 'sep24' : 'nosep24'));
           ")
 
-          if [ ${#DOMAINS[@]} -eq 0 ]; then
+          if [ ${#ENTRIES[@]} -eq 0 ]; then
             echo "::warning::No anchor domains found in constants/anchors.ts; skipping"
             echo "summary=no-domains-detected" >> "$GITHUB_OUTPUT"
             exit 0
           fi
 
+          # Probe an advertised SEP-24 server's mandatory /info endpoint.
+          probe_info() {
+            CODE=$(curl -s -o /dev/null -w "%{http_code}" --max-time 15 "${1}/info" || true)
+            [ -n "$CODE" ] || CODE="000"
+            echo "$CODE"
+          }
+
           FAIL=0
+          BLOCKED=0
           REPORT=""
-          for D in "${DOMAINS[@]}"; do
+          for E in "${ENTRIES[@]}"; do
+            D="${E%%$'\t'*}"
+            WANT="${E##*$'\t'}"
             URL="https://${D}/.well-known/stellar.toml"
             # curl prints 000 via -w when the connection never happens, and
             # also exits non-zero -- `|| echo 000` would append a second 000
@@ -59,30 +77,52 @@ jobs:
 
             # A TOML that advertises SEP-24 is not evidence that anything is
             # serving it. mykobo.co publishes a valid document naming
-            # https://stellar.mykobo.co/sep24, but that host CNAMEs into a load
-            # balancer that no longer exists. Follow the advertised URL to the
-            # mandatory /info endpoint so a dead service behind a healthy TOML
-            # is visible here, not only in the health ledger.
+            # https://stellar.mykobo.co/sep24, but that host no longer resolves.
+            # Follow the advertised URL to the mandatory /info endpoint so a dead
+            # service behind a healthy TOML is visible here, not only in the
+            # health ledger.
             SEP_CODE="n/a"
-            if [ "$HAS_TRANSFER" = "yes" ]; then
+            if [ "$WANT" = "sep24" ] && [ "$HAS_TRANSFER" = "yes" ]; then
               SEP_URL=$(sed -nE 's/^TRANSFER_SERVER_SEP0024[[:space:]]*=[[:space:]]*"?([^"[:space:]]+)"?.*/\1/p' /tmp/toml | head -n 1)
               SEP_URL="${SEP_URL%/}"
               if [ -n "$SEP_URL" ]; then
-                SEP_CODE=$(curl -s -o /dev/null -w "%{http_code}" --max-time 15 "${SEP_URL}/info" || true)
-                [ -n "$SEP_CODE" ] || SEP_CODE="000"
+                SEP_CODE=$(probe_info "$SEP_URL")
+                # One retry: a single 15s shot turns an anchor's slow night into
+                # a red build, and a genuinely dead host fails twice just as fast.
+                case "$SEP_CODE" in
+                  000|5??) sleep 5; SEP_CODE=$(probe_info "$SEP_URL") ;;
+                esac
               else
                 SEP_CODE="000"
               fi
             fi
 
-            LINE="$D | HTTP $CODE | SEP-24: $HAS_TRANSFER | SEP-24 endpoint: HTTP $SEP_CODE"
+            EXPECT="$WANT"
+            LINE="$D | HTTP $CODE | registered: $EXPECT | SEP-24 in TOML: $HAS_TRANSFER | SEP-24 endpoint: HTTP $SEP_CODE"
+
+            FAILED=no
+            [ "$CODE" = "200" ] || FAILED=yes
+            if [ "$WANT" = "sep24" ]; then
+              [ "$HAS_TRANSFER" = "yes" ] || FAILED=yes
+              case "$SEP_CODE" in
+                200) ;;
+                # 401/403 means something answered and refused us. Anchors
+                # increasingly put a WAF in front of /info that rejects
+                # datacenter IPs, and this runner is one -- ngnc.online serves
+                # 200 to a residential client and 403 here. That is a blind
+                # spot, not an outage, so surface it without failing the build.
+                401|403)
+                  BLOCKED=$((BLOCKED + 1))
+                  LINE="$LINE (blocked from CI, not counted)"
+                  echo "::warning::${D}: SEP-24 /info answered HTTP ${SEP_CODE} -- probably a WAF rejecting the runner IP, not an outage. Verify from another network."
+                  ;;
+                *) FAILED=yes ;;
+              esac
+            fi
+
             echo "$LINE"
             REPORT="${REPORT}${LINE}\n"
-            # A 200 TOML advertising a SEP-24 server that does not answer is
-            # still a failing anchor -- that is the whole point of the probe.
-            if [ "$CODE" != "200" ] || [ "$HAS_TRANSFER" != "yes" ] || [ "$SEP_CODE" != "200" ]; then
-              FAIL=$((FAIL + 1))
-            fi
+            [ "$FAILED" = "no" ] || FAIL=$((FAIL + 1))
           done
 
           {
@@ -101,7 +141,7 @@ jobs:
             echo -e "$REPORT"
             echo '```'
             echo ''
-            echo "${FAIL} of ${#DOMAINS[@]} domain(s) failed."
+            echo "${FAIL} of ${#ENTRIES[@]} domain(s) failed; ${BLOCKED} unobservable from CI."
           } >> "$GITHUB_STEP_SUMMARY"
 
           # Warning-only meant this job reported `success` on every night it
