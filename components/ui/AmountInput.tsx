@@ -110,9 +110,15 @@ export function AmountInput({
 
   return (
     <div>
-      <label className="mb-1.5 block text-sm font-medium text-secondary-text">Amount (USDC)</label>
+      <label
+        htmlFor="amount-input"
+        className="mb-1.5 block text-sm font-medium text-secondary-text"
+      >
+        Amount (USDC)
+      </label>
       <div className="relative">
         <input
+          id="amount-input"
           type="text"
           inputMode="decimal"
           value={raw}
