@@ -381,7 +381,8 @@ export async function executeIntent(input: ExecuteInput): Promise<ExecuteOutput>
   // stellar-sdk 17 hands back a plain Uint8Array for a hash memo where 16 gave a
   // Buffer. Buffer extends Uint8Array, so this accepts both.
   const memo = ('memo' in tx ? tx.memo : undefined) as
-    { type: string; value?: Uint8Array | string } | undefined;
+    | { type: string; value?: Uint8Array | string }
+    | undefined;
   const memoValue = memo?.value instanceof Uint8Array ? Buffer.from(memo.value) : undefined;
   if (memo?.type !== 'hash' || !memoValue || !memoValue.equals(expectedMemo)) {
     throw new OfframpToolError('Transaction memo does not match the intent hash', 'TX_MISMATCH');

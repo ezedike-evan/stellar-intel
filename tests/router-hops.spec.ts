@@ -155,11 +155,13 @@ describe('executeHopChain', () => {
 
   it('stops at the first execution failure without running the remaining hops', async () => {
     const onRamp = makeOnRampHop();
-    const swapExecute = vi.fn(async (): Promise<HopExecutionResult> => ({
-      ok: false,
-      hopId: 'mock-swap',
-      error: 'slippage_exceeded',
-    }));
+    const swapExecute = vi.fn(
+      async (): Promise<HopExecutionResult> => ({
+        ok: false,
+        hopId: 'mock-swap',
+        error: 'slippage_exceeded',
+      })
+    );
     const swap = makeSwapHop({ execute: swapExecute });
     const thirdHopExecute = vi.fn();
     const yieldHop = makeSwapHop({

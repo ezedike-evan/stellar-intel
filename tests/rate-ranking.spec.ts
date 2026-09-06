@@ -43,10 +43,12 @@ describe('computeRateComparison — sort stability', () => {
       createMockRate('anchor-c', 120),
     ];
 
-    const results = rates.map((r): PromiseFulfilledResult<AnchorRate> => ({
-      status: 'fulfilled',
-      value: r,
-    }));
+    const results = rates.map(
+      (r): PromiseFulfilledResult<AnchorRate> => ({
+        status: 'fulfilled',
+        value: r,
+      })
+    );
 
     const comparison1 = computeRateComparison(results, 'usdc-ngn');
     const comparison2 = computeRateComparison(results, 'usdc-ngn');
@@ -61,10 +63,12 @@ describe('computeRateComparison — sort stability', () => {
     const rate3 = createMockRate('anchor-c', 150);
 
     for (let i = 0; i < 5; i++) {
-      const results = [rate1, rate2, rate3].map((r): PromiseFulfilledResult<AnchorRate> => ({
-        status: 'fulfilled',
-        value: r,
-      }));
+      const results = [rate1, rate2, rate3].map(
+        (r): PromiseFulfilledResult<AnchorRate> => ({
+          status: 'fulfilled',
+          value: r,
+        })
+      );
 
       const comparison = computeRateComparison(results, 'usdc-ngn');
       expect(comparison.bestRateId).toBe('anchor-b');
@@ -83,10 +87,12 @@ describe('computeRateComparison — monotonicity', () => {
       createMockRate('anchor-d', 650),
     ];
 
-    const results = rates.map((r): PromiseFulfilledResult<AnchorRate> => ({
-      status: 'fulfilled',
-      value: r,
-    }));
+    const results = rates.map(
+      (r): PromiseFulfilledResult<AnchorRate> => ({
+        status: 'fulfilled',
+        value: r,
+      })
+    );
 
     const comparison = computeRateComparison(results, 'usdc-ngn');
 
@@ -115,10 +121,12 @@ describe('computeRateComparison — monotonicity', () => {
       createMockRate('anchor-c', 150),
     ];
 
-    const results = rates.map((r): PromiseFulfilledResult<AnchorRate> => ({
-      status: 'fulfilled',
-      value: r,
-    }));
+    const results = rates.map(
+      (r): PromiseFulfilledResult<AnchorRate> => ({
+        status: 'fulfilled',
+        value: r,
+      })
+    );
 
     const comparison = computeRateComparison(results, 'usdc-ngn');
     expect(comparison.rates).toHaveLength(3);
@@ -164,10 +172,12 @@ describe('computeRateComparison — edge cases', () => {
       createMockRate('anchor-c', 999),
     ];
 
-    const results = rates.map((r): PromiseFulfilledResult<AnchorRate> => ({
-      status: 'fulfilled',
-      value: r,
-    }));
+    const results = rates.map(
+      (r): PromiseFulfilledResult<AnchorRate> => ({
+        status: 'fulfilled',
+        value: r,
+      })
+    );
 
     const comparison = computeRateComparison(results, 'usdc-ngn');
     expect(comparison.bestRateId).toBe('anchor-c');
@@ -180,10 +190,12 @@ describe('computeRateComparison — edge cases', () => {
       createMockRate('anchor-c', 50),
     ];
 
-    const results = rates.map((r): PromiseFulfilledResult<AnchorRate> => ({
-      status: 'fulfilled',
-      value: r,
-    }));
+    const results = rates.map(
+      (r): PromiseFulfilledResult<AnchorRate> => ({
+        status: 'fulfilled',
+        value: r,
+      })
+    );
 
     const comparison = computeRateComparison(results, 'usdc-ngn');
     expect(comparison.bestRateId).toBe('anchor-a');
@@ -204,10 +216,12 @@ describe('computeRateComparison — property tests', () => {
             createMockRate(`anchor-${idx}`, total)
           );
 
-          const results = rates.map((r): PromiseFulfilledResult<AnchorRate> => ({
-            status: 'fulfilled',
-            value: r,
-          }));
+          const results = rates.map(
+            (r): PromiseFulfilledResult<AnchorRate> => ({
+              status: 'fulfilled',
+              value: r,
+            })
+          );
 
           const comparison = computeRateComparison(results, 'usdc-ngn');
           const bestRate = comparison.rates.find((r) => r.anchorId === comparison.bestRateId);
@@ -232,14 +246,18 @@ describe('computeRateComparison — property tests', () => {
           );
           const rates2 = [...rates1].reverse();
 
-          const results1 = rates1.map((r): PromiseFulfilledResult<AnchorRate> => ({
-            status: 'fulfilled',
-            value: r,
-          }));
-          const results2 = rates2.map((r): PromiseFulfilledResult<AnchorRate> => ({
-            status: 'fulfilled',
-            value: r,
-          }));
+          const results1 = rates1.map(
+            (r): PromiseFulfilledResult<AnchorRate> => ({
+              status: 'fulfilled',
+              value: r,
+            })
+          );
+          const results2 = rates2.map(
+            (r): PromiseFulfilledResult<AnchorRate> => ({
+              status: 'fulfilled',
+              value: r,
+            })
+          );
 
           const comparison1 = computeRateComparison(results1, 'usdc-ngn');
           const comparison2 = computeRateComparison(results2, 'usdc-ngn');
@@ -261,10 +279,12 @@ describe('computeRateComparison — property tests', () => {
             createMockRate(`anchor-${idx}`, total)
           );
 
-          const results = rates.map((r): PromiseFulfilledResult<AnchorRate> => ({
-            status: 'fulfilled',
-            value: r,
-          }));
+          const results = rates.map(
+            (r): PromiseFulfilledResult<AnchorRate> => ({
+              status: 'fulfilled',
+              value: r,
+            })
+          );
 
           const comparison = computeRateComparison(results, 'usdc-ngn');
           expect(comparison.rates).toHaveLength(totalReceivedValues.length);

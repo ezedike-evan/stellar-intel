@@ -24,7 +24,10 @@ import { OfframpToolError } from '@/lib/mcp/offramp';
  *                        the indicated delay.
  */
 export type McpErrorCategory =
-  'BAD_INPUT' | 'ANCHOR_UNAVAILABLE' | 'UPSTREAM_TIMEOUT' | 'RATE_LIMITED';
+  | 'BAD_INPUT'
+  | 'ANCHOR_UNAVAILABLE'
+  | 'UPSTREAM_TIMEOUT'
+  | 'RATE_LIMITED';
 
 export class McpToolError extends Error {
   readonly category: McpErrorCategory;

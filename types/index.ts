@@ -477,7 +477,8 @@ export interface HopChainPlan {
 }
 
 export type HopPlanResult =
-  { ok: true; step: HopStep } | { ok: false; hopId: string; error: string; details?: string };
+  | { ok: true; step: HopStep }
+  | { ok: false; hopId: string; error: string; details?: string };
 
 export type HopExecutionResult =
   | {
@@ -677,7 +678,9 @@ export interface Sep6WithdrawNeedsInfo {
 
 /** Union of all three SEP-6 /withdraw response shapes. */
 export type Sep6WithdrawResponse =
-  Sep6WithdrawInteractive | Sep6WithdrawNonInteractive | Sep6WithdrawNeedsInfo;
+  | Sep6WithdrawInteractive
+  | Sep6WithdrawNonInteractive
+  | Sep6WithdrawNeedsInfo;
 
 // ─── SEP-12 ───────────────────────────────────────────────────────────────────
 
