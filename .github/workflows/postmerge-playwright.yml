@@ -20,6 +20,12 @@ permissions:
   issues: write
 
 env:
+  # Without this the reputation store resolves to postgres (NODE_ENV is
+  # production under `next start`) and every write returns 500 with
+  # "DATABASE_URL is required for the postgres reputation backend", which is
+  # what sank the scorecard-freshness case. CI must not write to the real
+  # database, so it gets the non-durable backend that error prescribes.
+  REPUTATION_BACKEND: sqlite
   NEXT_PUBLIC_STELLAR_NETWORK: mainnet
   NEXT_PUBLIC_HORIZON_URL: https://horizon.stellar.org
   NEXT_PUBLIC_STELLAR_EXPERT_URL: https://api.stellar.expert/explorer/public
@@ -60,7 +66,9 @@ jobs:
         env:
           BASE_URL: http://localhost:3000
           PW_REUSE_SERVER: 'true'
-        run: npx playwright test --reporter=line
+        # `line` alone writes no playwright-report/, so the upload below found
+        # nothing and every failing run lost its traces and screenshots.
+        run: npx playwright test --reporter=line,html
 
       - name: Stop production server
         if: always()
