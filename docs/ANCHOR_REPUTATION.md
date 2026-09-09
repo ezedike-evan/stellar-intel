@@ -12,6 +12,93 @@ Source of truth: [`lib/reputation/`](../lib/reputation/),
 [`contracts/reputation/`](../contracts/reputation/) (see
 [`docs/ORACLE_SPEC.md`](ORACLE_SPEC.md)).
 
+## Two records, never added together
+
+This project keeps two separate records about an anchor, and the difference
+between them is the difference between what we watched and what a user lived
+through.
+
+|          | **Health**                                               | **Reputation**                       |
+| -------- | -------------------------------------------------------- | ------------------------------------ |
+| Measures | What we observed by probing                              | What happened when someone settled   |
+| Signals  | uptime, quote availability, issuer match, TOML integrity | fill rate, settlement time, slippage |
+| Source   | `probe_samples`, written every five minutes              | `outcome_log`, written on settlement |
+| Needs    | nothing from the anchor or the user                      | real completed transactions          |
+| Method   | `lib/reputation/health.ts`                               | `lib/reputation/composite.ts`        |
+
+Health **never contributes to the composite score**. An anchor can be perfectly
+healthy and still carry no reputation score at all, and that is the honest
+reading: it has not performed badly, it has not been observed performing.
+
+Both are published. Anything that reports one is labelled with which one it is —
+the leaderboard response carries an explicit
+`basis: { reputation: 'execution-outcomes', health: 'probe-observations' }`.
+
+## Probe-derived health
+
+Defined in [`lib/reputation/health.ts`](../lib/reputation/health.ts). Every
+registered anchor is probed on a five-minute clock across four signals, each
+stored as a `ProbeKind` row in `probe_samples`, keyed by the anchor's probe
+domain (`serviceDomain ?? homeDomain`):
+
+| Signal             | `ProbeKind`       | What it checks                                                     |
+| ------------------ | ----------------- | ------------------------------------------------------------------ |
+| Uptime             | `uptime`          | The anchor's `stellar.toml` resolves and is reachable.             |
+| Quote availability | `quote`           | A SEP-38 quote round-trip returns a quote.                         |
+| Issuer match       | `issuer-mismatch` | The issuer the anchor advertises still matches the asset on-chain. |
+| TOML integrity     | `toml-integrity`  | The `stellar.toml` still parses and validates.                     |
+
+The health score is a weighted mean over the signals that were **actually
+sampled**, with the weights renormalised across exactly those:
+
+```
+healthScore = Σ wᵢ · successRateᵢ ÷ Σ wᵢ      (over signals with samples > 0)
+
+HEALTH_WEIGHTS = { uptime: 0.4, quoteAvailability: 0.2,
+                   issuerMatch: 0.2, tomlIntegrity: 0.2 }
+```
+
+Uptime carries the most weight because it is the signal a user feels first: an
+anchor that does not answer cannot be used at any price.
+
+### A check that could not complete is not a failure by the anchor
+
+For the two comparison signals — issuer match and TOML integrity — a probe row
+counts only if it either succeeded or produced that signal's own verdict:
+`mismatch` for the issuer check, `integrity` for the TOML check. A row that
+failed for any other reason means the check never reached a verdict, and it is
+excluded from the signal's counts entirely and reported separately as
+`incomplete`.
+
+This is not a technicality. MoneyGram's issuer check has 583 rows in the ledger,
+zero successes, and has never once returned `mismatch` — every failure is
+`unknown`, meaning the check did not complete. Counting those as failures would
+publish "issuer match: 0%" about a real company on a public page, which is an
+accusation the data does not support. The probe layer already draws this
+distinction; `probeIssuerMismatch` documents that an unreachable result "covers
+both a genuine mismatch … and a probe that could not complete".
+
+Uptime and quote availability are liveness observations rather than comparisons,
+so every failure counts for those two: a request that did not come back is the
+answer, whatever the transport reason.
+
+Two further rules follow from the renormalisation, and both are deliberate:
+
+- **A signal that was never sampled scores nothing, not zero.** If the quote
+  sweep has not run for an anchor, that anchor has not failed quote
+  availability — the question was not asked. Its `successRate` is `null`, and
+  the UI prints `not sampled` rather than `0%`.
+- **Below `MIN_HEALTH_SAMPLES` (12, roughly one hour of probing) no score is
+  published.** The signals are still reported, because they are observations
+  and they are true; the state is `insufficient_data` and `healthScore` is
+  `null`.
+
+`observedDays` and `continuousDays` come from the same
+`buildProbeCoverageReport` that backs `GET /api/reputation/probe-coverage`, so
+the two surfaces cannot disagree. A streak whose last observation is older than
+yesterday is reported as `0` — an anchor last probed a week ago is not on a
+seven-day run.
+
 ## Composite score
 
 Defined in [`lib/reputation/composite.ts`](../lib/reputation/composite.ts):
@@ -27,6 +114,24 @@ score = fillRate × (1 − slippage) ÷ (settleSeconds / NORM_SETTLE_SECONDS)
 
 A score of **1.0** = perfect fill, zero slippage, settled at exactly the 300 s
 reference. **> 1.0** = faster than reference. Higher is better.
+
+### Two known divergences between this document and the code
+
+Stated here rather than left for a reader to discover, because a published
+method that does not match the running code is worse than no published method.
+
+1. **The leaderboard does not rank on the formula above.** `composite()` is the
+   formula published here and written on-chain. The corridor leaderboard, the
+   standings page and `lib/reputation/scores.ts` all rank on
+   `weightedComposite()` instead — a clamped `0.4 × fill + 0.3 × (1 −
+slippage/0.05) + 0.3 × (1 − settle/300)` bounded to `[0, 1]`. The two produce
+   different orderings. `lib/reputation/composite.ts` acknowledges the split in
+   its own comments; picking one is tracked in #917.
+2. **`state` flips at one outcome, not thirty.** `MIN_SAMPLES = 1` in
+   `lib/reputation/aggregate.ts` is what moves a scorecard from
+   `insufficient_data` to `ok`. `MIN_OUTCOMES_THRESHOLD = 30` is a _display_
+   threshold only — it gates the "Collecting Data" notice in the UI. The
+   progression table below describes the display threshold.
 
 ## Score bands
 

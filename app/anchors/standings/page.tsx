@@ -17,6 +17,7 @@ import { weightedComposite } from '@/lib/reputation/composite';
 import { holdsTopRank, isMeasured, rankStandings, scoreLabel } from '@/lib/reputation/standings';
 import { buildDatasetJsonLd, serializeJsonLd } from '@/lib/seo/jsonld';
 import { deriveReputationCoverage } from '@/lib/reputation/coverage';
+import { loadAnchorHealth, type AnchorHealth } from '@/lib/reputation/health';
 import type { OutcomeLogRow } from '@/types/reputation';
 
 export const metadata: Metadata = {
@@ -43,6 +44,12 @@ interface StandingsEntry {
 
 interface StandingsResult {
   standings: StandingsEntry[];
+  /**
+   * Probe-derived health per anchor id. Kept beside the standings rather than
+   * folded into StandingsEntry: the entry is the execution record, and the two
+   * must stay separable at every layer, including this one.
+   */
+  health: Map<string, AnchorHealth>;
   /** All raw outcome rows fetched, used to compute the Dataset JSON-LD coverage window. */
   allRows: OutcomeLogRow[];
 }
@@ -121,9 +128,21 @@ async function loadStandings(): Promise<StandingsResult> {
     })
   );
 
+  // Probe-derived health for the whole fleet in one query. Never blocks the
+  // page: if the store is unavailable the standings still render, just without
+  // the observed column.
+  let health = new Map<string, AnchorHealth>();
+  try {
+    const { tryGetReputationStore } = await import('@/lib/reputation/store');
+    const store = tryGetReputationStore();
+    if (store) health = await loadAnchorHealth(store);
+  } catch {
+    health = new Map();
+  }
+
   // Measured anchors first, descending by composite and numbered 1..m.
   // Unmeasured anchors follow, unranked.
-  return { standings: rankStandings(entries), allRows };
+  return { standings: rankStandings(entries), allRows, health };
 }
 
 // ─── Page ─────────────────────────────────────────────────────────────────────
@@ -131,8 +150,9 @@ async function loadStandings(): Promise<StandingsResult> {
 const SITE_URL = process.env.NEXT_PUBLIC_SITE_URL ?? 'https://stellar-intel.vercel.app';
 
 export default async function StandingsPage() {
-  const { standings, allRows } = await loadStandings();
+  const { standings, allRows, health } = await loadStandings();
   const measured = standings.filter((entry) => isMeasured(entry.sampleSize));
+  const observed = standings.filter((entry) => (health.get(entry.anchorId)?.sampleSize ?? 0) > 0);
 
   // Coverage window is derived from the raw rows fetched above — never
   // hardcoded — so the JSON-LD is always consistent with the displayed data.
@@ -169,7 +189,8 @@ export default async function StandingsPage() {
           </p>
           <div className="mt-6 flex flex-wrap items-center gap-x-4 gap-y-2">
             <p className="text-fg-muted font-mono text-xs tracking-wide">
-              {measured.length} of {standings.length} measured
+              {measured.length} of {standings.length} measured · {observed.length} of{' '}
+              {standings.length} observed
             </p>
             <Link
               href="/anchors"
@@ -184,12 +205,19 @@ export default async function StandingsPage() {
           "info" panel introduces a hue to say "this is a note"; a bordered
           block says the same thing using the surface. */}
         <section className="border-border bg-bg-subtle mt-12 rounded-sm border p-5">
-          <h2 className="text-fg-muted font-mono text-xs tracking-wide">how the ranking works</h2>
+          <h2 className="text-fg-muted font-mono text-xs tracking-wide">
+            how the two columns differ
+          </h2>
           <p className="text-secondary-text mt-3 text-sm">
-            Composite score = 40% fill rate + 30% slippage against a 5% ceiling + 30% settlement
-            speed against a 5-minute reference. Higher is better. An anchor with no confirmed
-            transactions is listed as not yet measured rather than scored — it has not performed
-            badly, it has not been observed.{' '}
+            <strong className="text-primary-text">Health</strong> is what we observed by probing
+            every five minutes: uptime, quote availability, issuer match and TOML integrity,
+            weighted 40/20/20/20 over the signals that were actually sampled. It needs nothing from
+            the anchor or from a user. <strong className="text-primary-text">Score</strong> is
+            reputation, and it is a different measurement: 40% fill rate + 30% slippage against a 5%
+            ceiling + 30% settlement speed against a 5-minute reference, computed from settled
+            transactions. Health never feeds the score. An anchor with no confirmed transactions is
+            listed as not yet measured rather than scored — it has not performed badly, it has not
+            been observed performing.{' '}
             <Link
               href="/methodology"
               className="text-primary-text hover:text-accent underline underline-offset-4"
@@ -200,7 +228,7 @@ export default async function StandingsPage() {
         </section>
 
         <div className="border-border mt-12 overflow-x-auto border-t">
-          <table className="w-full min-w-[44rem] text-sm">
+          <table className="w-full min-w-[52rem] text-sm">
             <caption className="sr-only">Anchor reputation standings</caption>
             <thead>
               <tr className="text-fg-muted border-border border-b font-mono text-xs tracking-wide">
@@ -210,7 +238,18 @@ export default async function StandingsPage() {
                 <th scope="col" className="py-3 pr-4 text-left font-medium">
                   anchor
                 </th>
-                <th scope="col" className="py-3 pr-4 text-right font-medium">
+                <th
+                  scope="col"
+                  className="py-3 pr-4 text-right font-medium"
+                  title="Probe-derived health: uptime, quote availability, issuer match and TOML integrity, observed every five minutes"
+                >
+                  health
+                </th>
+                <th
+                  scope="col"
+                  className="py-3 pr-4 text-right font-medium"
+                  title="Execution-derived reputation, computed from settled transactions"
+                >
                   score
                 </th>
                 <th
@@ -248,6 +287,7 @@ export default async function StandingsPage() {
                 const { label, className } = scoreLabel(entry.composite, entry.sampleSize);
                 const unmeasured = !isMeasured(entry.sampleSize);
                 const isTop = holdsTopRank(entry);
+                const anchorHealth = health.get(entry.anchorId);
 
                 return (
                   <tr
@@ -277,6 +317,24 @@ export default async function StandingsPage() {
                           <span className="text-accent font-mono text-xs">#1</span>
                         )}
                       </Link>
+                    </td>
+                    <td className="py-4 pr-4 text-right">
+                      {anchorHealth === undefined || anchorHealth.sampleSize === 0 ? (
+                        <span className="text-fg-muted font-mono text-xs">not observed</span>
+                      ) : anchorHealth.healthScore === null ? (
+                        <span className="text-fg-muted font-mono text-xs tabular-nums">
+                          {anchorHealth.sampleSize} probes
+                        </span>
+                      ) : (
+                        <>
+                          <span className="text-primary-text font-mono tabular-nums">
+                            {(anchorHealth.healthScore * 100).toFixed(1)}%
+                          </span>
+                          <span className="text-fg-muted ml-2 font-mono text-xs tabular-nums">
+                            {anchorHealth.observedDays}d
+                          </span>
+                        </>
+                      )}
                     </td>
                     <td className="py-4 pr-4 text-right">
                       {unmeasured ? (

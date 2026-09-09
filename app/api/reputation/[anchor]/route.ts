@@ -6,9 +6,11 @@ import {
   type OutcomeRow,
 } from '@/lib/reputation/aggregate';
 import { withRequestLogger } from '@/lib/logger';
-import { getReputationStore } from '@/lib/reputation/store';
+import { tryGetReputationStore } from '@/lib/reputation/store';
 import type { OutcomeLogRow } from '@/types/reputation';
 import { enforceRateLimit } from '@/lib/api/response';
+import { ANCHORS } from '@/constants/anchors';
+import { computeAnchorHealth, type AnchorHealth } from '@/lib/reputation/health';
 
 // ─── In-memory stores (seed / replace with DB in a later iteration) ───────────
 
@@ -86,13 +88,35 @@ export async function GET(
       });
     }
 
-    const storedRows = await getReputationStore().query({ anchorId: anchor });
+    // tryGetReputationStore rather than getReputationStore: every sibling read
+    // path already uses it, and the throwing variant took this route down at
+    // prerender time and in local dev without DATABASE_URL.
+    const store = tryGetReputationStore();
+    const storedRows = store ? await store.query({ anchorId: anchor }) : [];
     const seededRows = outcomeStore.filter((r) => r.anchorId === anchor);
     const anchorRows = [...seededRows, ...storedRows.map(toOutcomeRow)];
+
+    // Health rides alongside `scorecards`, never inside it. The scorecard is
+    // execution-derived and stays exactly as it was; this is the probe record,
+    // which is the half that has data today.
+    let health: AnchorHealth | null = null;
+    if (store) {
+      const registered = ANCHORS.find((a) => a.id === anchor);
+      if (registered) {
+        const domain = registered.serviceDomain ?? registered.homeDomain;
+        try {
+          const probeRows = await store.queryProbeSamples(domain);
+          health = computeAnchorHealth(probeRows, { anchorId: anchor, domain });
+        } catch {
+          health = null;
+        }
+      }
+    }
 
     return NextResponse.json({
       anchorId: anchor,
       scorecards: buildScorecards(anchorRows),
+      health,
     });
   });
 }
