@@ -70,6 +70,7 @@ export function KycIframe({ url, origin, onComplete, onCancel, onError }: KycIfr
           <div className="text-center">
             <div className="mb-4 text-status-down">
               <svg
+                aria-hidden="true"
                 className="mx-auto h-12 w-12"
                 fill="none"
                 viewBox="0 0 24 24"

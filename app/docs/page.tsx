@@ -1,6 +1,13 @@
+import type { Metadata } from 'next';
 import Link from 'next/link';
 import { ArrowRight } from 'lucide-react';
 import { DOCS_CARD_ROUTES } from './nav';
+
+export const metadata: Metadata = {
+  title: 'Developer Portal',
+  description:
+    'Everything you need to integrate Stellar Intel into your wallet, agent, or application — API reference, authentication, SDKs, webhooks, and MCP server docs.',
+};
 
 const CARD_DETAIL: Record<string, { title: string; description: string }> = {
   '/docs/quickstart': {

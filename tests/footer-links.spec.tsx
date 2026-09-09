@@ -15,6 +15,13 @@ describe('Footer legal links (#740)', () => {
     expect(terms).toHaveAttribute('href', '/terms');
   });
 
+  it('links to the FAQ page', () => {
+    render(<Footer />);
+    const faq = screen.getByRole('link', { name: /^faq$/i });
+    expect(faq).toHaveAttribute('href', '/faq');
+    expect(faq).not.toHaveAttribute('target', '_blank');
+  });
+
   it('renders Terms as an internal link, not an external one', () => {
     render(<Footer />);
     const terms = screen.getByRole('link', { name: /terms/i });

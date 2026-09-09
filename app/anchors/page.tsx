@@ -1,121 +1,57 @@
-'use client';
+/**
+ * app/anchors/page.tsx
+ *
+ * Anchor registry page — lists every registered anchor, its scorecard, and
+ * the live corridor leaderboard.
+ *
+ * Previously `'use client'`.  Converted to a React Server Component so that
+ * Dataset JSON-LD markup can be injected with a coverage window derived from
+ * the real underlying data (requirement: coverage window must be computed from
+ * actual data, not hardcoded).
+ *
+ * The interactive corridor-filter and leaderboard live in AnchorsContent, which
+ * is still a client component — the 'use client' boundary is now at the
+ * component level rather than the page level.
+ */
 
-import { useRouter, useSearchParams } from 'next/navigation';
-import { Suspense, useCallback } from 'react';
-import Link from 'next/link';
-import { ANCHORS, CORRIDORS } from '@/constants';
-import { AnchorCard } from '@/components/anchors/AnchorCard';
-import { Leaderboard } from '@/components/offramp/Leaderboard';
+import { ANCHORS } from '@/constants';
+import { AnchorsContent } from '@/components/anchors/AnchorsContent';
+import { buildDatasetJsonLd, serializeJsonLd } from '@/lib/seo/jsonld';
+import { loadCorpusCoverage } from '@/lib/reputation/coverage';
 
-function AnchorsContent() {
-  const router = useRouter();
-  const searchParams = useSearchParams();
+export const revalidate = 300; // 5 minutes, matching /anchors/standings
 
-  const corridorParam = searchParams.get('corridor');
-  const activeCorridor = CORRIDORS.find((c) => c.id === corridorParam) ?? CORRIDORS[0];
+const SITE_URL = process.env.NEXT_PUBLIC_SITE_URL ?? 'https://stellar-intel.vercel.app';
 
-  const selectCorridor = useCallback(
-    (id: string) => {
-      const params = new URLSearchParams(searchParams.toString());
-      params.set('corridor', id);
-      router.push(`?${params.toString()}`, { scroll: false });
-    },
-    [router, searchParams]
-  );
+export default async function AnchorsPage() {
+  // Derive coverage window from real outcome data so the JSON-LD is accurate.
+  // loadCorpusCoverage returns null coverage when the store is unavailable
+  // (dev / prerender) — the JSON-LD omits temporalCoverage in that case.
+  const coverage = await loadCorpusCoverage(ANCHORS.map((a) => a.id));
 
-  // CORRIDORS is a non-empty constant, so this never triggers — it narrows
-  // `activeCorridor` from `Corridor | undefined` to `Corridor` for the type checker.
-  if (!activeCorridor) return null;
+  const jsonLd = buildDatasetJsonLd({
+    url: `${SITE_URL}/anchors`,
+    name: 'Stellar Anchor Reputation Corpus — Registry',
+    description:
+      'Public health and reputation records for Stellar off-ramp anchors registered with Stellar Intel. ' +
+      'Includes fill rate, settlement time (p50), and slippage (p50) derived from on-chain settled transactions, ' +
+      `covering ${ANCHORS.length} registered anchors across all supported corridors.`,
+    temporalCoverage: coverage.temporalCoverage,
+    totalSamples: coverage.totalSamples,
+    // The probe cycle and leaderboard both refresh every 5 minutes.
+    updateFrequency: 'PT5M',
+    license: 'https://creativecommons.org/licenses/by/4.0/',
+    dateModified: new Date().toISOString(),
+  });
 
   return (
-    <main className="mx-auto max-w-5xl px-4 py-12 sm:py-16">
-      <header>
-        <h1 className="type-title">Anchors</h1>
-        <p className="text-secondary-text measure mt-4 text-base">
-          Every anchor in the registry, what it publishes about itself, and how it has actually
-          performed on the corridors it is registered for.
-        </p>
-        <div className="mt-6 flex flex-wrap items-center gap-x-4 gap-y-2">
-          {/* Was a green "N live anchors" pill. Nothing on this page establishes
-              that an anchor is live — that is what the probe record decides, and
-              a registered anchor with no successful probe is exactly the case
-              this product exists to surface. "Registered" is the claim the
-              registry can actually support. */}
-          <p className="text-fg-muted font-mono text-xs tracking-wide">
-            {ANCHORS.length} registered
-          </p>
-          <Link
-            href="/anchors/standings"
-            className="text-secondary-text hover:text-primary-text focus-visible:ring-accent focus-visible:ring-offset-background inline-flex h-11 items-center rounded-sm font-mono text-xs tracking-wide underline underline-offset-4 transition-colors duration-100 ease-out focus-visible:ring-2 focus-visible:ring-offset-2 focus-visible:outline-none"
-          >
-            reputation standings &rarr;
-          </Link>
-        </div>
-      </header>
-
-      <section className="mt-16" aria-labelledby="anchor-scorecards-heading">
-        <h2
-          id="anchor-scorecards-heading"
-          className="text-fg-muted font-mono text-xs tracking-wide"
-        >
-          scorecards
-        </h2>
-        <div className="mt-6 grid gap-4 sm:grid-cols-2">
-          {ANCHORS.map((anchor) => (
-            <AnchorCard key={anchor.id} anchor={anchor} />
-          ))}
-        </div>
-      </section>
-
-      <section className="mt-24" aria-labelledby="corridor-leaderboard-heading">
-        <h2 id="corridor-leaderboard-heading" className="type-title">
-          Corridor leaderboard
-        </h2>
-        <p className="text-secondary-text measure mt-4 text-base">
-          Ranked on a $100 USDC reference amount, refreshed every 30 seconds. An anchor that does
-          not answer is listed as unavailable rather than dropped.
-        </p>
-
-        {/* Corridor filter. Square controls, not pills — and the selected one is
-            marked by surface and border rather than a filled accent, so the
-            accent stays available for the result that matters. */}
-        <div
-          className="mt-8 flex flex-wrap gap-2"
-          role="group"
-          aria-label="Filter leaderboard by corridor"
-        >
-          {CORRIDORS.map((corridor) => {
-            const selected = corridor.id === activeCorridor.id;
-            return (
-              <button
-                key={corridor.id}
-                type="button"
-                onClick={() => selectCorridor(corridor.id)}
-                aria-pressed={selected}
-                className={
-                  selected
-                    ? 'border-control-border bg-bg-subtle text-primary-text focus-visible:ring-accent focus-visible:ring-offset-background inline-flex h-11 items-center rounded-sm border px-4 font-mono text-xs tracking-wide focus-visible:ring-2 focus-visible:ring-offset-2 focus-visible:outline-none'
-                    : 'border-border text-secondary-text hover:text-primary-text hover:border-control-border focus-visible:ring-accent focus-visible:ring-offset-background inline-flex h-11 items-center rounded-sm border px-4 font-mono text-xs tracking-wide transition-colors duration-100 ease-out focus-visible:ring-2 focus-visible:ring-offset-2 focus-visible:outline-none'
-                }
-              >
-                {corridor.from}/{corridor.to}
-              </button>
-            );
-          })}
-        </div>
-
-        <div className="mt-8">
-          <Leaderboard corridor={activeCorridor} />
-        </div>
-      </section>
-    </main>
-  );
-}
-
-export default function AnchorsPage() {
-  return (
-    <Suspense fallback={<main className="mx-auto max-w-5xl px-4 py-12 sm:py-16" />}>
+    <>
+      <script
+        type="application/ld+json"
+        // eslint-disable-next-line react/no-danger
+        dangerouslySetInnerHTML={{ __html: serializeJsonLd(jsonLd) }}
+      />
       <AnchorsContent />
-    </Suspense>
+    </>
   );
 }

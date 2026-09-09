@@ -71,6 +71,7 @@ export function DisputeModal({ transactionId, status, onClose, onSubmit }: Dispu
             aria-label="Close"
           >
             <svg
+              aria-hidden="true"
               className="h-5 w-5"
               viewBox="0 0 24 24"
               fill="none"
@@ -87,6 +88,7 @@ export function DisputeModal({ transactionId, status, onClose, onSubmit }: Dispu
             <div className="py-4 text-center">
               <div className="mx-auto mb-3 flex h-12 w-12 items-center justify-center rounded-full bg-accent-subtle">
                 <svg
+                  aria-hidden="true"
                   className="h-6 w-6 text-status-up"
                   viewBox="0 0 24 24"
                   fill="none"

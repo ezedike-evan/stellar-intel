@@ -27,6 +27,36 @@ See [README.md](README.md) for full setup instructions and environment variable 
 
 ---
 
+## Issue Assignment
+
+Anyone can pick up an issue labelled `help-wanted` or `good-first-issue`
+without asking first — comment that you're starting it and open a PR when
+it's ready. For anything else, ask to be assigned before you start, so two
+people don't end up duplicating the same work.
+
+### How to ask
+
+Comment on the issue and say what you plan to do. A request that includes a
+short plan — the approach you'll take, which files it touches, how you'll
+verify it — carries more weight than a bare "can I take this?" and gets
+assigned faster, since it shows the issue is understood rather than just
+claimed.
+
+A maintainer assigns the issue to you once your comment makes it clear you
+understand the scope. If nobody responds within a few days, it's fine to
+open the PR directly and reference the issue — a working PR is itself a form
+of claim.
+
+### How long an assignment holds
+
+An assignment is released after **14 days** of inactivity (no commits, no
+linked PR, no update comment). If you're still working on it but need more
+time, a comment saying so before the window closes keeps it yours. Once
+released, the issue reopens to anyone, including you if you want to pick it
+back up.
+
+---
+
 ## Workflow
 
 1. Fork the repository and create a branch from `main`.
@@ -38,8 +68,8 @@ See [README.md](README.md) for full setup instructions and environment variable 
    npm run test:release   # format:check + lint + typecheck + test + build
    ```
 
-   That covers the whole `check` CI job **except the OpenAPI drift gate**, which
-   is separate and catches people out:
+   That covers the whole `check` CI job **except the two generated-file drift
+   gates**, which are separate and catch people out:
 
    ```bash
    npm run emit-openapi && git diff --exit-code -- public/openapi.json
@@ -48,6 +78,17 @@ See [README.md](README.md) for full setup instructions and environment variable 
    `public/openapi.json` is committed, and CI regenerates it and fails on any
    diff. If you changed an API route or a schema, regenerate and commit the spec
    **in the same commit**.
+
+   The same applies to the docs corpus served at `/llms-full.txt`:
+
+   ```bash
+   npm run emit-llms-full && git diff --exit-code -- lib/seo/llms-full.generated.txt
+   ```
+
+   It is generated from `docs/`, so **editing any doc in the corpus means
+   committing the regenerated file too**. `npm run build` regenerates it for you
+   (it runs in `prebuild`), so after `npm run test:release` the file is already
+   updated in your working tree — just commit it.
 
    If your change touches Rust, Python or a workspace package, see
    [Per-surface checks](#per-surface-checks) below — the root commands do not
@@ -131,6 +172,7 @@ npm run test           # vitest
 npm run build
 npm run check:registry # anchor registry ⊆ transfer-capable set
 npm run emit-openapi && git diff --exit-code -- public/openapi.json
+npm run emit-llms-full && git diff --exit-code -- lib/seo/llms-full.generated.txt
 ```
 
 ### `contracts/reputation` — the Soroban contract
@@ -208,6 +250,7 @@ npm run build --workspace=@stellarintel/publisher
 
 - [ ] `npm run test:release` passes (format, lint, typecheck, test, build)
 - [ ] `npm run emit-openapi` produces no diff, **or** the regenerated spec is committed
+- [ ] `npm run emit-llms-full` produces no diff, **or** the regenerated corpus is committed
 - [ ] Rust: `cargo fmt --check`, `cargo clippy -- -D warnings`, `cargo test` pass for every crate touched
 - [ ] Python: `pytest` and `mypy` pass, and no generated file was hand-edited
 - [ ] Documentation files in `docs/` carry an updated `**Last reviewed:** YYYY-MM-DD` date

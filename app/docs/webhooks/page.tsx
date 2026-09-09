@@ -1,4 +1,11 @@
+import type { Metadata } from 'next';
 import { CodeBlock } from '@/components/docs/CodeBlock';
+
+export const metadata: Metadata = {
+  title: 'Webhooks',
+  description:
+    'Receive real-time event notifications from Stellar Intel — intent settlements, dispute updates, anchor onboarding, and publisher ticks — without polling the API.',
+};
 
 export default function WebhooksPage() {
   return (

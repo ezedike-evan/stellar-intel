@@ -205,7 +205,7 @@ describe('SEP-10 state machine — sign', () => {
       const tx = TransactionBuilder.fromXDR(xdr, Networks.PUBLIC);
       tx.addSignature(
         userKeypair.publicKey(),
-        userKeypair.sign(Buffer.from(xdr)).toString('base64')
+        Buffer.from(userKeypair.sign(Buffer.from(xdr))).toString('base64')
       );
       return tx.toXDR();
     });

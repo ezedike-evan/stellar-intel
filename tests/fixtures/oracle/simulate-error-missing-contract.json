@@ -1,0 +1,12 @@
+{
+  "jsonrpc": "2.0",
+  "id": 1,
+  "result": {
+    "error": "HostError: Error(Storage, MissingValue)\n\nEvent log (newest first):\n   0: [Diagnostic Event] topics:[error, Error(Storage, MissingValue)], data:\"trying to get non-existing value for contract instance\"\n   1: [Diagnostic Event] topics:[fn_call, CAAQCAIBAEAQCAIBAEAQCAIBAEAQCAIBAEAQCAIBAEAQCAIBAEAQC526, get_score_for_corridor], data:[\"moneygram\", \"usdc-ngn\"]\n",
+    "events": [
+      "AAAAAAAAAAAAAAAAAAAAAgAAAAAAAAADAAAADwAAAAdmbl9jYWxsAAAAAA0AAAAgAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEAAAAPAAAAFmdldF9zY29yZV9mb3JfY29ycmlkb3IAAAAAABAAAAABAAAAAgAAAA4AAAAJbW9uZXlncmFtAAAAAAAADgAAAAh1c2RjLW5nbg==",
+      "AAAAAAAAAAAAAAAAAAAAAgAAAAAAAAACAAAADwAAAAVlcnJvcgAAAAAAAAIAAAADAAAAAwAAAA4AAAA2dHJ5aW5nIHRvIGdldCBub24tZXhpc3RpbmcgdmFsdWUgZm9yIGNvbnRyYWN0IGluc3RhbmNlAAA="
+    ],
+    "latestLedger": 4400812
+  }
+}

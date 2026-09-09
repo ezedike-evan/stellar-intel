@@ -102,6 +102,13 @@ export interface V1Context {
 export interface V1HandlerResult {
   status: number;
   body: unknown;
+  /**
+   * Extra response headers, for routes whose answer has cacheability the
+   * wrapper cannot infer (a dated artifact is immutable; today's is not).
+   * The hardening headers always win — a handler cannot overwrite the request
+   * id or the rate-limit counters.
+   */
+  headers?: Record<string, string>;
 }
 
 export interface V1Options {
@@ -161,5 +168,8 @@ export async function withV1(
     await storeIdempotentResponse(idempotencyKey, result.status, result.body);
   }
 
-  return NextResponse.json(result.body, { status: result.status, headers: baseHeaders });
+  return NextResponse.json(result.body, {
+    status: result.status,
+    headers: { ...result.headers, ...baseHeaders },
+  });
 }

@@ -24,6 +24,7 @@ const EXEMPT: Record<string, string> = {
   'app/api/publisher/tick/route.ts':
     'Cron-only, bearer-gated on CRON_SECRET; a limit here would throttle the scheduler itself.',
   'app/api/reputation/reconcile/route.ts': 'Cron-only, bearer-gated on CRON_SECRET.',
+  'app/api/reputation/reconcile-volume-savings/route.ts': 'Cron-only, bearer-gated on CRON_SECRET.',
   'app/api/reputation/refresh/route.ts': 'Cron-only, bearer-gated on CRON_SECRET.',
   'app/api/graphql/route.ts': 'Limited inside the yoga handler.',
 };

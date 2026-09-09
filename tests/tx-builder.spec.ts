@@ -36,8 +36,10 @@ describe('buildIntentCommitmentTx', () => {
     expect(tx.timeBounds?.maxTime).toBe(mockParams.deadline.toString());
 
     expect(tx.memo.type).toBe('hash');
-    expect(tx.memo.value).toBeInstanceOf(Buffer);
-    expect((tx.memo.value as Buffer).toString('hex')).toBe(mockParams.intentHash);
+    // stellar-sdk 17 hands back a plain Uint8Array for a hash memo where 16 gave
+    // a Buffer. Buffer extends Uint8Array, so this holds for either.
+    expect(tx.memo.value).toBeInstanceOf(Uint8Array);
+    expect(Buffer.from(tx.memo.value as Uint8Array).toString('hex')).toBe(mockParams.intentHash);
 
     expect(tx.operations.length).toBe(1);
     const op = tx.operations[0] as any;

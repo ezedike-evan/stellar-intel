@@ -48,7 +48,13 @@ export function DisclaimerBanner() {
         aria-label="Dismiss disclaimer"
         className="flex-shrink-0 rounded p-0.5 text-secondary-text hover:text-secondary-text dark:hover:text-secondary-text"
       >
-        <svg className="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+        <svg
+          aria-hidden="true"
+          className="h-4 w-4"
+          fill="none"
+          viewBox="0 0 24 24"
+          stroke="currentColor"
+        >
           <path
             strokeLinecap="round"
             strokeLinejoin="round"

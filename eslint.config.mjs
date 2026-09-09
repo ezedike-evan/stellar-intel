@@ -42,12 +42,14 @@ const eslintConfig = defineConfig([
       ],
     },
   },
-  // Test files: mocks legitimately use `any` and intentionally-unused fixtures.
+  // Test files: mocks legitimately use `any` and intentionally-unused fixtures,
+  // and harness setup logs timings to the console like the scripts/ tooling does.
   {
     files: ['tests/**', '**/*.{test,spec}.{ts,tsx}'],
     rules: {
       '@typescript-eslint/no-explicit-any': 'off',
       '@typescript-eslint/no-unused-vars': 'off',
+      'no-console': 'off',
     },
   },
   // Build/CI scripts run in Node and are dev tooling, not shipped code.

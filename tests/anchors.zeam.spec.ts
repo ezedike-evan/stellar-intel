@@ -8,9 +8,9 @@ describe('zeam.money triage (B032)', () => {
     expect(zeam).toBeDefined();
   });
 
-  it('has correct home domain and service domain', () => {
+  it('uses the resolvable home domain for SEP endpoint discovery', () => {
     expect(zeam?.homeDomain).toBe('zeam.money');
-    expect(zeam?.serviceDomain).toBe('anchor.zeam.money');
+    expect(zeam?.serviceDomain).toBeUndefined();
   });
 
   it('anchors USDC with the correct issuer', () => {

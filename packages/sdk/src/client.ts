@@ -6,6 +6,8 @@ import {
 } from './errors.js';
 import type {
   AnchorHealth,
+  AnchorHealthLedgerArtifact,
+  CorridorVolumeSavings,
   OfframpIntentRequest,
   OfframpIntentResponse,
   RateComparison,
@@ -147,6 +149,32 @@ export class StellarIntelClient {
     return this.request<AnchorHealth>({
       method: 'GET',
       path: `/api/v1/anchors/${encodeURIComponent(anchorId)}/health`,
+    });
+  }
+
+  /**
+   * The nightly anchor health ledger for one date.
+   *
+   * Omit `date` for the latest. Pass a `YYYY-MM-DD` to get the ledger as it
+   * stood on that date, resolved from the git history of the committed file —
+   * so the series is readable without cloning the repository.
+   */
+  async getAnchorHealthLedger(date?: string): Promise<AnchorHealthLedgerArtifact> {
+    const query = date ? `?date=${encodeURIComponent(date)}` : '';
+    return this.request<AnchorHealthLedgerArtifact>({
+      method: 'GET',
+      path: `/api/v1/anchor-health/ledger${query}`,
+    });
+  }
+
+  /**
+   * Cumulative volume routed and fees saved for a corridor, read from the
+   * on-chain oracle rather than this app's database. Amounts are microUSDC.
+   */
+  async getCorridorVolumeSavings(corridorId: string): Promise<CorridorVolumeSavings> {
+    return this.request<CorridorVolumeSavings>({
+      method: 'GET',
+      path: `/api/v1/corridors/${encodeURIComponent(corridorId)}/volume-savings`,
     });
   }
 

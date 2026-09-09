@@ -42,6 +42,9 @@ export async function generateMetadata({
         },
       ],
     },
+    alternates: {
+      canonical: anchor ? `/anchors/${anchor.id}` : '/anchors',
+    },
     twitter: {
       card: 'summary_large_image',
       title,

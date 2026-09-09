@@ -1,4 +1,33 @@
+import type { Metadata } from 'next';
 import Link from 'next/link';
+
+const SITE_URL = process.env.NEXT_PUBLIC_SITE_URL ?? 'https://stellar-intel.vercel.app';
+const TITLE = 'Transaction history — Stellar Intel';
+const DESCRIPTION = 'Your Stellar off-ramp transaction history through Stellar Intel.';
+
+export const metadata: Metadata = {
+  title: TITLE,
+  description: DESCRIPTION,
+  openGraph: {
+    type: 'website',
+    title: TITLE,
+    description: DESCRIPTION,
+    url: new URL('/history', SITE_URL).toString(),
+    images: [
+      {
+        url: new URL('/opengraph-image', SITE_URL).toString(),
+        width: 1200,
+        height: 630,
+        alt: TITLE,
+      },
+    ],
+  },
+  twitter: {
+    card: 'summary_large_image',
+    title: TITLE,
+    description: DESCRIPTION,
+  },
+};
 
 export default function HistoryPage() {
   return (

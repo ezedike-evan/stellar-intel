@@ -1,4 +1,11 @@
+import type { Metadata } from 'next';
 import { CodeBlock } from '@/components/docs/CodeBlock';
+
+export const metadata: Metadata = {
+  title: 'MCP Tool Docs',
+  description:
+    'Use Stellar Intel through AI agents via the Model Context Protocol — install @stellarintel/mcp, run the stdio server, and let agents price off-ramp routes without holding signing keys.',
+};
 
 export default function McpPage() {
   return (
@@ -10,36 +17,85 @@ export default function McpPage() {
         </p>
       </div>
 
-      <section className="space-y-4">
-        <h2 className="text-xl font-semibold text-primary-text">Overview</h2>
-        <p className="text-secondary-text">
-          The MCP server exposes Stellar Intel&apos;s off-ramp routing to MCP-capable agents over
-          stdio. It reuses the same routing and canonical-hashing logic as the web app.
-        </p>
-        <p className="text-secondary-text">
-          The server is published on npm as <code className="text-accent">@stellarintel/mcp</code>.
+      {/* Not-yet-published notice */}
+      <section className="rounded-xl border border-amber-500/30 bg-amber-50 p-6 dark:bg-amber-950/20">
+        <h2 className="flex items-center gap-2 text-lg font-semibold text-amber-900 dark:text-amber-200">
+          <svg
+            className="h-5 w-5 shrink-0"
+            viewBox="0 0 24 24"
+            fill="currentColor"
+            aria-hidden="true"
+          >
+            <path d="M12 2L1 21h22L12 2zm1 14h-2v2h2v-2zm0-7h-2v5h2V9z" />
+          </svg>
+          The MCP package is not published yet
+        </h2>
+        <p className="mt-2 text-sm text-amber-800 dark:text-amber-300">
+          <code className="text-xs">@stellarintel/mcp</code> is not yet on npm — running{' '}
+          <code className="text-xs">npm install @stellarintel/mcp</code> returns 404 today. The
+          server is built, and publication is tracked in{' '}
+          <a
+            href="https://github.com/ezedike-evan/stellar-intel/issues/806"
+            target="_blank"
+            rel="noopener noreferrer"
+            className="font-medium underline underline-offset-2"
+          >
+            #806
+          </a>{' '}
+          for status updates. Until it ships, run it from this repository (see{' '}
+          <a href="#installation" className="font-medium underline underline-offset-2">
+            Installation
+          </a>{' '}
+          below).
         </p>
       </section>
 
       <section className="space-y-4">
+        <h2 className="text-xl font-semibold text-primary-text">Overview</h2>
+        <p className="text-secondary-text">
+          The MCP server exposes Stellar Intel&apos;s off-ramp routing and anchor intelligence to
+          MCP-capable agents over stdio or streamable HTTP. It reuses the same routing and
+          canonical-hashing logic as the web app.
+        </p>
+        <p className="text-secondary-text">
+          The server ships as <code className="text-accent">@stellarintel/mcp</code>, which is not
+          yet published to npm. It runs from this repository today.
+        </p>
+      </section>
+
+      <section id="installation" className="space-y-4">
         <h2 className="text-xl font-semibold text-primary-text">Installation</h2>
-        <CodeBlock language="bash" code={`npm install @stellarintel/mcp`} />
+        <p className="text-secondary-text">
+          The package is not on npm yet, so install it from this repository:
+        </p>
+        <CodeBlock
+          language="bash"
+          code={`git clone https://github.com/ezedike-evan/stellar-intel
+cd stellar-intel
+npm install`}
+        />
       </section>
 
       <section className="space-y-4">
         <h2 className="text-xl font-semibold text-primary-text">Running the Server</h2>
         <CodeBlock
           language="bash"
-          code={`# Build and run
-npm run build   # tsc -> dist/
-npm start       # node dist/index.js, stdio transport
+          code={`# Build and run the MCP package over stdio (from the repo root)
+npm run build --workspace=@stellarintel/mcp   # tsc -> dist/
+npm start --workspace=@stellarintel/mcp       # node dist/packages/mcp/src/index.js
 
-# Or use tsx for development (no build step)
+# Streamable HTTP instead of stdio — binds http://127.0.0.1:3000/mcp
+npx tsx packages/mcp/src/index.ts --transport http --port 3000
+
+# In-repo dev server (off-ramp tools only, stdio only)
 npx tsx scripts/mcp/server.ts`}
         />
         <p className="text-sm text-secondary-text">
-          Point any MCP-capable client (Claude Desktop, an agent framework, etc.) at the built entry
-          point as a stdio command.
+          Point any MCP-capable client (Claude Desktop, an agent framework, etc.) at the{' '}
+          <code>tsx</code> command as a stdio server, or at the <code>/mcp</code> URL when using the
+          HTTP transport. The <code>intel.anchor.*</code> tools call the Stellar Intel HTTP API at{' '}
+          <code>NEXT_PUBLIC_APP_URL</code> (default <code>http://localhost:3000</code>), so they
+          need a running app instance.
         </p>
       </section>
 
@@ -133,16 +189,230 @@ npx tsx scripts/mcp/server.ts`}
             </div>
           </div>
         </div>
+
+        <div className="rounded-xl border border-border p-5">
+          <h3 className="flex items-center gap-2 text-lg font-semibold text-primary-text">
+            <span className="rounded bg-accent-subtle px-2 py-0.5 text-xs font-medium text-accent">
+              TOOL
+            </span>
+            intel.execute
+          </h3>
+          <p className="mt-2 text-sm text-secondary-text">
+            Carries a prepared intent through to execution.{' '}
+            <strong>Stellar Intel never signs anything</strong> — the calling agent signs the{' '}
+            <code>intentHash</code> and the <code>unsignedTx</code> from{' '}
+            <code>intel.offramp.prepare</code> with its own wallet before calling this tool. The
+            server verifies the signed material still matches the prepared intent, then submits the
+            transaction to Horizon; any mismatch is rejected before anything reaches the network.
+          </p>
+
+          <div className="mt-4 grid grid-cols-1 gap-4 sm:grid-cols-2">
+            <div>
+              <h4 className="mb-2 text-sm font-medium text-primary-text">Input</h4>
+              <CodeBlock
+                language="json"
+                code={`{
+  "unsignedEnvelope": {
+    "intent": { "type": "offramp", … },
+    "intentHash": "<64-hex sha256>"
+  },
+  "signature": "<base64 ed25519 sig over intentHash>",
+  "signedTx": "<base64 signed transaction XDR>"
+}`}
+              />
+            </div>
+            <div>
+              <h4 className="mb-2 text-sm font-medium text-primary-text">Output</h4>
+              <CodeBlock
+                language="json"
+                code={`{
+  "status": "submitted",
+  "hash": "<64-hex tx hash>",
+  "ledger": 12345,
+  "corridorId": "usdc-ngn",
+  "anchorId": "cowrie"
+}`}
+              />
+            </div>
+          </div>
+        </div>
+
+        <div className="rounded-xl border border-border p-5">
+          <h3 className="flex items-center gap-2 text-lg font-semibold text-primary-text">
+            <span className="rounded bg-accent-subtle px-2 py-0.5 text-xs font-medium text-accent">
+              TOOL
+            </span>
+            intel.anchor.reputation
+          </h3>
+          <p className="mt-2 text-sm text-secondary-text">
+            Returns 7/30/90-day rolling percentile scorecards for an anchor. Each scorecard shows
+            state (<code>ok</code> or <code>insufficient_data</code>), sample size, fill rate,
+            settlement latency percentiles (p50/p95), and slippage percentiles (p50/p95). Available
+            from the <code>packages/mcp</code> server only.
+          </p>
+
+          <div className="mt-4 grid grid-cols-1 gap-4 sm:grid-cols-2">
+            <div>
+              <h4 className="mb-2 text-sm font-medium text-primary-text">Input</h4>
+              <CodeBlock language="json" code={`{ "anchor": "cowrie" }`} />
+            </div>
+            <div>
+              <h4 className="mb-2 text-sm font-medium text-primary-text">Output (abridged)</h4>
+              <CodeBlock
+                language="json"
+                code={`{
+  "anchorId": "cowrie",
+  "scorecards": {
+    "7": {
+      "state": "ok",
+      "window": 7,
+      "sampleSize": 42,
+      "fillRate": 0.97,
+      "settleMs": { "p50": 41000, "p95": 92000 },
+      "slippage": { "p50": 0.001, "p95": 0.004 },
+      "computedAt": "2026-…Z",
+      "lastPublisherTxTimestamp": "2026-…Z"
+    }
+  }
+}`}
+              />
+            </div>
+          </div>
+        </div>
+
+        <div className="rounded-xl border border-border p-5">
+          <h3 className="flex items-center gap-2 text-lg font-semibold text-primary-text">
+            <span className="rounded bg-accent-subtle px-2 py-0.5 text-xs font-medium text-accent">
+              TOOL
+            </span>
+            intel.anchor.health
+          </h3>
+          <p className="mt-2 text-sm text-secondary-text">
+            Returns the current status, consecutive failure count, degraded flag, last check
+            timestamp, last error message, and staleness flag for a given anchor domain and optional
+            asset. Available from the <code>packages/mcp</code> server only.
+          </p>
+
+          <div className="mt-4 grid grid-cols-1 gap-4 sm:grid-cols-2">
+            <div>
+              <h4 className="mb-2 text-sm font-medium text-primary-text">Input</h4>
+              <CodeBlock
+                language="json"
+                code={`{
+  "domain": "anclap.com",
+  "asset": "USDC"
+}`}
+              />
+            </div>
+            <div>
+              <h4 className="mb-2 text-sm font-medium text-primary-text">Output</h4>
+              <CodeBlock
+                language="json"
+                code={`{
+  "anchorId": "anclap",
+  "status": "healthy",
+  "consecutiveFailures": 0,
+  "degraded": false,
+  "lastCheckedAt": "2026-…Z",
+  "lastError": null,
+  "stale": false
+}`}
+              />
+            </div>
+          </div>
+        </div>
+
+        <div className="rounded-xl border border-border p-5">
+          <h3 className="flex items-center gap-2 text-lg font-semibold text-primary-text">
+            <span className="rounded bg-accent-subtle px-2 py-0.5 text-xs font-medium text-accent">
+              TOOL
+            </span>
+            intel.probe.coverage
+          </h3>
+          <p className="mt-2 text-sm text-secondary-text">
+            Answers whether the reputation data is trustworthy yet, so an agent can check before
+            believing a score. Same payload as <code>GET /api/reputation/probe-coverage</code> for
+            the same moment. Takes no input. Available from the <code>packages/mcp</code> server
+            only.
+          </p>
+
+          <div className="mt-4">
+            <h4 className="mb-2 text-sm font-medium text-primary-text">Output (abridged)</h4>
+            <CodeBlock
+              language="json"
+              code={`{
+  "thresholdDays": 90,
+  "asOfDay": "2026-…",
+  "fleetThresholdMet": false,
+  "daysUntilFleetThreshold": 47,
+  "anchors": [
+    { "anchorId": "cowrie", "continuousDays": 43, "thresholdMet": false }
+  ]
+}`}
+            />
+          </div>
+        </div>
+
+        <div className="rounded-xl border border-border p-5">
+          <h3 className="flex items-center gap-2 text-lg font-semibold text-primary-text">
+            <span className="rounded bg-accent-subtle px-2 py-0.5 text-xs font-medium text-accent">
+              TOOL
+            </span>
+            intel.leaderboard
+          </h3>
+          <p className="mt-2 text-sm text-secondary-text">
+            Ranks anchors by corridor, delegating to <code>GET /api/reputation/leaderboard</code>.
+            Each entry carries its standing label and the measured/unmeasured distinction the raw
+            API expresses as <code>n === 0</code>. Omit the corridor to rank every registered anchor
+            globally.
+          </p>
+
+          <div className="mt-4">
+            <h4 className="mb-2 text-sm font-medium text-primary-text">Input</h4>
+            <CodeBlock
+              language="json"
+              code={`{
+  "corridor": "usdc-ngn"
+}`}
+            />
+          </div>
+        </div>
+      </section>
+
+      <section className="space-y-4">
+        <h2 className="text-xl font-semibold text-primary-text">Prompts</h2>
+        <p className="text-secondary-text">
+          The <code>packages/mcp</code> server also registers two prompts, so an agent can start
+          from an intent instead of assembling the tool calls itself.
+        </p>
+        <div className="rounded-xl border border-border p-5">
+          <h3 className="text-lg font-semibold text-primary-text">intel.offramp.choose-anchor</h3>
+          <p className="mt-2 text-sm text-secondary-text">
+            Arguments <code>{'{ from, to }'}</code>. Compares the anchors available on a corridor so
+            the agent can pick one before quoting.
+          </p>
+        </div>
+        <div className="rounded-xl border border-border p-5">
+          <h3 className="text-lg font-semibold text-primary-text">
+            intel.offramp.quote-and-prepare
+          </h3>
+          <p className="mt-2 text-sm text-secondary-text">
+            Arguments <code>{'{ from, to, amount, sender, recipient }'}</code>. Walks quote →
+            prepare → execute, leaving the signature to the agent.
+          </p>
+        </div>
       </section>
 
       <section className="space-y-4">
         <h2 className="text-xl font-semibold text-primary-text">Security Model</h2>
         <div className="rounded-xl border border-border bg-bg-subtle p-5">
           <p className="text-sm text-secondary-text">
-            <strong>Non-custodial by design.</strong> The MCP server can only <em>prepare</em>{' '}
-            intents and unsigned transactions — it never holds signing keys. An AI agent can price
-            and compare routes autonomously, but the user must sign the final transaction in their
-            wallet (Freighter) before execution. The agent cannot spend without a user signature.
+            <strong>Non-custodial by design.</strong> The MCP server never holds signing keys. It
+            can <em>prepare</em> intents and unsigned transactions, and <code>intel.execute</code>{' '}
+            only <em>verifies</em> material the sender&apos;s own wallet has already signed — the
+            intent hash and the transaction itself — before submitting to Horizon. Nothing can be
+            spent without a signature produced outside this server, and signed material that no
+            longer matches the prepared intent is rejected.
           </p>
         </div>
       </section>
@@ -155,8 +425,8 @@ npx tsx scripts/mcp/server.ts`}
           code={`# Unit tests
 npm run test -- tests/mcp-offramp.spec.ts
 
-# E2E tests (spawns server + real MCP client)
-npm run test -- tests/mcp-e2e.spec.ts`}
+# E2E tests (spawns server + real MCP client, stdio and HTTP)
+npm run test -- tests/mcp-e2e.spec.ts tests/mcp-http-e2e.spec.ts`}
         />
       </section>
 
@@ -175,12 +445,12 @@ npm run test -- tests/mcp-e2e.spec.ts`}
           </li>
           <li>
             <a
-              href="https://www.npmjs.com/package/@stellarintel/mcp"
+              href="https://github.com/ezedike-evan/stellar-intel/issues/806"
               target="_blank"
               rel="noopener noreferrer"
               className="text-accent hover:underline"
             >
-              @stellarintel/mcp on npm →
+              Publication status tracking issue (#806) →
             </a>
           </li>
           <li>

@@ -924,6 +924,36 @@ registry.registerPath({
 
 registry.registerPath({
   method: 'get',
+  path: '/api/status',
+  summary: 'API version and deprecation status',
+  description:
+    'Current API version, the supported version window, and any announced deprecations — the "Status page" announcement channel in docs/VERSIONING.md.',
+  tags: ['System'],
+  responses: {
+    200: {
+      description: 'Status snapshot',
+      content: {
+        'application/json': {
+          schema: z.object({
+            version: z.string(),
+            supported_versions: z.array(z.string()),
+            announced_deprecations: z.array(
+              z.object({
+                version: z.string(),
+                supersededAt: z.string(),
+                sunsetAt: z.string(),
+              })
+            ),
+          }),
+        },
+      },
+    },
+    429: RATE_LIMITED_429,
+  },
+});
+
+registry.registerPath({
+  method: 'get',
   path: '/api/reputation/actuarial',
   summary: 'Actuarial progress report',
   description:
@@ -996,6 +1026,156 @@ registry.registerPath({
     409: { description: 'A refresh is already in progress' },
     500: {
       description: 'Sweep persisted no samples',
+      content: { 'application/json': { schema: ApiErrorSchema } },
+    },
+  },
+});
+
+registry.registerPath({
+  method: 'get',
+  path: '/api/v1/corridors/{corridor}/volume-savings',
+  summary: 'Get cumulative volume and fees saved for a corridor',
+  description:
+    'Reads the on-chain volume/savings oracle for one corridor: cumulative USDC routed, USDC ' +
+    'saved against the baseline rate, and the settlement count behind both. Amounts are ' +
+    'microUSDC. Served from the contract, so the aggregate is checkable without trusting this ' +
+    "app's own database. Zeroes are returned when the corridor has no on-chain entry yet.",
+  tags: ['Rates'],
+  request: {
+    params: z.object({
+      corridor: z.string().min(1).describe('Corridor identifier (e.g. usdc-ngn)'),
+    }),
+  },
+  responses: {
+    200: {
+      description: 'Cumulative volume and savings',
+      content: {
+        'application/json': {
+          schema: z.object({
+            corridor: z.string(),
+            volumeUsdc: z.number(),
+            savingsUsdc: z.number(),
+            settlementCount: z.number(),
+            updatedAt: z.number(),
+          }),
+        },
+      },
+    },
+    400: {
+      description: 'Invalid corridor ID',
+      content: { 'application/json': { schema: ApiErrorSchema } },
+    },
+    429: RATE_LIMITED_429,
+    500: {
+      description: 'Oracle read failed',
+      content: { 'application/json': { schema: ApiErrorSchema } },
+    },
+  },
+});
+
+const AnchorHealthLedgerArtifactSchema = registry.register(
+  'AnchorHealthLedgerArtifact',
+  z.object({
+    version: z
+      .string()
+      .describe(
+        'The YYYY-MM-DD this ledger describes, taken from its own updatedAt. Two responses with the same version carry the same ledger.'
+      ),
+    requestedDate: z
+      .string()
+      .nullable()
+      .describe('The date that was asked for, or null when the latest was asked for'),
+    source: z
+      .enum(['committed', 'git-history'])
+      .describe(
+        'committed = the file this deployment was built with (the source of truth); git-history = a past revision of that same file'
+      ),
+    commit: z
+      .string()
+      .nullable()
+      .describe('Commit the ledger was read from; null for the committed file'),
+    ledger: z
+      .object({
+        thresholdNights: z
+          .number()
+          .describe('Consecutive nightly failures before an anchor is flagged degraded'),
+        updatedAt: z.string().nullable().describe('ISO timestamp the ledger was written'),
+        anchors: z
+          .record(
+            z.string(),
+            z.object({
+              consecutiveFailures: z.number(),
+              degraded: z.boolean(),
+              lastCheckedAt: z.string().nullable(),
+              lastStatus: z.string(),
+              lastError: z.string().nullable(),
+            })
+          )
+          .describe('One health record per tracked anchor, keyed by anchor id'),
+      })
+      .describe('The ledger itself, verbatim from constants/anchor-health.json'),
+  })
+);
+
+registry.registerPath({
+  method: 'get',
+  path: '/api/v1/anchor-health/ledger',
+  summary: 'Get the anchor health ledger for a date',
+  description:
+    'Publishes the nightly anchor health ledger as a dated artifact. Without `date`, returns the ' +
+    'ledger this deployment was built with. With `date` (YYYY-MM-DD), returns the ledger as it ' +
+    'stood on that date, resolved from the git history of `constants/anchor-health.json` — so the ' +
+    'series is fetchable without cloning the repository. The committed file remains the source of ' +
+    'truth; nothing is mirrored server-side. A dated response is immutable and cached as such.',
+  tags: ['Anchors'],
+  request: {
+    query: z.object({
+      date: z
+        .string()
+        .regex(/^\d{4}-\d{2}-\d{2}$/)
+        .optional()
+        .describe('Ledger date to retrieve, YYYY-MM-DD. Omit for the latest.'),
+    }),
+  },
+  responses: {
+    200: {
+      description: 'The anchor health ledger for the requested date',
+      content: { 'application/json': { schema: AnchorHealthLedgerArtifactSchema } },
+    },
+    400: {
+      description: 'Malformed date',
+      content: { 'application/json': { schema: ApiErrorSchema } },
+    },
+    404: {
+      description: 'No ledger exists on or before the requested date',
+      content: { 'application/json': { schema: ApiErrorSchema } },
+    },
+    429: RATE_LIMITED_429,
+    502: {
+      description: 'The ledger history could not be read',
+      content: { 'application/json': { schema: ApiErrorSchema } },
+    },
+  },
+});
+
+registry.registerPath({
+  method: 'get',
+  path: '/api/reputation/reconcile-volume-savings',
+  summary: 'Reconcile volume and savings against the on-chain oracle',
+  description:
+    'Cron-triggered. Re-derives per-corridor volume and savings from the outcome log and ' +
+    'compares them against the on-chain totals, reporting any discrepancy rather than ' +
+    'silently diverging. Protected by CRON_SECRET.',
+  tags: ['System'],
+  security: [{ bearerAuth: [] }],
+  responses: {
+    200: {
+      description: 'Reconciliation completed',
+      content: { 'application/json': { schema: z.object({}).passthrough() } },
+    },
+    401: UNAUTHORIZED_401,
+    500: {
+      description: 'Reconciliation failed',
       content: { 'application/json': { schema: ApiErrorSchema } },
     },
   },

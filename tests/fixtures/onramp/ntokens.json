@@ -1,0 +1,18 @@
+{
+  "_comment": "Live SEP-24 GET /info deposit capture (#1095), captured by hand against the anchor's own advertised transfer server the same way tests/fixtures/sep38/capability-capture.json was. SEP-6 /info (https://ntokens-box.bpventures.us/sep6/info) was checked too and shows the identical BRL/enabled:false shape.",
+  "capturedAt": "2026-08-30T00:45:00.000Z",
+  "anchorId": "ntokens",
+  "homeDomain": "ntokens.com",
+  "registeredAssetCode": "BRL",
+  "transferServerSep0024": "https://ntokens-box.bpventures.us/sep24",
+  "reachable": true,
+  "supportsDeposit": false,
+  "reason": "The anchor explicitly advertises deposit for its registered asset (BRL) with enabled: false — unlike cowrie/anclap/ngnc, where the registered asset is simply absent from the deposit map, ntokens names it and turns it off outright. withdraw.BRL is enabled; deposit.BRL is not.",
+  "info": {
+    "deposit": {
+      "BRL": {
+        "enabled": false
+      }
+    }
+  }
+}

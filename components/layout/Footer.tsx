@@ -17,6 +17,7 @@ const FOOTER_COLUMNS = [
     title: 'Docs',
     links: [
       { href: '/docs', label: 'Developer Portal' },
+      { href: '/faq', label: 'FAQ' },
       { href: '/docs/quickstart', label: 'Quickstart' },
       { href: '/docs/api', label: 'API Reference' },
       { href: '/docs/sdks', label: 'SDKs' },

@@ -1,4 +1,11 @@
+import type { Metadata } from 'next';
 import ApiPlayground from '@/components/docs/ApiPlayground';
+
+export const metadata: Metadata = {
+  title: 'Interactive API Reference',
+  description:
+    'Explore every Stellar Intel endpoint with live try-it panels — rates, reputation, leaderboard, off-ramp intent, and public scores — directly from your browser.',
+};
 
 export default function ApiDocsPage() {
   return (

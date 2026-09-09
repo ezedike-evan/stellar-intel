@@ -20,6 +20,8 @@ const SAMPLE_ROW: OutcomeRow = {
   settleSeconds: 120,
   quotedRate: '1550.00',
   deliveredRate: '1548.50',
+  quotedAmount: '100.00',
+  deliveredAmount: '154850.00',
 };
 
 function dbRow(row: OutcomeRow): Record<string, unknown> {
@@ -31,6 +33,8 @@ function dbRow(row: OutcomeRow): Record<string, unknown> {
     settle_seconds: row.settleSeconds != null ? String(row.settleSeconds) : null,
     quoted_rate: row.quotedRate,
     delivered_rate: row.deliveredRate,
+    quoted_amount: row.quotedAmount,
+    delivered_amount: row.deliveredAmount,
   };
 }
 
@@ -53,6 +57,7 @@ const BASE_CONFIG: BatchConfig = {
 const sdkMocks = vi.hoisted(() => ({
   submitOutcome: vi.fn(),
   publishCorridorRate: vi.fn(),
+  addVolumeSavings: vi.fn(),
   signAndSend: vi.fn(),
 }));
 
@@ -66,6 +71,7 @@ vi.mock('@stellar/stellar-sdk', () => ({
       from: vi.fn().mockResolvedValue({
         submit_outcome: sdkMocks.submitOutcome,
         publish_corridor_rate: sdkMocks.publishCorridorRate,
+        add_volume_savings: sdkMocks.addVolumeSavings,
       }),
     },
   },
@@ -77,6 +83,11 @@ beforeEach(() => {
   });
   sdkMocks.submitOutcome.mockReset().mockResolvedValue({ signAndSend: sdkMocks.signAndSend });
   sdkMocks.publishCorridorRate.mockReset().mockResolvedValue({ signAndSend: sdkMocks.signAndSend });
+  sdkMocks.addVolumeSavings.mockReset().mockResolvedValue({
+    signAndSend: vi.fn().mockResolvedValue({
+      sendTransactionResponse: { hash: 'mock-volume-savings-tx-hash' },
+    }),
+  });
 });
 
 describe('buildOutcomeHash', () => {
@@ -151,6 +162,13 @@ describe('runBatch', () => {
       'mock-tx-hash',
       SAMPLE_ROW.intentHash,
     ]);
+    expect(sdkMocks.submitOutcome).toHaveBeenCalled();
+    expect(sdkMocks.addVolumeSavings).toHaveBeenCalledWith(
+      expect.objectContaining({
+        corridor: 'usdc-ngn',
+        volume_delta: 100000000n, // 100 USDC * 1,000,000
+      })
+    );
   });
 });
 

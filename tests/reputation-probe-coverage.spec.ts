@@ -71,7 +71,7 @@ describe('GET /api/reputation/probe-coverage', () => {
     yesterday.setUTCDate(yesterday.getUTCDate() - 1);
 
     const row = (at: Date): ProbeLedgerRow => ({
-      domain: 'cowrie.exchange',
+      domain: 'api.cowrie.exchange',
       kind: 'uptime',
       corridor: null,
       reachable: true,

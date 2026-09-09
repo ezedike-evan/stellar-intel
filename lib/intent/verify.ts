@@ -28,8 +28,7 @@ export function verifyIntentSignature(params: {
 }
 
 export type IntentAttestationResult =
-  | { ok: true; attested: boolean }
-  | { ok: false; status: 400 | 401; message: string };
+  { ok: true; attested: boolean } | { ok: false; status: 400 | 401; message: string };
 
 /**
  * Optional intent attestation for the off-ramp submit path.

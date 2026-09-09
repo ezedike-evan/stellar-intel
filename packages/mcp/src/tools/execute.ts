@@ -1,6 +1,7 @@
 import type { McpServer } from '@modelcontextprotocol/sdk/server/mcp.js';
 import { z } from 'zod';
 import { executeIntent, OfframpToolError, ExecuteOutputSchema } from '@/lib/mcp/offramp';
+import { McpToolError, fromOfframpError, upstreamTimeout } from '../errors.js';
 
 export const EXECUTE_TOOL_NAME = 'intel.execute';
 
@@ -43,6 +44,7 @@ export function registerExecuteTool(server: McpServer): void {
         'transaction itself with its own wallet before calling this tool.',
       inputSchema: inputShape,
       outputSchema: ExecuteOutputSchema,
+      annotations: { destructiveHint: true, idempotentHint: false },
     },
     async (args) => {
       try {
@@ -52,15 +54,18 @@ export function registerExecuteTool(server: McpServer): void {
           structuredContent: result,
         };
       } catch (err) {
-        const message =
+        const toolErr =
           err instanceof OfframpToolError
-            ? `${err.code}: ${err.message}`
-            : err instanceof Error
-              ? err.message
-              : 'Unknown error';
+            ? fromOfframpError(err)
+            : err instanceof McpToolError
+              ? err
+              : upstreamTimeout(
+                  err instanceof Error ? err.message : 'Unknown error',
+                  'UNKNOWN_ERROR'
+                );
         return {
           isError: true,
-          content: [{ type: 'text', text: message }],
+          content: [{ type: 'text', text: `${toolErr.code}: ${toolErr.message}` }],
         };
       }
     }

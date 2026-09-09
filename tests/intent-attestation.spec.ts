@@ -16,7 +16,7 @@ const intent: Intent = {
 
 async function signIntent(kp: Keypair): Promise<string> {
   const hash = await hashIntent(intent);
-  return kp.sign(Buffer.from(hash, 'hex')).toString('base64');
+  return Buffer.from(kp.sign(Buffer.from(hash, 'hex'))).toString('base64');
 }
 
 describe('verifyOptionalIntentAttestation', () => {

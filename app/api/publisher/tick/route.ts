@@ -19,7 +19,8 @@ import { getReputationStore } from '@/lib/reputation/store';
 import { loadProbeCoverageReport } from '@/lib/reputation/probeCoverage';
 import { resolveOracleContractId, TESTNET_ORACLE_CONTRACT_ID } from '@/lib/oracle/deployment';
 import { deriveAllCorridorRates } from '@/lib/oracle/corridor-rate';
-import type { OutcomeLogRow } from '@/types/reputation';
+import { ANCHORS } from '@/constants/anchors';
+import type { OutcomeLogRow, ProbeLedgerRow } from '@/types/reputation';
 
 export const runtime = 'nodejs';
 // Fluid Compute: allow the function to run for up to 5 minutes per tick so a
@@ -82,6 +83,35 @@ async function loadCorridorRates() {
   }
 }
 
+/**
+ * Probe-derived signals for the publisher tick (#D070 / #785).
+ *
+ * Reads uptime + quote-latency + drift probe samples via the ReputationStore
+ * rather than raw SQL so it reuses the same store abstraction the rest of the
+ * app uses. A missing table or empty ledger is treated as "no data yet" — the
+ * probe runner (D007) may not have run — and the batch will publish outcomes
+ * only (empty-data path).
+ */
+async function loadProbeSamples(): Promise<readonly ProbeLedgerRow[]> {
+  try {
+    const store = getReputationStore();
+    return await store.queryProbeSamples();
+  } catch {
+    return [];
+  }
+}
+
+function buildDomainToAnchorId(): Record<string, string> {
+  const map: Record<string, string> = {};
+  for (const a of ANCHORS) {
+    const domain = (a.serviceDomain ?? a.homeDomain).toLowerCase();
+    map[domain] = a.id;
+    // Also map raw homeDomain for anchors where serviceDomain differs.
+    map[a.homeDomain.toLowerCase()] = a.id;
+  }
+  return map;
+}
+
 async function tick(): Promise<BatchResult> {
   const publisherSecret = process.env.PUBLISHER_SECRET;
   if (!publisherSecret) {
@@ -93,6 +123,10 @@ async function tick(): Promise<BatchResult> {
   // route. resolveNetwork throws when STELLAR_NETWORK is unset, which is the
   // point: the gate below cannot be trusted while a caller guesses the network.
   const network = resolveNetwork();
+
+  const windowDays = process.env.PROBE_WINDOW_DAYS
+    ? parseInt(process.env.PROBE_WINDOW_DAYS, 10)
+    : undefined;
 
   const config: BatchConfig = {
     batchSize: process.env.BATCH_SIZE ? parseInt(process.env.BATCH_SIZE, 10) : DEFAULT_BATCH_SIZE,
@@ -110,6 +144,11 @@ async function tick(): Promise<BatchResult> {
       testnetContractId: TESTNET_ORACLE_CONTRACT_ID,
     },
     loadCorridorRates,
+    probeSignals: {
+      ...(windowDays ? { windowDays } : {}),
+      domainToAnchorId: buildDomainToAnchorId(),
+      loadProbeSamples,
+    },
   };
 
   return runBatch(config);

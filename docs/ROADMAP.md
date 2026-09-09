@@ -1,11 +1,11 @@
 # Stellar Intel — Roadmap
 
-> Six milestone versions, tickable. The wave structure mirrors the numbered
-> tickets in the [GitHub issue tracker](https://github.com/Ezedike-Evan/stellar-intel/issues)
-> — this document is the product-level view a grant reviewer, contributor, or
+> Six versions, tickable. The wave structure mirrors the numbered tickets in
+> the [GitHub issue tracker](https://github.com/Ezedike-Evan/stellar-intel/issues)
+> — this document is the product-level view a contributor, integrator, or
 > anchor partner reads to know **what ships next** and **in what order**.
 
-**Last reviewed:** 2026-08-26
+**Last reviewed:** 2026-08-28
 
 **Legend.** `[x]` shipped on `main` today · `[-]` in flight · `[ ]` planned.
 Ticket ranges point back to numbered issues in the
@@ -27,6 +27,15 @@ Ticket ranges point back to numbered issues in the
 > npm 404), multisig admin (two-step rotation shipped, 2-of-3 pending), decentralization (#875).
 > GraphQL is on `main` but the live endpoint currently 500s. The open security /
 > production-readiness / S-tier program lives in [`maintainer.md`](../maintainer.md).
+>
+> **Reconciliation, 2026-08-28.** Waves reconciled against the milestone list
+> (#1076). Three v1 milestones that had shipped without ever appearing here are
+> now written up as Waves [1.4](#wave-14--sep-6), [1.5](#wave-15--anchor-fleet)
+> and [1.6](#wave-16--landing-polish); the open `H1 Rung 1` milestone is written
+> up as [Rung 1](#rung-1--data-infra) under its own name. "Wave 2.2" and "Wave
+> 2.3" named scope no milestone ever tracked and are no longer waves. The
+> [milestone map](#milestone-map) is the check: every wave named in this
+> document appears on it.
 
 **Ship discipline.** Each wave has a **release gate** — a single named
 command plus a named condition — that must be green before the next wave
@@ -37,16 +46,20 @@ opens. A wave does not open early. A wave does not ship partial.
 ## Table of contents
 
 - [At a glance](#at-a-glance)
+- [Milestone map](#milestone-map) — every wave named here, and the milestone that tracks it
 - [v1 Executable](#v1-executable) — a correct, demonstrable off-ramp
   - [Wave 1.0 Core Executable](#wave-10--core-executable) (`#001–#070`)
   - [Wave 1.1 Hardening + SEP-38](#wave-11--hardening--sep-38) (`#071–#110`)
   - [Wave 1.2 Router + Seeds](#wave-12--router--seeds) (`#111–#140`)
   - [Wave 1.3 Polish + Release Gate](#wave-13--polish--release-gate) (`#141–#150`)
+  - [Wave 1.4 SEP-6](#wave-14--sep-6) (`B001–B025`)
+  - [Wave 1.5 Anchor Fleet](#wave-15--anchor-fleet) (`B026–B070`)
+  - [Wave 1.6 Landing Polish](#wave-16--landing-polish) (`B071–B100`)
 - [v2 Observable](#v2-observable) — reputation as a product surface
   - [Wave 2.0 Reputation as Product Surface](#wave-20--reputation-as-product-surface) (`#151–#180`)
   - [Wave 2.1 Soroban Oracle Live](#wave-21--soroban-oracle-live) (`#181–#205`)
-  - [Wave 2.2 Multi-Anchor Split Routing](#wave-22--multi-anchor-split-routing) (`#206–#230`)
-  - [Wave 2.3 Public Reputation API + Bootstrap](#wave-23--public-reputation-api--bootstrap) (`#231–#250`)
+  - [Rung 1 Data Infra](#rung-1--data-infra) (`D001–D077`) — the milestone currently open
+  - [v2 scope with no milestone](#v2-scope-with-no-milestone) (`#206–#250`)
 - [v3 Guaranteed](#v3-guaranteed) — intent-level SLAs
 - [v4 Universal](#v4-universal) — SDK + MCP GA + embeddable widget
 - [v5 Institutional](#v5-institutional) — compliance-grade primitives
@@ -60,12 +73,55 @@ opens. A wave does not open early. A wave does not ship partial.
 
 | Version                         | Theme                                                    | Scope                               | Target gate                                                                        | Status                                                                                    |
 | ------------------------------- | -------------------------------------------------------- | ----------------------------------- | ---------------------------------------------------------------------------------- | ----------------------------------------------------------------------------------------- |
-| **v1 Executable**               | A correct, demonstrable off-ramp                         | `#001–#150` · 150 tickets · 4 waves | `npm run test:release` green; feature flags default-on                             | 🟢 Wave 1.0 substantially shipped                                                         |
-| **v2 Observable**               | Reputation as product surface, Soroban on mainnet        | `#151–#250` · 100 tickets · 4 waves | Soroban contract deployed, ≥3 publishers, ≥1000 outcomes                           | 🟡 Foundations landed (store + API, oracle on testnet, MCP); mainnet + public API pending |
+| **v1 Executable**               | A correct, demonstrable off-ramp                         | `#001–#150` + `B001–B100` · 7 waves | `npm run test:release` green; feature flags default-on                             | 🟢 All seven v1 milestones closed                                                         |
+| **v2 Observable**               | Reputation as product surface, Soroban on mainnet        | `#151–#205` + `D001–D077` · 3 waves | Soroban contract deployed, ≥3 publishers, ≥1000 outcomes                           | 🟡 Foundations landed (store + API, oracle on testnet, MCP); mainnet + public API pending |
 | **v3 Guaranteed**               | Intent-level SLAs, slippage bounds, recurring intents    | Planned · scope decomposed post-v2  | Slippage-bound compliance ≥ 99.5% over 10k intents                                 | ⚪ Not started                                                                            |
 | **v4 Universal**                | SDK + MCP GA + embeddable widget                         | Planned · scope decomposed post-v3  | `@stellarintel/sdk` + `@stellarintel/mcp` on npm; 3 reference integrations         | ⚪ Not started                                                                            |
 | **v5 Institutional**            | Compliance-grade primitives, audit-ready                 | Planned · scope decomposed post-v4  | Third-party audit report published; SBOM on every release                          | ⚪ Not started                                                                            |
 | **v6 Ecosystem Infrastructure** | Webhooks, GraphQL, multi-language SDKs, decentralization | Planned · scope decomposed post-v5  | Corridor rate oracle read by ≥1 third-party contract; the "ripped out" test passes | ⚪ Not started                                                                            |
+
+---
+
+## Milestone map
+
+**The rule this table exists to hold: no wave is named in this document without
+a milestone tracking it, and no milestone is left undescribed here.** The two
+drifted apart — three v1 milestones shipped without ever appearing on this
+roadmap, and two waves were named here that no milestone ever tracked — so the
+mapping is now written down rather than assumed.
+
+Counts are from the [milestone
+list](https://github.com/ezedike-evan/stellar-intel/milestones) on 2026-08-28.
+
+| Wave in this document                               | Milestone                        | Tickets     | Issues            |
+| --------------------------------------------------- | -------------------------------- | ----------- | ----------------- |
+| [Wave 1.0](#wave-10--core-executable)               | `v1.0`                           | `#001–#070` | 70 closed         |
+| [Wave 1.1](#wave-11--hardening--sep-38)             | `v1.1`                           | `#071–#110` | 40 closed         |
+| [Wave 1.2](#wave-12--router--seeds)                 | `v1.2`                           | `#111–#140` | 30 closed         |
+| [Wave 1.3](#wave-13--polish--release-gate)          | `v1.3`                           | `#141–#150` | 10 closed         |
+| [Wave 1.4](#wave-14--sep-6)                         | `v1.4 SEP-6`                     | `B001–B025` | 25 closed         |
+| [Wave 1.5](#wave-15--anchor-fleet)                  | `v1.5 Anchor Fleet`              | `B026–B070` | 45 closed         |
+| [Wave 1.6](#wave-16--landing-polish)                | `v1.6 Landing Polish`            | `B071–B100` | 30 closed         |
+| [Wave 2.0](#wave-20--reputation-as-product-surface) | `v2.0`                           | `#151–#180` | 30 closed         |
+| [Wave 2.1](#wave-21--soroban-oracle-live)           | `v2.1`                           | `#181–#205` | 20 closed         |
+| [Rung 1](#rung-1--data-infra)                       | `H1 Rung 1 — Data Infra + Grant` | `D001–D077` | 76 closed, 1 open |
+
+**Three ticket series, not one.** The `#NNN` series is this document's original
+decomposition; `B` and `D` are later series filed against their own milestones.
+A number here only resolves against the milestone on the same row — `#206` as a
+roadmap ticket is not GitHub issue 206.
+
+**Nothing below is named "Wave 2.2" or "Wave 2.3" any more.** Both headings
+existed here for scope that was never given a milestone and is not scheduled.
+They now sit under [v2 scope with no
+milestone](#v2-scope-with-no-milestone), which is what they always were.
+
+**A closed milestone is not a ticked checkbox.** Every milestone above except
+Rung 1 has zero open issues, while many checkboxes in the wave sections still
+read `[ ]`. The milestone is the record of what was closed; a checkbox here is
+this document's own claim, and the reconciliation notes at the top of the file
+say which one to trust where they disagree. Flipping the boxes is a separate,
+per-line sweep and is deliberately not done in bulk.
 
 ---
 
@@ -278,7 +334,7 @@ instrumented.
 - [ ] `#149` "Open in MCP" header badge when a local MCP is detected
 - [ ] `#150` Favicon + app icon final assets
 
-**v1 release gate.**
+**v1.3 release gate.**
 
 - [ ] All 150 issues closed (`#001–#150`)
 - [ ] `npm run test:release` green
@@ -288,17 +344,117 @@ instrumented.
 - [ ] `CHANGELOG.md` tagged with a dated release note
 - [ ] Git tag `v1.0.0` pushed
 
-> **When this gate is green, v1 ships and Wave 2.0 opens.**
+> This was written as _the_ v1 gate, on the assumption that v1 ended at Wave
+> 1.3. Three further v1 milestones were opened and closed after it, so it is
+> the **Wave 1.3** gate and the three waves below are also part of v1.
+
+---
+
+### Wave 1.4 — SEP-6
+
+> Tickets: `B001–B025`. Milestone `v1.4 SEP-6`, closed.
+> _"SEP-6 enablement: rate source + programmatic withdraw."_
+
+SEP-24 is the interactive withdrawal and it is what the drawer drives. It is
+not what every anchor offers. Wave 1.4 added SEP-6 as a second, programmatic
+path so an anchor that never implemented SEP-24 can still appear in a corridor
+with a real indicative rate rather than not appear at all.
+
+- [x] `lib/stellar/sep6.ts` — capability detection, `/info` and `/withdraw`
+      schemas, indicative rate derived from `/info` fees (`B001–B005`, `B011`, `B012`)
+- [x] SEP-6 wired as the Tier-3 fallback in `fetchCorridorRates`, with the
+      source surfaced in the rate rows (`B006`, `B007`, `B038`)
+- [x] SEP-12 customer client, dynamic KYC field-form schema, `needs_info`
+      handling (`B013–B015`, `B021`)
+- [x] Unified SEP-6/SEP-24 status normalization and polling (`B016`, `B017`)
+- [x] Capability-aware branch in `ExecuteDrawer` and a CORS-safe
+      `app/api/sep6/withdraw` proxy (`B019`, `B020`)
+- [x] `Anchor.seps[]` capability field on the registry type (`B023`)
+- [x] SEP-6 support matrix in [`SEP_COMPLIANCE.md`](SEP_COMPLIANCE.md) (`B025`)
+
+**Wave 1.4 release gate.**
+
+- [x] All `B001–B025` closed
+- [x] E2E: SEP-6 withdraw happy path against a mock anchor (`B022`)
+
+---
+
+### Wave 1.5 — Anchor Fleet
+
+> Tickets: `B026–B070`. Milestone `v1.5 Anchor Fleet`, closed.
+> _"Survey-driven anchor onboarding and fleet infrastructure."_
+
+Three registered anchors is a demo. This wave turned the registry into a
+surveyed fleet: every candidate triaged against its live `stellar.toml`,
+issuer-only domains classified and excluded rather than quietly rendered, and
+the whole thing rechecked on a schedule so the list decays visibly.
+
+- [x] Per-anchor triage and integration — `anclap.com`, `cowrie.exchange`,
+      `mykobo.co`, `ngnc.online`, `ntokens.com`, `ultracapital.xyz`,
+      `zeam.money`, `fchain.io` (`B026–B033`)
+- [x] Non-anchors documented rather than dropped silently — `naobtc.com`,
+      `stellarport.io`, `dead.apay.io` (`B034–B036`)
+- [x] Transfer-capable vs issuer-only classification; issuer-only excluded from
+      the selectors (`B037`)
+- [x] `anchor-survey.mjs` wired into nightly with a committed JSON snapshot
+      (`B038`)
+- [x] Home-domain vs service-domain resolution, TOML cache with TTL,
+      per-anchor timeout and retry tuning (`B039`, `B041`, `B043`)
+- [x] SEP-31 and SEP-38 capability detection per anchor (`B047`, `B048`)
+- [x] EUR, ZAR and XOF corridor scaffolding (`B049`, `B050`)
+- [x] Stale-anchor auto-disable on repeated TOML failure; graceful per-anchor
+      degradation (`B058`, `B062`)
+- [x] Tracking issues kept for what the survey could not resolve — 30
+      issuer-only anchors, 51 unreachable or unconfirmed (`B065`, `B066`)
+
+**Wave 1.5 release gate.**
+
+- [x] All `B026–B070` closed
+- [x] CI check: registry anchors ⊆ the survey's transfer-capable set (`B067`)
+- [x] Property test: every registered anchor's TOML parses and carries the
+      required SEPs (`B057`)
+
+---
+
+### Wave 1.6 — Landing Polish
+
+> Tickets: `B071–B100`. Milestone `v1.6 Landing Polish`, closed.
+> _"Landing page redesign and polish."_
+
+- [x] Landing decomposed into `components/landing/*` — `Hero`, `StatBar`,
+      `FeatureGrid` (`B071–B073`)
+- [x] Real multi-stat bar (anchors, corridors, countries) rather than
+      hand-written numbers (`B074`, `B075`)
+- [x] Live sample-rate preview, corridors strip, anchor logo wall,
+      leaderboard teaser, comparison teaser (`B078–B082`, `B096`)
+- [x] Dark-mode, responsive, theme-token and microcopy passes (`B086`, `B087`,
+      `B095`, `B098`)
+- [x] Accessibility pass — aria, contrast, focus order (`B088`)
+- [x] Lighthouse pass: image optimization, font loading (`B089`, `B090`)
+- [x] OG/social meta and favicon set (`B092`)
+
+**Wave 1.6 release gate.**
+
+- [x] All `B071–B100` closed
+- [x] Playwright smoke: landing renders and the CTAs navigate (`B100`)
+- [x] Visual snapshot tests for the landing components (`B099`)
+
+> **With Wave 1.6 closed, all seven v1 milestones are closed and v2 is open.**
 
 ---
 
 ## v2 Observable
 
 **Thesis.** The reputation data that v1 writes silently becomes the
-product's centre of gravity. The Soroban oracle goes live on mainnet.
-Split routing unlocks. A public reputation API and a probe network
-bootstrap coverage before organic volume arrives. This is where the moat
-compounds.
+product's centre of gravity. The probes run continuously, the methodology is
+public, and the Soroban oracle goes live on mainnet once the coverage behind it
+is real. This is where the moat compounds — and it compounds on the clock, not
+on how fast the code is written.
+
+Three milestones sit under v2: `v2.0` and `v2.1` are closed, and
+[`H1 Rung 1`](#rung-1--data-infra) is the one still open. Split routing and the
+public reputation API are [scope with no
+milestone](#v2-scope-with-no-milestone) — real decomposition, unscheduled.
 
 ### Wave 2.0 — Reputation as Product Surface
 
@@ -362,7 +518,59 @@ compounds.
 
 ---
 
-### Wave 2.2 — Multi-Anchor Split Routing
+### Rung 1 — Data Infra
+
+> Tickets: `D001–D077`. Milestone `H1 Rung 1 — Data Infra + Grant`, **open** —
+> 76 closed, 1 open. This is the only milestone with open work in it, and it is
+> where the last several months of commits actually landed.
+
+**Why it is not called "Wave 2.2".** It was filed under the Horizon/Rung
+structure this document used before it moved to waves, and it never got
+renumbered. Rather than rename a milestone with 77 issues in it, the name is
+recorded here as-is. It runs across v2 rather than after Wave 2.1: probe
+infrastructure, the publish pipeline, and the positioning and legal work that
+had to happen alongside them.
+
+- [x] The five probe checks and the scheduler that runs them — uptime, TOML
+      integrity, issuer mismatch, quote latency, quote drift (`D001–D007`)
+- [x] Probe results wired into the health ledger with 90-day retention, plus
+      the accumulation progress tracker (`D008`, `D009`)
+- [x] Scoring methodology written up and published as a public page
+      (`D010`, `D011`) — [`ANCHOR_REPUTATION.md`](ANCHOR_REPUTATION.md)
+- [x] Publisher verified end-to-end against the testnet contract; scheduled
+      publish cron with retry, backoff and failure alerting (`D012–D016`)
+- [x] **The 90-day probe gate enforced in code** on mainnet oracle publish
+      (`D071`) — `packages/publisher/src/gate.ts`
+- [x] Narrowed-identity rewrite across the README, the landing page, the OG
+      metadata and this repository's proposal (`D017–D022`, `D072`)
+- [x] Multi-factor solver routing, wired into the intent API with real
+      scoring inputs (`D041–D044`, `D075`)
+- [x] Rate-limit coverage audit and the routes it flagged (`D046–D048`)
+- [x] Terms of service, financial disclaimer, consent flow (`D052–D056`)
+- [x] Accessibility: focus trap, `aria-live` rate updates, site-wide contrast
+      (`D067–D069`)
+- [ ] `D070` Publish probe-derived signals on-chain — extend the publisher
+      beyond `outcome_log`
+      ([#785](https://github.com/ezedike-evan/stellar-intel/issues/785))
+
+**Rung 1 release gate.**
+
+- [ ] `D070` closed — the last open issue in the milestone
+- [x] The 90-day gate is a refusal in the publish path, not a convention
+- [x] Probe coverage is queryable at `GET /api/reputation/probe-coverage`
+
+---
+
+### v2 scope with no milestone
+
+Two blocks below were headed "Wave 2.2" and "Wave 2.3" and carried release
+gates, which read as scheduled work. Neither has ever had a milestone, and
+neither is scheduled. They are kept because the decomposition is worth having
+when they are picked up — but they are scope, not waves, and the gates that
+were attached to them are stated as the conditions they would have to meet
+rather than as gates that are pending.
+
+#### Multi-Anchor Split Routing
 
 > Tickets: `#206–#230`. A single intent can fan across anchors if the sum
 > of chunk scores beats any single-anchor plan.
@@ -392,16 +600,16 @@ compounds.
 - [ ] `#228` Split flow e2e with two anchors
 - [ ] `#229` Split partial failure + recovery e2e
 
-**Wave 2.2 release gate.**
+**What split routing would have to prove before it ships.**
 
-- [ ] All `#206–#230` closed
-- [ ] Across last 30 days of synthetic probes, split plans deliver ≥1% more
-      landed value than best-single on ≥20% of above-threshold intents
-- [ ] Atomicity invariant holds in property-based tests (10k scenarios)
+- All `#206–#230` closed
+- Across the last 30 days of synthetic probes, split plans deliver ≥1% more
+  landed value than best-single on ≥20% of above-threshold intents
+- Atomicity invariant holds in property-based tests (10k scenarios)
 
 ---
 
-### Wave 2.3 — Public Reputation API + Bootstrap
+#### Public Reputation API + Bootstrap
 
 > Tickets: `#231–#250`. Bootstrap the dataset before organic volume
 > arrives. Expose it publicly. Document it loudly.
@@ -421,7 +629,7 @@ compounds.
 
 **v2 release gate.**
 
-- [ ] All 100 additive issues closed (`#151–#250`)
+- [ ] Every v2 milestone closed — `v2.0` and `v2.1` are; `H1 Rung 1` is not
 - [ ] `npm run test:release:v2` green
 - [ ] Soroban reputation contract verifiably deployed on mainnet
 - [ ] ≥3 publishers on whitelist
@@ -430,7 +638,9 @@ compounds.
 - [ ] Probe service running nightly against all live corridors
 - [ ] Git tag `v2.0.0` pushed
 
-> **When this gate is green, v2 ships and Wave 3 opens.**
+> **When this gate is green, v2 ships and v3 opens.** The unscheduled scope
+> above is not on this gate: neither block has a milestone, so neither blocks
+> the release.
 
 ---
 
@@ -634,8 +844,8 @@ filled.
 - **Yield module** — parking stablecoin balances in a rate-bearing venue
 - **Swap module** — a standalone asset-exchange surface
 
-**Why.** Shipping four modules at once is the exact failure mode that got the
-first grant submission rejected. Width without depth loses. The unoccupied
+**Why.** Shipping four modules at once is width without depth, and width
+without depth loses regardless of who is reading. The unoccupied
 lane is anchor intelligence — the health, reputation, and execution record of
 the last mile — and it is unoccupied precisely because it is unglamorous and
 slow to accumulate. Every module added before that lane is genuinely held

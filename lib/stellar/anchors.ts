@@ -30,13 +30,25 @@ export interface AnchorHealth {
   lastError: string | null;
 }
 
-interface AnchorHealthLedger {
+/**
+ * The whole nightly ledger: the threshold it was evaluated against, when it was
+ * written, and one record per tracked anchor.
+ */
+export interface AnchorHealthLedger {
   thresholdNights: number;
   updatedAt: string | null;
   anchors: Record<string, AnchorHealth>;
 }
 
 const ANCHOR_HEALTH = anchorHealthData as AnchorHealthLedger;
+
+/**
+ * The committed ledger in full — the source of truth every other reader here
+ * indexes into, and what `/api/v1/anchor-health/ledger` publishes (#1098).
+ */
+export function getAnchorHealthLedger(): AnchorHealthLedger {
+  return ANCHOR_HEALTH;
+}
 
 /** Returns the nightly health record for an anchor, or undefined if untracked. */
 export function getAnchorHealth(id: string): AnchorHealth | undefined {

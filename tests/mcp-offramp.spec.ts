@@ -211,7 +211,9 @@ describe('intel.execute (#819)', () => {
     const intent = { ...validIntent, sender: kp.publicKey() };
     const { unsignedEnvelope, unsignedTx } = await prepareIntent(intent);
 
-    const signature = kp.sign(Buffer.from(unsignedEnvelope.intentHash, 'utf8')).toString('base64');
+    const signature = Buffer.from(
+      kp.sign(Buffer.from(unsignedEnvelope.intentHash, 'utf8'))
+    ).toString('base64');
 
     const tx = TransactionBuilder.fromXDR(unsignedTx, Networks.PUBLIC);
     tx.sign(kp);
@@ -277,9 +279,9 @@ describe('intel.execute (#819)', () => {
     const kp = Keypair.random();
     const other = Keypair.random();
     const { unsignedEnvelope, signedTx } = await prepareAndSign(kp);
-    const wrongSignature = other
-      .sign(Buffer.from(unsignedEnvelope.intentHash, 'utf8'))
-      .toString('base64');
+    const wrongSignature = Buffer.from(
+      other.sign(Buffer.from(unsignedEnvelope.intentHash, 'utf8'))
+    ).toString('base64');
 
     await expect(
       executeIntent({ unsignedEnvelope, signature: wrongSignature, signedTx })
@@ -290,7 +292,9 @@ describe('intel.execute (#819)', () => {
     const kp = Keypair.random();
     const intent = { ...validIntent, sender: kp.publicKey() };
     const { unsignedEnvelope, unsignedTx } = await prepareIntent(intent);
-    const signature = kp.sign(Buffer.from(unsignedEnvelope.intentHash, 'utf8')).toString('base64');
+    const signature = Buffer.from(
+      kp.sign(Buffer.from(unsignedEnvelope.intentHash, 'utf8'))
+    ).toString('base64');
 
     await expect(
       executeIntent({ unsignedEnvelope, signature, signedTx: unsignedTx })
@@ -322,7 +326,7 @@ describe('intel.execute (#819)', () => {
     // NO_ROUTE check.
     const { hashIntent } = await import('@/lib/intent/hash');
     const intentHash = await hashIntent(intent as unknown as import('@/lib/intent/hash').Intent);
-    const signature = kp.sign(Buffer.from(intentHash, 'utf8')).toString('base64');
+    const signature = Buffer.from(kp.sign(Buffer.from(intentHash, 'utf8'))).toString('base64');
 
     await expect(
       executeIntent({

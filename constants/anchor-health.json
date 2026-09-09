@@ -1,55 +1,55 @@
 {
   "thresholdNights": 3,
-  "updatedAt": "2026-08-26T04:57:02.450Z",
+  "updatedAt": "2026-09-04T08:57:47.230Z",
   "anchors": {
     "moneygram": {
       "consecutiveFailures": 0,
       "degraded": false,
-      "lastCheckedAt": "2026-08-26T04:57:02.450Z",
+      "lastCheckedAt": "2026-09-04T08:57:47.230Z",
       "lastStatus": "ok",
       "lastError": null
     },
     "cowrie": {
-      "consecutiveFailures": 2,
+      "consecutiveFailures": 0,
       "degraded": false,
-      "lastCheckedAt": "2026-08-26T04:57:02.450Z",
-      "lastStatus": "fail",
-      "lastError": "missing TRANSFER_SERVER_SEP0024 (SEP-24)"
+      "lastCheckedAt": "2026-09-04T08:57:47.230Z",
+      "lastStatus": "ok",
+      "lastError": null
     },
     "anclap": {
       "consecutiveFailures": 0,
       "degraded": false,
-      "lastCheckedAt": "2026-08-26T04:57:02.450Z",
+      "lastCheckedAt": "2026-09-04T08:57:47.230Z",
       "lastStatus": "ok",
       "lastError": null
     },
     "ngnc": {
       "consecutiveFailures": 0,
       "degraded": false,
-      "lastCheckedAt": "2026-08-26T04:57:02.450Z",
+      "lastCheckedAt": "2026-09-04T08:57:47.230Z",
       "lastStatus": "ok",
       "lastError": null
     },
     "mykobo": {
-      "consecutiveFailures": 2,
+      "consecutiveFailures": 0,
       "degraded": false,
-      "lastCheckedAt": "2026-08-26T04:57:02.450Z",
-      "lastStatus": "fail",
-      "lastError": "TypeError:ENOTFOUND"
+      "lastCheckedAt": "2026-09-04T08:57:47.230Z",
+      "lastStatus": "ok",
+      "lastError": null
     },
     "ntokens": {
       "consecutiveFailures": 0,
       "degraded": false,
-      "lastCheckedAt": "2026-08-26T04:57:02.450Z",
+      "lastCheckedAt": "2026-09-04T08:57:47.230Z",
       "lastStatus": "ok",
       "lastError": null
     },
     "zeam": {
-      "consecutiveFailures": 2,
+      "consecutiveFailures": 0,
       "degraded": false,
-      "lastCheckedAt": "2026-08-26T04:57:02.450Z",
-      "lastStatus": "fail",
-      "lastError": "HTTP 404"
+      "lastCheckedAt": "2026-09-04T08:57:47.230Z",
+      "lastStatus": "ok",
+      "lastError": null
     }
   }
 }

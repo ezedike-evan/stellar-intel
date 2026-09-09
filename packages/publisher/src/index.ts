@@ -7,8 +7,18 @@ import { isOverrideEnabled } from './gate';
 // Re-exported so consumers can `import { runBatch } from '@stellarintel/publisher'`
 // and build their own BatchConfig (e.g. the main app's /api/publisher/tick route,
 // which already has its own DB pool + lock) instead of shelling out to this CLI.
-export { runBatch, DEFAULT_BATCH_SIZE, type BatchConfig, type QueryExecutor };
-export type { BatchResult, CorridorRateInput } from './batch';
+export {
+  runBatch,
+  DEFAULT_BATCH_SIZE,
+  DEFAULT_PROBE_WINDOW_DAYS,
+  fetchProbeSamples,
+  aggregateProbeSignals,
+  buildProbeSignalsPayload,
+  publishProbeSignals,
+  type BatchConfig,
+  type QueryExecutor,
+} from './batch';
+export type { BatchResult, CorridorRateInput, ProbeSignals, ProbeSignalsPayload } from './batch';
 export { publishCorridorRates } from './batch';
 export {
   resolveNetwork,

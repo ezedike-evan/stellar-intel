@@ -54,6 +54,54 @@ describe('MCP server round-trip over streamable HTTP (#1049)', () => {
     }
   });
 
+  it('lists the same prompts as the in-process server (#1048)', async () => {
+    // Same dynamic comparison as the tools test — HTTP should serve the same
+    // prompt registry as the in-process server.
+    const [clientSide, serverSide] = InMemoryTransport.createLinkedPair();
+    const inProcess = await createServer();
+    await inProcess.connect(serverSide);
+    const reference = new Client({ name: 'in-process-reference', version: '1.0.0' });
+    await reference.connect(clientSide);
+
+    try {
+      const expected = (await reference.listPrompts()).prompts.map((p) => p.name).sort();
+      const names = (await client.listPrompts()).prompts.map((p) => p.name).sort();
+      expect(names).toEqual(expected);
+      expect(names.length).toBeGreaterThan(0);
+    } finally {
+      await reference.close();
+      await inProcess.close();
+    }
+  });
+
+  it('prompts/get renders arguments for choose-anchor (#1048)', async () => {
+    const result = await client.getPrompt({
+      name: 'intel.offramp.choose-anchor',
+      arguments: { from: 'USDC', to: 'NGN' },
+    });
+    const text = (result.messages[0]?.content as { type: string; text: string }).text ?? '';
+    expect(text).toContain('intel.offramp.quote');
+    expect(text).toContain('usdc-ngn');
+  });
+
+  it('prompts/get renders arguments for quote-and-prepare (#1048)', async () => {
+    const result = await client.getPrompt({
+      name: 'intel.offramp.quote-and-prepare',
+      arguments: {
+        from: 'USDC',
+        to: 'NGN',
+        amount: '100',
+        sender: 'GAIJ3VXNY7RPPLGVVCLGBK7NPHLL5ZRKATHETOA7M7UPZPAAHEGQQIY2',
+        recipient: 'recipient-123',
+      },
+    });
+    const text = (result.messages[0]?.content as { type: string; text: string }).text ?? '';
+    expect(text).toContain('intel.offramp.quote');
+    expect(text).toContain('intel.offramp.prepare');
+    expect(text).toContain('intel.execute');
+    expect(text).toContain('GAIJ3VXNY7RPPLGVVCLGBK7NPHLL5ZRKATHETOA7M7UPZPAAHEGQQIY2');
+  });
+
   it('intel.offramp.prepare returns an unsigned envelope + unsigned tx over HTTP', async () => {
     const result = await client.callTool({
       name: 'intel.offramp.prepare',

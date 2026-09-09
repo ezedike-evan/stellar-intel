@@ -3,6 +3,7 @@ import { AsyncLocalStorage } from 'async_hooks';
 import { NextResponse } from 'next/server';
 import type { NextRequest } from 'next/server';
 import { API_VERSION, negotiateApiVersion, SUPPORTED_API_VERSIONS } from './api/api-version';
+import { computeDeprecationHeaders } from './api/deprecation';
 
 type LoggerContext = { correlationId: string };
 
@@ -17,6 +18,19 @@ function setApiVersionHeader(response: NextResponse): void {
   if (!response.headers.has('API-Version')) {
     response.headers.set('API-Version', API_VERSION);
   }
+}
+
+/**
+ * Stamps `Sunset` / `Warning: 299` when the request pinned a deprecated-but-
+ * still-supported version, per docs/VERSIONING.md's four-phase lifecycle.
+ * A no-op today — API_VERSION_HISTORY has never had a superseded entry — but
+ * wired at the same call site as `setApiVersionHeader` so it activates the
+ * moment a version is actually retired, with no route changes needed.
+ */
+function setDeprecationHeaders(response: NextResponse, requestedVersion: string | null): void {
+  const { sunset, warning } = computeDeprecationHeaders(requestedVersion);
+  if (sunset) response.headers.set('Sunset', sunset);
+  if (warning) response.headers.set('Warning', warning);
 }
 
 const asyncLocalStorage = new AsyncLocalStorage<LoggerContext>();
@@ -95,6 +109,7 @@ export async function withRequestLogger(
       // files, whereas API-Version previously reached three of them even though
       // the OpenAPI spec documents it as universal (#914).
       setApiVersionHeader(response);
+      setDeprecationHeaders(response, negotiated.requested);
       logger.info({ event: 'request.end', status: response.status });
       return response;
     } catch (err) {
@@ -108,6 +123,7 @@ export async function withRequestLogger(
       );
       response.headers.set('x-correlation-id', correlationId);
       setApiVersionHeader(response);
+      setDeprecationHeaders(response, negotiated.requested);
       return response;
     }
   });

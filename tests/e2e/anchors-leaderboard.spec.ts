@@ -18,6 +18,10 @@ test.describe('Anchors page', () => {
     const corridorButtons = page.getByRole('button', { name: /^USDC\// });
     await expect(corridorButtons.first()).toBeVisible();
     await corridorButtons.nth(1).click();
-    await expect(corridorButtons.nth(1)).toHaveClass(/bg-blue-600/);
+    // Assert the selected state, not the class that paints it: the filter is
+    // styled from theme tokens now, and asserting `bg-blue-600` kept this test
+    // red for every restyle without ever checking that selection worked.
+    await expect(corridorButtons.nth(1)).toHaveAttribute('aria-pressed', 'true');
+    await expect(corridorButtons.first()).toHaveAttribute('aria-pressed', 'false');
   });
 });

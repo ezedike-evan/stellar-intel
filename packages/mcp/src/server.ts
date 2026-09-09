@@ -21,15 +21,32 @@ export async function createServer(): Promise<McpServer> {
   const { registerQuoteTool } = await import('./tools/quote.js');
   const { registerPrepareTool } = await import('./tools/prepare.js');
   const { registerExecuteTool } = await import('./tools/execute.js');
+  const { registerProbeCoverageTool } = await import('./tools/probe-coverage.js');
   const { registerAnchorReputationTool } = await import('./tools/anchor-reputation.js');
+  const { registerAnchorHealthTool } = await import('./tools/anchor-health.js');
+  const { registerLeaderboardTool } = await import('./tools/leaderboard.js');
+  const { registerCorridorsTool } = await import('./tools/corridors.js');
+  const { registerPrompts } = await import('./prompts.js');
+  const { registerAnchorHealthResource } = await import('./resources/anchor-health.js');
+  const { applyToolRateLimit } = await import('./rate-limit.js');
 
   const server = new McpServer({
     name: '@stellarintel/mcp',
     version: '0.1.0',
   });
+  // Before any tool is registered: the limiter wraps `registerTool`, so a tool
+  // registered afterwards is covered without opting in. See rate-limit.ts.
+  applyToolRateLimit(server);
+
   registerQuoteTool(server);
   registerPrepareTool(server);
   registerExecuteTool(server);
+  registerProbeCoverageTool(server);
   registerAnchorReputationTool(server);
+  registerAnchorHealthTool(server);
+  registerLeaderboardTool(server);
+  registerCorridorsTool(server);
+  registerPrompts(server);
+  registerAnchorHealthResource(server);
   return server;
 }
