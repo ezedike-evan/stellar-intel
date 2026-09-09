@@ -6,7 +6,14 @@ function gitShortSha() {
   try {
     return execSync('git rev-parse --short HEAD').toString().trim();
   } catch (e) {
-    return 'unknown';
+    // CI build hosts often check out without git metadata, so `git rev-parse`
+    // throws and the footer renders "v unknown" — which it did in production.
+    // Vercel exposes the commit directly; fall back to that before giving up.
+    const ciSha =
+      process.env.VERCEL_GIT_COMMIT_SHA ||
+      process.env.GITHUB_SHA ||
+      process.env.CF_PAGES_COMMIT_SHA;
+    return ciSha ? ciSha.slice(0, 7) : 'unknown';
   }
 }
 
