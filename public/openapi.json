@@ -1611,6 +1611,119 @@
         }
       }
     },
+    "/api/mcp": {
+      "post": {
+        "summary": "MCP server (Streamable HTTP)",
+        "description": "Model Context Protocol server over the Streamable HTTP transport, so an MCP client can reach the off-ramp tools with a URL and nothing installed. Stateless: every request carries its own context and no Mcp-Session-Id is issued. The body is JSON-RPC 2.0, and Accept must include both application/json and text/event-stream. GET and DELETE return 405 — this server never initiates messages, so there is no stream to open and no session to delete. See docs/MCP.md for the tool list and client configuration.",
+        "tags": [
+          "System"
+        ],
+        "requestBody": {
+          "description": "A JSON-RPC 2.0 request, e.g. an initialize handshake or tools/list.",
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "properties": {
+                  "jsonrpc": {
+                    "type": "string",
+                    "enum": [
+                      "2.0"
+                    ]
+                  },
+                  "id": {
+                    "anyOf": [
+                      {
+                        "type": "string"
+                      },
+                      {
+                        "type": "number"
+                      }
+                    ]
+                  },
+                  "method": {
+                    "type": "string"
+                  },
+                  "params": {
+                    "type": "object",
+                    "additionalProperties": {}
+                  }
+                },
+                "required": [
+                  "jsonrpc",
+                  "method"
+                ]
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "JSON-RPC result",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "jsonrpc": {
+                      "type": "string",
+                      "enum": [
+                        "2.0"
+                      ]
+                    },
+                    "id": {
+                      "anyOf": [
+                        {
+                          "type": "string"
+                        },
+                        {
+                          "type": "number"
+                        },
+                        {
+                          "type": "null"
+                        }
+                      ]
+                    },
+                    "result": {
+                      "type": "object",
+                      "additionalProperties": {}
+                    },
+                    "error": {
+                      "type": "object",
+                      "properties": {
+                        "code": {
+                          "type": "number"
+                        },
+                        "message": {
+                          "type": "string"
+                        }
+                      },
+                      "required": [
+                        "code",
+                        "message"
+                      ]
+                    }
+                  },
+                  "required": [
+                    "jsonrpc",
+                    "id"
+                  ]
+                }
+              }
+            }
+          },
+          "406": {
+            "description": "Accept header does not include text/event-stream"
+          },
+          "415": {
+            "description": "Content-Type is not application/json"
+          },
+          "429": {
+            "description": "Rate limit exceeded"
+          }
+        }
+      }
+    },
     "/api/mcp/ping": {
       "get": {
         "summary": "MCP health check",

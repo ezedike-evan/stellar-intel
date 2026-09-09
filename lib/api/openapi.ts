@@ -715,6 +715,53 @@ registry.registerPath({
 });
 
 registry.registerPath({
+  method: 'post',
+  path: '/api/mcp',
+  summary: 'MCP server (Streamable HTTP)',
+  description:
+    'Model Context Protocol server over the Streamable HTTP transport, so an MCP client can ' +
+    'reach the off-ramp tools with a URL and nothing installed. Stateless: every request ' +
+    'carries its own context and no Mcp-Session-Id is issued. The body is JSON-RPC 2.0, and ' +
+    'Accept must include both application/json and text/event-stream. GET and DELETE return ' +
+    '405 — this server never initiates messages, so there is no stream to open and no session ' +
+    'to delete. See docs/MCP.md for the tool list and client configuration.',
+  tags: ['System'],
+  request: {
+    body: {
+      description: 'A JSON-RPC 2.0 request, e.g. an initialize handshake or tools/list.',
+      content: {
+        'application/json': {
+          schema: z.object({
+            jsonrpc: z.literal('2.0'),
+            id: z.union([z.string(), z.number()]).optional(),
+            method: z.string(),
+            params: z.record(z.string(), z.unknown()).optional(),
+          }),
+        },
+      },
+    },
+  },
+  responses: {
+    200: {
+      description: 'JSON-RPC result',
+      content: {
+        'application/json': {
+          schema: z.object({
+            jsonrpc: z.literal('2.0'),
+            id: z.union([z.string(), z.number()]).nullable(),
+            result: z.record(z.string(), z.unknown()).optional(),
+            error: z.object({ code: z.number(), message: z.string() }).optional(),
+          }),
+        },
+      },
+    },
+    406: { description: 'Accept header does not include text/event-stream' },
+    415: { description: 'Content-Type is not application/json' },
+    429: { description: 'Rate limit exceeded' },
+  },
+});
+
+registry.registerPath({
   method: 'get',
   path: '/api/mcp/ping',
   summary: 'MCP health check',
