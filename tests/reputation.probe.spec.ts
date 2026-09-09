@@ -152,9 +152,25 @@ describe('reputation probe', () => {
     expect(classifyFailure('UNABLE_TO_VERIFY_LEAF_SIGNATURE')).toBe('tls');
     expect(classifyFailure('self signed certificate in chain')).toBe('tls');
     expect(classifyFailure('ERR_SSL_TLSV1_ALERT_PROTOCOL_VERSION')).toBe('tls');
+
+    // A hostname inside the anchor's own toml must not be read as a TLS fault.
+    // NGNC's stellar.toml embeds `https://uploads-ssl.webflow.com/...`, and
+    // when the toml failed to parse that URL travelled inside the error
+    // message — filing 26 days of TOML parse errors as certificate failures
+    // against a host whose certificate verifies cleanly.
+    expect(
+      classifyFailure(
+        'stellar.toml is invalid - Parsing error on line 67, column 100: Invalid TOML document: ' +
+          'image="https://uploads-ssl.webflow.com/6512d40f/65f06c75_KESc.png" s'
+      )
+    ).toBe('integrity');
   });
 
   it('classifies timeout failures', () => {
+    expect(classifyFailure('stellar.toml is invalid')).toBe('integrity');
+    expect(classifyFailure('toml integrity check failed')).toBe('integrity');
+    expect(classifyFailure('parse error at line 4')).toBe('integrity');
+
     expect(classifyFailure('The operation was aborted')).toBe('timeout');
     expect(classifyFailure('connect ETIMEDOUT 1.2.3.4:443')).toBe('timeout');
     expect(classifyFailure('request timeout after 5000ms')).toBe('timeout');

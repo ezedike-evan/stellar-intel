@@ -28,6 +28,7 @@ function makeEntry(overrides: Partial<LeaderboardEntry> = {}): LeaderboardEntry 
     slippage_p50: 0.01,
     n: 100,
     onChain: null,
+    health: null,
     ...overrides,
   };
 }
@@ -39,6 +40,7 @@ function makeLeaderboardResponse(
     leaderboard: [makeEntry()],
     corridor: null,
     generatedAt: new Date().toISOString(),
+    basis: { reputation: 'execution-outcomes', health: 'probe-observations' },
     ...overrides,
   };
 }

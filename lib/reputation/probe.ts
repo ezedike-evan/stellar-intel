@@ -106,22 +106,42 @@ function resolveDeps(deps?: ProbeDeps): Required<ProbeDeps> {
 export function classifyFailure(error: string): ProbeFailureType {
   const lower = error.toLowerCase();
 
-  if (lower.includes('enotfound') || lower.includes('enotinfo') || lower.includes('eai_again')) {
+  // URLs are removed before any matching. An anchor's own stellar.toml can
+  // embed a hostname like `uploads-ssl.webflow.com`, and when the toml fails to
+  // parse that hostname travels inside the error message — where a bare
+  // substring test for "ssl" read it as a TLS handshake failure. NGNC's TOML
+  // parse error was filed as a certificate fault for 26 days of probes because
+  // of exactly this, against a host whose certificate verifies cleanly.
+  const text = lower.replace(/https?:\/\/\S+/g, ' ');
+
+  // Checked before the transport classes: a document that arrived and failed to
+  // parse is a statement about the document, not about the connection that
+  // delivered it.
+  if (
+    text.includes('toml is invalid') ||
+    text.includes('invalid toml') ||
+    text.includes('parsing error') ||
+    text.includes('parse error') ||
+    text.includes('integrity')
+  ) {
+    return 'integrity';
+  }
+  if (text.includes('enotfound') || text.includes('enotinfo') || text.includes('eai_again')) {
     return 'dns';
   }
   if (
-    lower.includes('unable_to_verify') ||
-    lower.includes('cert') ||
-    lower.includes('ssl') ||
-    lower.includes('tls') ||
-    lower.includes('err_cert')
+    text.includes('unable_to_verify') ||
+    text.includes('cert') ||
+    text.includes('ssl') ||
+    text.includes('tls') ||
+    text.includes('err_cert')
   ) {
     return 'tls';
   }
-  if (lower.includes('abort') || lower.includes('etimedout') || lower.includes('timeout')) {
+  if (text.includes('abort') || text.includes('etimedout') || text.includes('timeout')) {
     return 'timeout';
   }
-  if (/http\s*\d{3}/.test(lower) || lower.includes('status')) {
+  if (/http\s*\d{3}/.test(text) || text.includes('status')) {
     return 'http';
   }
   return 'unknown';
