@@ -121,4 +121,13 @@ describe('GET /api/v1/health (#805)', () => {
     expect(body.status).toBe('ok');
     expect(body.version).toBe('v1');
   });
+
+  // /api/mcp/ping is rewritten onto this handler so the two liveness probes
+  // ship as one Vercel Function. Its documented body must not change.
+  it('answers the rewritten /api/mcp/ping probe with its own body and bucket', async () => {
+    const res = await GET(new NextRequest('http://localhost/api/v1/health?probe=mcp'));
+    expect(res.status).toBe(200);
+    expect(res.headers.get('X-RateLimit-Limit')).toBe('120');
+    expect(await res.json()).toEqual({ ok: true });
+  });
 });

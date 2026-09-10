@@ -30,6 +30,22 @@ function toSpecPath(file: string): string {
   );
 }
 
+/**
+ * Paths that a next.config.ts rewrite serves from another route's function, so
+ * they have no `route.ts` of their own. Folding the liveness probes onto one
+ * function keeps Vercel Functions Storage down (each route file is its own
+ * bundle, retained per deployment per region).
+ *
+ * Read from the config source rather than hard-coded: delete the rewrite and
+ * this test fails, instead of the spec quietly promising a path that 404s.
+ */
+function rewrittenSpecPaths(): string[] {
+  const config = readFileSync('next.config.ts', 'utf8');
+  const start = config.indexOf('async rewrites()');
+  if (start === -1) return [];
+  return [...config.slice(start).matchAll(/source:\s*'([^']+)'/g)].map((m) => m[1]!);
+}
+
 const spec = JSON.parse(readFileSync('public/openapi.json', 'utf8')) as {
   paths: Record<string, unknown>;
   info: { version: string };
@@ -60,7 +76,7 @@ describe('OpenAPI coverage (#918)', () => {
   it('documents no path that has no route', () => {
     // Catches the opposite drift: a route deleted or renamed while its spec
     // entry lingers, so the published contract promises something that 404s.
-    const routes = new Set(files.map(toSpecPath));
+    const routes = new Set([...files.map(toSpecPath), ...rewrittenSpecPaths()]);
     const orphans = Object.keys(spec.paths).filter((p) => !routes.has(p));
     expect(orphans).toEqual([]);
   });
