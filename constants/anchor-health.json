@@ -1,46 +1,46 @@
 {
   "thresholdNights": 3,
-  "updatedAt": "2026-09-09T08:59:36.515Z",
+  "updatedAt": "2026-09-11T08:56:40.821Z",
   "anchors": {
     "moneygram": {
       "consecutiveFailures": 0,
       "degraded": false,
-      "lastCheckedAt": "2026-09-09T08:59:36.515Z",
+      "lastCheckedAt": "2026-09-11T08:56:40.821Z",
       "lastStatus": "ok",
       "lastError": null
     },
     "cowrie": {
       "consecutiveFailures": 0,
       "degraded": false,
-      "lastCheckedAt": "2026-09-09T08:59:36.515Z",
+      "lastCheckedAt": "2026-09-11T08:56:40.821Z",
       "lastStatus": "ok",
       "lastError": null
     },
     "anclap": {
       "consecutiveFailures": 0,
       "degraded": false,
-      "lastCheckedAt": "2026-09-09T08:59:36.515Z",
+      "lastCheckedAt": "2026-09-11T08:56:40.821Z",
       "lastStatus": "ok",
       "lastError": null
     },
     "ngnc": {
       "consecutiveFailures": 0,
       "degraded": false,
-      "lastCheckedAt": "2026-09-09T08:59:36.515Z",
+      "lastCheckedAt": "2026-09-11T08:56:40.821Z",
       "lastStatus": "ok",
       "lastError": null
     },
     "ntokens": {
       "consecutiveFailures": 0,
       "degraded": false,
-      "lastCheckedAt": "2026-09-09T08:59:36.515Z",
+      "lastCheckedAt": "2026-09-11T08:56:40.821Z",
       "lastStatus": "ok",
       "lastError": null
     },
     "zeam": {
       "consecutiveFailures": 0,
       "degraded": false,
-      "lastCheckedAt": "2026-09-09T08:59:36.515Z",
+      "lastCheckedAt": "2026-09-11T08:56:40.821Z",
       "lastStatus": "ok",
       "lastError": null
     }
