@@ -87,7 +87,7 @@ npm start --workspace=@stellarintel/mcp       # node dist/packages/mcp/src/index
 # Streamable HTTP instead of stdio — binds http://127.0.0.1:3000/mcp
 npx tsx packages/mcp/src/index.ts --transport http --port 3000
 
-# In-repo dev server (off-ramp tools only, stdio only)
+# In-repo dev server (stdio only)
 npx tsx scripts/mcp/server.ts`}
         />
         <p className="text-sm text-secondary-text">
@@ -247,8 +247,7 @@ npx tsx scripts/mcp/server.ts`}
           <p className="mt-2 text-sm text-secondary-text">
             Returns 7/30/90-day rolling percentile scorecards for an anchor. Each scorecard shows
             state (<code>ok</code> or <code>insufficient_data</code>), sample size, fill rate,
-            settlement latency percentiles (p50/p95), and slippage percentiles (p50/p95). Available
-            from the <code>packages/mcp</code> server only.
+            settlement latency percentiles (p50/p95), and slippage percentiles (p50/p95).
           </p>
 
           <div className="mt-4 grid grid-cols-1 gap-4 sm:grid-cols-2">
@@ -290,7 +289,7 @@ npx tsx scripts/mcp/server.ts`}
           <p className="mt-2 text-sm text-secondary-text">
             Returns the current status, consecutive failure count, degraded flag, last check
             timestamp, last error message, and staleness flag for a given anchor domain and optional
-            asset. Available from the <code>packages/mcp</code> server only.
+            asset.
           </p>
 
           <div className="mt-4 grid grid-cols-1 gap-4 sm:grid-cols-2">
@@ -332,8 +331,7 @@ npx tsx scripts/mcp/server.ts`}
           <p className="mt-2 text-sm text-secondary-text">
             Answers whether the reputation data is trustworthy yet, so an agent can check before
             believing a score. Same payload as <code>GET /api/reputation/probe-coverage</code> for
-            the same moment. Takes no input. Available from the <code>packages/mcp</code> server
-            only.
+            the same moment. Takes no input.
           </p>
 
           <div className="mt-4">
@@ -377,13 +375,50 @@ npx tsx scripts/mcp/server.ts`}
             />
           </div>
         </div>
+
+        <div className="rounded-xl border border-border p-5">
+          <h3 className="flex items-center gap-2 text-lg font-semibold text-primary-text">
+            <span className="rounded bg-accent-subtle px-2 py-0.5 text-xs font-medium text-accent">
+              TOOL
+            </span>
+            intel.corridors
+          </h3>
+          <p className="mt-2 text-sm text-secondary-text">
+            Lists every corridor Stellar Intel currently surfaces, with its id, display name, source
+            asset, destination fiat currency, country, and the anchors that serve it. Call this
+            before any tool that takes a corridor id rather than guessing one.
+          </p>
+
+          <div className="mt-4">
+            <h4 className="mb-2 text-sm font-medium text-primary-text">Output (abridged)</h4>
+            <CodeBlock
+              language="json"
+              code={`{
+  "count": 6,
+  "corridors": [
+    {
+      "id": "usdc-ngn",
+      "displayName": "Nigeria (NGN)",
+      "from": "USDC",
+      "to": "NGN",
+      "countryCode": "NG",
+      "countryName": "Nigeria",
+      "anchors": [
+        { "id": "cowrie", "name": "Cowrie", "homeDomain": "cowrie.exchange" }
+      ]
+    }
+  ]
+}`}
+            />
+          </div>
+        </div>
       </section>
 
       <section className="space-y-4">
         <h2 className="text-xl font-semibold text-primary-text">Prompts</h2>
         <p className="text-secondary-text">
-          The <code>packages/mcp</code> server also registers two prompts, so an agent can start
-          from an intent instead of assembling the tool calls itself.
+          The server also registers two prompts, so an agent can start from an intent instead of
+          assembling the tool calls itself.
         </p>
         <div className="rounded-xl border border-border p-5">
           <h3 className="text-lg font-semibold text-primary-text">intel.offramp.choose-anchor</h3>
