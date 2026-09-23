@@ -333,7 +333,7 @@ describe('SEP-10 challenge validation — rejects', () => {
     expect(err.detail).toMatch(/hash memo/);
   });
 
-  it('rejects a timebounds window longer than an hour', async () => {
+  it('accepts the 24-hour window cowrie and zeam issue on mainnet', async () => {
     stubAnchor(
       buildCustomChallenge({
         signer: server,
@@ -343,8 +343,26 @@ describe('SEP-10 challenge validation — rejects', () => {
         timeoutSeconds: 24 * 60 * 60,
       })
     );
+    const f = await freighter();
+
+    const auth = await authenticate(anchor(), client.publicKey());
+
+    expect(auth.anchorDomain).toBe(HOME_DOMAIN);
+    expect(f.signTransaction).toHaveBeenCalledTimes(1);
+  });
+
+  it('rejects a timebounds window longer than 24 hours', async () => {
+    stubAnchor(
+      buildCustomChallenge({
+        signer: server,
+        clientAccountId: client.publicKey(),
+        homeDomain: HOME_DOMAIN,
+        webAuthDomain: WEB_AUTH_DOMAIN,
+        timeoutSeconds: 7 * 24 * 60 * 60,
+      })
+    );
     const err = await expectRefused(anchor());
-    expect(err.detail).toMatch(/longer than an hour/);
+    expect(err.detail).toMatch(/longer than 24 hours/);
   });
 
   it('rejects a toml with no SIGNING_KEY before fetching anything', async () => {

@@ -189,11 +189,12 @@ export function requireSigningKey(domain: string, signingKey: string | null | un
 /** Clock-skew allowance on either side of the challenge's timebounds (seconds). */
 const TIMEBOUNDS_GRACE_SECONDS = 5 * 60;
 /**
- * Longest timebounds window accepted (seconds). SEP-10 servers typically issue
- * 5–15 minute windows; anything far longer is a signed login that stays
- * replayable for too long.
+ * Longest timebounds window accepted (seconds). SEP-10 suggests 15 minutes,
+ * but honest mainnet anchors issue up to 24 hours (cowrie and zeam both do), so
+ * the cap sits there. It is a sanity bound, not a security control: a
+ * sequence-0 challenge can never be submitted, however long it stays valid.
  */
-const MAX_CHALLENGE_WINDOW_SECONDS = 60 * 60;
+const MAX_CHALLENGE_WINDOW_SECONDS = 24 * 60 * 60;
 
 /**
  * Verifies a SEP-10 challenge before it goes anywhere near the wallet.
@@ -209,8 +210,8 @@ const MAX_CHALLENGE_WINDOW_SECONDS = 60 * 60;
  * the mainnet hash; every operation is manage_data; the first operation is
  * sourced from the connected wallet and keyed `<d> auth` for one of this
  * anchor's domains; later operations are sourced from SIGNING_KEY (or are
- * `client_domain`); timebounds present, finite, current and no wider than an
- * hour.
+ * `client_domain`); timebounds present, finite, current and no wider than 24
+ * hours.
  *
  * Tolerated — cosmetic deviations that cannot move funds on a sequence-0
  * transaction: a missing `web_auth_domain` operation, or one whose value is any
@@ -308,7 +309,7 @@ export function validateSep10Challenge(
   // Measured from now rather than from minTime: some servers leave minTime at
   // 0, and what matters is how long the signed challenge stays usable.
   if (maxTime - now > MAX_CHALLENGE_WINDOW_SECONDS + TIMEBOUNDS_GRACE_SECONDS) {
-    reject('the transaction is valid for longer than an hour');
+    reject('the transaction is valid for longer than 24 hours');
   }
   if (now < minTime - TIMEBOUNDS_GRACE_SECONDS) reject('the transaction is not valid yet');
   if (now > maxTime + TIMEBOUNDS_GRACE_SECONDS) reject('the transaction has expired');
