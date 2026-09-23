@@ -8,6 +8,7 @@ import {
   Account,
   Asset,
   Keypair,
+  Memo,
   Networks,
   Operation,
   TransactionBuilder,
@@ -42,8 +43,11 @@ export interface CustomChallengeOptions {
   signer?: Keypair | null;
   sequence?: bigint;
   clientAccountId: string;
+  /** Domain named in the first op's key, `<homeDomain> auth`. */
   homeDomain: string;
-  webAuthDomain: string;
+  /** Value of the web_auth_domain op; null leaves the op out entirely. */
+  webAuthDomain: string | null;
+  memo?: Memo;
   /** Operations placed before the standard auth manage_data op. */
   prependOps?: xdr.Operation[];
   /** Operations appended after the web_auth_domain op. */
@@ -68,25 +72,28 @@ export function buildCustomChallenge(opts: CustomChallengeOptions): string {
     fee: '100',
     networkPassphrase: Networks.PUBLIC,
   });
+  if (opts.memo) builder = builder.addMemo(opts.memo);
   for (const op of opts.prependOps ?? []) builder = builder.addOperation(op);
-  builder = builder
-    .addOperation(
-      Operation.manageData({
-        name: `${opts.homeDomain} auth`,
-        value: nonce,
-        source: opts.clientAccountId,
-      })
-    )
-    .addOperation(
-      Operation.manageData({
-        name: 'web_auth_domain',
-        value: opts.webAuthDomain,
-        source,
-      })
+  builder = builder.addOperation(
+    Operation.manageData({
+      name: `${opts.homeDomain} auth`,
+      value: nonce,
+      source: opts.clientAccountId,
+    })
+  );
+  if (opts.webAuthDomain !== null) {
+    builder = builder.addOperation(
+      Operation.manageData({ name: 'web_auth_domain', value: opts.webAuthDomain, source })
     );
+  }
   for (const op of opts.appendOps ?? []) builder = builder.addOperation(op);
 
-  const tx = builder.setTimeout(opts.timeoutSeconds ?? 300).build();
+  // Mirror WebAuth.buildChallengeTx: the window opens now. A timeout of 0
+  // produces infinite timebounds, which the validator must refuse.
+  const timeout = opts.timeoutSeconds ?? 300;
+  const now = Math.floor(Date.now() / 1000);
+  builder = timeout === 0 ? builder.setTimeout(0) : builder.setTimebounds(now, now + timeout);
+  const tx = builder.build();
   if (opts.signer) tx.sign(opts.signer);
   return tx.toEnvelope().toXDR('base64');
 }

@@ -5,7 +5,7 @@
  * by the SDK, and the negative cases assert Freighter was never asked to sign.
  */
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
-import { Keypair, Networks, Operation } from '@stellar/stellar-sdk';
+import { Keypair, Memo, Networks, Operation } from '@stellar/stellar-sdk';
 import {
   authenticate,
   fetchSep10Challenge,
@@ -180,7 +180,7 @@ describe('SEP-10 challenge validation — rejects', () => {
     );
     const err = await expectRefused(anchor());
     expect(err.reason).toBe('INVALID_CHALLENGE');
-    expect(err.detail).toMatch(/sequence number should be zero/);
+    expect(err.detail).toMatch(/sequence number is not zero/);
   });
 
   it("rejects a challenge whose source is not the toml's SIGNING_KEY", async () => {
@@ -194,7 +194,7 @@ describe('SEP-10 challenge validation — rejects', () => {
       })
     );
     const err = await expectRefused(anchor());
-    expect(err.detail).toMatch(/source account is not equal to the server's account/);
+    expect(err.detail).toMatch(/source is not the anchor's SIGNING_KEY/);
   });
 
   it('rejects a challenge not signed by the SIGNING_KEY', async () => {
@@ -208,7 +208,7 @@ describe('SEP-10 challenge validation — rejects', () => {
       })
     );
     const err = await expectRefused(anchor());
-    expect(err.detail).toMatch(/not signed by server/);
+    expect(err.detail).toMatch(/not signed by the anchor's SIGNING_KEY/);
   });
 
   it('rejects an unsigned challenge', async () => {
@@ -222,7 +222,7 @@ describe('SEP-10 challenge validation — rejects', () => {
       })
     );
     const err = await expectRefused(anchor());
-    expect(err.detail).toMatch(/not signed by server/);
+    expect(err.detail).toMatch(/not signed by the anchor's SIGNING_KEY/);
   });
 
   it('rejects a challenge carrying a payment after the auth operations', async () => {
@@ -236,7 +236,7 @@ describe('SEP-10 challenge validation — rejects', () => {
       })
     );
     const err = await expectRefused(anchor());
-    expect(err.detail).toMatch(/not of type 'manageData'/);
+    expect(err.detail).toMatch(/operations other than manage_data/);
   });
 
   it('rejects a payment presented as the first operation of the "login"', async () => {
@@ -250,7 +250,7 @@ describe('SEP-10 challenge validation — rejects', () => {
       })
     );
     const err = await expectRefused(anchor());
-    expect(err.detail).toMatch(/operation type should be 'manageData'/);
+    expect(err.detail).toMatch(/operations other than manage_data/);
   });
 
   it('rejects an extra manage_data op sourced from the client account', async () => {
@@ -266,19 +266,19 @@ describe('SEP-10 challenge validation — rejects', () => {
       })
     );
     const err = await expectRefused(anchor());
-    expect(err.detail).toMatch(/unrecognized/);
+    expect(err.detail).toMatch(/not sourced from the anchor's SIGNING_KEY/);
   });
 
   it('rejects a challenge for the wrong home domain', async () => {
     stubAnchor(valid({ homeDomain: 'evil.example.org' }));
     const err = await expectRefused(anchor());
-    expect(err.detail).toMatch(/does not match the expected home domain/);
+    expect(err.detail).toMatch(/does not name this anchor's domain/);
   });
 
   it('rejects a web_auth_domain that is not the WEB_AUTH_ENDPOINT host', async () => {
     stubAnchor(valid({ webAuthDomain: 'evil.example.org' }));
     const err = await expectRefused(anchor());
-    expect(err.detail).toMatch(/'web_auth_domain' operation value does not match/);
+    expect(err.detail).toMatch(/web_auth_domain "evil.example.org" does not match/);
   });
 
   it('rejects a challenge for a different client account', async () => {
@@ -319,6 +319,34 @@ describe('SEP-10 challenge validation — rejects', () => {
     await expectRefused(anchor());
   });
 
+  it('rejects a hash memo', async () => {
+    stubAnchor(
+      buildCustomChallenge({
+        signer: server,
+        clientAccountId: client.publicKey(),
+        homeDomain: HOME_DOMAIN,
+        webAuthDomain: WEB_AUTH_DOMAIN,
+        memo: Memo.hash('a'.repeat(64)),
+      })
+    );
+    const err = await expectRefused(anchor());
+    expect(err.detail).toMatch(/hash memo/);
+  });
+
+  it('rejects a timebounds window longer than an hour', async () => {
+    stubAnchor(
+      buildCustomChallenge({
+        signer: server,
+        clientAccountId: client.publicKey(),
+        homeDomain: HOME_DOMAIN,
+        webAuthDomain: WEB_AUTH_DOMAIN,
+        timeoutSeconds: 24 * 60 * 60,
+      })
+    );
+    const err = await expectRefused(anchor());
+    expect(err.detail).toMatch(/longer than an hour/);
+  });
+
   it('rejects a toml with no SIGNING_KEY before fetching anything', async () => {
     const fetchMock = stubAnchor(valid());
     const err = await expectRefused(anchor({ SIGNING_KEY: null }));
@@ -352,6 +380,90 @@ describe('SEP-10 challenge validation — rejects', () => {
     await expect(
       fetchSep10Challenge(WEB_AUTH_ENDPOINT, client.publicKey(), HOME_DOMAIN, server.publicKey())
     ).rejects.toMatchObject({ name: 'ChallengeError', code: 'WRONG_NETWORK' });
+  });
+});
+
+/**
+ * Regression shapes decoded from live mainnet anchors (2026-09-23). Each
+ * deviates from SEP-10 in a way that cannot move funds, and each must pass.
+ * Keys are random; op names, memos and domains match what the anchor sent.
+ */
+describe('SEP-10 challenge validation — tolerated real-world shapes', () => {
+  it('cowrie.exchange: web_auth_domain carries the home domain, not the endpoint host', async () => {
+    const endpoint = 'https://api.cowrie.exchange/web_auth';
+    stubAnchor(
+      buildCustomChallenge({
+        signer: server,
+        clientAccountId: client.publicKey(),
+        homeDomain: 'cowrie.exchange',
+        webAuthDomain: 'cowrie.exchange',
+      })
+    );
+    const auth = await authenticate(
+      anchor({
+        homeDomain: 'cowrie.exchange',
+        domain: 'cowrie.exchange',
+        WEB_AUTH_ENDPOINT: endpoint,
+      }),
+      client.publicKey()
+    );
+    expect(auth.anchorDomain).toBe('cowrie.exchange');
+  });
+
+  it('anclap.com: auth key and web_auth_domain name the endpoint host', async () => {
+    const endpoint = 'https://api.anclap.com/auth';
+    stubAnchor(
+      buildCustomChallenge({
+        signer: server,
+        clientAccountId: client.publicKey(),
+        homeDomain: 'api.anclap.com',
+        webAuthDomain: 'api.anclap.com',
+      })
+    );
+    const auth = await authenticate(
+      anchor({ homeDomain: 'anclap.com', domain: 'anclap.com', WEB_AUTH_ENDPOINT: endpoint }),
+      client.publicKey()
+    );
+    expect(auth.anchorDomain).toBe('anclap.com');
+  });
+
+  it('zeam.money: text memo and no web_auth_domain op', async () => {
+    const endpoint = 'https://anchor.zeam.money/auth';
+    stubAnchor(
+      buildCustomChallenge({
+        signer: server,
+        clientAccountId: client.publicKey(),
+        homeDomain: 'zeam.money',
+        webAuthDomain: null,
+        memo: Memo.text('zeam.money'),
+      })
+    );
+    const auth = await authenticate(
+      anchor({ homeDomain: 'zeam.money', domain: 'zeam.money', WEB_AUTH_ENDPOINT: endpoint }),
+      client.publicKey()
+    );
+    expect(auth.anchorDomain).toBe('zeam.money');
+  });
+
+  it('still refuses a payment smuggled into an otherwise tolerated shape', async () => {
+    stubAnchor(
+      buildCustomChallenge({
+        signer: server,
+        clientAccountId: client.publicKey(),
+        homeDomain: 'zeam.money',
+        webAuthDomain: null,
+        memo: Memo.text('zeam.money'),
+        appendOps: [drainPayment(client.publicKey(), attacker.publicKey())],
+      })
+    );
+    const err = await expectRefused(
+      anchor({
+        homeDomain: 'zeam.money',
+        domain: 'zeam.money',
+        WEB_AUTH_ENDPOINT: 'https://anchor.zeam.money/auth',
+      })
+    );
+    expect(err.detail).toMatch(/operations other than manage_data/);
   });
 });
 

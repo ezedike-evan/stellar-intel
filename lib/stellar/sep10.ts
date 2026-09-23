@@ -1,5 +1,13 @@
-import { Networks, StrKey, WebAuth } from '@stellar/stellar-sdk';
-import type { Transaction } from '@stellar/stellar-sdk';
+import {
+  Keypair,
+  MemoID,
+  MemoNone,
+  MemoText,
+  Networks,
+  StrKey,
+  Transaction,
+  TransactionBuilder,
+} from '@stellar/stellar-sdk';
 import { resolveAnchor } from './sep1';
 import { getCachedJwt, setCachedJwt, invalidateCachedJwt } from './jwt-cache';
 import type { ResolvedAnchor, Sep10Auth } from '@/types';
@@ -90,7 +98,10 @@ export interface Sep10Challenge {
 export interface Sep10ChallengeExpectations {
   /** The anchor's SIGNING_KEY — must be the challenge source and must have signed it. */
   serverSigningKey: string;
-  /** Home domain(s) the first manage_data key may name (`<home_domain> auth`). */
+  /**
+   * Home domain(s) the first manage_data key may name (`<d> auth`). The
+   * WEB_AUTH_ENDPOINT host is always allowed as well.
+   */
   homeDomains: string | string[];
   /** WEB_AUTH_ENDPOINT; its host must match any `web_auth_domain` operation. */
   webAuthEndpoint: string;
@@ -175,17 +186,36 @@ export function requireSigningKey(domain: string, signingKey: string | null | un
 
 // ─── Challenge validation ─────────────────────────────────────────────────────
 
+/** Clock-skew allowance on either side of the challenge's timebounds (seconds). */
+const TIMEBOUNDS_GRACE_SECONDS = 5 * 60;
+/**
+ * Longest timebounds window accepted (seconds). SEP-10 servers typically issue
+ * 5–15 minute windows; anything far longer is a signed login that stays
+ * replayable for too long.
+ */
+const MAX_CHALLENGE_WINDOW_SECONDS = 60 * 60;
+
 /**
  * Verifies a SEP-10 challenge before it goes anywhere near the wallet.
  *
- * Delegates the structural checks to the SDK's `WebAuth.readChallengeTx`:
- * sequence number 0, source account equal to the anchor's SIGNING_KEY, only
- * manage_data operations, a first operation keyed `<home_domain> auth` with a
- * 48-byte nonce, a `web_auth_domain` value matching the endpoint host, finite
- * and current timebounds, and a valid signature from the SIGNING_KEY. On top of
- * that it pins the network to mainnet and requires the challenge to be for the
- * connected wallet, so an anchor cannot ask this user to sign for another
- * account.
+ * The SDK's `WebAuth.readChallengeTx` is stricter than several honest mainnet
+ * anchors (a text memo, a `web_auth_domain` set to the home domain, an auth
+ * key naming the endpoint host), so the checks are implemented here and split
+ * into two groups.
+ *
+ * Strict — these are what stop a real transaction being passed off as a login:
+ * mainnet network; sequence number 0 (so the envelope can never be submitted);
+ * source account is the toml's SIGNING_KEY; a valid SIGNING_KEY signature over
+ * the mainnet hash; every operation is manage_data; the first operation is
+ * sourced from the connected wallet and keyed `<d> auth` for one of this
+ * anchor's domains; later operations are sourced from SIGNING_KEY (or are
+ * `client_domain`); timebounds present, finite, current and no wider than an
+ * hour.
+ *
+ * Tolerated — cosmetic deviations that cannot move funds on a sequence-0
+ * transaction: a missing `web_auth_domain` operation, or one whose value is any
+ * of the anchor's domains rather than exactly the endpoint host; a text memo
+ * (id and none are the spec; hash and return memos are still refused).
  */
 export function validateSep10Challenge(
   transaction: string,
@@ -202,35 +232,110 @@ export function validateSep10Challenge(
 
   const serverSigningKey = requireSigningKey(domain, expected.serverSigningKey);
   const webAuthUrl = requireHttpsWebAuthEndpoint(domain, expected.webAuthEndpoint);
-
-  let read: ReturnType<typeof WebAuth.readChallengeTx>;
-  try {
-    read = WebAuth.readChallengeTx(
-      transaction,
-      serverSigningKey,
-      Networks.PUBLIC,
-      expected.homeDomains,
-      webAuthUrl.host
-    );
-  } catch (err) {
-    const detail = err instanceof Error && err.message ? err.message : String(err);
+  const reject = (detail: string): never => {
     throw new Sep10ChallengeRejectedError(domain, 'INVALID_CHALLENGE', detail);
+  };
+
+  const allowedDomains = new Set(
+    [
+      ...(Array.isArray(expected.homeDomains) ? expected.homeDomains : [expected.homeDomains]),
+      webAuthUrl.hostname,
+    ].map((d) => d.toLowerCase())
+  );
+
+  let tx: Transaction;
+  try {
+    const parsed = TransactionBuilder.fromXDR(transaction, Networks.PUBLIC);
+    if (!(parsed instanceof Transaction)) {
+      return reject('the challenge is a fee-bump transaction');
+    }
+    tx = parsed;
+  } catch {
+    return reject('the challenge is not a readable Stellar transaction');
   }
 
-  if (read.clientAccountID !== expected.clientAccountId) {
+  // ── Strict ──
+  if (tx.sequence !== '0') reject('the transaction sequence number is not zero');
+  if (tx.source !== serverSigningKey) {
+    reject("the transaction source is not the anchor's SIGNING_KEY");
+  }
+
+  const [first, ...rest] = tx.operations;
+  if (!first) return reject('the transaction has no operations');
+  if (tx.operations.some((op) => op.type !== 'manageData')) {
+    reject('the transaction contains operations other than manage_data');
+  }
+  // Narrowed by the check above; re-asserted for the type system.
+  if (first.type !== 'manageData') return reject('the first operation is not manage_data');
+
+  if (first.source !== expected.clientAccountId) {
     throw new Sep10ChallengeRejectedError(
       domain,
       'WRONG_ACCOUNT',
       'the challenge is for a different account than the connected wallet'
     );
   }
+  const authSuffix = ' auth';
+  const authDomain = first.name.endsWith(authSuffix)
+    ? first.name.slice(0, -authSuffix.length).toLowerCase()
+    : null;
+  if (!authDomain || !allowedDomains.has(authDomain)) {
+    reject(`the auth key "${first.name}" does not name this anchor's domain`);
+  }
+  if (!first.value || first.value.length === 0) reject('the auth nonce is empty');
+
+  for (const op of rest) {
+    if (op.type !== 'manageData') continue; // already rejected above
+    if (op.name === 'client_domain') continue; // sourced from the client domain's key by spec
+    if (op.source !== serverSigningKey) {
+      reject(`the "${op.name}" operation is not sourced from the anchor's SIGNING_KEY`);
+    }
+    // Tolerated: absent, or naming any of this anchor's domains.
+    if (op.name === 'web_auth_domain') {
+      const value = op.value ? new TextDecoder().decode(op.value).toLowerCase() : '';
+      if (!allowedDomains.has(value)) {
+        reject(`the web_auth_domain "${value}" does not match this anchor`);
+      }
+    }
+  }
+
+  const bounds = tx.timeBounds;
+  if (!bounds) return reject('the transaction has no timebounds');
+  const minTime = Number.parseInt(bounds.minTime, 10);
+  const maxTime = Number.parseInt(bounds.maxTime, 10);
+  if (!Number.isFinite(maxTime) || maxTime === 0) reject('the transaction never expires');
+  const now = Math.floor(Date.now() / 1000);
+  // Measured from now rather than from minTime: some servers leave minTime at
+  // 0, and what matters is how long the signed challenge stays usable.
+  if (maxTime - now > MAX_CHALLENGE_WINDOW_SECONDS + TIMEBOUNDS_GRACE_SECONDS) {
+    reject('the transaction is valid for longer than an hour');
+  }
+  if (now < minTime - TIMEBOUNDS_GRACE_SECONDS) reject('the transaction is not valid yet');
+  if (now > maxTime + TIMEBOUNDS_GRACE_SECONDS) reject('the transaction has expired');
+
+  // Tolerated: text memo. Hash and return memos have no place in a login.
+  if (tx.memo.type !== MemoNone && tx.memo.type !== MemoID && tx.memo.type !== MemoText) {
+    reject(`the transaction carries a ${tx.memo.type} memo`);
+  }
+
+  // Signature over the mainnet hash, so this also re-pins the network.
+  const serverKey = Keypair.fromPublicKey(serverSigningKey);
+  const hash = tx.hash();
+  const signed = tx.signatures.some((sig) => {
+    try {
+      return serverKey.verify(hash, sig.signature.toBytes());
+    } catch {
+      return false; // malformed signature bytes
+    }
+  });
+  if (!signed) reject("the transaction is not signed by the anchor's SIGNING_KEY");
 
   const challenge = Object.freeze({
     transaction,
     network_passphrase: Networks.PUBLIC,
-    parsed: read.tx,
-    clientAccountID: read.clientAccountID,
-    homeDomain: read.matchedHomeDomain,
+    parsed: tx,
+    clientAccountID: first.source,
+    homeDomain: authDomain as string,
   }) as Sep10Challenge;
   validatedChallenges.add(challenge);
   return challenge;

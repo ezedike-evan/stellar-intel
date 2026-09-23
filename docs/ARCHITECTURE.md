@@ -215,7 +215,7 @@ sequenceDiagram
   UI->>A: GET {WEB_AUTH_ENDPOINT}?account=G...&home_domain=...
   A-->>UI: { transaction (XDR), network_passphrase }
   UI->>UI: Assert network_passphrase == Networks.PUBLIC
-  UI->>UI: WebAuth.readChallengeTx against SIGNING_KEY, home domain, endpoint host
+  UI->>UI: validateSep10Challenge against SIGNING_KEY, home domain, endpoint host
   UI->>F: signTransaction(xdr, { networkPassphrase })
   F-->>UI: Signed XDR
   UI->>A: POST {WEB_AUTH_ENDPOINT} { transaction: signed }
@@ -229,14 +229,24 @@ Implemented in `lib/stellar/sep10.ts`. Key invariants:
   `network_passphrase` is not mainnet. This blocks a malicious anchor from
   trying to phish a testnet-scoped signature into a mainnet replay.
 - **The challenge is verified before Freighter sees it.** `validateSep10Challenge`
-  runs the SDK's `WebAuth.readChallengeTx` and refuses to sign unless: the
-  sequence number is 0; the source account is the toml's `SIGNING_KEY`; every
-  operation is `manage_data`, the first sourced from the connected wallet and
-  keyed `<home_domain> auth`; any `web_auth_domain` op matches the
-  `WEB_AUTH_ENDPOINT` host; timebounds are present, finite and current; and the
-  envelope carries a valid `SIGNING_KEY` signature. Without these checks a
-  hostile or compromised anchor could present a real payment as the "login".
-  `signChallenge` only accepts an object the validator produced.
+  parses the XDR with the SDK and applies two tiers of checks. `signChallenge`
+  only accepts an object the validator produced.
+  - _Strict_ — these stop a hostile or compromised anchor presenting a real
+    transaction (say, a payment) as the "login": mainnet passphrase; sequence
+    number 0, so the envelope can never be submitted; source account is the
+    toml's `SIGNING_KEY`, with a valid `SIGNING_KEY` signature over the mainnet
+    hash; every operation is `manage_data`; the first is sourced from the
+    connected wallet and keyed `<d> auth`, where `d` is the domain the toml was
+    fetched from, the registry home domain, or the `WEB_AUTH_ENDPOINT` host;
+    later operations are sourced from `SIGNING_KEY` (or are `client_domain`);
+    timebounds are present, finite, current (±5 min skew) and expire within an
+    hour.
+  - _Tolerated_ — deviations seen from honest mainnet anchors that cannot move
+    funds on a sequence-0 transaction: no `web_auth_domain` operation, or one
+    naming any of the allowed domains instead of exactly the endpoint host; a
+    text memo (none and id are the spec; hash and return memos are refused).
+    The SDK's `WebAuth.readChallengeTx` rejects these, which is why it is not
+    used directly.
 - **Fail closed on the toml.** No `SIGNING_KEY`, or a `WEB_AUTH_ENDPOINT` that
   is not `https://`, stops authentication before any request is made. Every
   refusal surfaces as `Sep10ChallengeRejectedError` with a message the
