@@ -75,6 +75,8 @@ function outcomeRow(
     disputedReason: null,
     publishedAt: null,
     oracleTxHash: null,
+    attested: true,
+    signerAccount: null,
     ...overrides,
   };
 }
@@ -383,5 +385,31 @@ describe('GET /api/reputation/leaderboard — validation errors', () => {
   it('rejects an unknown corridor without touching the network', async () => {
     await GET(makeRequest({ corridor: 'usdc-xyz' }));
     expect(oracleRequests()).toHaveLength(0);
+  });
+});
+
+// ─── Attestation gate ─────────────────────────────────────────────────────────
+
+describe('GET /api/reputation/leaderboard — unattested rows', () => {
+  it('ignores rows without a verified sender signature', async () => {
+    const store = new InMemoryReputationStore();
+    for (const row of SEED_ROWS) await store.append(row);
+    // Forged failures against moneygram: stored, but never attested.
+    for (let i = 0; i < 5; i++) {
+      await store.append(
+        outcomeRow({
+          intentHash: `forged-${i}`,
+          outcome: 'error',
+          deliveredRate: null,
+          deliveredAmount: null,
+          attested: false,
+        })
+      );
+    }
+    _setReputationStore(store);
+
+    const moneygram = entryFor(await leaderboardFor(), 'moneygram');
+    expect(moneygram.n).toBe(2);
+    expect(moneygram.composite).toBeCloseTo(MONEYGRAM_COMPOSITE, 4);
   });
 });

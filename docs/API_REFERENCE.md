@@ -323,7 +323,7 @@ Progress toward statistically meaningful anchor scoring, combining settled outco
 
 **Summary:** Append outcome log row  
 
-The single server-side write path for reputation outcome rows.
+The single server-side write path for reputation outcome rows. The body must carry the sender's Stellar account (`publicKey`) and an Ed25519 signature by that account over `intentHash` — raw over the 32 hash bytes, or SEP-53 over the hex string (what Freighter `signMessage` produces). `anchorId` must be a registered anchor and `corridor` one it serves. Appends are insert-only: a second POST for a known `intentHash` returns 409 and never changes the stored row. Rate-limited per client IP.
 
 #### Request Body
 
@@ -331,17 +331,28 @@ The single server-side write path for reputation outcome rows.
 
 | Field | Type | Required | Description |
 | :--- | :--- | :--- | :--- |
-| `intentHash` | `string` | **Yes** | - |
+| `intentHash` | `string` | **Yes** | Lowercase hex SHA-256 of the canonical intent |
 | `anchorId` | `string` | **Yes** | - |
 | `corridor` | `string` | **Yes** | - |
+| `quotedRate` | `string` | **Yes** | - |
+| `quotedAmount` | `string` | **Yes** | - |
 | `outcome` | `"completed" | "partial" | "refunded" | "expired" | "error"` | **Yes** | - |
+| `deliveredRate` | `object` | No | - |
+| `deliveredAmount` | `object` | No | - |
+| `settleSeconds` | `object` | No | - |
+| `stellarTransactionId` | `object` | No | - |
+| `publicKey` | `string` | **Yes** | The sender account that signed intentHash |
+| `signature` | `string` | **Yes** | Base64 Ed25519 signature by publicKey over intentHash |
 
 #### Responses
 
 | Status | Description | Content-Type | Schema |
 | :--- | :--- | :--- | :--- |
-| `201` | Outcome appended | `application/json` | `object` |
+| `201` | Outcome appended and attested | `application/json` | `object` |
 | `400` | Validation error | `application/json` | `ApiError` |
+| `401` | Missing signature, or the signature does not verify for publicKey | `application/json` | `ApiError` |
+| `409` | An outcome for this intentHash is already recorded | `application/json` | `ApiError` |
+| `429` | Rate limited | `application/json` | `ApiError` |
 
 ---
 

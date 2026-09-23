@@ -1203,7 +1203,7 @@ Progress toward statistically meaningful anchor scoring, combining settled outco
 
 **Summary:** Append outcome log row  
 
-The single server-side write path for reputation outcome rows.
+The single server-side write path for reputation outcome rows. The body must carry the sender's Stellar account (`publicKey`) and an Ed25519 signature by that account over `intentHash` — raw over the 32 hash bytes, or SEP-53 over the hex string (what Freighter `signMessage` produces). `anchorId` must be a registered anchor and `corridor` one it serves. Appends are insert-only: a second POST for a known `intentHash` returns 409 and never changes the stored row. Rate-limited per client IP.
 
 #### Request Body
 
@@ -1211,17 +1211,28 @@ The single server-side write path for reputation outcome rows.
 
 | Field | Type | Required | Description |
 | :--- | :--- | :--- | :--- |
-| `intentHash` | `string` | **Yes** | - |
+| `intentHash` | `string` | **Yes** | Lowercase hex SHA-256 of the canonical intent |
 | `anchorId` | `string` | **Yes** | - |
 | `corridor` | `string` | **Yes** | - |
+| `quotedRate` | `string` | **Yes** | - |
+| `quotedAmount` | `string` | **Yes** | - |
 | `outcome` | `"completed" | "partial" | "refunded" | "expired" | "error"` | **Yes** | - |
+| `deliveredRate` | `object` | No | - |
+| `deliveredAmount` | `object` | No | - |
+| `settleSeconds` | `object` | No | - |
+| `stellarTransactionId` | `object` | No | - |
+| `publicKey` | `string` | **Yes** | The sender account that signed intentHash |
+| `signature` | `string` | **Yes** | Base64 Ed25519 signature by publicKey over intentHash |
 
 #### Responses
 
 | Status | Description | Content-Type | Schema |
 | :--- | :--- | :--- | :--- |
-| `201` | Outcome appended | `application/json` | `object` |
+| `201` | Outcome appended and attested | `application/json` | `object` |
 | `400` | Validation error | `application/json` | `ApiError` |
+| `401` | Missing signature, or the signature does not verify for publicKey | `application/json` | `ApiError` |
+| `409` | An outcome for this intentHash is already recorded | `application/json` | `ApiError` |
+| `429` | Rate limited | `application/json` | `ApiError` |
 
 ---
 
@@ -3159,6 +3170,46 @@ Outcomes are signed and replayable, so a dispute resolves on evidence, not
 opinion. Admin-only review is gated by `ADMIN_SECRET_KEY` via
 `/api/admin/disputes`.
 
+### Write path: `POST /api/reputation/append`
+
+This route is the only way an outcome row enters the store from outside, and an
+accepted row feeds anchor scores and, through the publisher, the on-chain oracle.
+It is strict about what it accepts:
+
+- **Signed by the sender.** The body carries the sender's Stellar account
+  (`publicKey`, `G…`) and `signature`, an Ed25519 signature by that account over
+  `intentHash`. The server checks it with `verifyIntentSignature`
+  ([`lib/intent/verify.ts`](../lib/intent/verify.ts), the same helper the dispute
+  route uses), which accepts a raw signature over the 32 hash bytes or a SEP-53
+  signature over the hex string, which is what Freighter's `signMessage` produces.
+  A missing or non-verifying signature gets **401**. The off-ramp page hashes an
+  intent that binds the SEP-24 transaction id to the wallet, anchor and corridor,
+  and signs it with Freighter when execution starts.
+- **Bounded fields.** `anchorId` must be in the registry
+  ([`constants/anchors.ts`](../constants/anchors.ts)) and `corridor` must be one that
+  anchor serves. `intentHash` and `stellarTransactionId` are 64-character hex hashes,
+  amounts and rates are non-negative decimals under fixed ceilings, and
+  `settleSeconds` is capped at 90 days. Anything else gets **400**. Server-managed
+  columns (`createdAt`, reconcile, dispute and publish state) are not accepted from
+  the client at all.
+- **Insert-only.** Both backends insert with `ON CONFLICT (intent_hash) DO NOTHING`.
+  A second POST for a known `intentHash` gets **409**, including a byte-identical
+  retry, and the stored row is never rewritten. It cannot change an outcome, move a
+  row to another signer, or clear `published_at` and send the row back through the
+  publisher.
+- **Rate-limited** per client IP (`enforceRateLimit`, 20 requests per window).
+
+Each stored row records `attested` and `signer_account` (migration
+[`006_outcome_attestation.sql`](../lib/reputation/migrations/006_outcome_attestation.sql),
+also applied inline by both drivers). `ReputationStore.query()` returns only
+attested rows unless a caller passes `includeUnattested: true`, so every score,
+leaderboard, coverage and actuarial read skips unattested rows. The publisher's
+pending scan, corridor-rate derivation and median-rate lookup filter on
+`attested = TRUE` too. Rows written before the migration default to unattested and
+stop counting. Server-side seeds (`lib/reputation/seed.ts`) write straight to the
+store as unattested rows and never go through the public route. Probe samples are a
+separate table and are unaffected.
+
 ## On-chain mirror
 
 The same outcomes are written to the Soroban reputation contract for permissionless
@@ -4314,7 +4365,7 @@ the system is [non-custodial](NON_CUSTODY.md) and never holds either.
 | **Hostile SEP-10 challenge**     | Anchor serves a payment or other transaction as the login challenge | Before signing, `validateSep10Challenge` requires: sequence 0, source and signature from the toml `SIGNING_KEY`, `manage_data`-only ops with the first for this wallet and anchor domain, finite current timebounds. Missing `SIGNING_KEY` fails closed. Cosmetic deviations (text memo, `web_auth_domain` value) are tolerated. |
 | **Intent replay**                | Re-submitting a previously-signed envelope                          | `lib/intent/replay.ts` treats each signed envelope as single-use; server recomputes the canonical hash and verifies the signature.                                                                                                                                                                                               |
 | **Intent tampering**             | Altering amount/anchor after signing                                | Server recomputes SHA-256 over the canonical intent and verifies the Ed25519 signature; `publicKey` must match. Any change invalidates the signature.                                                                                                                                                                            |
-| **Reputation poisoning**         | Forged or spam outcomes to skew scores                              | Outcomes are signed and replayable; disputes resolve on evidence. On-chain writes gated by `require_admin` / publisher whitelist.                                                                                                                                                                                                |
+| **Reputation poisoning**         | Forged or spam outcomes to skew scores                              | Append needs the sender's signature over the intent hash, is insert-only and registry-checked; scores and the publisher read attested rows only. On-chain writes gated by `require_admin`.                                                                                                                                       |
 | **Oracle tampering**             | Unauthorized contract writes                                        | Soroban `require_admin` gate on `submit_outcome` / `register`; multi-signer admin + time-locked upgrade are roadmap hardening.                                                                                                                                                                                                   |
 | **Admin-route abuse**            | Hitting `/admin/disputes` or admin reputation routes                | Gated by server-only `ADMIN_SECRET_KEY` (not a `NEXT_PUBLIC_*` var).                                                                                                                                                                                                                                                             |
 | **Agent misuse**                 | An AI agent tries to drain a wallet via MCP                         | MCP surface is advisory + user-signed: every executing call must be signed by the user's wallet. No held keys, no autonomous spend.                                                                                                                                                                                              |

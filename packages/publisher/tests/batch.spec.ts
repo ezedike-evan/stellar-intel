@@ -125,6 +125,13 @@ describe('fetchPendingOutcomes', () => {
     await fetchPendingOutcomes(executor, 25);
     expect(executor).toHaveBeenCalledWith(expect.any(String), [25]);
   });
+
+  it('reads attested rows only, so an unsigned outcome never reaches the oracle', async () => {
+    const executor = makeExecutor([]);
+    await fetchPendingOutcomes(executor, 10);
+    const sql = String(vi.mocked(executor).mock.calls[0]?.[0]);
+    expect(sql).toMatch(/attested\s*=\s*TRUE/i);
+  });
 });
 
 describe('markPublished', () => {

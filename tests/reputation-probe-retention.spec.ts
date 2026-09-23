@@ -13,6 +13,9 @@ import type { ProbeLedgerRow } from '@/types/reputation';
 class SqliteBackedPgExecutor implements SqlExecutor {
   private readonly db = new Database(':memory:');
   async query(text: string, params: unknown[] = []): Promise<{ rows: Record<string, unknown>[] }> {
+    // SQLite has no ADD COLUMN IF NOT EXISTS; the driver's upgrade-in-place ALTER
+    // is a no-op here because CREATE TABLE already carries those columns.
+    if (/ADD COLUMN IF NOT EXISTS/i.test(text)) return { rows: [] };
     // Multi-statement DDL (CREATE TABLE / INDEX blocks) must use exec(), not prepare().
     const stmts = text
       .split(';')

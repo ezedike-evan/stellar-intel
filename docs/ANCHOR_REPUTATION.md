@@ -167,6 +167,46 @@ Outcomes are signed and replayable, so a dispute resolves on evidence, not
 opinion. Admin-only review is gated by `ADMIN_SECRET_KEY` via
 `/api/admin/disputes`.
 
+### Write path: `POST /api/reputation/append`
+
+This route is the only way an outcome row enters the store from outside, and an
+accepted row feeds anchor scores and, through the publisher, the on-chain oracle.
+It is strict about what it accepts:
+
+- **Signed by the sender.** The body carries the sender's Stellar account
+  (`publicKey`, `G…`) and `signature`, an Ed25519 signature by that account over
+  `intentHash`. The server checks it with `verifyIntentSignature`
+  ([`lib/intent/verify.ts`](../lib/intent/verify.ts), the same helper the dispute
+  route uses), which accepts a raw signature over the 32 hash bytes or a SEP-53
+  signature over the hex string, which is what Freighter's `signMessage` produces.
+  A missing or non-verifying signature gets **401**. The off-ramp page hashes an
+  intent that binds the SEP-24 transaction id to the wallet, anchor and corridor,
+  and signs it with Freighter when execution starts.
+- **Bounded fields.** `anchorId` must be in the registry
+  ([`constants/anchors.ts`](../constants/anchors.ts)) and `corridor` must be one that
+  anchor serves. `intentHash` and `stellarTransactionId` are 64-character hex hashes,
+  amounts and rates are non-negative decimals under fixed ceilings, and
+  `settleSeconds` is capped at 90 days. Anything else gets **400**. Server-managed
+  columns (`createdAt`, reconcile, dispute and publish state) are not accepted from
+  the client at all.
+- **Insert-only.** Both backends insert with `ON CONFLICT (intent_hash) DO NOTHING`.
+  A second POST for a known `intentHash` gets **409**, including a byte-identical
+  retry, and the stored row is never rewritten. It cannot change an outcome, move a
+  row to another signer, or clear `published_at` and send the row back through the
+  publisher.
+- **Rate-limited** per client IP (`enforceRateLimit`, 20 requests per window).
+
+Each stored row records `attested` and `signer_account` (migration
+[`006_outcome_attestation.sql`](../lib/reputation/migrations/006_outcome_attestation.sql),
+also applied inline by both drivers). `ReputationStore.query()` returns only
+attested rows unless a caller passes `includeUnattested: true`, so every score,
+leaderboard, coverage and actuarial read skips unattested rows. The publisher's
+pending scan, corridor-rate derivation and median-rate lookup filter on
+`attested = TRUE` too. Rows written before the migration default to unattested and
+stop counting. Server-side seeds (`lib/reputation/seed.ts`) write straight to the
+store as unattested rows and never go through the public route. Probe samples are a
+separate table and are unaffected.
+
 ## On-chain mirror
 
 The same outcomes are written to the Soroban reputation contract for permissionless

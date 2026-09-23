@@ -37,7 +37,9 @@ const CREATE_TABLE_SQL = `
     disputed               BOOLEAN NOT NULL DEFAULT FALSE,
     disputed_reason        TEXT,
     published_at           TIMESTAMPTZ,
-    oracle_tx_hash         TEXT
+    oracle_tx_hash         TEXT,
+    attested               BOOLEAN NOT NULL DEFAULT FALSE,
+    signer_account         TEXT
   );
 
   CREATE TABLE IF NOT EXISTS probe_samples (
@@ -52,6 +54,16 @@ const CREATE_TABLE_SQL = `
   );
   CREATE INDEX IF NOT EXISTS idx_probe_samples_domain ON probe_samples (domain);
   CREATE INDEX IF NOT EXISTS idx_probe_samples_domain_corridor ON probe_samples (domain, corridor);
+`;
+
+// Tables created before migration 006 lack the attestation columns, and
+// nothing applies `lib/reputation/migrations/` — this inline DDL is what runs.
+// Kept as its own statement so it can be read (and skipped by the SQLite-backed
+// test executor, which has no ADD COLUMN IF NOT EXISTS) independently.
+export const MIGRATE_ATTESTATION_SQL = `
+  ALTER TABLE outcome_log
+    ADD COLUMN IF NOT EXISTS attested       BOOLEAN NOT NULL DEFAULT FALSE,
+    ADD COLUMN IF NOT EXISTS signer_account TEXT;
 `;
 
 function asString(v: unknown): string | null {
@@ -78,6 +90,8 @@ function fromDb(r: Record<string, unknown>): OutcomeLogRow {
     publishedAt:
       r['published_at'] == null ? null : new Date(r['published_at'] as string).toISOString(),
     oracleTxHash: asString(r['oracle_tx_hash']),
+    attested: r['attested'] === true || r['attested'] === 1 || r['attested'] === 't',
+    signerAccount: asString(r['signer_account']),
   };
 }
 
@@ -100,27 +114,33 @@ export class PostgresReputationStore implements ReputationStore {
   constructor(private readonly sql: SqlExecutor) {}
 
   private init(): Promise<void> {
-    if (!this.ready) this.ready = this.sql.query(CREATE_TABLE_SQL).then(() => undefined);
+    if (!this.ready) {
+      this.ready = this.sql
+        .query(CREATE_TABLE_SQL)
+        .then(() => this.sql.query(MIGRATE_ATTESTATION_SQL))
+        .then(() => undefined)
+        .catch((err: unknown) => {
+          // Reset so a transient failure does not permanently poison the store.
+          this.ready = null;
+          throw err;
+        });
+    }
     return this.ready;
   }
 
-  async append(row: OutcomeLogRow): Promise<void> {
+  async append(row: OutcomeLogRow): Promise<boolean> {
     await this.init();
-    await this.sql.query(
+    // Insert-only. This was an upsert that overwrote every column, so a second
+    // POST for a known intentHash could rewrite the outcome or clear
+    // published_at/reconciled_at and push the row back through the publisher.
+    const { rows } = await this.sql.query(
       `INSERT INTO outcome_log
          (intent_hash, anchor_id, corridor, quoted_rate, delivered_rate, quoted_amount,
           delivered_amount, settle_seconds, outcome, created_at, stellar_transaction_id, reconciled_at,
-          disputed, disputed_reason, published_at, oracle_tx_hash)
-       VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16)
-       ON CONFLICT (intent_hash) DO UPDATE SET
-         anchor_id = EXCLUDED.anchor_id, corridor = EXCLUDED.corridor,
-         quoted_rate = EXCLUDED.quoted_rate, delivered_rate = EXCLUDED.delivered_rate,
-         quoted_amount = EXCLUDED.quoted_amount, delivered_amount = EXCLUDED.delivered_amount,
-         settle_seconds = EXCLUDED.settle_seconds, outcome = EXCLUDED.outcome,
-         created_at = EXCLUDED.created_at, stellar_transaction_id = EXCLUDED.stellar_transaction_id,
-         reconciled_at = EXCLUDED.reconciled_at,
-         disputed = EXCLUDED.disputed, disputed_reason = EXCLUDED.disputed_reason,
-         published_at = EXCLUDED.published_at, oracle_tx_hash = EXCLUDED.oracle_tx_hash`,
+          disputed, disputed_reason, published_at, oracle_tx_hash, attested, signer_account)
+       VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16,$17,$18)
+       ON CONFLICT (intent_hash) DO NOTHING
+       RETURNING intent_hash`,
       [
         row.intentHash,
         row.anchorId,
@@ -138,8 +158,11 @@ export class PostgresReputationStore implements ReputationStore {
         row.disputedReason,
         row.publishedAt,
         row.oracleTxHash,
+        row.attested,
+        row.signerAccount,
       ]
     );
+    return rows.length > 0;
   }
 
   async query(filter: OutcomeQuery = {}): Promise<OutcomeLogRow[]> {
@@ -159,6 +182,7 @@ export class PostgresReputationStore implements ReputationStore {
         'delivered_amount IS NULL AND reconciled_at IS NULL AND stellar_transaction_id IS NOT NULL'
       );
     }
+    if (!filter.includeUnattested) where.push('attested = TRUE');
     const sql = `SELECT * FROM outcome_log ${
       where.length ? `WHERE ${where.join(' AND ')}` : ''
     } ORDER BY created_at ASC`;

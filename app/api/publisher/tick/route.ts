@@ -72,6 +72,7 @@ async function loadCorridorRates() {
               delivered_amount, settle_seconds, reconciled_at
          FROM outcome_log
         WHERE reconciled_at IS NOT NULL
+          AND attested = TRUE
         ORDER BY reconciled_at DESC
         LIMIT 5000`
     );

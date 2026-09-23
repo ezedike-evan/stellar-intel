@@ -336,6 +336,13 @@ export function buildProbeSignalsPayload(signals: readonly ProbeSignals[]): Prob
   return { version: 1, signals: [...signals] };
 }
 
+/**
+ * Reconciled, not-yet-published outcomes, oldest first.
+ *
+ * Only attested rows qualify: the append route marks a row attested once it has
+ * verified the sender's signature over the intent hash. An unattested row (a
+ * legacy unsigned write, a dev seed) never reaches the oracle.
+ */
 export async function fetchPendingOutcomes(
   executor: QueryExecutor,
   limit: number
@@ -354,6 +361,7 @@ export async function fetchPendingOutcomes(
      FROM outcome_log
      WHERE published_at IS NULL
        AND reconciled_at IS NOT NULL
+       AND attested = TRUE
      ORDER BY reconciled_at ASC
      LIMIT $1`,
     [limit]
@@ -765,6 +773,7 @@ async function getCorridorMedianRate(
        FROM outcome_log
       WHERE corridor = $1
         AND delivered_rate IS NOT NULL
+        AND attested = TRUE
       ORDER BY reconciled_at DESC
       LIMIT 100`,
     [corridor]

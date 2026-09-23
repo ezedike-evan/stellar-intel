@@ -1,5 +1,9 @@
 import { afterEach, describe, expect, it } from 'vitest';
 import Database from 'better-sqlite3';
+import { Keypair } from '@stellar/stellar-sdk';
+import { mkdtempSync, rmSync } from 'node:fs';
+import { tmpdir } from 'node:os';
+import { join } from 'node:path';
 import {
   computeLatencyPercentiles,
   createReputationStore,
@@ -10,13 +14,16 @@ import { OutcomeLogRowSchema, toOutcomeLogRow } from '@/lib/reputation/schema';
 import type { OutcomeLogRow, ProbeLedgerRow } from '@/types/reputation';
 
 // A pg-compatible executor backed by in-memory SQLite, so the Postgres adapter's
-// real SQL ($1 params, ON CONFLICT upsert) is genuinely exercised in tests.
+// real SQL ($1 params, ON CONFLICT DO NOTHING RETURNING) is genuinely exercised.
+// SQLite has no ADD COLUMN IF NOT EXISTS; the driver's upgrade-in-place ALTER is
+// skipped here because the CREATE TABLE already carries the new columns.
 class SqliteBackedPgExecutor implements SqlExecutor {
   private readonly db = new Database(':memory:');
   async query(text: string, params: unknown[] = []): Promise<{ rows: Record<string, unknown>[] }> {
     // Postgres $n params are positional-by-number and can appear out of textual
     // order, so map them to better-sqlite3 named params (@pN) for a faithful run.
     // Multi-statement DDL (CREATE TABLE / INDEX blocks) must use exec(), not prepare().
+    if (/ADD COLUMN IF NOT EXISTS/i.test(text)) return { rows: [] };
     const stmts = text
       .split(';')
       .map((s) => s.trim())
@@ -31,7 +38,7 @@ class SqliteBackedPgExecutor implements SqlExecutor {
       bind[`p${i + 1}`] = (typeof v === 'boolean' ? (v ? 1 : 0) : v) as never;
     });
     const args = params.length ? [bind] : [];
-    if (/^\s*(select|delete.*returning)/i.test(text.trim())) {
+    if (/^\s*select|returning/i.test(text.trim())) {
       return { rows: stmt.all(...(args as never[])) as Record<string, unknown>[] };
     }
     stmt.run(...(args as never[]));
@@ -39,20 +46,27 @@ class SqliteBackedPgExecutor implements SqlExecutor {
   }
 }
 
+const SIGNER = Keypair.random().publicKey();
+
 function row(over: Partial<OutcomeLogRow> = {}): OutcomeLogRow {
-  return toOutcomeLogRow(
-    {
-      intentHash: `h-${Math.random().toString(16).slice(2)}`,
-      anchorId: 'cowrie',
-      corridor: 'USDC-NGN',
-      quotedRate: '1500.0',
-      quotedAmount: '100',
-      outcome: 'completed',
-      stellarTransactionId: 'stellar-tx-1',
-      ...over,
-    },
-    new Date('2026-06-04T12:00:00.000Z')
-  );
+  return {
+    ...toOutcomeLogRow(
+      {
+        intentHash: 'f'.repeat(64),
+        anchorId: 'cowrie',
+        corridor: 'usdc-ngn',
+        quotedRate: '1500.0',
+        quotedAmount: '100',
+        outcome: 'completed',
+        stellarTransactionId: 'a'.repeat(64),
+        publicKey: SIGNER,
+        signature: 'unused-here',
+      },
+      new Date('2026-06-04T12:00:00.000Z')
+    ),
+    intentHash: `h-${Math.random().toString(16).slice(2)}`,
+    ...over,
+  };
 }
 
 const backends: Array<[string, () => ReputationStore]> = [
@@ -80,19 +94,53 @@ describe.each(backends)('ReputationStore conformance — %s backend', (_name, ma
     expect(cowrie[0]?.intentHash).toBe('a');
   });
 
-  it('is idempotent on intentHash', async () => {
+  it('is insert-only on intentHash: a duplicate never overwrites the stored row', async () => {
     store = make();
-    await store.append(row({ intentHash: 'dup', outcome: 'completed' }));
-    await store.append(row({ intentHash: 'dup', outcome: 'refunded' }));
+    expect(await store.append(row({ intentHash: 'dup', outcome: 'completed' }))).toBe(true);
+    expect(await store.append(row({ intentHash: 'dup', outcome: 'refunded' }))).toBe(false);
     const all = await store.query({});
     expect(all).toHaveLength(1);
-    expect(all[0]?.outcome).toBe('refunded');
+    expect(all[0]?.outcome).toBe('completed');
+  });
+
+  it('a duplicate cannot reset publish or reconcile state', async () => {
+    store = make();
+    await store.append(
+      row({
+        intentHash: 'pub',
+        reconciledAt: '2026-06-04T12:05:00.000Z',
+        deliveredAmount: '149000',
+        publishedAt: '2026-06-04T12:10:00.000Z',
+        oracleTxHash: 'b'.repeat(64),
+      })
+    );
+    expect(await store.append(row({ intentHash: 'pub' }))).toBe(false);
+    const [stored] = await store.query({});
+    expect(stored?.publishedAt).toBe('2026-06-04T12:10:00.000Z');
+    expect(stored?.oracleTxHash).toBe('b'.repeat(64));
+    expect(stored?.reconciledAt).toBe('2026-06-04T12:05:00.000Z');
+    expect(stored?.deliveredAmount).toBe('149000');
+  });
+
+  it('persists the attestation and hides unattested rows unless asked', async () => {
+    store = make();
+    await store.append(row({ intentHash: 'signed' }));
+    await store.append(row({ intentHash: 'unsigned', attested: false, signerAccount: null }));
+
+    const scored = await store.query({});
+    expect(scored.map((r) => r.intentHash)).toEqual(['signed']);
+    expect(scored[0]?.attested).toBe(true);
+    expect(scored[0]?.signerAccount).toBe(SIGNER);
+
+    const raw = await store.query({ includeUnattested: true });
+    expect(raw.map((r) => r.intentHash).sort()).toEqual(['signed', 'unsigned']);
+    expect(raw.find((r) => r.intentHash === 'unsigned')?.attested).toBe(false);
   });
 
   it('backfills delivery and drops the row from the pending-reconciliation set', async () => {
     store = make();
     await store.append(
-      row({ intentHash: 'r', deliveredAmount: null, stellarTransactionId: 'tx-r' })
+      row({ intentHash: 'r', deliveredAmount: null, stellarTransactionId: 'c'.repeat(64) })
     );
 
     expect(await store.query({ pendingReconciliationOnly: true })).toHaveLength(1);
@@ -107,6 +155,41 @@ describe.each(backends)('ReputationStore conformance — %s backend', (_name, ma
     const [updated] = await store.query({ anchorId: 'cowrie' });
     expect(updated?.deliveredAmount).toBe('149000');
     expect(updated?.reconciledAt).toBe('2026-06-04T12:05:00.000Z');
+  });
+});
+
+describe('SQLite upgrade in place (migration 006)', () => {
+  it('adds the attestation columns to a pre-006 database; old rows stay unattested', async () => {
+    const dir = mkdtempSync(join(tmpdir(), 'rep-006-'));
+    const path = join(dir, 'rep.db');
+    const legacy = new Database(path);
+    legacy.exec(`
+      CREATE TABLE outcome_log (
+        intentHash TEXT NOT NULL PRIMARY KEY, anchorId TEXT NOT NULL, corridor TEXT NOT NULL,
+        quotedRate TEXT NOT NULL, deliveredRate TEXT, quotedAmount TEXT NOT NULL,
+        deliveredAmount TEXT, settleSeconds REAL, outcome TEXT NOT NULL, createdAt TEXT NOT NULL,
+        stellarTransactionId TEXT, reconciledAt TEXT, disputed INTEGER NOT NULL DEFAULT 0,
+        disputed_reason TEXT, publishedAt TEXT, oracleTxHash TEXT
+      );
+      INSERT INTO outcome_log (intentHash, anchorId, corridor, quotedRate, quotedAmount, outcome, createdAt)
+      VALUES ('legacy', 'cowrie', 'usdc-ngn', '1500', '100', 'completed', '2026-06-01T00:00:00.000Z');
+    `);
+    legacy.close();
+
+    const store = createReputationStore({ backend: 'sqlite', sqlitePath: path });
+    try {
+      expect(await store.query({})).toHaveLength(0);
+      const [old] = await store.query({ includeUnattested: true });
+      expect(old?.intentHash).toBe('legacy');
+      expect(old?.attested).toBe(false);
+      expect(old?.signerAccount).toBeNull();
+
+      await store.append(row({ intentHash: 'new' }));
+      expect((await store.query({})).map((r) => r.intentHash)).toEqual(['new']);
+    } finally {
+      await store.close();
+      rmSync(dir, { recursive: true, force: true });
+    }
   });
 });
 

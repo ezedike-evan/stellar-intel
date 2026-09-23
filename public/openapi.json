@@ -1145,7 +1145,7 @@
     "/api/reputation/append": {
       "post": {
         "summary": "Append outcome log row",
-        "description": "The single server-side write path for reputation outcome rows.",
+        "description": "The single server-side write path for reputation outcome rows. The body must carry the sender's Stellar account (`publicKey`) and an Ed25519 signature by that account over `intentHash` — raw over the 32 hash bytes, or SEP-53 over the hex string (what Freighter `signMessage` produces). `anchorId` must be a registered anchor and `corridor` one it serves. Appends are insert-only: a second POST for a known `intentHash` returns 409 and never changes the stored row. Rate-limited per client IP.",
         "tags": [
           "Reputation"
         ],
@@ -1157,13 +1157,27 @@
                 "type": "object",
                 "properties": {
                   "intentHash": {
-                    "type": "string"
+                    "type": "string",
+                    "pattern": "^[0-9a-f]{64}$",
+                    "description": "Lowercase hex SHA-256 of the canonical intent"
                   },
                   "anchorId": {
-                    "type": "string"
+                    "type": "string",
+                    "example": "cowrie"
                   },
                   "corridor": {
-                    "type": "string"
+                    "type": "string",
+                    "example": "usdc-ngn"
+                  },
+                  "quotedRate": {
+                    "type": "string",
+                    "pattern": "^\\d+(\\.\\d+)?$",
+                    "example": "1500.0"
+                  },
+                  "quotedAmount": {
+                    "type": "string",
+                    "pattern": "^\\d+(\\.\\d+)?$",
+                    "example": "100"
                   },
                   "outcome": {
                     "type": "string",
@@ -1174,13 +1188,55 @@
                       "expired",
                       "error"
                     ]
+                  },
+                  "deliveredRate": {
+                    "type": [
+                      "string",
+                      "null"
+                    ],
+                    "pattern": "^\\d+(\\.\\d+)?$"
+                  },
+                  "deliveredAmount": {
+                    "type": [
+                      "string",
+                      "null"
+                    ],
+                    "pattern": "^\\d+(\\.\\d+)?$"
+                  },
+                  "settleSeconds": {
+                    "type": [
+                      "integer",
+                      "null"
+                    ],
+                    "minimum": 0,
+                    "maximum": 7776000
+                  },
+                  "stellarTransactionId": {
+                    "type": [
+                      "string",
+                      "null"
+                    ],
+                    "pattern": "^[0-9a-fA-F]{64}$"
+                  },
+                  "publicKey": {
+                    "type": "string",
+                    "pattern": "^G[A-Z2-7]{55}$",
+                    "description": "The sender account that signed intentHash"
+                  },
+                  "signature": {
+                    "type": "string",
+                    "description": "Base64 Ed25519 signature by publicKey over intentHash"
                   }
                 },
                 "required": [
                   "intentHash",
                   "anchorId",
                   "corridor",
-                  "outcome"
+                  "quotedRate",
+                  "quotedAmount",
+                  "outcome",
+                  "publicKey",
+                  "signature"
                 ]
               }
             }
@@ -1188,7 +1244,7 @@
         },
         "responses": {
           "201": {
-            "description": "Outcome appended",
+            "description": "Outcome appended and attested",
             "content": {
               "application/json": {
                 "schema": {
@@ -1199,11 +1255,15 @@
                     },
                     "intentHash": {
                       "type": "string"
+                    },
+                    "attested": {
+                      "type": "boolean"
                     }
                   },
                   "required": [
                     "ok",
-                    "intentHash"
+                    "intentHash",
+                    "attested"
                   ]
                 }
               }
@@ -1211,6 +1271,36 @@
           },
           "400": {
             "description": "Validation error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiError"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Missing signature, or the signature does not verify for publicKey",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiError"
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "An outcome for this intentHash is already recorded",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiError"
+                }
+              }
+            }
+          },
+          "429": {
+            "description": "Rate limited",
             "content": {
               "application/json": {
                 "schema": {

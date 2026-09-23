@@ -31,6 +31,10 @@ function makeBootstrapRow(anchorId: string, corridor: string, now: Date): Outcom
     disputedReason: null,
     publishedAt: null,
     oracleTxHash: null,
+    // Server-side seeds carry no sender signature, so they are unattested and
+    // never count towards scores or reach the oracle. Dev/test fixtures only.
+    attested: false,
+    signerAccount: null,
   };
 }
 
@@ -45,8 +49,11 @@ export function buildBootstrapSeeds(
 
 /**
  * Appends one bootstrap row per anchor×corridor into the store.
- * Idempotent: re-seeding the same anchor replaces the existing bootstrap row
- * (store upserts on intentHash).
+ * Idempotent: re-seeding the same anchor leaves the existing bootstrap row in
+ * place (appends are insert-only on intentHash).
+ *
+ * Writes straight to the store, never through the public append route, which
+ * requires a sender signature a server-side seed cannot produce.
  *
  * Returns the number of rows written.
  */
@@ -56,8 +63,9 @@ export async function seedReputationStore(
   now = new Date()
 ): Promise<number> {
   const seeds = buildBootstrapSeeds(anchors, now);
+  let written = 0;
   for (const row of seeds) {
-    await store.append(row);
+    if (await store.append(row)) written++;
   }
-  return seeds.length;
+  return written;
 }

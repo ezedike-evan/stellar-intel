@@ -29,7 +29,9 @@ const CREATE_TABLE_SQL = `
     disputed             INTEGER NOT NULL DEFAULT 0,
     disputed_reason      TEXT,
     publishedAt          TEXT,
-    oracleTxHash         TEXT
+    oracleTxHash         TEXT,
+    attested             INTEGER NOT NULL DEFAULT 0,
+    signerAccount        TEXT
   );
   CREATE INDEX IF NOT EXISTS idx_outcome_log_anchor ON outcome_log (anchorId);
 
@@ -64,6 +66,8 @@ interface OutcomeLogRowDb {
   disputed_reason: string | null;
   publishedAt: string | null;
   oracleTxHash: string | null;
+  attested: number;
+  signerAccount: string | null;
 }
 
 function fromDb(r: OutcomeLogRowDb): OutcomeLogRow {
@@ -72,6 +76,7 @@ function fromDb(r: OutcomeLogRowDb): OutcomeLogRow {
     outcome: r.outcome as OutcomeStatus,
     disputed: r.disputed !== 0,
     disputedReason: r.disputed_reason,
+    attested: r.attested !== 0,
   };
 }
 
@@ -95,21 +100,44 @@ export class SqliteReputationStore implements ReputationStore {
     this.db = new Database(path);
     this.db.pragma('journal_mode = WAL');
     this.db.exec(CREATE_TABLE_SQL);
+    this.migrateAttestation();
   }
 
-  async append(row: OutcomeLogRow): Promise<void> {
-    this.db
+  /**
+   * Adds the attestation columns (migration 006) to a database file created
+   * before they existed. SQLite has no ADD COLUMN IF NOT EXISTS, so check first.
+   */
+  private migrateAttestation(): void {
+    const columns = new Set(
+      (this.db.prepare(`PRAGMA table_info(outcome_log)`).all() as Array<{ name: string }>).map(
+        (c) => c.name
+      )
+    );
+    if (!columns.has('attested')) {
+      this.db.exec(`ALTER TABLE outcome_log ADD COLUMN attested INTEGER NOT NULL DEFAULT 0`);
+    }
+    if (!columns.has('signerAccount')) {
+      this.db.exec(`ALTER TABLE outcome_log ADD COLUMN signerAccount TEXT`);
+    }
+  }
+
+  async append(row: OutcomeLogRow): Promise<boolean> {
+    // Insert-only: an existing row (and its reconcile/publish state) is never
+    // replaced. `changes` is 0 when the intentHash was already present.
+    const result = this.db
       .prepare(
-        `INSERT OR REPLACE INTO outcome_log
+        `INSERT INTO outcome_log
            (intentHash, anchorId, corridor, quotedRate, deliveredRate, quotedAmount,
             deliveredAmount, settleSeconds, outcome, createdAt, stellarTransactionId, reconciledAt,
-            disputed, disputed_reason, publishedAt, oracleTxHash)
+            disputed, disputed_reason, publishedAt, oracleTxHash, attested, signerAccount)
          VALUES
            (@intentHash, @anchorId, @corridor, @quotedRate, @deliveredRate, @quotedAmount,
             @deliveredAmount, @settleSeconds, @outcome, @createdAt, @stellarTransactionId, @reconciledAt,
-            @disputed, @disputedReason, @publishedAt, @oracleTxHash)`
+            @disputed, @disputedReason, @publishedAt, @oracleTxHash, @attested, @signerAccount)
+         ON CONFLICT (intentHash) DO NOTHING`
       )
-      .run({ ...row, disputed: row.disputed ? 1 : 0 });
+      .run({ ...row, disputed: row.disputed ? 1 : 0, attested: row.attested ? 1 : 0 });
+    return result.changes > 0;
   }
 
   async query(filter: OutcomeQuery = {}): Promise<OutcomeLogRow[]> {
@@ -128,6 +156,7 @@ export class SqliteReputationStore implements ReputationStore {
         'deliveredAmount IS NULL AND reconciledAt IS NULL AND stellarTransactionId IS NOT NULL'
       );
     }
+    if (!filter.includeUnattested) where.push('attested = 1');
     const sql = `SELECT * FROM outcome_log ${
       where.length ? `WHERE ${where.join(' AND ')}` : ''
     } ORDER BY createdAt ASC`;
