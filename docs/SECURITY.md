@@ -44,6 +44,14 @@ for users — losing funds — is structurally out of scope because we never hol
 
 - **SEP-10** authentication asserts the mainnet network passphrase before signing a
   challenge (`lib/stellar/sep10.ts`), preventing cross-network challenge replay.
+- **SEP-10 challenges are verified before signing.** The challenge must pass
+  `WebAuth.readChallengeTx` against the anchor's stellar.toml `SIGNING_KEY`: sequence
+  number 0, source account and signature from `SIGNING_KEY`, only `manage_data`
+  operations with the first sourced from the connected wallet and keyed
+  `<home_domain> auth`, a `web_auth_domain` matching the `WEB_AUTH_ENDPOINT` host, and
+  current, finite timebounds. A toml without a `SIGNING_KEY`, or with a non-https
+  `WEB_AUTH_ENDPOINT`, fails closed. This stops an anchor passing off a payment as a
+  login challenge.
 - **Anchor calls run server-side** (e.g. `/api/rates/[corridor]`) so third-party
   anchor responses never execute with the user's origin/credentials.
 - **No fabricated rates.** A failed anchor renders as unavailable; the codebase and

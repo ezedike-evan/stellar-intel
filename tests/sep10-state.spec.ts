@@ -1,15 +1,14 @@
 // @vitest-environment node
 import { describe, it, expect, vi, beforeEach } from 'vitest';
+import { Networks, TransactionBuilder, Keypair } from '@stellar/stellar-sdk';
 import {
-  Networks,
-  TransactionBuilder,
-  Keypair,
-  Account,
-  Memo,
-  Operation,
-} from '@stellar/stellar-sdk';
-import { fetchSep10Challenge, ChallengeError, Sep10AuthError } from '@/lib/stellar/sep10';
+  fetchSep10Challenge,
+  validateSep10Challenge,
+  ChallengeError,
+  Sep10AuthError,
+} from '@/lib/stellar/sep10';
 import type { Sep10Challenge } from '@/lib/stellar/sep10';
+import { buildValidChallenge } from './fixtures/sep10-challenge';
 
 vi.mock('@stellar/freighter-api', () => {
   return {
@@ -36,39 +35,34 @@ const WEB_AUTH_ENDPOINT = 'https://anchor.example.com/auth';
 const PUBLIC_KEY = Keypair.random().publicKey();
 const HOME_DOMAIN = 'anchor.example.com';
 
-let VALID_CHALLENGE_XDR = '';
+const SERVER = Keypair.random();
+const SIGNING_KEY = SERVER.publicKey();
 
-function createMockChallenge(overrides?: Partial<Sep10Challenge>): Sep10Challenge {
-  const keypair = Keypair.random();
-  const txBuilder = new TransactionBuilder(new Account(keypair.publicKey(), '0'), {
-    fee: '100',
-    networkPassphrase: Networks.PUBLIC,
+/** A real SEP-10 challenge from the anchor's SIGNING_KEY for PUBLIC_KEY. */
+function buildChallengeXdr(): string {
+  return buildValidChallenge({
+    server: SERVER,
+    clientAccountId: PUBLIC_KEY,
+    homeDomain: HOME_DOMAIN,
+    webAuthDomain: new URL(WEB_AUTH_ENDPOINT).host,
   });
-
-  const tx = txBuilder
-    .addMemo(Memo.text('12345'))
-    .addOperation(
-      Operation.manageData({
-        name: 'challenge',
-        value: Buffer.from('test-challenge'),
-      })
-    )
-    .setTimeout(300)
-    .build();
-
-  const xdr = tx.toXDR();
-  VALID_CHALLENGE_XDR = xdr;
-
-  return {
-    transaction: xdr,
-    network_passphrase: Networks.PUBLIC,
-    parsed: tx,
-    ...overrides,
-  };
 }
 
-// Initialize VALID_CHALLENGE_XDR
-createMockChallenge();
+const VALID_CHALLENGE_XDR = buildChallengeXdr();
+
+function createMockChallenge(): Sep10Challenge {
+  return validateSep10Challenge(
+    buildChallengeXdr(),
+    Networks.PUBLIC,
+    {
+      serverSigningKey: SIGNING_KEY,
+      homeDomains: HOME_DOMAIN,
+      webAuthEndpoint: WEB_AUTH_ENDPOINT,
+      clientAccountId: PUBLIC_KEY,
+    },
+    HOME_DOMAIN
+  );
+}
 
 // ─── Mock fetch ───────────────────────────────────────────────────────────────
 
@@ -100,7 +94,7 @@ describe('SEP-10 state machine — challenge fetch', () => {
       })
     );
 
-    await fetchSep10Challenge(WEB_AUTH_ENDPOINT, PUBLIC_KEY, HOME_DOMAIN);
+    await fetchSep10Challenge(WEB_AUTH_ENDPOINT, PUBLIC_KEY, HOME_DOMAIN, SIGNING_KEY);
 
     expect(capturedUrl).toContain(WEB_AUTH_ENDPOINT);
     expect(capturedUrl).toContain(`account=${encodeURIComponent(PUBLIC_KEY)}`);
@@ -120,7 +114,12 @@ describe('SEP-10 state machine — challenge fetch', () => {
       }))
     );
 
-    const challenge = await fetchSep10Challenge(WEB_AUTH_ENDPOINT, PUBLIC_KEY, HOME_DOMAIN);
+    const challenge = await fetchSep10Challenge(
+      WEB_AUTH_ENDPOINT,
+      PUBLIC_KEY,
+      HOME_DOMAIN,
+      SIGNING_KEY
+    );
 
     expect(challenge).toHaveProperty('transaction');
     expect(challenge).toHaveProperty('network_passphrase');
@@ -136,12 +135,12 @@ describe('SEP-10 state machine — challenge fetch', () => {
       })
     );
 
-    await expect(fetchSep10Challenge(WEB_AUTH_ENDPOINT, PUBLIC_KEY, HOME_DOMAIN)).rejects.toThrow(
-      ChallengeError
-    );
+    await expect(
+      fetchSep10Challenge(WEB_AUTH_ENDPOINT, PUBLIC_KEY, HOME_DOMAIN, SIGNING_KEY)
+    ).rejects.toThrow(ChallengeError);
 
     try {
-      await fetchSep10Challenge(WEB_AUTH_ENDPOINT, PUBLIC_KEY, HOME_DOMAIN);
+      await fetchSep10Challenge(WEB_AUTH_ENDPOINT, PUBLIC_KEY, HOME_DOMAIN, SIGNING_KEY);
     } catch (err) {
       expect(err).toBeInstanceOf(ChallengeError);
       if (err instanceof ChallengeError) {
@@ -162,9 +161,9 @@ describe('SEP-10 state machine — challenge fetch', () => {
       }))
     );
 
-    await expect(fetchSep10Challenge(WEB_AUTH_ENDPOINT, PUBLIC_KEY, HOME_DOMAIN)).rejects.toThrow(
-      ChallengeError
-    );
+    await expect(
+      fetchSep10Challenge(WEB_AUTH_ENDPOINT, PUBLIC_KEY, HOME_DOMAIN, SIGNING_KEY)
+    ).rejects.toThrow(ChallengeError);
   });
 
   it('throws ChallengeError on HTTP error response', async () => {
@@ -176,9 +175,9 @@ describe('SEP-10 state machine — challenge fetch', () => {
       }))
     );
 
-    await expect(fetchSep10Challenge(WEB_AUTH_ENDPOINT, PUBLIC_KEY, HOME_DOMAIN)).rejects.toThrow(
-      ChallengeError
-    );
+    await expect(
+      fetchSep10Challenge(WEB_AUTH_ENDPOINT, PUBLIC_KEY, HOME_DOMAIN, SIGNING_KEY)
+    ).rejects.toThrow(ChallengeError);
   });
 });
 
@@ -288,7 +287,12 @@ describe('SEP-10 state machine — exchange', () => {
       })
     );
 
-    const challenge = await fetchSep10Challenge(WEB_AUTH_ENDPOINT, PUBLIC_KEY, HOME_DOMAIN);
+    const challenge = await fetchSep10Challenge(
+      WEB_AUTH_ENDPOINT,
+      PUBLIC_KEY,
+      HOME_DOMAIN,
+      SIGNING_KEY
+    );
     expect(challenge).toBeDefined();
   });
 
@@ -372,7 +376,12 @@ describe('SEP-10 state machine — transitions', () => {
     );
 
     // Verify flow can be initiated
-    const challenge = await fetchSep10Challenge(WEB_AUTH_ENDPOINT, PUBLIC_KEY, HOME_DOMAIN);
+    const challenge = await fetchSep10Challenge(
+      WEB_AUTH_ENDPOINT,
+      PUBLIC_KEY,
+      HOME_DOMAIN,
+      SIGNING_KEY
+    );
     expect(challenge).toBeDefined();
     expect(callCount).toBeGreaterThan(0);
   });
@@ -409,7 +418,12 @@ describe('SEP-10 state machine — transitions', () => {
       })
     );
 
-    const challenge = await fetchSep10Challenge(WEB_AUTH_ENDPOINT, PUBLIC_KEY, HOME_DOMAIN);
+    const challenge = await fetchSep10Challenge(
+      WEB_AUTH_ENDPOINT,
+      PUBLIC_KEY,
+      HOME_DOMAIN,
+      SIGNING_KEY
+    );
     expect(challenge).toBeDefined();
     expect(callTracker.getChallengeCount).toBeGreaterThan(0);
   });
@@ -422,7 +436,9 @@ describe('SEP-10 state machine — transitions', () => {
       })
     );
 
-    await expect(fetchSep10Challenge(WEB_AUTH_ENDPOINT, PUBLIC_KEY, HOME_DOMAIN)).rejects.toThrow();
+    await expect(
+      fetchSep10Challenge(WEB_AUTH_ENDPOINT, PUBLIC_KEY, HOME_DOMAIN, SIGNING_KEY)
+    ).rejects.toThrow();
   });
 });
 
@@ -508,7 +524,12 @@ describe('SEP-10 state machine — JWT caching', () => {
     );
 
     // First call
-    const challenge1 = await fetchSep10Challenge(WEB_AUTH_ENDPOINT, PUBLIC_KEY, HOME_DOMAIN);
+    const challenge1 = await fetchSep10Challenge(
+      WEB_AUTH_ENDPOINT,
+      PUBLIC_KEY,
+      HOME_DOMAIN,
+      SIGNING_KEY
+    );
     expect(challenge1).toBeDefined();
 
     // JWT would be cached in a real implementation

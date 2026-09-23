@@ -96,7 +96,7 @@ writes to Soroban — never to move user funds.
 | **StatusTracker**           | Polls `/transaction?id=...` and renders the SEP-24 state machine.                           | `components/offramp/StatusTracker.tsx` | ✅                      |
 | **Anchor registry**         | Typed list of anchors + corridors + assets. Single source of truth.                         | `lib/stellar/anchors.ts`               | ✅                      |
 | **SEP-1 resolver**          | `stellar.toml` discovery, TRANSFER_SERVER_SEP0024 + WEB_AUTH_ENDPOINT extraction.           | `lib/stellar/sep1.ts`                  | ✅                      |
-| **SEP-10 client**           | Challenge fetch, Freighter sign, JWT exchange. Network asserted as mainnet.                 | `lib/stellar/sep10.ts`                 | ✅                      |
+| **SEP-10 client**           | Challenge fetch, verification, Freighter sign, JWT exchange. Network pinned to mainnet.     | `lib/stellar/sep10.ts`                 | ✅                      |
 | **SEP-24 client**           | `/fee`, `/transactions/withdraw/interactive`, `/transaction` wrappers. 10s timeout.         | `lib/stellar/sep24.ts`                 | ✅                      |
 | **Horizon helper**          | Build + sign + submit the user's withdrawal payment on the Stellar ledger.                  | `lib/stellar/horizon.ts`               | ✅                      |
 | **Freighter hook**          | Wallet connection state + account + network.                                                | `hooks/useFreighter.ts`                | ✅                      |
@@ -211,9 +211,11 @@ sequenceDiagram
   participant F as Freighter
   participant A as Anchor
 
-  UI->>A: GET {WEB_AUTH_ENDPOINT}?account=G...
+  UI->>UI: Require https WEB_AUTH_ENDPOINT and a SIGNING_KEY in stellar.toml
+  UI->>A: GET {WEB_AUTH_ENDPOINT}?account=G...&home_domain=...
   A-->>UI: { transaction (XDR), network_passphrase }
   UI->>UI: Assert network_passphrase == Networks.PUBLIC
+  UI->>UI: WebAuth.readChallengeTx against SIGNING_KEY, home domain, endpoint host
   UI->>F: signTransaction(xdr, { networkPassphrase })
   F-->>UI: Signed XDR
   UI->>A: POST {WEB_AUTH_ENDPOINT} { transaction: signed }
@@ -223,9 +225,22 @@ sequenceDiagram
 
 Implemented in `lib/stellar/sep10.ts`. Key invariants:
 
-- **Network pinning.** `fetchChallenge` throws if the anchor's
+- **Network pinning.** `fetchSep10Challenge` throws if the anchor's
   `network_passphrase` is not mainnet. This blocks a malicious anchor from
   trying to phish a testnet-scoped signature into a mainnet replay.
+- **The challenge is verified before Freighter sees it.** `validateSep10Challenge`
+  runs the SDK's `WebAuth.readChallengeTx` and refuses to sign unless: the
+  sequence number is 0; the source account is the toml's `SIGNING_KEY`; every
+  operation is `manage_data`, the first sourced from the connected wallet and
+  keyed `<home_domain> auth`; any `web_auth_domain` op matches the
+  `WEB_AUTH_ENDPOINT` host; timebounds are present, finite and current; and the
+  envelope carries a valid `SIGNING_KEY` signature. Without these checks a
+  hostile or compromised anchor could present a real payment as the "login".
+  `signChallenge` only accepts an object the validator produced.
+- **Fail closed on the toml.** No `SIGNING_KEY`, or a `WEB_AUTH_ENDPOINT` that
+  is not `https://`, stops authentication before any request is made. Every
+  refusal surfaces as `Sep10ChallengeRejectedError` with a message the
+  `authenticating` step shows as-is.
 - **JWT is scoped.** The JWT is used only as the `Authorization: Bearer …`
   header on that anchor's SEP-24 endpoints. It is never passed cross-anchor.
 - **Ephemeral.** No JWT is persisted to localStorage or IndexedDB.
@@ -521,8 +536,9 @@ invariants. If any is broken by a PR, the PR is wrong.
    account sits between them.
 3. **We never touch fiat.** Fiat settlement is between the anchor and the
    user's bank / mobile-money provider. Stellar Intel has no banking rail.
-4. **Network is pinned.** Every SEP-10 challenge must be mainnet-scoped or it
-   is rejected at parse time.
+4. **Network is pinned, and challenges are verified.** Every SEP-10 challenge
+   must be mainnet-scoped and pass SEP-10 verification against the anchor's
+   `SIGNING_KEY` before it is offered for signing, or it is rejected.
 5. **Outcomes are user-witnessed.** Every reputation write references a
    user-signed `intent_hash` and an on-ledger `stellar_transaction_id`. An
    anchor cannot backfill its own reputation.
