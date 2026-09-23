@@ -4,7 +4,7 @@ import { z } from 'zod';
 export const ANCHOR_REPUTATION_TOOL_NAME = 'intel.anchor.reputation';
 
 const inputShape = {
-  anchor: z.string().min(1).describe('Anchor identifier (e.g., cowrie, flutterwave)'),
+  anchor: z.string().min(1).describe('Anchor identifier (e.g., cowrie, moneygram)'),
 };
 
 const PercentilesSchema = z.object({

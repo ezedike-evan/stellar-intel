@@ -7,7 +7,8 @@
  * through a real MCP client, asserting the same tool set that the stdio
  * transport serves (#137) is reachable over HTTP too.
  */
-import { describe, it, expect, beforeAll, afterAll } from 'vitest';
+import { describe, it, expect, beforeAll, afterAll, vi } from 'vitest';
+import { Keypair } from '@stellar/stellar-sdk';
 import { Client } from '@modelcontextprotocol/sdk/client/index.js';
 import { StreamableHTTPClientTransport } from '@modelcontextprotocol/sdk/client/streamableHttp.js';
 import { InMemoryTransport } from '@modelcontextprotocol/sdk/inMemory.js';
@@ -16,12 +17,17 @@ import { createServer } from '../packages/mcp/src/server.js';
 import { startStreamableHttpServer } from '../packages/mcp/src/transports/streamable-http.js';
 import type { StreamableHttpHandle } from '../packages/mcp/src/transports/streamable-http.js';
 
+// Any valid public key works as the sender: prepare never touches the network.
+const SENDER = Keypair.random().publicKey();
+
 describe('MCP server round-trip over streamable HTTP (#1049)', () => {
   let handle: StreamableHttpHandle;
   let transport: StreamableHTTPClientTransport;
   let client: Client;
 
   beforeAll(async () => {
+    // No built-in payout accounts: prepare routes only to a verified account.
+    vi.stubEnv('ANCHOR_PAYMENT_ACCOUNTS', JSON.stringify({ cowrie: Keypair.random().publicKey() }));
     handle = await startStreamableHttpServer({ host: '127.0.0.1', port: 0 });
     transport = new StreamableHTTPClientTransport(new URL(handle.url));
     client = new Client({ name: 'http-e2e-test-client', version: '1.0.0' });
@@ -29,6 +35,7 @@ describe('MCP server round-trip over streamable HTTP (#1049)', () => {
   });
 
   afterAll(async () => {
+    vi.unstubAllEnvs();
     await client?.close();
     await handle?.close();
   });
@@ -91,7 +98,7 @@ describe('MCP server round-trip over streamable HTTP (#1049)', () => {
         from: 'USDC',
         to: 'NGN',
         amount: '100',
-        sender: 'GAIJ3VXNY7RPPLGVVCLGBK7NPHLL5ZRKATHETOA7M7UPZPAAHEGQQIY2',
+        sender: SENDER,
         recipient: 'recipient-123',
       },
     });
@@ -99,7 +106,7 @@ describe('MCP server round-trip over streamable HTTP (#1049)', () => {
     expect(text).toContain('intel.offramp.quote');
     expect(text).toContain('intel.offramp.prepare');
     expect(text).toContain('intel.execute');
-    expect(text).toContain('GAIJ3VXNY7RPPLGVVCLGBK7NPHLL5ZRKATHETOA7M7UPZPAAHEGQQIY2');
+    expect(text).toContain(SENDER);
   });
 
   it('intel.offramp.prepare returns an unsigned envelope + unsigned tx over HTTP', async () => {
@@ -110,7 +117,7 @@ describe('MCP server round-trip over streamable HTTP (#1049)', () => {
         sourceAsset: 'USDC',
         destinationAsset: 'NGN',
         amount: '100',
-        sender: 'GAIJ3VXNY7RPPLGVVCLGBK7NPHLL5ZRKATHETOA7M7UPZPAAHEGQQIY2',
+        sender: SENDER,
         recipient: 'recipient-123',
       },
     });

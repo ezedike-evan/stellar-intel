@@ -33,6 +33,13 @@ share the exact same logic:
   wallet signs the intent hash and the transaction before calling this tool.
   It is the only tool in this server marked destructive in `tools/list`.
 
+The off-ramp tools carry no built-in payout addresses. A corridor routes only to
+a registered anchor (`constants/anchors.ts`) with an operator-verified receiving
+account in the `ANCHOR_PAYMENT_ACCOUNTS` environment variable (JSON, anchor id
+to Stellar account); anything else returns `NO_ROUTE` and no transaction is
+built. See
+[`docs/MCP.md`](https://github.com/ezedike-evan/stellar-intel/blob/main/docs/MCP.md#routing-and-payment-accounts).
+
 ### Resources
 
 - `stellarintel://anchor-health/ledger` (`application/json`) — the nightly

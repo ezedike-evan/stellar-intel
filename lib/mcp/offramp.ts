@@ -16,31 +16,47 @@ import { hashIntent, type Intent } from '@/lib/intent/hash';
 import { USDC_ISSUER, HORIZON_URL } from '@/lib/config';
 import { STELLAR_PUBKEY_PATTERN, AMOUNT_7DP_PATTERN } from '@/lib/patterns';
 import { fetchCorridorRates } from '@/lib/stellar/server-rates';
+import {
+  registeredAnchorsForCorridor,
+  routingTargetsForCorridor,
+  type AnchorRoutingTarget,
+} from '@/lib/intent/anchor-accounts';
 
-// ─── Anchor routing table (corridor → anchor) ────────────────────────────────
-// Mirrors app/api/intent/offramp/route.ts. Each corridor maps to the anchor we
-// route through plus its on-chain receiving account. Pricing is live (see
-// fetchCorridorRates below) — this table only pins which anchor account a
-// corridor pays out to.
+// ─── Anchor routing (corridor → anchor + payment account) ────────────────────
+// Resolved per call from the same source the web intent path uses
+// (lib/intent/anchor-accounts.ts): the anchor registry in constants/anchors.ts,
+// filtered to anchors with an operator-verified payment account in
+// ANCHOR_PAYMENT_ACCOUNTS. There is deliberately no built-in fallback. This
+// file used to carry its own corridor → account table whose two addresses did
+// not exist on mainnet and were never verified as anchor-owned, so whoever held
+// either key could have created the account and received agent off-ramps. A
+// corridor with no registered anchor, or no verified account for one, is
+// NO_ROUTE and no transaction is ever built.
 
-interface AnchorRoute {
-  anchorId: string;
-  anchorDomain: string;
-  anchorAccount: string;
+/**
+ * The NO_ROUTE error for a corridor, naming the registered anchors when the gap
+ * is a missing verified account rather than a corridor nobody serves.
+ */
+function noRouteError(id: string): OfframpToolError {
+  const registered = registeredAnchorsForCorridor(id);
+  return new OfframpToolError(
+    registered.length > 0
+      ? `No verified payment account configured for corridor ${id} (registered anchors: ${registered.join(', ')})`
+      : `No route for corridor ${id}`,
+    'NO_ROUTE'
+  );
 }
 
-export const ANCHOR_ROUTING: Record<string, AnchorRoute> = {
-  'usdc-ngn': {
-    anchorId: 'cowrie',
-    anchorDomain: 'cowrie.exchange',
-    anchorAccount: 'GAIJ3VXNY7RPPLGVVCLGBK7NPHLL5ZRKATHETOA7M7UPZPAAHEGQQIY2',
-  },
-  'usdc-kes': {
-    anchorId: 'flutterwave',
-    anchorDomain: 'flutterwave.com',
-    anchorAccount: 'GC6PVZIZYHHROHYBBOZDJ5ZZI4RH6LDSHRT4K7BA5QGZFKMZ6HAZUQAK',
-  },
-};
+/**
+ * Resolves the anchor a corridor pays out through, or throws NO_ROUTE.
+ * First configured candidate in registry order, matching the web path's
+ * default `first-match` strategy so quote, prepare and the web API agree.
+ */
+function resolveRoute(id: string): AnchorRoutingTarget {
+  const target = routingTargetsForCorridor(id)[0];
+  if (!target) throw noRouteError(id);
+  return target;
+}
 
 // ─── Schemas ──────────────────────────────────────────────────────────────────
 
@@ -174,10 +190,7 @@ export async function getQuote(
 ): Promise<QuoteOutput> {
   const parsed = QuoteInputSchema.parse(input);
   const id = corridorId(parsed.from, parsed.to);
-  const route = ANCHOR_ROUTING[id];
-  if (!route) {
-    throw new OfframpToolError(`No route for corridor ${id}`, 'NO_ROUTE');
-  }
+  const route = resolveRoute(id);
 
   const { rates, errors } = await fetchCorridorRates(id, parsed.amount);
   const anchorRate = rates.find((r) => r.anchorId === route.anchorId);
@@ -218,10 +231,7 @@ export async function getQuote(
 export async function prepareIntent(input: PrepareInput): Promise<PrepareOutput> {
   const intent = PrepareInputSchema.parse(input);
   const id = corridorId(intent.sourceAsset, intent.destinationAsset);
-  const route = ANCHOR_ROUTING[id];
-  if (!route) {
-    throw new OfframpToolError(`No route for corridor ${id}`, 'NO_ROUTE');
-  }
+  const route = resolveRoute(id);
 
   const intentHash = await hashIntent(intent as unknown as Intent);
 
@@ -303,10 +313,10 @@ export async function executeIntent(input: ExecuteInput): Promise<ExecuteOutput>
   }
 
   const id = corridorId(intent.sourceAsset, intent.destinationAsset);
-  const route = ANCHOR_ROUTING[id];
-  if (!route) {
-    throw new OfframpToolError(`No route for corridor ${id}`, 'NO_ROUTE');
-  }
+  // Resolved again rather than trusted from the envelope: the payment must go
+  // to an account that is verified for this corridor at submission time.
+  const targets = routingTargetsForCorridor(id);
+  if (targets.length === 0) throw noRouteError(id);
 
   const { Keypair, TransactionBuilder, Networks, Horizon } = await import('@stellar/stellar-sdk');
 
@@ -368,13 +378,20 @@ export async function executeIntent(input: ExecuteInput): Promise<ExecuteOutput>
     rest.length > 0 ||
     !payment ||
     payment.type !== 'payment' ||
-    payment.destination !== route.anchorAccount ||
+    !payment.destination ||
     payment.amount === undefined ||
     Number(payment.amount) !== Number(intent.amount) ||
     payment.asset?.code !== intent.sourceAsset ||
     payment.asset?.issuer !== USDC_ISSUER
   ) {
     throw new OfframpToolError('Transaction operations do not match the intent', 'TX_MISMATCH');
+  }
+  const route = targets.find((t) => t.anchorAccount === payment.destination);
+  if (!route) {
+    throw new OfframpToolError(
+      `Payment destination is not a verified anchor account for corridor ${id}`,
+      'TX_MISMATCH'
+    );
   }
 
   const expectedMemo = Buffer.from(intentHash, 'hex');

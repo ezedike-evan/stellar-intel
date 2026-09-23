@@ -19,7 +19,7 @@ import type { ServerRatesResult } from '@/lib/stellar/server-rates';
 /** Corridors the stubbed rate source can quote, and what it quotes them at. */
 const STUBBED_CORRIDORS: Record<string, { anchorId: string; anchorName: string; rate: number }> = {
   'usdc-ngn': { anchorId: 'cowrie', anchorName: 'Cowrie', rate: 1600 },
-  'usdc-kes': { anchorId: 'flutterwave', anchorName: 'Flutterwave', rate: 129 },
+  'usdc-kes': { anchorId: 'moneygram', anchorName: 'MoneyGram', rate: 129 },
 };
 
 /**

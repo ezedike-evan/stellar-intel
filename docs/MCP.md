@@ -155,6 +155,24 @@ Annotated `readOnlyHint: true` — nothing is submitted on-chain until
   `{ type: "offramp", sourceAsset, destinationAsset, amount, sender, recipient }`
 - **Output:** `{ unsignedEnvelope: { intent, intentHash }, unsignedTx }`
 
+#### Routing and payment accounts
+
+`quote`, `prepare` and `execute` all route a corridor the same way the web
+intent API does (`lib/intent/anchor-accounts.ts`): the anchors registered for
+the corridor in `constants/anchors.ts`, narrowed to those with an
+operator-verified Stellar receiving account in `ANCHOR_PAYMENT_ACCOUNTS`
+(JSON, anchor id to account), first match in registry order. The server has
+**no built-in payout addresses**. A corridor with no registered anchor, or no
+verified account for one, returns `NO_ROUTE` and no transaction is built.
+`intel.execute` resolves the corridor again at submission time and rejects
+(`TX_MISMATCH`) a payment whose destination is not a currently verified
+account for it.
+
+Self-hosting the server, set `ANCHOR_PAYMENT_ACCOUNTS` for every corridor you
+want `prepare`/`execute` to serve. Check each address against Horizon and the
+anchor's own published details first: a wrong address is a payment to a
+stranger.
+
 ### `intel.execute` (#819)
 
 Annotated `destructiveHint: true, idempotentHint: false` — it is the only
@@ -210,7 +228,7 @@ Returns 7/30/90-day rolling percentile scorecards for an anchor, fetched from
 the Stellar Intel API (`/api/reputation/{anchor}`).
 
 - **Input:** `{ anchor: string }` — anchor identifier (e.g. `cowrie`,
-  `flutterwave`)
+  `moneygram`)
 - **Output:** `{ anchorId, scorecards }` where `scorecards` maps each window
   (`7`, `30`, `90`) to either an `ok` scorecard
   (`{ state: "ok", window, sampleSize, fillRate, settleMs: { p50, p95 }, slippage: { p50, p95 }, computedAt, lastPublisherTxTimestamp }`)
