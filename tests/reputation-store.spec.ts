@@ -38,7 +38,8 @@ class SqliteBackedPgExecutor implements SqlExecutor {
       bind[`p${i + 1}`] = (typeof v === 'boolean' ? (v ? 1 : 0) : v) as never;
     });
     const args = params.length ? [bind] : [];
-    if (/^\s*select|returning/i.test(text.trim())) {
+    const sql = text.trim();
+    if (/^select\b/i.test(sql) || /\breturning\b/i.test(sql)) {
       return { rows: stmt.all(...(args as never[])) as Record<string, unknown>[] };
     }
     stmt.run(...(args as never[]));
