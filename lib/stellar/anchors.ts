@@ -259,3 +259,41 @@ export function getCorridorById(id: string): Corridor {
 export function isValidCorridorId(id: string): boolean {
   return CORRIDORS.some((c) => c.id === id);
 }
+
+/**
+ * Validates structural rules for anchor registry fields:
+ * - every id in unverifiedCorridors is also in corridors;
+ * - sep31Corridors and corridors are disjoint, and every sep31Corridors id exists in CORRIDORS;
+ * - an anchor with a non-empty sep31Corridors lists 'sep31' in seps.
+ */
+export function registryShapeViolations(anchors: Anchor[], corridors: Corridor[]): string[] {
+  const violations: string[] = [];
+  const validCorridorIds = new Set(corridors.map((c) => c.id));
+
+  for (const anchor of anchors) {
+    if (anchor.unverifiedCorridors) {
+      for (const id of anchor.unverifiedCorridors) {
+        if (!anchor.corridors.includes(id)) {
+          violations.push(`${anchor.id}: unverifiedCorridors contains '${id}' but it is not in corridors`);
+        }
+      }
+    }
+
+    if (anchor.sep31Corridors && anchor.sep31Corridors.length > 0) {
+      if (!anchor.seps?.includes('sep31')) {
+        violations.push(`${anchor.id}: has sep31Corridors but 'sep31' is not in seps`);
+      }
+
+      for (const id of anchor.sep31Corridors) {
+        if (!validCorridorIds.has(id)) {
+          violations.push(`${anchor.id}: sep31Corridors contains '${id}' which is not a known corridor`);
+        }
+        if (anchor.corridors.includes(id)) {
+          violations.push(`${anchor.id}: sep31Corridors and corridors are not disjoint ('${id}' is in both)`);
+        }
+      }
+    }
+  }
+
+  return violations;
+}
