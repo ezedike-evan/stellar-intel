@@ -13,8 +13,9 @@
 
 import { getLogger } from '@/lib/logger';
 import { resolveToml, validateTomlIntegrity, type TomlResult } from '@/lib/stellar/sep1';
+import { assertSep38Capable, getSep38Price } from '@/lib/stellar/sep38';
 import { getCorridorById } from '@/lib/stellar/anchors';
-import { assertSep38Capable, getSep38Price, getSep38Info } from '@/lib/stellar/sep38';
+import { verifyAssetOnChain } from '@/lib/stellar/horizon';
 import {
   DEGRADE_AFTER_FAILURES,
   DOWN_AFTER_FAILURES,
@@ -641,39 +642,46 @@ export function quoteLatencyPercentiles(
   return { p50Ms: rank(50), p95Ms: rank(95), sampleCount: windowed.length };
 }
 
-// ─── Issuer-mismatch probe (Issue #D004) ───────────────────────────────────────
+// ─── Issuer-mismatch probe (Issue #D004, #1243) ────────────────────────────────
 //
 // Compares an anchor's stellar.toml advertised issuer for its registered asset
-// against the issuer its own live SEP-38 GET /info response returns for that
-// same asset. The two are usually set from the same config and never drift,
-// but if they ever do it means the anchor's live quote server is settling a
-// look-alike asset under a different issuer than the one publicly advertised
-// — a trust-critical signal distinct from routine unreachability, so it is
-// recorded as its own probe dimension rather than folded into `uptime`.
+// against the issuer verified on-chain via Horizon. The advertised issuer in
+// stellar.toml [[CURRENCIES]] is checked to confirm that the issuer actually
+// issues that asset on Horizon. If the asset does not exist on-chain or is issued
+// under a different issuer than publicly advertised, a 'mismatch' failure type
+// is produced — a trust-critical signal distinct from routine unreachability.
 
 /** Outcome of one issuer-mismatch check. */
 export interface IssuerCheckResult {
-  /** True when both the toml and the live SEP-38 /info issuer were resolved (whether or not they match). */
+  /** True when the toml was resolved and on-chain verification was completed (whether or not they match). */
   ok: boolean;
   /** Issuer address from the anchor's stellar.toml CURRENCIES entry for its asset code; null if absent. */
   advertisedIssuer: string | null;
-  /** Issuer address from the anchor's live SEP-38 /info assets list for the same asset code; null if absent. */
+  /** Issuer address verified on-chain via Horizon for the same asset code; null if absent/unverified. */
   actualIssuer: string | null;
-  /** Set when `ok` is false — the reason the check could not complete. */
+  /** Set when `ok` is false — the reason the check could not complete (e.g. TOML unreachability or Horizon network failure). */
   error?: string;
 }
 
 /** Injectable dependencies for the issuer-mismatch probe. */
 export interface IssuerMismatchDeps {
-  /** Resolves an anchor's advertised vs. actual issuer. Defaults to a real toml + SEP-38 /info fetch. */
+  /** Resolves an anchor's advertised vs. actual issuer. Defaults to defaultCheckIssuer. */
   checkIssuer?: (anchor: Anchor) => Promise<IssuerCheckResult>;
+  /** Resolves an anchor's stellar.toml. Defaults to resolveToml from lib/stellar/sep1. */
+  fetchToml?: (domain: string) => Promise<TomlResult>;
+  /** Verifies whether an asset exists on-chain for a given code and issuer. Defaults to verifyAssetOnChain from lib/stellar/horizon. */
+  verifyOnChainAsset?: (assetCode: string, issuer: string) => Promise<boolean>;
   /** Monotonic-ish millisecond clock. Defaults to `Date.now`. */
   now?: () => number;
 }
 
-async function defaultCheckIssuer(anchor: Anchor): Promise<IssuerCheckResult> {
+export async function defaultCheckIssuer(
+  anchor: Anchor,
+  fetchToml: (domain: string) => Promise<TomlResult> = resolveToml,
+  verifyOnChain: (assetCode: string, issuer: string) => Promise<boolean> = verifyAssetOnChain
+): Promise<IssuerCheckResult> {
   const domain = anchor.serviceDomain ?? anchor.homeDomain;
-  const tomlResult = await resolveToml(domain);
+  const tomlResult = await fetchToml(domain);
   if (!tomlResult.ok) {
     return { ok: false, advertisedIssuer: null, actualIssuer: null, error: tomlResult.error };
   }
@@ -681,24 +689,28 @@ async function defaultCheckIssuer(anchor: Anchor): Promise<IssuerCheckResult> {
   const advertisedIssuer =
     tomlResult.data.CURRENCIES.find((c) => c.code === anchor.assetCode)?.issuer ?? null;
 
-  let quoteServer: string;
-  try {
-    quoteServer = assertSep38Capable(tomlResult.data);
-  } catch (err) {
+  if (!advertisedIssuer) {
     return {
-      ok: false,
-      advertisedIssuer,
+      ok: true,
+      advertisedIssuer: null,
       actualIssuer: null,
-      error: err instanceof Error ? err.message : String(err),
     };
   }
 
   try {
-    const info = await getSep38Info(quoteServer);
-    const prefix = `stellar:${anchor.assetCode}:`;
-    const match = info.assets.find((a) => a.asset.startsWith(prefix));
-    const actualIssuer = match ? match.asset.slice(prefix.length) || null : null;
-    return { ok: true, advertisedIssuer, actualIssuer };
+    const exists = await verifyOnChain(anchor.assetCode, advertisedIssuer);
+    if (!exists) {
+      return {
+        ok: true,
+        advertisedIssuer,
+        actualIssuer: null,
+      };
+    }
+    return {
+      ok: true,
+      advertisedIssuer,
+      actualIssuer: advertisedIssuer,
+    };
   } catch (err) {
     return {
       ok: false,
@@ -709,9 +721,15 @@ async function defaultCheckIssuer(anchor: Anchor): Promise<IssuerCheckResult> {
   }
 }
 
-function resolveIssuerMismatchDeps(deps?: IssuerMismatchDeps): Required<IssuerMismatchDeps> {
+function resolveIssuerMismatchDeps(deps?: IssuerMismatchDeps): {
+  checkIssuer: (anchor: Anchor) => Promise<IssuerCheckResult>;
+  now: () => number;
+} {
+  const fetchToml = deps?.fetchToml ?? resolveToml;
+  const verifyOnChain = deps?.verifyOnChainAsset ?? verifyAssetOnChain;
   return {
-    checkIssuer: deps?.checkIssuer ?? defaultCheckIssuer,
+    checkIssuer:
+      deps?.checkIssuer ?? ((anchor) => defaultCheckIssuer(anchor, fetchToml, verifyOnChain)),
     now: deps?.now ?? Date.now,
   };
 }
