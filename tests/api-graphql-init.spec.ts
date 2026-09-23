@@ -80,11 +80,16 @@ describe('graphql route always answers with a body', () => {
   });
 
   it('enforces the depth limit', async () => {
-    const deep = '{ rates(corridor: "usdc-ngn") { rates { anchorId } } }';
-    const response = await POST(postRequest({ query: deep.repeat(1) }));
-    // Within budget — this asserts the rule is wired without tripping it.
-    expect([200, 400]).toContain(response.status);
-    expect((await response.text()).length).toBeGreaterThan(0);
+    // Twelve levels of selection nesting, past MAX_DEPTH (10). Introspection is
+    // used because it nests arbitrarily and resolves locally: an earlier version
+    // queried `rates`, which fetched every live anchor and timed out under load.
+    const deep =
+      '{ __schema { types { fields { type { ofType { ofType { ofType { ofType { ofType { ofType { ofType { name } } } } } } } } } } } }';
+    const response = await POST(postRequest({ query: deep }));
+    const body = (await response.json()) as { errors?: Array<{ message: string }> };
+
+    expect(response.status).toBe(400);
+    expect(body.errors?.[0]?.message).toContain('maximum depth');
   });
 });
 
