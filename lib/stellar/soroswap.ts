@@ -2,7 +2,7 @@
  * lib/stellar/soroswap.ts
  *
  * Thin REST client for Soroswap's swap aggregator API
- * (https://api.soroswap.finance) -- per ROADMAP.md line 90 and issue #816's
+ * (https://api.soroswap.finance) -- per docs/ROADMAP.md and issue #816's
  * own scope note, this integrates an existing aggregator rather than
  * rebuilding one.
  *

@@ -439,7 +439,7 @@ export type SolverResult =
 // ─── Hop chain (H3 primitive II — chained atomic execution, #815) ─────────────
 //
 // A hop chain composes on-ramp, swap, and yield legs — the modules H2
-// deliberately deferred (see ROADMAP.md) — into a single sequenced plan.
+// deliberately deferred (see docs/ROADMAP.md) — into a single sequenced plan.
 // "Atomic" here means every hop's preconditions are validated together
 // before any hop executes (see planHopChain in lib/router/hops.ts), not a
 // single ledger-level rollback: on-ramp/off-ramp legs are off-chain SEP

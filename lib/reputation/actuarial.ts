@@ -4,8 +4,8 @@ import type { OutcomeLogRow, OutcomeStatus, ProbeLedgerRow } from '@/types/reput
  * lib/reputation/actuarial.ts
  *
  * Settlement-SLA actuarial dataset (issue #813). The SLA product (#814) launches
- * only once enough actuarial observations exist — roughly 10k (ROADMAP.md line
- * 101). Real execution outcomes (#799) are the load-bearing signal; probes
+ * only once enough actuarial observations exist — roughly 10k (docs/ROADMAP.md).
+ * Real execution outcomes (#799) are the load-bearing signal; probes
  * (#785/#786) accelerate accumulation.
  *
  * The dataset is a derived view: observations are computed from — and
