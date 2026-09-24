@@ -30,15 +30,14 @@ for users — losing funds — is structurally out of scope because we never hol
   ([`docs/INTENT_API.md`](INTENT_API.md)).
 - **`ADMIN_SECRET_KEY`** gates `/admin/disputes` and admin reputation routes. Keep
   it server-side only; never expose it to the client (it is **not** a
-  `NEXT_PUBLIC_*` var). See `lib/config.ts` for env validation.
+  `NEXT_PUBLIC_*` var). See `lib/auth/admin.ts`.
 - **Publisher keys** (Soroban oracle) are server-held and never shipped to the
   browser. Rotation policy is a roadmap item ([`docs/ROADMAP.md`](ROADMAP.md)).
-- **Contract admin key** — the reputation contract's admin `Address` is
-  currently a single HSM-backed key. The migration path to a community-governed
-  multisig (M-of-N Stellar account) is documented in
-  [`docs/GOVERNANCE.md`](GOVERNANCE.md). The two-step `propose_admin` /
-  `accept_admin` entrypoints on the contract are in place to execute that
-  handoff safely once the signer set is ratified.
+- **Contract admin key** — on testnet the admin is a single key shared with the
+  publisher account; mainnet requires a separate multisig admin
+  ([`docs/MAINNET_LAUNCH.md`](MAINNET_LAUNCH.md), [`docs/GOVERNANCE.md`](GOVERNANCE.md)).
+  The two-step `propose_admin` / `accept_admin` entrypoints on the contract are in
+  place to execute that handoff safely once the signer set is ratified.
 
 ## Network & data integrity
 
