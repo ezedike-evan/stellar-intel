@@ -20,7 +20,11 @@ export type { Sep10ChallengeRejection } from './errors';
 // ─── Typed errors ─────────────────────────────────────────────────────────────
 
 export type ChallengeErrorCode =
-  'FETCH_FAILED' | 'MISSING_FIELD' | 'WRONG_NETWORK' | 'INVALID_XDR' | 'NOT_VALIDATED';
+  | 'FETCH_FAILED'
+  | 'MISSING_FIELD'
+  | 'WRONG_NETWORK'
+  | 'INVALID_XDR'
+  | 'NOT_VALIDATED';
 
 export class ChallengeError extends Error {
   constructor(
@@ -324,7 +328,7 @@ export function validateSep10Challenge(
   const hash = tx.hash();
   const signed = tx.signatures.some((sig) => {
     try {
-      return serverKey.verify(hash, sig.signature.toBytes());
+      return serverKey.verify(hash, sig.signature());
     } catch {
       return false; // malformed signature bytes
     }
