@@ -65,6 +65,8 @@ describe('per-corridor anchor coverage', () => {
     const orphanCorridor: Corridor = {
       id: 'test-orphan',
       from: 'USDC',
+      fromIssuer: 'GA5ZSEJYB37JRC5AVCIA5MOP4RHTM335X2KGX3IHOJAPP5RE34K4KZVN',
+      fromPeg: 'USD',
       to: 'ZZZ',
       countryCode: 'ZZ',
       countryName: 'Testland',

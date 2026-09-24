@@ -259,3 +259,44 @@ export function getCorridorById(id: string): Corridor {
 export function isValidCorridorId(id: string): boolean {
   return CORRIDORS.some((c) => c.id === id);
 }
+
+// ─── Corridor assets (#ANC002) ────────────────────────────────────────────────
+
+/**
+ * The Stellar asset a corridor carries on its source side, plus the fiat
+ * currency it is pegged to. `issuer` is null for native XLM, so callers can
+ * derive SEP-38 identifiers once instead of re-implementing the native special
+ * case downstream.
+ */
+export interface CorridorAsset {
+  /** Stellar asset code, e.g. 'USDC'. */
+  code: string;
+  /** Issuing account; null for native XLM. */
+  issuer: string | null;
+  /** Fiat currency the asset is pegged to, e.g. 'USD' for USDC. */
+  peg: string;
+}
+
+/**
+ * Returns the asset a corridor carries on its source side — code, issuer, and
+ * fiat peg — resolved from the corridor registry.
+ * Throws the same "Unknown corridor" error as {@link getCorridorById} for an
+ * unknown corridor ID.
+ */
+export function getCorridorAsset(corridorId: string): CorridorAsset {
+  const corridor = getCorridorById(corridorId);
+  return {
+    code: corridor.from,
+    issuer: corridor.fromIssuer,
+    peg: corridor.fromPeg,
+  };
+}
+
+/**
+ * Formats an asset as its SEP-38 identifier: `stellar:native` when the issuer
+ * is null (native XLM), otherwise `` `stellar:${code}:${issuer}` ``.
+ */
+export function sep38AssetId(asset: Pick<CorridorAsset, 'code' | 'issuer'>): string {
+  if (asset.issuer === null) return 'stellar:native';
+  return `stellar:${asset.code}:${asset.issuer}`;
+}
