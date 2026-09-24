@@ -15,6 +15,7 @@ import {
   probeAllAnchorQuotes,
   quoteLatencyPercentiles,
   probeIssuerMismatch,
+  defaultCheckIssuer,
   probeAllAnchorIssuers,
   probeTomlIntegrity,
   probeAllAnchorIntegrity,
@@ -521,6 +522,87 @@ describe('issuer-mismatch probe', () => {
     expect(samples).toHaveLength(2);
     expect(store.samples('a.example')).toHaveLength(1);
     expect(store.samples('b.example')).toHaveLength(1);
+  });
+
+  it('defaultCheckIssuer returns ok:true and matching actualIssuer when advertised issuer exists on-chain and matches expected', async () => {
+    const anchor = testAnchor({
+      assetCode: 'USDC',
+      assetIssuer: 'GA5ZSEJYB37JRC5AVCIA5MOP4RHTM335X2KGX3IHOJAPP5RE34K4KZVN',
+    });
+    const fetchToml = async () => ({
+      ok: true as const,
+      data: {
+        domain: 'stellar.moneygram.com',
+        CURRENCIES: [
+          { code: 'USDC', issuer: 'GA5ZSEJYB37JRC5AVCIA5MOP4RHTM335X2KGX3IHOJAPP5RE34K4KZVN' },
+        ],
+      } as unknown as Sep1TomlData,
+    });
+    const verifyOnChainAsset = vi.fn().mockResolvedValue(true);
+
+    const result = await defaultCheckIssuer(anchor, { fetchToml, verifyOnChainAsset });
+    expect(result.ok).toBe(true);
+    expect(result.advertisedIssuer).toBe(
+      'GA5ZSEJYB37JRC5AVCIA5MOP4RHTM335X2KGX3IHOJAPP5RE34K4KZVN'
+    );
+    expect(result.actualIssuer).toBe('GA5ZSEJYB37JRC5AVCIA5MOP4RHTM335X2KGX3IHOJAPP5RE34K4KZVN');
+    expect(verifyOnChainAsset).toHaveBeenCalledWith(
+      'USDC',
+      'GA5ZSEJYB37JRC5AVCIA5MOP4RHTM335X2KGX3IHOJAPP5RE34K4KZVN'
+    );
+
+    const store = new InMemoryProbeStore();
+    const sample = await probeIssuerMismatch(anchor, store, { fetchToml, verifyOnChainAsset });
+    expect(sample.reachable).toBe(true);
+    expect(sample.failureType ?? null).toBeNull();
+  });
+
+  it('defaultCheckIssuer flags mismatch when advertised issuer does not match expected anchor issuer', async () => {
+    const anchor = testAnchor({
+      assetCode: 'USDC',
+      assetIssuer: 'GA5ZSEJYB37JRC5AVCIA5MOP4RHTM335X2KGX3IHOJAPP5RE34K4KZVN',
+    });
+    const fetchToml = async () => ({
+      ok: true as const,
+      data: {
+        domain: 'stellar.moneygram.com',
+        CURRENCIES: [{ code: 'USDC', issuer: 'GFAKEISSUER1234567890' }],
+      } as unknown as Sep1TomlData,
+    });
+    const verifyOnChainAsset = vi.fn().mockResolvedValue(true);
+
+    const result = await defaultCheckIssuer(anchor, { fetchToml, verifyOnChainAsset });
+    expect(result.ok).toBe(true);
+    expect(result.advertisedIssuer).toBe('GFAKEISSUER1234567890');
+    expect(result.actualIssuer).toBe('GA5ZSEJYB37JRC5AVCIA5MOP4RHTM335X2KGX3IHOJAPP5RE34K4KZVN');
+
+    const store = new InMemoryProbeStore();
+    const sample = await probeIssuerMismatch(anchor, store, { fetchToml, verifyOnChainAsset });
+    expect(sample.reachable).toBe(false);
+    expect(sample.failureType).toBe('mismatch');
+    expect(sample.error).toContain('issuer mismatch for USDC');
+  });
+
+  it('defaultCheckIssuer flags mismatch when advertised issuer does not exist on-chain', async () => {
+    const anchor = testAnchor({ assetCode: 'USDC', assetIssuer: undefined });
+    const fetchToml = async () => ({
+      ok: true as const,
+      data: {
+        domain: 'anchor.example',
+        CURRENCIES: [{ code: 'USDC', issuer: 'GUNISSUEDASSET' }],
+      } as unknown as Sep1TomlData,
+    });
+    const verifyOnChainAsset = vi.fn().mockResolvedValue(false);
+
+    const result = await defaultCheckIssuer(anchor, { fetchToml, verifyOnChainAsset });
+    expect(result.ok).toBe(true);
+    expect(result.advertisedIssuer).toBe('GUNISSUEDASSET');
+    expect(result.actualIssuer).toBeNull();
+
+    const store = new InMemoryProbeStore();
+    const sample = await probeIssuerMismatch(anchor, store, { fetchToml, verifyOnChainAsset });
+    expect(sample.reachable).toBe(false);
+    expect(sample.failureType).toBe('mismatch');
   });
 });
 

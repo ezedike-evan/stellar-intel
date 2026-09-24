@@ -673,11 +673,11 @@ export function quoteLatencyPercentiles(
 
 /** Outcome of one issuer-mismatch check. */
 export interface IssuerCheckResult {
-  /** True when both the toml and the live SEP-38 /info issuer were resolved (whether or not they match). */
+  /** True when the toml was fetched and the issuer comparison/verification was evaluated. */
   ok: boolean;
   /** Issuer address from the anchor's stellar.toml CURRENCIES entry for its asset code; null if absent. */
   advertisedIssuer: string | null;
-  /** Issuer address from the anchor's live SEP-38 /info assets list for the same asset code; null if absent. */
+  /** Verified/expected issuer address; null if absent or unverified on-chain. */
   actualIssuer: string | null;
   /** Set when `ok` is false — the reason the check could not complete. */
   error?: string;
@@ -685,25 +685,69 @@ export interface IssuerCheckResult {
 
 /** Injectable dependencies for the issuer-mismatch probe. */
 export interface IssuerMismatchDeps {
-  /** Resolves an anchor's advertised vs. actual issuer. Defaults to a real toml + SEP-38 /info fetch. */
+  /** Resolves an anchor's advertised vs. actual issuer. Defaults to toml + on-chain verification. */
   checkIssuer?: (anchor: Anchor) => Promise<IssuerCheckResult>;
+  /** Checks on-chain whether an asset with the given code and issuer exists on Horizon. */
+  verifyOnChainAsset?: (assetCode: string, issuer: string) => Promise<boolean>;
+  /** Anchor TOML fetcher. Defaults to resolveToml. */
+  fetchToml?: (domain: string) => Promise<TomlResult>;
   /** Monotonic-ish millisecond clock. Defaults to `Date.now`. */
   now?: () => number;
 }
 
-async function defaultCheckIssuer(anchor: Anchor): Promise<IssuerCheckResult> {
+export async function defaultVerifyOnChainAsset(
+  assetCode: string,
+  issuer: string
+): Promise<boolean> {
+  try {
+    const { horizonServer } = await import('@/lib/stellar/horizon');
+    const res = await horizonServer.assets().forCode(assetCode).forIssuer(issuer).call();
+    return (res._embedded?.records?.length ?? 0) > 0;
+  } catch {
+    return false;
+  }
+}
+
+export async function defaultCheckIssuer(
+  anchor: Anchor,
+  deps?: {
+    fetchToml?: (domain: string) => Promise<TomlResult>;
+    verifyOnChainAsset?: (assetCode: string, issuer: string) => Promise<boolean>;
+  }
+): Promise<IssuerCheckResult> {
   const domain = anchor.serviceDomain ?? anchor.homeDomain;
-  const tomlResult = await resolveToml(domain);
+  const fetchToml = deps?.fetchToml ?? resolveToml;
+  const verifyOnChainAsset = deps?.verifyOnChainAsset ?? defaultVerifyOnChainAsset;
+
+  const tomlResult = await fetchToml(domain);
   if (!tomlResult.ok) {
     return { ok: false, advertisedIssuer: null, actualIssuer: null, error: tomlResult.error };
   }
 
-  const advertisedIssuer =
-    tomlResult.data.CURRENCIES.find((c) => c.code === anchor.assetCode)?.issuer ?? null;
+  const currency = tomlResult.data.CURRENCIES?.find((c) => c.code === anchor.assetCode);
+  const advertisedIssuer = currency?.issuer ?? null;
 
-  let quoteServer: string;
+  if (!advertisedIssuer) {
+    return {
+      ok: true,
+      advertisedIssuer: null,
+      actualIssuer: anchor.assetIssuer ?? null,
+    };
+  }
+
+  // If anchor config has a designated expected issuer, verify that advertised matches expected
+  if (anchor.assetIssuer && advertisedIssuer !== anchor.assetIssuer) {
+    return {
+      ok: true,
+      advertisedIssuer,
+      actualIssuer: anchor.assetIssuer,
+    };
+  }
+
+  // Verify on-chain that the asset actually exists on Horizon
+  let onChainValid = false;
   try {
-    quoteServer = assertSep38Capable(tomlResult.data);
+    onChainValid = await verifyOnChainAsset(anchor.assetCode, advertisedIssuer);
   } catch (err) {
     return {
       ok: false,
@@ -713,25 +757,33 @@ async function defaultCheckIssuer(anchor: Anchor): Promise<IssuerCheckResult> {
     };
   }
 
-  try {
-    const info = await getSep38Info(quoteServer);
-    const prefix = `stellar:${anchor.assetCode}:`;
-    const match = info.assets.find((a) => a.asset.startsWith(prefix));
-    const actualIssuer = match ? match.asset.slice(prefix.length) || null : null;
-    return { ok: true, advertisedIssuer, actualIssuer };
-  } catch (err) {
+  if (onChainValid) {
     return {
-      ok: false,
+      ok: true,
       advertisedIssuer,
-      actualIssuer: null,
-      error: err instanceof Error ? err.message : String(err),
+      actualIssuer: advertisedIssuer,
     };
   }
+
+  return {
+    ok: true,
+    advertisedIssuer,
+    actualIssuer: null,
+  };
 }
 
-function resolveIssuerMismatchDeps(deps?: IssuerMismatchDeps): Required<IssuerMismatchDeps> {
+function resolveIssuerMismatchDeps(deps?: IssuerMismatchDeps): {
+  checkIssuer: (anchor: Anchor) => Promise<IssuerCheckResult>;
+  now: () => number;
+} {
   return {
-    checkIssuer: deps?.checkIssuer ?? defaultCheckIssuer,
+    checkIssuer:
+      deps?.checkIssuer ??
+      ((anchor: Anchor) =>
+        defaultCheckIssuer(anchor, {
+          fetchToml: deps?.fetchToml,
+          verifyOnChainAsset: deps?.verifyOnChainAsset,
+        })),
     now: deps?.now ?? Date.now,
   };
 }
