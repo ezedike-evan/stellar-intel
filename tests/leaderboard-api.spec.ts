@@ -266,10 +266,10 @@ describe('GET /api/reputation/leaderboard — with corridor filter', () => {
   it('only returns anchors that serve the requested corridor', async () => {
     const ids = idsOf(await leaderboardFor({ corridor: 'usdc-ngn' }));
 
-    // moneygram, cowrie and ngnc all serve usdc-ngn; anclap does not.
+    // moneygram and cowrie serve usdc-ngn; ngnc and anclap do not.
     expect(ids).toContain('moneygram');
     expect(ids).toContain('cowrie');
-    expect(ids).toContain('ngnc');
+    expect(ids).not.toContain('ngnc');
     expect(ids).not.toContain('anclap');
   });
 

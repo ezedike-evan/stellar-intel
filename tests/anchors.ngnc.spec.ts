@@ -1,7 +1,7 @@
 import { describe, it, expect } from 'vitest';
 import { ANCHORS, CORRIDORS, ANCHOR_HOME_DOMAINS } from '@/constants/anchors';
 
-describe('ngnc.online triage (B029)', () => {
+describe('ngnc.online triage (B029, updated #1275)', () => {
   const ngnc = ANCHORS.find((a) => a.id === 'ngnc');
 
   it('is included in ANCHORS — has SEP-24 NGN withdraw corridor', () => {
@@ -12,24 +12,24 @@ describe('ngnc.online triage (B029)', () => {
     expect(ngnc?.homeDomain).toBe('ngnc.online');
   });
 
-  it('anchors USDC with the correct issuer', () => {
-    expect(ngnc?.assetCode).toBe('USDC');
-    expect(ngnc?.assetIssuer).toBeDefined();
-    expect(ngnc?.assetIssuer.length).toBeGreaterThan(0);
+  it('anchors NGNC with the correct issuer', () => {
+    expect(ngnc?.assetCode).toBe('NGNC');
+    expect(ngnc?.assetIssuer).toBe('GASBV6W7GGED66MXEVC7YZHTWWYMSVYEY35USF2HJZBLABLYIFQGXZY6');
   });
 
-  it('serves the usdc-ngn corridor', () => {
-    expect(ngnc?.corridors).toContain('usdc-ngn');
+  it('serves the ngnc-ngn corridor', () => {
+    expect(ngnc?.corridors).toContain('ngnc-ngn');
   });
 
-  it('declares sep24 capability', () => {
+  it('declares sep10 and sep24 capabilities', () => {
+    expect(ngnc?.seps).toContain('sep10');
     expect(ngnc?.seps).toContain('sep24');
   });
 
-  it('usdc-ngn corridor is defined in CORRIDORS', () => {
-    const corridor = CORRIDORS.find((c) => c.id === 'usdc-ngn');
+  it('ngnc-ngn corridor is defined in CORRIDORS', () => {
+    const corridor = CORRIDORS.find((c) => c.id === 'ngnc-ngn');
     expect(corridor).toBeDefined();
-    expect(corridor?.from).toBe('USDC');
+    expect(corridor?.from).toBe('NGNC');
     expect(corridor?.to).toBe('NGN');
     expect(corridor?.countryCode).toBe('NG');
   });
