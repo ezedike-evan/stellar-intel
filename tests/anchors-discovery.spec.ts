@@ -28,13 +28,26 @@ describe('discoverAnchorsForCorridor', () => {
     const result = await discoverAnchorsForCorridor('usdc-ngn');
     const ids = result.map((anchor) => anchor.id);
 
-    expect(ids).toEqual(['cowrie', 'ngnc']);
+    expect(ids).toEqual(['cowrie']);
     expect(result).toEqual([
       expect.objectContaining({
         id: 'cowrie',
         TRANSFER_SERVER_SEP0024: 'https://api.cowrie.exchange/sep24',
         WEB_AUTH_ENDPOINT: 'https://api.cowrie.exchange/auth',
       }),
+    ]);
+  });
+
+  it('returns successful ngnc-ngn anchor resolutions with populated endpoints', async () => {
+    vi.spyOn(StellarToml.Resolver, 'resolve').mockImplementation((domain) => {
+      return Promise.resolve(tomlFor(String(domain)) as never);
+    });
+
+    const result = await discoverAnchorsForCorridor('ngnc-ngn');
+    const ids = result.map((anchor) => anchor.id);
+
+    expect(ids).toEqual(['ngnc']);
+    expect(result).toEqual([
       expect.objectContaining({
         id: 'ngnc',
         TRANSFER_SERVER_SEP0024: 'https://ngnc.online/sep24',
