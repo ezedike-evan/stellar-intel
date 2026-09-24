@@ -35,10 +35,10 @@ describe('ANCHORS', () => {
     expect(cowrie.corridors).toEqual(['usdc-ngn']);
   });
 
-  it('Anclap covers usdc-ars and usdc-pen', () => {
+  it('Anclap covers ars-ars and pen-pen', () => {
     const anclap = ANCHORS.find((a) => a.id === 'anclap')!;
-    expect(anclap.corridors).toContain('usdc-ars');
-    expect(anclap.corridors).toContain('usdc-pen');
+    expect(anclap.corridors).toContain('ars-ars');
+    expect(anclap.corridors).toContain('pen-pen');
   });
 });
 
@@ -59,6 +59,9 @@ describe('CORRIDORS', () => {
         'usdc-ars',
         'usdc-pen',
         'usdc-eur',
+        'ars-ars',
+        'pen-pen',
+        'ngnc-ngn',
       ])
     );
   });
@@ -97,13 +100,19 @@ describe('getAnchorById', () => {
 });
 
 describe('getAnchorsByCorridorId', () => {
-  it('returns MoneyGram, Cowrie, and NGNC for usdc-ngn', () => {
+  it('returns MoneyGram and Cowrie for usdc-ngn', () => {
     const anchors = getAnchorsByCorridorId('usdc-ngn');
     const ids = anchors.map((a) => a.id);
     expect(ids).toContain('moneygram');
     expect(ids).toContain('cowrie');
-    expect(ids).toContain('ngnc');
-    expect(ids).toHaveLength(3);
+    expect(ids).not.toContain('ngnc');
+    expect(ids).toHaveLength(2);
+  });
+
+  it('returns only NGNC for ngnc-ngn', () => {
+    const anchors = getAnchorsByCorridorId('ngnc-ngn');
+    expect(anchors).toHaveLength(1);
+    expect(anchors[0]?.id).toBe('ngnc');
   });
 
   it('returns MoneyGram for usdc-kes', () => {
@@ -118,8 +127,8 @@ describe('getAnchorsByCorridorId', () => {
     expect(anchors[0]?.id).toBe('moneygram');
   });
 
-  it('returns only Anclap for usdc-ars', () => {
-    const anchors = getAnchorsByCorridorId('usdc-ars');
+  it('returns only Anclap for ars-ars', () => {
+    const anchors = getAnchorsByCorridorId('ars-ars');
     expect(anchors).toHaveLength(1);
     expect(anchors[0]?.id).toBe('anclap');
   });

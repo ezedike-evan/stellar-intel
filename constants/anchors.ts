@@ -51,26 +51,33 @@ export const ANCHORS: Anchor[] = [
     assetCode: 'USDC',
     assetIssuer: USDC_ISSUER,
   },
+  // anclap.com: ARS and PEN fiat corridors — SEP-6 and SEP-24 withdraw/deposit enabled.
+  // Verified 2026-09-23 (/info census). TOML: TRANSFER_SERVER = https://api.anclap.com/transfer6,
+  // TRANSFER_SERVER_SEP0024 = https://api.anclap.com/transfer24. /info lists ARS and PEN
+  // on both rails (no USDC). ARS issuer GCYE7C77EB5AWAA25R5XMWNI2EDOKTTFTTPZKM2SR5DI4B4WFD52DARS,
+  // PEN issuer GA4TDPNUCZPTOHB3TKUYMDCRVATXKEADH7ZEYEBWJKQKE2UBFCYNBPEN.
   {
     id: 'anclap',
     name: 'Anclap',
     homeDomain: 'anclap.com',
-    corridors: ['usdc-ars', 'usdc-pen'],
-    assetCode: 'USDC',
-    assetIssuer: USDC_ISSUER,
+    corridors: ['ars-ars', 'pen-pen'],
+    assetCode: 'ARS',
+    assetIssuer: 'GCYE7C77EB5AWAA25R5XMWNI2EDOKTTFTTPZKM2SR5DI4B4WFD52DARS',
     seps: ['sep6', 'sep24'],
   },
-  // ngnc.online: NGN fiat corridor — SEP-24 withdraw enabled.
-  // Verified 2026-06-29. TOML: TRANSFER_SERVER_SEP0024 present. /info: withdraw.USDC.enabled = true.
-  // Serves USDC→NGN corridor for Nigeria.
+  // ngnc.online: NGN fiat corridor — SEP-24 withdraw and deposit enabled on its native NGNC token.
+  // Verified 2026-09-23 (/info census). TOML: TRANSFER_SERVER_SEP0024 = https://anchor.ngnc.online/sep24.
+  // /info lists only NGNC token (deposit min 20,000, withdraw min 10,000); no USDC rail.
+  // NGNC issuer: GASBV6W7GGED66MXEVC7YZHTWWYMSVYEY35USF2HJZBLABLYIFQGXZY6.
+  // GHSC and KESC are marked status=pending in the TOML and are not yet on the rail.
   {
     id: 'ngnc',
     name: 'NGNC',
     homeDomain: 'ngnc.online',
-    corridors: ['usdc-ngn'],
-    assetCode: 'USDC',
-    assetIssuer: USDC_ISSUER,
-    seps: ['sep24'],
+    corridors: ['ngnc-ngn'],
+    assetCode: 'NGNC',
+    assetIssuer: 'GASBV6W7GGED66MXEVC7YZHTWWYMSVYEY35USF2HJZBLABLYIFQGXZY6',
+    seps: ['sep10', 'sep24'],
   },
   // mykobo.co: DELISTED 2026-09-06. Its stellar.toml still advertises both
   // TRANSFER_SERVER and TRANSFER_SERVER_SEP0024 on stellar.mykobo.co, and that
@@ -197,6 +204,27 @@ export const CORRIDORS: Corridor[] = [
     countryCode: 'BR',
     countryName: 'Brazil',
   },
+  {
+    id: 'ars-ars',
+    from: 'ARS',
+    to: 'ARS',
+    countryCode: 'AR',
+    countryName: 'Argentina',
+  },
+  {
+    id: 'pen-pen',
+    from: 'PEN',
+    to: 'PEN',
+    countryCode: 'PE',
+    countryName: 'Peru',
+  },
+  {
+    id: 'ngnc-ngn',
+    from: 'NGNC',
+    to: 'NGN',
+    countryCode: 'NG',
+    countryName: 'Nigeria',
+  },
   // ─── v1.1 target corridors ────────────────────────────────────────────────
   // Scaffolded ahead of anchor onboarding (see .github/ISSUE_TEMPLATE/anchor-onboard.yml).
   // Gated behind the `v11Corridors` flag AND anchor coverage — see V11_CORRIDOR_IDS
@@ -234,6 +262,9 @@ export const V11_CORRIDOR_IDS: ReadonlySet<string> = new Set([
   // corridor resolvable for lookups while hiding it from selectors until an
   // anchor serves it again. Same state it was in before mykobo onboarded.
   'usdc-eur',
+  // usdc-ars and usdc-pen are orphaned when anclap was corrected to its own tokens 2026-09-23.
+  'usdc-ars',
+  'usdc-pen',
 ]);
 
 /**
@@ -251,6 +282,9 @@ export const TYPICAL_AMOUNTS: Record<string, number[]> = {
   'usdc-pen': [50, 150, 300],
   'usdc-eur': [100, 300, 500],
   'brl-brl': [100, 250, 500],
+  'ars-ars': [50000, 100000, 250000],
+  'pen-pen': [100, 300, 500],
+  'ngnc-ngn': [20000, 50000, 100000],
   'usdc-zar': [50, 150, 300],
   'usdc-xof': [50, 100, 200],
 };
