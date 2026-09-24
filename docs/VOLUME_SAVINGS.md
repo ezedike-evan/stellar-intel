@@ -7,7 +7,7 @@
 > Source of truth: [`contracts/reputation/src/volume_savings.rs`](../contracts/reputation/src/volume_savings.rs)
 > (`VolumeSavings` struct, `add_volume_savings` / `get_volume_savings` entrypoints).
 
-**Last reviewed:** 2026-08-26
+**Last reviewed:** 2026-09-24
 
 ---
 
@@ -15,40 +15,32 @@
 
 ### "Fees saved" definition
 
-For each executed intent, the **savings** is the difference between the
-baseline cost and the actual cost, expressed in USDC:
+For each executed intent with `outcome === 'completed'`, the **savings** is the difference between the baseline cost in USDC and the actual quoted cost in USDC, clamped at zero (returning 0 if the outcome is not completed or if required amounts are missing):
 
 ```
-savings = baseline_received - actual_received
+baseline_cost = delivered_amount / baseline_rate
+savings = max(0, baseline_cost - quoted_amount)
 ```
 
 Where:
 
-- **`actual_received`** — the fiat amount the user actually received after
-  all anchor fees, derived from the delivered rate in the settled outcome.
-- **`baseline_received`** — the fiat amount the user would have received
-  using a reference baseline rate.
+- **`quoted_amount`** — the actual USDC input amount for the route.
+- **`delivered_amount`** — the fiat amount delivered to the recipient.
+- **`baseline_rate`** — the reference exchange rate (fiat per 1 USDC).
+- **`baseline_cost`** — the USDC amount that would have been required to deliver `delivered_amount` at the `baseline_rate`.
 
 ### Baseline selection
 
-The baseline is determined using the following priority order:
+The baseline rate is determined using the following priority order:
 
-1. **Anchor's own indicative rate** at intent time (from SEP-24 `/fee` or
-   SEP-38 `QUOTE` response). This captures what the user would have gotten
-   if they went directly to that same anchor without Stellar Intel routing.
-2. **Corridor median rate** — the median of all available anchor rates for
-   the corridor at the time of execution, used when the anchor-specific
-   baseline is unavailable (e.g. the anchor only provides a firm quote
-   post-routing).
-3. **Previous published corridor rate** — the last on-chain corridor rate
-   published by `publish_corridor_rate`, used as fallback when neither
-   anchor-specific nor corridor-median data exists.
+1. **Anchor's own indicative rate** at intent time (`quoted_rate` from SEP-24 `/fee` or SEP-38 `QUOTE` response). This captures what the user would have gotten if they went directly to that same anchor without Stellar Intel routing.
+2. **Corridor median rate** — the median of recent delivered rates for the corridor from attested outcomes, used when the anchor-specific indicative rate is unavailable or non-positive.
+
+_(Note: Fallback to previously published on-chain corridor rates is not implemented; if neither indicative rate nor corridor median is available or positive, savings defaults to 0)._
 
 ### Volume tracking
 
-Cumulative volume is the sum of all `actual_received` values (in USDC
-equivalent) for the corridor. This is the total value that flowed through
-Stellar Intel's routing for that corridor.
+Cumulative volume is the sum of all `quoted_amount` values converted to microUSDC (`quoted_amount × 1_000_000`) for completed outcomes in the corridor. This is the total USDC value that flowed through Stellar Intel's routing for that corridor.
 
 ### On-chain publishing
 
@@ -56,9 +48,9 @@ Volume and savings are published by the same publisher service that submits
 outcomes (see `packages/publisher/src/batch.ts`). Each settlement triggers:
 
 1. Outcome submission to the reputation oracle (`submit_outcome`).
-2. Volume + savings increment via `add_volume_savings`.
+2. Volume + savings increment via `add_volume_savings` (for completed outcomes).
 
-Both values are **cumulative and monotonically increasing**. A consumer can
+Both values are **cumulative; only decreases when an admin calls `reset_volume_savings`**. A consumer can
 read the latest snapshot and compare it against a previously recorded value
 to compute the delta over any interval.
 
