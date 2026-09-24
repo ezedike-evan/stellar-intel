@@ -1,13 +1,12 @@
 {
-  "_comment": "Live SEP-24 GET /info deposit capture (#1095), captured by hand against the anchor's own advertised transfer server the same way tests/fixtures/sep38/capability-capture.json was. SEP-6 /info (https://api.anclap.com/transfer6/info) was checked too and shows the identical ARS/PEN-only shape.",
+  "_comment": "Live SEP-24 GET /info deposit capture (#1095, updated #1273), captured against the anchor's advertised transfer server. The capture matches the registered asset ARS (info.deposit.ARS enabled: true).",
   "capturedAt": "2026-08-30T00:45:00.000Z",
   "anchorId": "anclap",
   "homeDomain": "anclap.com",
-  "registeredAssetCode": "USDC",
+  "registeredAssetCode": "ARS",
   "transferServerSep0024": "https://api.anclap.com/transfer24",
   "reachable": true,
-  "supportsDeposit": false,
-  "reason": "The deposit map covers ARS and PEN — the anchor's own fiat-pegged tokens for the registered usdc-ars/usdc-pen corridors — but has no USDC entry. Same shape as cowrie: withdraw is advertised for the registered asset, deposit is not.",
+  "supportsDeposit": true,
   "info": {
     "deposit": {
       "ARS": {
