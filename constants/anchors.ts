@@ -98,6 +98,8 @@ export const ANCHORS: Anchor[] = [
     assetCode: 'BRL',
     assetIssuer: 'GDVKY2GU2DRXWTBEYJJWSFXIGBZV6AZNBVVSUHEPZI54LIS6BA7DVVSP',
     seps: ['sep6', 'sep24', 'sep31'],
+    // deposit disabled on SEP-6/SEP-24 /info (verified 2026-09-23)
+    depositEnabled: false,
   },
   // zeam.money: ZAR fiat corridor — SEP-24 withdraw/deposit enabled.
   // Verified 2026-08-28. The home domain publishes the SEP-24 endpoint; the

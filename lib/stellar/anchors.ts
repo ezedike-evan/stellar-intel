@@ -192,6 +192,14 @@ export function getAnchorsByCorridorId(corridorId: string): Anchor[] {
 }
 
 /**
+ * Returns all deposit-capable anchors that serve the given corridor.
+ * Filters `getAnchorsByCorridorId` to anchors whose `depositEnabled` is not explicitly false.
+ */
+export function getDepositCapableAnchors(corridorId: string): Anchor[] {
+  return getAnchorsByCorridorId(corridorId).filter((a) => a.depositEnabled !== false);
+}
+
+/**
  * Resolves SEP-1 details for every known, non-degraded anchor that serves the
  * corridor. Failed anchors are omitted so callers can continue with the live subset.
  * For each anchor, uses serviceDomain if available, otherwise falls back to homeDomain.
