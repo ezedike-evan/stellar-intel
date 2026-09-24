@@ -160,22 +160,38 @@ export async function getResolvedAnchorById(id: string): Promise<ResolvedAnchor>
   return { ...anchor, ...result.data };
 }
 
-// SEPs that indicate transfer capability (deposit/withdrawal/send)
-// SEP-6: programmatic transfer, SEP-24: interactive transfer,
-// SEP-31: cross-border payment
-const TRANSFER_SEPS: ReadonlyArray<NonNullable<Anchor['seps']>[number]> = [
-  'sep6',
-  'sep24',
-  'sep31',
-];
+// SEPs that indicate routable transfer capability for end-user off-ramps
+// (SEP-6 programmatic transfer, SEP-24 interactive transfer).
+// SEP-31 (cross-border direct payment) requires bilateral sending-anchor
+// agreements; SEP-31-only anchors are tracked for health but never routed.
+const ROUTABLE_SEPS: ReadonlyArray<NonNullable<Anchor['seps']>[number]> = ['sep6', 'sep24'];
 
 /**
- * Returns true if the anchor supports at least one transfer SEP
- * (SEP-6, SEP-24, or SEP-31). Issuer-only anchors that lack all
- * three are excluded from corridor selectors and the rate engine.
+ * Returns true if the anchor supports at least one routable transfer SEP
+ * (SEP-6 or SEP-24). Issuer-only anchors and SEP-31-only anchors are excluded
+ * from corridor selectors and the rate engine.
  */
 export function transferCapable(anchor: Anchor): boolean {
-  return anchor.seps?.some((sep) => TRANSFER_SEPS.includes(sep)) ?? false;
+  return anchor.seps?.some((sep) => ROUTABLE_SEPS.includes(sep)) ?? false;
+}
+
+/**
+ * Returns true if the anchor supports SEP-31 and lacks both SEP-6 and SEP-24.
+ * Such anchors are tracked in the registry for health monitoring but are never
+ * returned for end-user off-ramp routing.
+ */
+export function isSep31Only(anchor: Anchor): boolean {
+  const seps = anchor.seps ?? [];
+  return seps.includes('sep31') && !seps.includes('sep6') && !seps.includes('sep24');
+}
+
+/**
+ * Returns all registered anchors in full, including SEP-31-only and issuer-only
+ * anchors. Health probes and administrative monitors use this; end-user routing
+ * must never use this directly.
+ */
+export function getTrackedAnchors(): Anchor[] {
+  return [...ANCHORS];
 }
 
 /**

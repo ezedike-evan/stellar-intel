@@ -9,6 +9,8 @@ import {
   getCorridorById,
   isValidCorridorId,
   transferCapable,
+  isSep31Only,
+  getTrackedAnchors,
 } from '@/lib/stellar/anchors';
 
 describe('ANCHORS', () => {
@@ -188,8 +190,12 @@ describe('transferCapable', () => {
     expect(transferCapable({ ...issuerOnly, seps: ['sep10', 'sep24'] })).toBe(true);
   });
 
-  it('returns true for an anchor with SEP-31', () => {
-    expect(transferCapable({ ...issuerOnly, seps: ['sep10', 'sep31'] })).toBe(true);
+  it('returns false for a SEP-31-only anchor (SEP-31 is tracked, not routed)', () => {
+    expect(transferCapable({ ...issuerOnly, seps: ['sep10', 'sep31'] })).toBe(false);
+  });
+
+  it('returns true for an anchor with both SEP-24 and SEP-31', () => {
+    expect(transferCapable({ ...issuerOnly, seps: ['sep10', 'sep24', 'sep31'] })).toBe(true);
   });
 
   it('returns false when seps is undefined', () => {
@@ -198,21 +204,58 @@ describe('transferCapable', () => {
   });
 });
 
-describe('getAnchorsByCorridorId excludes issuer-only anchors', () => {
-  it('returns only transfer-capable anchors for usdc-ngn', () => {
+describe('isSep31Only', () => {
+  const baseAnchor: Anchor = {
+    id: 'x',
+    name: 'x',
+    homeDomain: 'x',
+    corridors: [],
+    assetCode: 'x',
+    assetIssuer: 'x',
+  };
+
+  it('returns true for an anchor with SEP-31 and neither SEP-6 nor SEP-24', () => {
+    expect(isSep31Only({ ...baseAnchor, seps: ['sep10', 'sep31'] })).toBe(true);
+  });
+
+  it('returns false for an anchor with SEP-31 and SEP-24', () => {
+    expect(isSep31Only({ ...baseAnchor, seps: ['sep10', 'sep24', 'sep31'] })).toBe(false);
+  });
+
+  it('returns false for an anchor with SEP-31 and SEP-6', () => {
+    expect(isSep31Only({ ...baseAnchor, seps: ['sep6', 'sep31'] })).toBe(false);
+  });
+
+  it('returns false for an anchor without SEP-31', () => {
+    expect(isSep31Only({ ...baseAnchor, seps: ['sep10', 'sep24'] })).toBe(false);
+    expect(isSep31Only({ ...baseAnchor, seps: ['sep10'] })).toBe(false);
+    expect(isSep31Only(baseAnchor)).toBe(false);
+  });
+});
+
+describe('getTrackedAnchors', () => {
+  it('returns all registered anchors', () => {
+    const tracked = getTrackedAnchors();
+    expect(tracked).toEqual(ANCHORS);
+    expect(tracked.length).toBe(ANCHORS.length);
+  });
+});
+
+describe('getAnchorsByCorridorId excludes non-routable anchors', () => {
+  it('returns only routable transfer-capable anchors for usdc-ngn', () => {
     const results = getAnchorsByCorridorId('usdc-ngn');
     for (const anchor of results) {
       expect(transferCapable(anchor)).toBe(true);
     }
   });
 
-  it('does not include anchors lacking transfer SEPs', () => {
-    // Every registered anchor serving usdc-ngn is transfer-capable; an
-    // issuer-only anchor (e.g. seps: ['sep10'] only) added in the future
-    // would be excluded by the filter.
+  it('does not include anchors lacking routable transfer SEPs (e.g. SEP-31-only or issuer-only)', () => {
     const results = getAnchorsByCorridorId('usdc-ngn');
     const ids = results.map((a) => a.id);
     expect(ids).toContain('moneygram');
     expect(ids).toContain('cowrie');
+    for (const anchor of results) {
+      expect(isSep31Only(anchor)).toBe(false);
+    }
   });
 });
