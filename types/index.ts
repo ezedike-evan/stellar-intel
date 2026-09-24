@@ -21,6 +21,8 @@ export interface Anchor {
   serviceDomain?: string;
   /** Known SEP protocol support flags for this anchor. */
   seps?: Array<'sep6' | 'sep10' | 'sep24' | 'sep31' | 'sep38'>;
+  /** Whether the anchor supports deposits (on-ramp). Defaults to true if omitted. */
+  depositEnabled?: boolean;
   /** Structured operator-supplied metadata, as collected by the anchor onboarding template. */
   metadata?: AnchorMetadata;
 }
@@ -477,7 +479,8 @@ export interface HopChainPlan {
 }
 
 export type HopPlanResult =
-  { ok: true; step: HopStep } | { ok: false; hopId: string; error: string; details?: string };
+  | { ok: true; step: HopStep }
+  | { ok: false; hopId: string; error: string; details?: string };
 
 export type HopExecutionResult =
   | {
@@ -677,7 +680,9 @@ export interface Sep6WithdrawNeedsInfo {
 
 /** Union of all three SEP-6 /withdraw response shapes. */
 export type Sep6WithdrawResponse =
-  Sep6WithdrawInteractive | Sep6WithdrawNonInteractive | Sep6WithdrawNeedsInfo;
+  | Sep6WithdrawInteractive
+  | Sep6WithdrawNonInteractive
+  | Sep6WithdrawNeedsInfo;
 
 // ─── SEP-12 ───────────────────────────────────────────────────────────────────
 

@@ -6,6 +6,7 @@ import {
   ANCHOR_HOME_DOMAINS,
   getAnchorById,
   getAnchorsByCorridorId,
+  getDepositCapableAnchors,
   getCorridorById,
   isValidCorridorId,
   transferCapable,
@@ -126,6 +127,29 @@ describe('getAnchorsByCorridorId', () => {
 
   it('returns an empty array for an unknown corridor', () => {
     expect(getAnchorsByCorridorId('usdc-xyz')).toEqual([]);
+  });
+});
+
+describe('getDepositCapableAnchors', () => {
+  it('excludes ntokens for brl-brl while getAnchorsByCorridorId includes it', () => {
+    const allBrlAnchors = getAnchorsByCorridorId('brl-brl');
+    expect(allBrlAnchors.map((a) => a.id)).toContain('ntokens');
+
+    const depositCapableBrlAnchors = getDepositCapableAnchors('brl-brl');
+    expect(depositCapableBrlAnchors.map((a) => a.id)).not.toContain('ntokens');
+    expect(depositCapableBrlAnchors).toEqual([]);
+  });
+
+  it('returns deposit-capable anchors for usdc-ngn', () => {
+    const depositCapable = getDepositCapableAnchors('usdc-ngn');
+    const ids = depositCapable.map((a) => a.id);
+    expect(ids).toContain('moneygram');
+    expect(ids).toContain('cowrie');
+    expect(ids).toContain('ngnc');
+  });
+
+  it('returns an empty array for an unknown corridor', () => {
+    expect(getDepositCapableAnchors('usdc-xyz')).toEqual([]);
   });
 });
 
