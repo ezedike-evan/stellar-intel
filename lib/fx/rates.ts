@@ -62,3 +62,46 @@ export async function getUsdFxRate(currencyCode: string): Promise<number> {
   }
   return rate;
 }
+
+/**
+ * Returns the live reference exchange rate from `from` currency to `to` currency
+ * (ISO 4217, e.g. "EUR" → "NGN", "ARS" → "ARS").
+ *
+ * - Identity case: When `from` and `to` are the same currency (case-insensitive),
+ *   returns `1` immediately without making any network request.
+ * - Direct USD case: When `from` is "USD", delegates directly to `getUsdFxRate(to)`.
+ * - Cross-rate case: When converting between non-USD currencies, calculates the
+ *   cross-rate via USD (`rate(USD→to) / rate(USD→from)`) using the same cached
+ *   USD rate table.
+ *
+ * Throws when a reference rate is unavailable for either leg of the pair.
+ */
+export async function getFxRate(from: string, to: string): Promise<number> {
+  const upperFrom = from.toUpperCase();
+  const upperTo = to.toUpperCase();
+
+  if (upperFrom === upperTo) {
+    return 1;
+  }
+
+  if (upperFrom === 'USD') {
+    return getUsdFxRate(upperTo);
+  }
+
+  const rates = await loadRates();
+  const fromRate = rates[upperFrom];
+  const toRate = upperTo === 'USD' ? 1 : rates[upperTo];
+
+  if (
+    typeof fromRate !== 'number' ||
+    !Number.isFinite(fromRate) ||
+    fromRate <= 0 ||
+    typeof toRate !== 'number' ||
+    !Number.isFinite(toRate) ||
+    toRate <= 0
+  ) {
+    throw new Error(`No reference FX rate available for ${upperFrom}→${upperTo}`);
+  }
+
+  return toRate / fromRate;
+}
