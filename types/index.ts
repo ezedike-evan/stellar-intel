@@ -48,6 +48,10 @@ export interface Corridor {
   to: string; // fiat currency code, e.g. 'NGN'
   countryCode: string; // ISO 3166-1 alpha-2
   countryName: string;
+  /** Stellar issuer of the corridor's source asset; null for native XLM. */
+  fromIssuer: string | null;
+  /** Fiat currency the source asset is pegged to (e.g. 'USD' for USDC). */
+  fromPeg: string;
 }
 
 // ─── Rate comparison ──────────────────────────────────────────────────────────

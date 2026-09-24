@@ -137,6 +137,8 @@ export const CORRIDORS: Corridor[] = [
   {
     id: 'usdc-ngn',
     from: 'USDC',
+    fromIssuer: USDC_ISSUER,
+    fromPeg: 'USD',
     to: 'NGN',
     countryCode: 'NG',
     countryName: 'Nigeria',
@@ -144,6 +146,8 @@ export const CORRIDORS: Corridor[] = [
   {
     id: 'usdc-kes',
     from: 'USDC',
+    fromIssuer: USDC_ISSUER,
+    fromPeg: 'USD',
     to: 'KES',
     countryCode: 'KE',
     countryName: 'Kenya',
@@ -151,6 +155,8 @@ export const CORRIDORS: Corridor[] = [
   {
     id: 'usdc-ghs',
     from: 'USDC',
+    fromIssuer: USDC_ISSUER,
+    fromPeg: 'USD',
     to: 'GHS',
     countryCode: 'GH',
     countryName: 'Ghana',
@@ -158,6 +164,8 @@ export const CORRIDORS: Corridor[] = [
   {
     id: 'usdc-mxn',
     from: 'USDC',
+    fromIssuer: USDC_ISSUER,
+    fromPeg: 'USD',
     to: 'MXN',
     countryCode: 'MX',
     countryName: 'Mexico',
@@ -165,6 +173,8 @@ export const CORRIDORS: Corridor[] = [
   {
     id: 'usdc-brl',
     from: 'USDC',
+    fromIssuer: USDC_ISSUER,
+    fromPeg: 'USD',
     to: 'BRL',
     countryCode: 'BR',
     countryName: 'Brazil',
@@ -172,6 +182,8 @@ export const CORRIDORS: Corridor[] = [
   {
     id: 'usdc-ars',
     from: 'USDC',
+    fromIssuer: USDC_ISSUER,
+    fromPeg: 'USD',
     to: 'ARS',
     countryCode: 'AR',
     countryName: 'Argentina',
@@ -179,6 +191,8 @@ export const CORRIDORS: Corridor[] = [
   {
     id: 'usdc-pen',
     from: 'USDC',
+    fromIssuer: USDC_ISSUER,
+    fromPeg: 'USD',
     to: 'PEN',
     countryCode: 'PE',
     countryName: 'Peru',
@@ -186,6 +200,8 @@ export const CORRIDORS: Corridor[] = [
   {
     id: 'usdc-eur',
     from: 'USDC',
+    fromIssuer: USDC_ISSUER,
+    fromPeg: 'USD',
     to: 'EUR',
     countryCode: 'DE',
     countryName: 'Germany',
@@ -193,6 +209,8 @@ export const CORRIDORS: Corridor[] = [
   {
     id: 'brl-brl',
     from: 'BRL',
+    fromIssuer: 'GDVKY2GU2DRXWTBEYJJWSFXIGBZV6AZNBVVSUHEPZI54LIS6BA7DVVSP',
+    fromPeg: 'BRL',
     to: 'BRL',
     countryCode: 'BR',
     countryName: 'Brazil',
@@ -205,6 +223,8 @@ export const CORRIDORS: Corridor[] = [
   {
     id: 'usdc-zar',
     from: 'USDC',
+    fromIssuer: USDC_ISSUER,
+    fromPeg: 'USD',
     to: 'ZAR',
     countryCode: 'ZA',
     countryName: 'South Africa',
@@ -214,6 +234,8 @@ export const CORRIDORS: Corridor[] = [
   {
     id: 'usdc-xof',
     from: 'USDC',
+    fromIssuer: USDC_ISSUER,
+    fromPeg: 'USD',
     to: 'XOF',
     countryCode: 'SN',
     countryName: 'Senegal',
