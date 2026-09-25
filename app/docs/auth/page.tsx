@@ -69,6 +69,9 @@ export default function AuthPage() {
             <li>
               <code className="text-accent">POST /api/admin/disputes</code>
             </li>
+            <li>
+              <code className="text-accent">POST /api/admin/cache/invalidate</code>
+            </li>
           </ul>
         </div>
 
@@ -121,7 +124,7 @@ export default function AuthPage() {
       <section className="space-y-4">
         <h2 className="text-xl font-semibold text-primary-text">Rate Limits</h2>
         <p className="text-secondary-text">
-          Rate limiting is applied on a per-IP basis using a sliding window algorithm. The following
+          Rate limiting is applied on a per-IP basis using a fixed window algorithm. The following
           limits are currently enforced:
         </p>
 
@@ -169,9 +172,9 @@ export default function AuthPage() {
                 <td className="px-4 py-3 text-secondary-text">60 seconds</td>
               </tr>
               <tr>
-                <td className="px-4 py-3 font-mono text-xs text-accent">Other public endpoints</td>
-                <td className="px-4 py-3 text-secondary-text">Coming soon</td>
-                <td className="px-4 py-3 text-secondary-text">—</td>
+                <td className="px-4 py-3 font-mono text-xs text-accent">Other endpoints</td>
+                <td className="px-4 py-3 text-secondary-text">60 requests</td>
+                <td className="px-4 py-3 text-secondary-text">60 seconds (default)</td>
               </tr>
             </tbody>
           </table>
@@ -186,13 +189,16 @@ export default function AuthPage() {
           <CodeBlock
             language="json"
             code={`{
-  "code": "TOO_MANY_REQUESTS",
-  "message": "Rate limit exceeded. Retry after 45 seconds."
+  "code": "RATE_LIMITED",
+  "message": "Too many requests",
+  "retryAfter": 45
 }`}
           />
           <p className="mt-2 text-sm text-secondary-text">
             The response includes a <code>Retry-After</code> header with the number of seconds to
-            wait, and <code>X-RateLimit-Remaining</code> headers on successful requests.
+            wait. Every rate-limited endpoint also sets <code>X-RateLimit-Limit</code>,{' '}
+            <code>X-RateLimit-Remaining</code> and <code>X-RateLimit-Reset</code> headers on both
+            successful and 429 responses.
           </p>
         </div>
       </section>
