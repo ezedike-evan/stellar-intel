@@ -2381,14 +2381,21 @@ Classifies directory anchors by SEP support — see
 
 # SDK
 
-> **Status: roadmap (v4).** A first-class typed client `@stellarintel/sdk` is a
-> v4 "Universal" deliverable (see [`docs/ROADMAP.md`](ROADMAP.md)). It is **not yet
-> published to npm** — the npm badge in the README is aspirational. Until it ships,
-> use the HTTP API directly (below). The MCP package
-> ([`packages/mcp/`](../packages/mcp/), `@stellarintel/mcp`) is the agent-facing
-> surface that exists today.
+> **Status: built in-tree, not yet published.** All four SDKs exist in this
+> repository; none is on a public registry yet (the registry scopes are
+> unclaimed — see each package's README for the publishing steps):
+>
+> | Package                    | Language   | Path                                                                      |
+> | -------------------------- | ---------- | ------------------------------------------------------------------------- |
+> | `@stellarintel/sdk`        | TypeScript | [`packages/sdk/`](../packages/sdk/)                                       |
+> | `stellarintel`             | Python     | [`packages/python-sdk/`](../packages/python-sdk/)                         |
+> | `stellar-intel-client`     | Rust       | [`crates/stellar-intel-client/`](../crates/stellar-intel-client/)         |
+> | `stellar-intel-reputation` | Rust       | [`crates/stellar-intel-reputation/`](../crates/stellar-intel-reputation/) |
+>
+> The MCP package ([`packages/mcp/`](../packages/mcp/), `@stellarintel/mcp`) is
+> the agent-facing surface alongside them.
 
-**Last reviewed:** 2026-08-26
+**Last reviewed:** 2026-09-25
 
 ## `stellar-intel-reputation` (Rust, on-chain)
 
@@ -2407,7 +2414,7 @@ until the maintainer wires up a `CARGO_REGISTRY_TOKEN`, depend on it directly:
 ```toml
 [dependencies]
 stellar-intel-reputation = { git = "https://github.com/ezedike-evan/stellar-intel", package = "stellar-intel-reputation" }
-# once published: stellar-intel-reputation = "0.2"
+# once published: stellar-intel-reputation = "0.3"
 ```
 
 ```rust,ignore
@@ -2482,22 +2489,32 @@ Types you can import from the repo today: `OfframpIntent`, `SignedIntentEnvelope
 `IntentV1` ([`types/intent.ts`](../types/intent.ts)) and the reputation types
 ([`types/reputation.ts`](../types/reputation.ts)).
 
-## Future: published `@stellarintel/sdk` package (v4)
+## Using `@stellarintel/sdk` from the repo
 
-The npm package is planned and is not available yet. Once published, its
-installation will be:
+The TypeScript client is built at [`packages/sdk/`](../packages/sdk/)
+(`0.1.0`) — typed wrappers for the rates, intent, and reputation APIs with
+retries and idempotency keys on by default. It is not on npm yet (the
+`@stellarintel` scope is unclaimed; `packages/sdk/README.md` documents the two
+human publishing steps, after which a `sdk-v*` tag triggers
+`.github/workflows/publish-npm-sdk.yml`). Until then, consume it from the
+repository:
 
 ```bash
-npm install @stellarintel/sdk
+git clone https://github.com/ezedike-evan/stellar-intel
+cd stellar-intel/packages/sdk && npm install && npm run build
+# then, from your project:
+npm install /path/to/stellar-intel/packages/sdk
 ```
 
-- Typed wrappers for the rates, intent, and reputation APIs.
-- React hooks (the app's `hooks/useAnchorRates.ts` is the reference pattern).
-- A signing helper that builds → canonicalizes → hashes → signs an intent via a
-  wallet adapter.
-- Three reference integrations (web, agent, wallet).
+```ts
+import { StellarIntelClient } from '@stellarintel/sdk';
 
-When it ships, this document becomes the SDK reference; the HTTP recipes above
+const client = new StellarIntelClient();
+const { rates, bestRateId } = await client.getRates('usdc-ngn');
+```
+
+See [`packages/sdk/README.md`](../packages/sdk/README.md) for the full method
+list, error handling, and the hardening contract. The HTTP recipes above
 remain valid as the underlying transport.
 
 <!-- source: docs/MCP.md -->
