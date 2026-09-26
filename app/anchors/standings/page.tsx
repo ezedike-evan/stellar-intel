@@ -179,7 +179,7 @@ export default async function StandingsPage() {
         // eslint-disable-next-line react/no-danger
         dangerouslySetInnerHTML={{ __html: serializeJsonLd(jsonLd) }}
       />
-      <main className="mx-auto max-w-5xl px-4 py-12 sm:py-16">
+      <div className="mx-auto max-w-5xl px-4 py-12 sm:py-16">
         <header>
           <h1 className="type-title">Anchor standings</h1>
           <p className="text-secondary-text measure mt-4 text-base">
@@ -373,7 +373,7 @@ export default async function StandingsPage() {
           record is not evidence of poor performance, and treating it as such is how a monitor turns
           into a rumour.
         </p>
-      </main>
+      </div>
     </>
   );
 }

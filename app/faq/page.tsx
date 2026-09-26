@@ -39,11 +39,16 @@ function loadFaqSource(): string {
 
 export default function FaqPage() {
   const source = loadFaqSource();
-  const html = marked.parse(source, { async: false });
+  // docs/FAQ.md keeps `###` questions (the JSON-LD parser keys on them), which would jump
+  // from the page's h1 straight to h3. Render them as h2, keeping the h3 prose styling.
+  const html = marked
+    .parse(source, { async: false })
+    .replace(/<h3\b/g, '<h2 class="!mt-8 !text-base"')
+    .replace(/<\/h3>/g, '</h2>');
   const jsonLd = serializeJsonLd(buildFaqPageJsonLd(parseFaqMarkdown(source)));
 
   return (
-    <main className="mx-auto max-w-4xl px-4 py-8">
+    <div className="mx-auto max-w-4xl px-4 py-8">
       <script
         type="application/ld+json"
         // eslint-disable-next-line react/no-danger
@@ -54,6 +59,6 @@ export default function FaqPage() {
         // eslint-disable-next-line react/no-danger
         dangerouslySetInnerHTML={{ __html: html }}
       />
-    </main>
+    </div>
   );
 }
