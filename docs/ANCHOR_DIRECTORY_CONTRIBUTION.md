@@ -49,8 +49,8 @@ existing signals into a self-describing JSON document:
   [`lib/stellar/anchors.ts`](../lib/stellar/anchors.ts)) — this already covers
   TOML-reachability integrity and auto-clears once an anchor recovers.
 - **Uptime and average latency**, derived from `uptime`-kind probe samples in
-  the reputation store (`lib/reputation/probe.ts`), once the probe pipeline
-  from #785/#786 is publishing real samples.
+  the reputation store (`lib/reputation/probe.ts`), as probe samples
+  accumulate.
 - **Per-corridor quote-latency percentiles** (p50/p95), derived from
   `quote`-kind probe samples the same way.
 
@@ -116,10 +116,10 @@ omitted.
       "corridors": ["usdc-ngn"],
       "health": {
         "status": "healthy",
-        "lastStatus": "fail",
-        "lastCheckedAt": "2026-08-26T04:57:02.450Z",
-        "lastError": "missing TRANSFER_SERVER_SEP0024 (SEP-24)",
-        "consecutiveFailures": 2,
+        "lastStatus": "ok",
+        "lastCheckedAt": "2026-09-26T09:22:48.592Z",
+        "lastError": null,
+        "consecutiveFailures": 0,
         "uptime": 0.997,
         "avgLatencyMs": 184,
         "quoteLatencyByCorridor": {}
@@ -130,15 +130,11 @@ omitted.
 ```
 
 Cowrie is a deliberate example rather than a tidy one — it is what the registry
-and the committed ledger actually say today, and it shows three of the
-derivations above at once:
+and the committed ledger actually say today, and it shows the derivations above
+at once:
 
-- `status: "healthy"` beside `lastStatus: "fail"` — two failures, below the
-  three-night `thresholdNights`, so the debounce has not latched `degraded` yet.
-- The `lastError` is the SEP-6-only case: Cowrie advertises `TRANSFER_SERVER`
-  but no `TRANSFER_SERVER_SEP0024`, and the nightly validator's success
-  condition is SEP-24 specifically. See
-  [`docs/ANCHOR_ONBOARDING.md`](ANCHOR_ONBOARDING.md#what-the-probes-require).
+- `status` tracks `degraded`, derived from the ledger's `degraded` flag rather
+  than `lastStatus` alone.
 - `quoteLatencyByCorridor` is empty because Cowrie advertises no
   `ANCHOR_QUOTE_SERVER`, so the SEP-38 quote probe has nothing to call. Absence
   here means "no quote server", not "slow".
@@ -153,14 +149,13 @@ point readers at `docs/anchor-directory-contribution.md`. This file is
 because it ships inside the payload, a recipient of the export follows it too.
 Worth correcting alongside the next change to that module.
 
-## Known limitation: depends on #785
+## Known limitation: probe-derived fields
 
-Until [#785](https://github.com/ezedike-evan/stellar-intel/issues/785) (the
-publisher that writes probe-derived data on-chain) lands, uptime and
-quote-latency fields will mostly read `null`/empty for anchors with no
-accumulated probe samples yet — the export degrades honestly rather than
-fabricating a number. Health `status` still reflects the nightly validator's
-ledger regardless, since that pipeline is already live.
+Although the probe pipeline runs, uptime and quote-latency fields will mostly
+read `null`/empty for anchors until samples accumulate for an anchor — the
+export degrades honestly rather than fabricating a number. Health `status` still
+reflects the nightly validator's ledger regardless, since that pipeline is
+already live.
 
 ## How to actually contribute this today
 
