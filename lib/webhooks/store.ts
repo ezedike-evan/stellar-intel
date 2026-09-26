@@ -1,3 +1,5 @@
+import { hasDatabaseUrl } from '@/lib/reputation/pool';
+import { PostgresWebhookStore } from './postgres';
 import type { WebhookSubscription, DeliveryRecord } from './types';
 
 export interface WebhookStore {
@@ -42,8 +44,14 @@ export class InMemoryWebhookStore implements WebhookStore {
 
 let singleton: WebhookStore | null = null;
 
+/**
+ * Postgres when a database is configured, so subscriptions survive cold starts
+ * and are shared across instances. In-memory otherwise (local dev, tests).
+ */
 export function getWebhookStore(): WebhookStore {
-  if (!singleton) singleton = new InMemoryWebhookStore();
+  if (!singleton) {
+    singleton = hasDatabaseUrl() ? new PostgresWebhookStore() : new InMemoryWebhookStore();
+  }
   return singleton;
 }
 
