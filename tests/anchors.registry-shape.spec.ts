@@ -28,7 +28,9 @@ describe('Anchor registry shape', () => {
         },
       ];
       const violations = registryShapeViolations(fakeAnchors, fakeCorridors);
-      expect(violations).toContain("fake1: unverifiedCorridors contains 'usdc-php' but it is not in corridors");
+      expect(violations).toContain(
+        "fake1: unverifiedCorridors contains 'usdc-php' but it is not in corridors"
+      );
     });
 
     it('rejects sep31Corridors that are not disjoint from corridors', () => {
@@ -45,7 +47,9 @@ describe('Anchor registry shape', () => {
         },
       ];
       const violations = registryShapeViolations(fakeAnchors, fakeCorridors);
-      expect(violations).toContain("fake2: sep31Corridors and corridors are not disjoint ('usdc-ngn' is in both)");
+      expect(violations).toContain(
+        "fake2: sep31Corridors and corridors are not disjoint ('usdc-ngn' is in both)"
+      );
     });
 
     it('rejects sep31Corridors containing unknown corridors', () => {
@@ -62,7 +66,9 @@ describe('Anchor registry shape', () => {
         },
       ];
       const violations = registryShapeViolations(fakeAnchors, fakeCorridors);
-      expect(violations).toContain("fake3: sep31Corridors contains 'usdc-xxx' which is not a known corridor");
+      expect(violations).toContain(
+        "fake3: sep31Corridors contains 'usdc-xxx' which is not a known corridor"
+      );
     });
 
     it('rejects sep31Corridors when sep31 is missing from seps', () => {

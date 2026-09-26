@@ -288,7 +288,9 @@ export function registryShapeViolations(anchors: Anchor[], corridors: Corridor[]
     if (anchor.unverifiedCorridors) {
       for (const id of anchor.unverifiedCorridors) {
         if (!anchor.corridors.includes(id)) {
-          violations.push(`${anchor.id}: unverifiedCorridors contains '${id}' but it is not in corridors`);
+          violations.push(
+            `${anchor.id}: unverifiedCorridors contains '${id}' but it is not in corridors`
+          );
         }
       }
     }
@@ -300,10 +302,14 @@ export function registryShapeViolations(anchors: Anchor[], corridors: Corridor[]
 
       for (const id of anchor.sep31Corridors) {
         if (!validCorridorIds.has(id)) {
-          violations.push(`${anchor.id}: sep31Corridors contains '${id}' which is not a known corridor`);
+          violations.push(
+            `${anchor.id}: sep31Corridors contains '${id}' which is not a known corridor`
+          );
         }
         if (anchor.corridors.includes(id)) {
-          violations.push(`${anchor.id}: sep31Corridors and corridors are not disjoint ('${id}' is in both)`);
+          violations.push(
+            `${anchor.id}: sep31Corridors and corridors are not disjoint ('${id}' is in both)`
+          );
         }
       }
     }

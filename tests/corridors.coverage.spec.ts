@@ -68,9 +68,10 @@ describe('per-corridor anchor coverage', () => {
     const coveredIds = new Set(ANCHORS.flatMap((anchor) => anchor.corridors));
 
     for (const corridorId of visibleIds) {
-      expect(coveredIds.has(corridorId), `visible corridor ${corridorId} is missing anchor coverage`).toBe(
-        true
-      );
+      expect(
+        coveredIds.has(corridorId),
+        `visible corridor ${corridorId} is missing anchor coverage`
+      ).toBe(true);
     }
   });
 
