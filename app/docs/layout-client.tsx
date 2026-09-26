@@ -91,9 +91,9 @@ export default function DocsLayoutClient({ children }: { children: React.ReactNo
           </button>
           {DOCS_SECTIONS.map((section) => (
             <div key={section.title}>
-              <h3 className="mb-2 px-3 text-xs font-semibold uppercase tracking-wider text-secondary-text">
+              <p className="mb-2 px-3 text-xs font-semibold uppercase tracking-wider text-secondary-text">
                 {section.title}
-              </h3>
+              </p>
               <ul className="space-y-1">
                 {section.links.map((link) => {
                   const Icon = link.icon;
@@ -124,9 +124,9 @@ export default function DocsLayoutClient({ children }: { children: React.ReactNo
       </aside>
 
       {/* Main content */}
-      <main className="min-w-0 flex-1 px-4 py-8 md:px-8 lg:px-12">
+      <div className="min-w-0 flex-1 px-4 py-8 md:px-8 lg:px-12">
         <div className="mx-auto max-w-3xl">{children}</div>
-      </main>
+      </div>
 
       <DocsSearch open={searchOpen} onClose={() => setSearchOpen(false)} />
     </div>

@@ -51,13 +51,17 @@ export const ANCHORS: Anchor[] = [
     assetCode: 'USDC',
     assetIssuer: USDC_ISSUER,
   },
+  // anclap.com: ARS and PEN fiat corridors — SEP-6 and SEP-24 deposit and withdraw enabled.
+  // Verified 2026-09-23. TOML CURRENCIES: ARS issuer GCYE7C77EB5AWAA25R5XMWNI2EDOKTTFTTPZKM2SR5DI4B4WFD52DARS,
+  // PEN issuer GA4TDPNUCZPTOHB3TKUYMDCRVATXKEADH7ZEYEBWJKQKE2UBFCYNBPEN.
+  // /info: deposit [ARS, PEN], withdraw [ARS, PEN]. No USDC on either rail.
   {
     id: 'anclap',
     name: 'Anclap',
     homeDomain: 'anclap.com',
-    corridors: ['usdc-ars', 'usdc-pen'],
-    assetCode: 'USDC',
-    assetIssuer: USDC_ISSUER,
+    corridors: ['ars-ars', 'pen-pen'],
+    assetCode: 'ARS',
+    assetIssuer: 'GCYE7C77EB5AWAA25R5XMWNI2EDOKTTFTTPZKM2SR5DI4B4WFD52DARS',
     seps: ['sep6', 'sep24'],
   },
   // ngnc.online: NGN fiat corridor — SEP-24 withdraw enabled.
@@ -99,29 +103,23 @@ export const ANCHORS: Anchor[] = [
     assetIssuer: 'GDVKY2GU2DRXWTBEYJJWSFXIGBZV6AZNBVVSUHEPZI54LIS6BA7DVVSP',
     seps: ['sep6', 'sep24', 'sep31'],
   },
-  // zeam.money: ZAR fiat corridor — SEP-24 withdraw/deposit enabled.
-  // Verified 2026-08-28. The home domain publishes the SEP-24 endpoint; the
-  // legacy anchor.zeam.money service host returns 404 for stellar.toml.
-  // /info: deposit/withdraw for USDC enabled.
-  //
-  // Re-probed 2026-08-04 (#720): also declares
-  // ANCHOR_QUOTE_SERVER = https://anchor.zeam.money/sep38, which the `seps`
-  // array omitted. It is the ONLY registered anchor advertising SEP-38.
-  //
-  // Note the corridor mismatch: this entry claims `usdc-zar`, but the SEP-38
-  // /info offers USDC and BRL only — no ZAR asset at all. The ZAR corridor may
-  // still be served over SEP-24; the two rails are not required to cover the
-  // same currencies. Flagged rather than silently "corrected", because dropping
-  // usdc-zar would change corridor routing on the strength of one rail's
-  // capability list. See tests/fixtures/sep38/capability-capture.json.
+  // zeam.money: verified payment rails for BRL and a separate ZAR claim.
+  // Verified 2026-09-23. SEP-24 /info at https://anchor.zeam.money/sep24/info
+  // lists deposit/withdraw asset pairs [USDC, native]; SEP-31 receive is [USDC].
+  // SEP-38 /info at https://anchor.zeam.money/sep38/info advertises assets
+  // stellar:USDC:..., stellar:BRL:..., and iso4217:BRL, with country_codes ["BR"].
+  // No ZAR asset or country code appears anywhere in the live /info responses.
+  // We keep the ZAR route on the registry but flag it as unverified pending an
+  // interactive check, rather than silently rewriting the corridor claim.
   {
     id: 'zeam',
     name: 'Zeam Money',
     homeDomain: 'zeam.money',
-    corridors: ['usdc-zar'],
+    corridors: ['usdc-zar', 'usdc-brl'],
+    unverifiedCorridors: ['usdc-zar'],
     assetCode: 'USDC',
     assetIssuer: USDC_ISSUER,
-    seps: ['sep24', 'sep31', 'sep38'],
+    seps: ['sep10', 'sep24', 'sep31', 'sep38'],
   },
 ];
 
@@ -197,6 +195,20 @@ export const CORRIDORS: Corridor[] = [
     countryCode: 'BR',
     countryName: 'Brazil',
   },
+  {
+    id: 'ars-ars',
+    from: 'ARS',
+    to: 'ARS',
+    countryCode: 'AR',
+    countryName: 'Argentina',
+  },
+  {
+    id: 'pen-pen',
+    from: 'PEN',
+    to: 'PEN',
+    countryCode: 'PE',
+    countryName: 'Peru',
+  },
   // ─── v1.1 target corridors ────────────────────────────────────────────────
   // Scaffolded ahead of anchor onboarding (see .github/ISSUE_TEMPLATE/anchor-onboard.yml).
   // Gated behind the `v11Corridors` flag AND anchor coverage — see V11_CORRIDOR_IDS
@@ -234,6 +246,9 @@ export const V11_CORRIDOR_IDS: ReadonlySet<string> = new Set([
   // corridor resolvable for lookups while hiding it from selectors until an
   // anchor serves it again. Same state it was in before mykobo onboarded.
   'usdc-eur',
+  // usdc-ars and usdc-pen: orphaned when anclap was corrected to its own tokens 2026-09-23
+  'usdc-ars',
+  'usdc-pen',
 ]);
 
 /**
@@ -251,23 +266,26 @@ export const TYPICAL_AMOUNTS: Record<string, number[]> = {
   'usdc-pen': [50, 150, 300],
   'usdc-eur': [100, 300, 500],
   'brl-brl': [100, 250, 500],
+  'ars-ars': [50000, 100000, 250000],
+  'pen-pen': [100, 300, 500],
   'usdc-zar': [50, 150, 300],
   'usdc-xof': [50, 100, 200],
 };
 
 /** Corridor IDs that at least one anchor in the registry currently serves. */
-const SERVED_CORRIDOR_IDS: ReadonlySet<string> = new Set(
+export const SERVED_CORRIDOR_IDS: ReadonlySet<string> = new Set(
   ANCHORS.flatMap((anchor) => anchor.corridors)
 );
 
 /**
- * Corridors safe to surface in selectors. Non-gated corridors always appear;
- * v1.1 gated corridors appear only when the `v11Corridors` flag is on AND an
- * anchor serves them — so a scaffolded corridor stays hidden until it's live.
+ * Corridors safe to surface in selectors. The set is gated by the registry's
+ * served-corridor coverage, and v1.1 target corridors additionally require the
+ * feature flag. A corridor can never appear unless an anchor actually serves it.
  */
 export const VISIBLE_CORRIDORS: Corridor[] = CORRIDORS.filter((c) => {
+  if (!SERVED_CORRIDOR_IDS.has(c.id)) return false;
   if (!V11_CORRIDOR_IDS.has(c.id)) return true;
-  return flags.v11Corridors && SERVED_CORRIDOR_IDS.has(c.id);
+  return flags.v11Corridors;
 });
 
 // ─── Registry stats ─────────────────────────────────────────────────────────────

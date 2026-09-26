@@ -1,12 +1,13 @@
 # SDK Handoff: Community Maintainer Model
 
-> **Status: planning (v4).** The `@stellarintel/sdk` (TypeScript),
-> `stellar-intel-py` (Python), and `stellar-intel-rs` (Rust) SDKs are v4
-> "Universal" deliverables (see [`docs/ROADMAP.md`](ROADMAP.md) and
+> **Status: built, unpublished.** The `@stellarintel/sdk` (TypeScript,
+> `packages/sdk/`), `stellarintel` (Python, `packages/python-sdk/`) and
+> `stellar-intel-client` / `stellar-intel-reputation` (Rust, `crates/`) SDKs
+> are all built in-tree; none is on a public registry yet (see
 > [`docs/SDK.md`](SDK.md)). This document defines the maintainer structure so
-> the SDKs do not depend solely on the core team once they ship.
+> the SDKs do not depend solely on the core team once they are published.
 
-**Last reviewed:** 2026-08-26
+**Last reviewed:** 2026-09-25
 
 ## Motivation
 
@@ -19,11 +20,11 @@ on every PR.
 
 Each SDK has an independent maintainer group:
 
-| SDK                 | Language   | Minimum maintainers | Core-team veto              |
-| ------------------- | ---------- | ------------------- | --------------------------- |
-| `@stellarintel/sdk` | TypeScript | 2                   | Yes (breaking changes only) |
-| `stellar-intel-py`  | Python     | 2                   | Yes (breaking changes only) |
-| `stellar-intel-rs`  | Rust       | 2                   | Yes (breaking changes only) |
+| SDK                                                 | Language   | Minimum maintainers | Core-team veto              |
+| --------------------------------------------------- | ---------- | ------------------- | --------------------------- |
+| `@stellarintel/sdk`                                 | TypeScript | 2                   | Yes (breaking changes only) |
+| `stellarintel`                                      | Python     | 2                   | Yes (breaking changes only) |
+| `stellar-intel-client` / `stellar-intel-reputation` | Rust       | 2                   | Yes (breaking changes only) |
 
 "Minimum maintainers" is the floor needed before the core team considers a
 package handed off. Below that number, the core team remains a required
@@ -80,10 +81,12 @@ independently. Major releases require the core-team approval described above.
 Release steps:
 
 1. Bump version in the package manifest.
-2. Update `CHANGELOG.md` in the SDK package.
+2. Note the change in the PR description.
 3. Open a PR tagged `release` — CI must be fully green.
-4. One maintainer merges; the merge commit is tagged `sdk-ts/v{semver}`,
-   `sdk-py/v{semver}`, or `sdk-rs/v{semver}` respectively.
+4. One maintainer merges; the merge commit is tagged `sdk-v{semver}`
+   (TypeScript, `publish-npm-sdk.yml`), `python-sdk-v{semver}`
+   (`publish-python-sdk.yml`), or `stellar-intel-reputation-v{semver}`
+   (`publish-rust-sdk.yml`) respectively.
 5. A GitHub Release is created from the tag; the package is published to the
    relevant registry (npm / PyPI / crates.io) via the release CI workflow.
 

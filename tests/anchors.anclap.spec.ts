@@ -8,12 +8,19 @@ describe('Anclap anchor', () => {
     expect(anclap).toBeDefined();
   });
 
-  it('has usdc-ars corridor', () => {
-    expect(anclap?.corridors).toContain('usdc-ars');
+  it('anchors ARS with the correct issuer', () => {
+    expect(anclap?.assetCode).toBe('ARS');
+    expect(anclap?.assetIssuer).toBe('GCYE7C77EB5AWAA25R5XMWNI2EDOKTTFTTPZKM2SR5DI4B4WFD52DARS');
   });
 
-  it('has usdc-pen corridor', () => {
-    expect(anclap?.corridors).toContain('usdc-pen');
+  it('serves the ars-ars corridor', () => {
+    expect(anclap?.corridors).toContain('ars-ars');
+    expect(anclap?.corridors).not.toContain('usdc-ars');
+  });
+
+  it('serves the pen-pen corridor', () => {
+    expect(anclap?.corridors).toContain('pen-pen');
+    expect(anclap?.corridors).not.toContain('usdc-pen');
   });
 
   it('declares sep6 capability', () => {
@@ -24,11 +31,11 @@ describe('Anclap anchor', () => {
     expect(anclap?.seps).toContain('sep24');
   });
 
-  it('usdc-ars corridor exists in CORRIDORS list', () => {
-    expect(CORRIDORS.some((c) => c.id === 'usdc-ars')).toBe(true);
+  it('ars-ars corridor exists in CORRIDORS list', () => {
+    expect(CORRIDORS.some((c) => c.id === 'ars-ars')).toBe(true);
   });
 
-  it('usdc-pen corridor exists in CORRIDORS list', () => {
-    expect(CORRIDORS.some((c) => c.id === 'usdc-pen')).toBe(true);
+  it('pen-pen corridor exists in CORRIDORS list', () => {
+    expect(CORRIDORS.some((c) => c.id === 'pen-pen')).toBe(true);
   });
 });

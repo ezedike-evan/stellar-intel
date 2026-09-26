@@ -17,8 +17,10 @@ describe('zeam.money triage (B032)', () => {
     expect(zeam?.assetCode).toBe('USDC');
   });
 
-  it('serves the usdc-zar corridor', () => {
+  it('tracks the verified Zeam corridors while keeping ZAR unverified', () => {
     expect(zeam?.corridors).toContain('usdc-zar');
+    expect(zeam?.corridors).toContain('usdc-brl');
+    expect(zeam?.unverifiedCorridors).toContain('usdc-zar');
   });
 
   it('usdc-zar corridor is defined in CORRIDORS', () => {
@@ -27,6 +29,15 @@ describe('zeam.money triage (B032)', () => {
     expect(corridor?.from).toBe('USDC');
     expect(corridor?.to).toBe('ZAR');
     expect(corridor?.countryCode).toBe('ZA');
+  });
+
+  it('serves the usdc-brl corridor via the verified BRL entry point', () => {
+    expect(zeam?.corridors).toContain('usdc-brl');
+    const corridor = CORRIDORS.find((c) => c.id === 'usdc-brl');
+    expect(corridor).toBeDefined();
+    expect(corridor?.from).toBe('USDC');
+    expect(corridor?.to).toBe('BRL');
+    expect(corridor?.countryCode).toBe('BR');
   });
 
   it('zeam home domain is registered in ANCHOR_HOME_DOMAINS', () => {

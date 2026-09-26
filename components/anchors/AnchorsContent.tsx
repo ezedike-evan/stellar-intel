@@ -38,7 +38,7 @@ function AnchorsContentInner() {
   if (!activeCorridor) return null;
 
   return (
-    <main className="mx-auto max-w-5xl px-4 py-12 sm:py-16">
+    <div className="mx-auto max-w-5xl px-4 py-12 sm:py-16">
       <header>
         <h1 className="type-title">Anchors</h1>
         <p className="text-secondary-text measure mt-4 text-base">
@@ -118,13 +118,13 @@ function AnchorsContentInner() {
           <Leaderboard corridor={activeCorridor} />
         </div>
       </section>
-    </main>
+    </div>
   );
 }
 
 export function AnchorsContent() {
   return (
-    <Suspense fallback={<main className="mx-auto max-w-5xl px-4 py-12 sm:py-16" />}>
+    <Suspense fallback={<div className="mx-auto max-w-5xl px-4 py-12 sm:py-16" />}>
       <AnchorsContentInner />
     </Suspense>
   );

@@ -48,7 +48,7 @@ Both would have been repeated on mainnet.
 | Anchor registry seeded                                             | preflight (`list_anchors`)              |
 | Security audit complete                                            | **manual** — #716/#717                  |
 | Keys in HSM/KMS per `docs/SECURITY.md`                             | **manual** — verify custody out of band |
-| Rollback rehearsed                                                 | **manual** — section 5                  |
+| Rollback rehearsed                                                 | **manual** — section 5.1                |
 
 ### Key model
 
@@ -165,6 +165,127 @@ Therefore:
 4. **A compromised admin key is not a rollback scenario**, it is an incident.
    The upgrade admin can replace the contract with anything; that is why it must
    be a separate multisig from the operational admin.
+
+### 5.1 Rehearsal on testnet
+
+This is the procedure behind the **Rollback rehearsed** gate. It needs no prior
+knowledge of the contract. It uses a throwaway contract instance, so it never
+touches the shared deployment in `.deployments/testnet.json`.
+
+**What it proves.** That the upgrade admin can move the contract to a new WASM
+and back, that stored state survives both swaps, and that nobody else can do it.
+
+**Facts the steps depend on** (from `contracts/reputation/src/upgrade.rs`):
+
+- `upgrade(new_wasm_hash)` needs the **upgrade admin's** signature. The
+  operational admin cannot call it.
+- The version is bumped _before_ the swap, on every call. **Rolling back to the
+  old WASM does not restore the old version**; it moves the version forward.
+- `upgrade()` replaces code only. Anchors, outcomes and the registry are
+  untouched, in both directions.
+
+**You need:** the `stellar` CLI, Rust with the `wasm32v1-none` target, and two
+funded testnet identities that are **different accounts**: one for `admin`, one
+for `upgrade_admin`. Use the same multisig shape you will use on mainnet if you
+can.
+
+```bash
+export NETWORK=testnet
+stellar keys generate rehearsal-admin --network $NETWORK --fund
+stellar keys generate rehearsal-upgrade --network $NETWORK --fund
+export ADMIN_ADDR=$(stellar keys address rehearsal-admin)
+export UPGRADE_ADDR=$(stellar keys address rehearsal-upgrade)
+```
+
+**Step 1: build and upload the current WASM (v1).**
+
+```bash
+(cd contracts/reputation && stellar contract build)
+WASM=contracts/reputation/target/wasm32v1-none/release/reputation.wasm
+sha256sum "$WASM"                                    # record as V1_SHA
+V1_HASH=$(stellar contract upload --wasm "$WASM" --source rehearsal-admin --network $NETWORK)
+cp "$WASM" /tmp/reputation-v1.wasm
+```
+
+**Step 2: deploy a fresh instance from v1.** The constructor binds both
+authorities atomically, so both arguments are required.
+
+```bash
+CONTRACT_ID=$(stellar contract deploy --wasm-hash "$V1_HASH" --source rehearsal-admin \
+  --network $NETWORK -- --admin "$ADMIN_ADDR" --upgrade_admin "$UPGRADE_ADDR")
+```
+
+**Step 3: seed the registry and take the baseline.** Seed as in
+[`ORACLE_SPEC.md`](ORACLE_SPEC.md) "Fresh deploy" (`scripts/init-oracle-registry.ts`
+with `ORACLE_CONTRACT_ID=$CONTRACT_ID`), then read:
+
+```bash
+for fn in contract_version admin upgrade_admin list_anchors; do
+  echo "== $fn"
+  stellar contract invoke --id "$CONTRACT_ID" --source rehearsal-admin --network $NETWORK -- $fn
+done
+```
+
+**Step 4: upgrade to a different WASM (v2).** Rebuild after any change that
+alters the binary (for the first rehearsal, a trivial edit is enough; revert it
+afterwards), upload it, then upgrade **as the upgrade admin**.
+
+```bash
+(cd contracts/reputation && stellar contract build)
+sha256sum "$WASM"                                    # record as V2_SHA; must differ from V1_SHA
+V2_HASH=$(stellar contract upload --wasm "$WASM" --source rehearsal-admin --network $NETWORK)
+stellar contract invoke --id "$CONTRACT_ID" --source rehearsal-upgrade --network $NETWORK \
+  -- upgrade --new_wasm_hash "$V2_HASH"
+```
+
+Re-run the Step 3 reads. Expected: `contract_version` is `2`; the other three are
+unchanged.
+
+**Step 5: roll back to v1.** This is the rehearsal itself.
+
+```bash
+stellar contract invoke --id "$CONTRACT_ID" --source rehearsal-upgrade --network $NETWORK \
+  -- upgrade --new_wasm_hash "$V1_HASH"
+stellar contract fetch --id "$CONTRACT_ID" --network $NETWORK --out-file /tmp/reputation-live.wasm
+sha256sum /tmp/reputation-live.wasm /tmp/reputation-v1.wasm   # must match
+```
+
+Re-run the Step 3 reads. Expected: `contract_version` is **`3`, not `1`**; the
+other three are unchanged.
+
+**Step 6: confirm nobody else can upgrade.**
+
+```bash
+stellar contract invoke --id "$CONTRACT_ID" --source rehearsal-admin --network $NETWORK \
+  -- upgrade --new_wasm_hash "$V2_HASH"
+```
+
+Expected: the call **fails** authorization, and `contract_version` stays `3`.
+
+**Step 7: record it.** Copy the table below into the sign-off (PR or issue) for
+the mainnet launch, with the `Observed` column filled in. A step that does not
+match `Expected` is a failed rehearsal, not a footnote.
+
+| Step | Check                                 | Expected                      | Observed |
+| ---- | ------------------------------------- | ----------------------------- | -------- |
+| 2    | `contract_version` after deploy       | `1`                           |          |
+| 2    | `admin` / `upgrade_admin`             | the two different accounts    |          |
+| 3    | `list_anchors` count                  | equals `constants/anchors.ts` |          |
+| 4    | V1_SHA vs V2_SHA                      | different                     |          |
+| 4    | `contract_version` after upgrade      | `2`                           |          |
+| 4    | `list_anchors` after upgrade          | unchanged from step 3         |          |
+| 5    | live WASM sha256 vs V1_SHA            | identical                     |          |
+| 5    | `contract_version` after rollback     | `3`                           |          |
+| 5    | `list_anchors` after rollback         | unchanged from step 3         |          |
+| 6    | upgrade signed by the admin           | fails authorization           |          |
+| 6    | `contract_version` after that attempt | `3`                           |          |
+
+The real launch rollback follows the same shape with two additions: keep the
+previous mainnet WASM hash somewhere retrievable **before** upgrading, and
+remember that reverting code does not revert data (point 3 above).
+
+**Status:** no rehearsal has been recorded yet. The first operator to run this
+fills in the `Observed` column and keeps the result as the baseline.
 
 ---
 

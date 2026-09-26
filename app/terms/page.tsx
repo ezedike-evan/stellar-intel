@@ -46,8 +46,8 @@ export default function TermsPage() {
   const html = renderTermsDoc();
 
   return (
-    <main className="mx-auto max-w-4xl px-4 py-8">
+    <div className="mx-auto max-w-4xl px-4 py-8">
       <div className={PROSE_CLASSES} dangerouslySetInnerHTML={{ __html: html }} />
-    </main>
+    </div>
   );
 }

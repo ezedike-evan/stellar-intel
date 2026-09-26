@@ -20,7 +20,7 @@ const CARD_DETAIL: Record<string, { title: string; description: string }> = {
   },
   '/docs/auth': {
     title: 'Auth & Rate Limits',
-    description: 'Authentication methods, API keys, and rate-limit tiers.',
+    description: 'Admin authentication and per-IP rate limits.',
   },
   '/docs/webhooks': {
     title: 'Webhooks',
@@ -70,9 +70,9 @@ export default function DocsHome() {
               <div className="border-border bg-bg-sunken mb-3 inline-flex rounded-sm border p-2.5">
                 <Icon className="text-secondary-text h-5 w-5" aria-hidden="true" />
               </div>
-              <h3 className="mb-1 font-semibold text-primary-text group-hover:text-accent">
+              <h2 className="mb-1 font-semibold text-primary-text group-hover:text-accent">
                 {card.title}
-              </h3>
+              </h2>
               <p className="text-sm text-secondary-text">{card.description}</p>
               <div className="mt-3 flex items-center gap-1 text-xs font-medium text-accent opacity-0 transition-opacity group-hover:opacity-100">
                 Read more <ArrowRight className="h-3 w-3" />

@@ -21,6 +21,22 @@ export interface Anchor {
   serviceDomain?: string;
   /** Known SEP protocol support flags for this anchor. */
   seps?: Array<'sep6' | 'sep10' | 'sep24' | 'sep31' | 'sep38'>;
+  /**
+   * subset of corridors whose payout currency has not been confirmed on any live /info response;
+   * still routable, but flagged to users.
+   */
+  unverifiedCorridors?: string[];
+  /**
+   * corridors this anchor serves ONLY as a SEP-31 receiving anchor.
+   * Tracked for the record, never routed (SEP-31 needs a bilateral sending-anchor agreement).
+   * Must NOT also appear in corridors.
+   */
+  sep31Corridors?: string[];
+  /**
+   * false when the anchor's own /info deposit map is empty/disabled for its asset;
+   * default (undefined) means enabled.
+   */
+  depositEnabled?: boolean;
   /** Structured operator-supplied metadata, as collected by the anchor onboarding template. */
   metadata?: AnchorMetadata;
 }
