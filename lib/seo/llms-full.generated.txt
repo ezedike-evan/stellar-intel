@@ -4404,8 +4404,8 @@ facts, all enforced in code:
 
 1. **Every leg is signed by the user.** Value moves only on a transaction the user
    signs in their own wallet (Freighter). We submit nothing on a user's behalf with
-   a held key. Intents are user-signed envelopes
-   ([`docs/INTENT_API.md`](INTENT_API.md)).
+   a held key. Intents may carry a user signature (optional attestation); value moves
+   only on a transaction the user signs in their wallet ([`docs/INTENT_API.md`](INTENT_API.md)).
 2. **The anchor takes custody.** Fiat settlement and KYC are between the user and a
    regulated anchor under SEP-24 / SEP-6. We are not in the settlement path.
 3. **Stellar enforces atomicity.** The ledger, not Stellar Intel, guarantees the
@@ -4464,8 +4464,11 @@ In this model:
 
 1. **The reputation oracle** (see [`docs/ORACLE_SPEC.md`](ORACLE_SPEC.md))
    already records every terminal outcome: intent hash, anchor, quoted rate,
-   delivered rate, settle time, and outcome status. Over time, the oracle
-   accumulates a per-user remittance history that is user-signed,
+   delivered rate, settle time, and outcome status. Today, the oracle records
+   per-anchor outcomes with no user identifier (`OutcomeLogRow` stores no user key,
+   and PII is redacted per [`docs/NON_CUSTODY.md`](NON_CUSTODY.md)). A credit layer
+   would need a way to correlate or prove a user's own remittance history — whether
+   through client-side attestation or zero-knowledge proof — that is user-signed,
    replayable, and permissionless to read.
 2. **The intent primitive** (see [`docs/INTENT_API.md`](INTENT_API.md))
    already expresses a user's commitment to a future action. A credit-layer
@@ -4521,9 +4524,10 @@ the outcome log ([`types/reputation.ts`](../types/reputation.ts)):
 
 **Open questions for the proposed criteria:**
 
-1. Should synthetic probe transactions (nightly $1 off-ramps — see Wave 2.3
-   in [`docs/ROADMAP.md`](ROADMAP.md)) count toward proven history? Probes
-   are user-witnessed but may not reflect genuine remittance behaviour.
+1. Should synthetic probe transactions (nightly $1 off-ramps — see Rung 1
+   in [`docs/ROADMAP.md`](ROADMAP.md#rung-1--data-infra)) count toward proven
+   history? Probes are user-witnessed but may not reflect genuine remittance
+   behaviour.
 2. Does a single corridor user have a materially different risk profile from
    a multi-corridor user?
 3. Should the threshold adjust for the destination country's remittance
