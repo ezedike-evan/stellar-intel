@@ -4831,7 +4831,7 @@ host enforces the threshold.
 
 ### Prerequisites
 
-- Rust toolchain + `cargo` with the `soroban` CLI installed.
+- Rust toolchain + `cargo` with the `stellar` CLI installed.
 - Stellar account with sufficient XLM for transaction fees.
 - Authorization from the current admin (private key access).
 
@@ -4943,10 +4943,12 @@ removed urgently:
 
 ## Contract upgrade governance
 
-The contract upgrade authority (`init_upgrade` / `upgrade` entrypoints in
-`src/upgrade.rs`) uses a separate `UpgradeAdmin` key. The same multisig
-migration path applies: set `UpgradeAdmin` to the multisig account using the
-same propose/accept flow as for the main admin:
+The contract upgrade authority (bound at deploy by
+`__constructor(admin, upgrade_admin)`; `upgrade` in
+`contracts/reputation/src/upgrade.rs`) uses a separate `UpgradeAdmin` key. The
+same multisig migration path applies: rotate `UpgradeAdmin` to the multisig
+account using `propose_upgrade_admin`, `accept_upgrade_admin`, and
+`cancel_upgrade_proposal`:
 
 ```bash
 stellar contract invoke \
