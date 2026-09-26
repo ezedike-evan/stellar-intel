@@ -68,7 +68,13 @@ export const LLMS_FULL_SECTIONS: LlmsFullSection[] = [
   {
     title: 'API reference',
     blurb: 'The HTTP and GraphQL surfaces, their version guarantees, and their wire formats.',
-    files: ['INTENT_API.md', 'GRAPHQL_API.md', 'VERSIONING.md', 'CANONICAL_JSON.md'],
+    files: [
+      'API_REFERENCE.md',
+      'INTENT_API.md',
+      'GRAPHQL_API.md',
+      'VERSIONING.md',
+      'CANONICAL_JSON.md',
+    ],
   },
   {
     title: 'Integration guides',
@@ -77,10 +83,9 @@ export const LLMS_FULL_SECTIONS: LlmsFullSection[] = [
   },
   {
     title: 'Data and methodology',
-    blurb: 'How scores, rates, benchmarks, and on-chain published metrics are computed.',
+    blurb: 'How scores, rates, settlement times, and on-chain published metrics are computed.',
     files: [
       'ANCHOR_REPUTATION.md',
-      'BENCHMARKS.md',
       'SETTLEMENT_SLA.md',
       'ORACLE_SPEC.md',
       'VOLUME_SAVINGS.md',
@@ -121,10 +126,6 @@ export const EXCLUDED_DOCS: Record<string, string> = {
     'Internal messaging guidance — how to talk about the product, not how it works.',
   'AGENT_POSITIONING.md': 'Comparison memo against another product; opinion rather than reference.',
   'ANALYTICS.md': 'Team-facing event taxonomy and dashboard access model.',
-  'PRODUCTION_AUDIT.md':
-    'Point-in-time readiness audit; its findings are historical the day after it is written.',
-  'RATE_LIMIT_AUDIT.md':
-    'Point-in-time audit. The limits a caller actually needs are in VERSIONING.md and the OpenAPI spec.',
   'ANCHOR_FLEET_RECHECK.md':
     'Point-in-time survey record, superseded by scripts/anchor-survey.snapshot.json.',
   'SEP38_USDC_NGN_VERIFICATION.md': 'Point-in-time verification record for a single corridor.',

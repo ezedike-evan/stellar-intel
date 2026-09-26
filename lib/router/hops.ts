@@ -2,7 +2,7 @@
  * lib/router/hops.ts
  *
  * Solver hop architecture (#815) — composes on-ramp, swap, and yield legs
- * (the modules H2 deferred; see ROADMAP.md) into a single sequenced chain.
+ * (the modules H2 deferred; see docs/ROADMAP.md) into a single sequenced chain.
  * Connector implementations for each module type are the companion issue (#816).
  *
  * Two-phase composition:

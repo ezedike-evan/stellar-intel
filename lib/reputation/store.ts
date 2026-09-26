@@ -23,6 +23,13 @@ export interface OutcomeQuery {
   corridor?: string;
   /** Only rows that are settled but not yet reconciled (delivery still null). */
   pendingReconciliationOnly?: boolean;
+  /**
+   * Also return unattested rows. Off by default: every score, aggregate and
+   * publish path reads through `query()`, and an unattested row (no verified
+   * signature by the account that made the off-ramp) must never reach them.
+   * Only tests and operator tooling that need the raw log should set this.
+   */
+  includeUnattested?: boolean;
 }
 
 export interface DeliveredUpdate {
@@ -42,8 +49,12 @@ export interface ProbeSampleQuery {
 }
 
 export interface ReputationStore {
-  /** Idempotent on intentHash — re-appending the same row replaces it. */
-  append(row: OutcomeLogRow): Promise<void>;
+  /**
+   * Insert-only on intentHash. Returns true when the row was written, false when
+   * a row with that intentHash already exists — the existing row (including its
+   * reconcile, dispute and publish state) is left untouched.
+   */
+  append(row: OutcomeLogRow): Promise<boolean>;
   query(filter?: OutcomeQuery): Promise<OutcomeLogRow[]>;
   /** Backfills delivered amount/rate for a row (used by the reconciler). */
   markDelivered(intentHash: string, update: DeliveredUpdate): Promise<void>;
@@ -98,6 +109,7 @@ export function computeLatencyPercentiles(
 }
 
 function matches(row: OutcomeLogRow, filter: OutcomeQuery): boolean {
+  if (!filter.includeUnattested && !row.attested) return false;
   if (filter.anchorId && row.anchorId !== filter.anchorId) return false;
   if (filter.corridor && row.corridor !== filter.corridor) return false;
   if (filter.pendingReconciliationOnly) {
@@ -112,8 +124,10 @@ export class InMemoryReputationStore implements ReputationStore {
   private readonly rows = new Map<string, OutcomeLogRow>();
   private readonly probeSamples: ProbeLedgerRow[] = [];
 
-  async append(row: OutcomeLogRow): Promise<void> {
+  async append(row: OutcomeLogRow): Promise<boolean> {
+    if (this.rows.has(row.intentHash)) return false;
     this.rows.set(row.intentHash, { ...row });
+    return true;
   }
 
   async query(filter: OutcomeQuery = {}): Promise<OutcomeLogRow[]> {

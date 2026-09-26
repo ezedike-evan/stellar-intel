@@ -4,9 +4,11 @@ import { GET, POST } from '@/app/api/sep6/withdraw/route';
 import { isAllowedAnchorHost, parseAllowedTransferServer } from '@/lib/api/anchor-allowlist';
 import { clearRateLimitStore } from '@/lib/api/rate-limit';
 
-// A registered anchor transfer server (mykobo hosts SEP-6 on a subdomain of its
-// homeDomain) and a hostile target the proxy must never fetch.
-const ALLOWED = 'https://stellar.mykobo.co/sep6';
+// A registered anchor transfer server (cowrie hosts SEP-6 on api.cowrie.exchange,
+// a subdomain of its homeDomain) and a hostile target the proxy must never fetch.
+// This used mykobo until it was delisted; cowrie has the same homeDomain vs
+// serviceDomain-subdomain shape, which is the property under test.
+const ALLOWED = 'https://api.cowrie.exchange/sep6';
 const ALLOWED_APEX = 'https://cowrie.exchange/sep6';
 const METADATA = 'https://169.254.169.254/latest/meta-data';
 const LOCALHOST = 'https://localhost/sep6';
@@ -22,10 +24,9 @@ afterEach(() => {
 
 describe('anchor-allowlist', () => {
   it('accepts registered anchor hosts and their subdomains', () => {
-    expect(isAllowedAnchorHost('cowrie.exchange')).toBe(true);
-    expect(isAllowedAnchorHost('stellar.mykobo.co')).toBe(true); // serviceDomain
-    expect(isAllowedAnchorHost('mykobo.co')).toBe(true); // homeDomain
-    expect(isAllowedAnchorHost('api.stellar.mykobo.co')).toBe(true); // deeper subdomain
+    expect(isAllowedAnchorHost('cowrie.exchange')).toBe(true); // homeDomain
+    expect(isAllowedAnchorHost('api.cowrie.exchange')).toBe(true); // serviceDomain
+    expect(isAllowedAnchorHost('edge.api.cowrie.exchange')).toBe(true); // deeper subdomain
   });
 
   it('rejects internal, link-local and unregistered hosts', () => {
@@ -33,12 +34,12 @@ describe('anchor-allowlist', () => {
     expect(isAllowedAnchorHost('localhost')).toBe(false);
     expect(isAllowedAnchorHost('evil.example.com')).toBe(false);
     // A lookalike suffix must not be accepted as a subdomain.
-    expect(isAllowedAnchorHost('mykobo.co.evil.com')).toBe(false);
+    expect(isAllowedAnchorHost('cowrie.exchange.evil.com')).toBe(false);
     expect(isAllowedAnchorHost('notcowrie.exchange')).toBe(false);
   });
 
   it('parseAllowedTransferServer requires https and an allowed host', () => {
-    expect(parseAllowedTransferServer(ALLOWED)?.hostname).toBe('stellar.mykobo.co');
+    expect(parseAllowedTransferServer(ALLOWED)?.hostname).toBe('api.cowrie.exchange');
     expect(parseAllowedTransferServer('http://cowrie.exchange/sep6')).toBeNull(); // not https
     expect(parseAllowedTransferServer(METADATA)).toBeNull();
     expect(parseAllowedTransferServer('not a url')).toBeNull();

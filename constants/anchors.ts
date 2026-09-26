@@ -45,18 +45,23 @@ export const ANCHORS: Anchor[] = [
     id: 'cowrie',
     name: 'Cowrie Exchange',
     homeDomain: 'cowrie.exchange',
+    serviceDomain: 'api.cowrie.exchange',
     corridors: ['usdc-ngn'],
     seps: ['sep6', 'sep10'],
     assetCode: 'USDC',
     assetIssuer: USDC_ISSUER,
   },
+  // anclap.com: ARS and PEN fiat corridors — SEP-6 and SEP-24 deposit and withdraw enabled.
+  // Verified 2026-09-23. TOML CURRENCIES: ARS issuer GCYE7C77EB5AWAA25R5XMWNI2EDOKTTFTTPZKM2SR5DI4B4WFD52DARS,
+  // PEN issuer GA4TDPNUCZPTOHB3TKUYMDCRVATXKEADH7ZEYEBWJKQKE2UBFCYNBPEN.
+  // /info: deposit [ARS, PEN], withdraw [ARS, PEN]. No USDC on either rail.
   {
     id: 'anclap',
     name: 'Anclap',
     homeDomain: 'anclap.com',
-    corridors: ['usdc-ars', 'usdc-pen'],
-    assetCode: 'USDC',
-    assetIssuer: USDC_ISSUER,
+    corridors: ['ars-ars', 'pen-pen'],
+    assetCode: 'ARS',
+    assetIssuer: 'GCYE7C77EB5AWAA25R5XMWNI2EDOKTTFTTPZKM2SR5DI4B4WFD52DARS',
     seps: ['sep6', 'sep24'],
   },
   // ngnc.online: NGN fiat corridor — SEP-24 withdraw enabled.
@@ -71,20 +76,15 @@ export const ANCHORS: Anchor[] = [
     assetIssuer: USDC_ISSUER,
     seps: ['sep24'],
   },
-  // mykobo.co: EUR fiat corridor — SEP-6, SEP-24, SEP-31 enabled, issues EURC (EUR-pegged 1:1).
-  // Verified 2026-06-29. TOML: TRANSFER_SERVER_SEP0024 = https://stellar.mykobo.co/sep24
-  // SEP-6: TRANSFER_SERVER = https://stellar.mykobo.co/sep6.
-  // /info: withdraw.EURC.enabled = true. Serves USDC→EUR corridor.
-  {
-    id: 'mykobo',
-    name: 'MyKobo',
-    homeDomain: 'mykobo.co',
-    serviceDomain: 'stellar.mykobo.co',
-    corridors: ['usdc-eur'],
-    assetCode: 'EURC',
-    assetIssuer: 'GAQRF3UGHBT6JYQZ7YSUYCIYWAF4T2SAA5237Q5LIQYJOHHFAWDXZ7NM',
-    seps: ['sep6', 'sep24', 'sep31'],
-  },
+  // mykobo.co: DELISTED 2026-09-06. Its stellar.toml still advertises both
+  // TRANSFER_SERVER and TRANSFER_SERVER_SEP0024 on stellar.mykobo.co, and that
+  // host has no A or AAAA record — every SEP-6 and SEP-24 call fails to connect.
+  // The TOML itself still serves 200, so a check that stops at the TOML reads
+  // this anchor as healthy; the nightly probe follows the advertised endpoint
+  // and does not. Nothing here is fixable from our side: re-list when MyKobo
+  // publishes a transfer server that resolves. Was: EURC issuer
+  // GAQRF3UGHBT6JYQZ7YSUYCIYWAF4T2SAA5237Q5LIQYJOHHFAWDXZ7NM, usdc-eur,
+  // seps sep6/sep24/sep31.
   // ultracapital.xyz: NOT integrated — crypto yield-token platform, no fiat off-ramp.
   // Verified 2026-06-29. TOML present (SEP-6 + SEP-24). SEP-24 /info withdraw assets: ETH,
   // yUSDC, BTC, yBTC, yXLM, yETH. anchor_asset_type = "crypto" throughout — no fiat corridor.
@@ -103,29 +103,23 @@ export const ANCHORS: Anchor[] = [
     assetIssuer: 'GDVKY2GU2DRXWTBEYJJWSFXIGBZV6AZNBVVSUHEPZI54LIS6BA7DVVSP',
     seps: ['sep6', 'sep24', 'sep31'],
   },
-  // zeam.money: ZAR fiat corridor — SEP-24 withdraw/deposit enabled.
-  // Verified 2026-06-28. TOML: TRANSFER_SERVER_SEP0024 = https://anchor.zeam.money/sep24
-  // /info: deposit/withdraw for USDC enabled.
-  //
-  // Re-probed 2026-08-04 (#720): also declares
-  // ANCHOR_QUOTE_SERVER = https://anchor.zeam.money/sep38, which the `seps`
-  // array omitted. It is the ONLY registered anchor advertising SEP-38.
-  //
-  // Note the corridor mismatch: this entry claims `usdc-zar`, but the SEP-38
-  // /info offers USDC and BRL only — no ZAR asset at all. The ZAR corridor may
-  // still be served over SEP-24; the two rails are not required to cover the
-  // same currencies. Flagged rather than silently "corrected", because dropping
-  // usdc-zar would change corridor routing on the strength of one rail's
-  // capability list. See tests/fixtures/sep38/capability-capture.json.
+  // zeam.money: verified payment rails for BRL and a separate ZAR claim.
+  // Verified 2026-09-23. SEP-24 /info at https://anchor.zeam.money/sep24/info
+  // lists deposit/withdraw asset pairs [USDC, native]; SEP-31 receive is [USDC].
+  // SEP-38 /info at https://anchor.zeam.money/sep38/info advertises assets
+  // stellar:USDC:..., stellar:BRL:..., and iso4217:BRL, with country_codes ["BR"].
+  // No ZAR asset or country code appears anywhere in the live /info responses.
+  // We keep the ZAR route on the registry but flag it as unverified pending an
+  // interactive check, rather than silently rewriting the corridor claim.
   {
     id: 'zeam',
     name: 'Zeam Money',
     homeDomain: 'zeam.money',
-    serviceDomain: 'anchor.zeam.money',
-    corridors: ['usdc-zar'],
+    corridors: ['usdc-zar', 'usdc-brl'],
+    unverifiedCorridors: ['usdc-zar'],
     assetCode: 'USDC',
     assetIssuer: USDC_ISSUER,
-    seps: ['sep24', 'sep31', 'sep38'],
+    seps: ['sep10', 'sep24', 'sep31', 'sep38'],
   },
 ];
 
@@ -201,6 +195,20 @@ export const CORRIDORS: Corridor[] = [
     countryCode: 'BR',
     countryName: 'Brazil',
   },
+  {
+    id: 'ars-ars',
+    from: 'ARS',
+    to: 'ARS',
+    countryCode: 'AR',
+    countryName: 'Argentina',
+  },
+  {
+    id: 'pen-pen',
+    from: 'PEN',
+    to: 'PEN',
+    countryCode: 'PE',
+    countryName: 'Peru',
+  },
   // ─── v1.1 target corridors ────────────────────────────────────────────────
   // Scaffolded ahead of anchor onboarding (see .github/ISSUE_TEMPLATE/anchor-onboard.yml).
   // Gated behind the `v11Corridors` flag AND anchor coverage — see V11_CORRIDOR_IDS
@@ -229,7 +237,19 @@ export const CORRIDORS: Corridor[] = [
  * in CORRIDORS but excluded from VISIBLE_CORRIDORS until the flag is enabled and
  * at least one anchor serves them.
  */
-export const V11_CORRIDOR_IDS: ReadonlySet<string> = new Set(['usdc-zar', 'usdc-xof']);
+export const V11_CORRIDOR_IDS: ReadonlySet<string> = new Set([
+  'usdc-zar',
+  'usdc-xof',
+  // usdc-eur is not a v1.1 scaffold -- it was live until mykobo, its only
+  // anchor, was delisted above. It sits here because this set is what
+  // VISIBLE_CORRIDORS checks anchor coverage against, so listing it keeps the
+  // corridor resolvable for lookups while hiding it from selectors until an
+  // anchor serves it again. Same state it was in before mykobo onboarded.
+  'usdc-eur',
+  // usdc-ars and usdc-pen: orphaned when anclap was corrected to its own tokens 2026-09-23
+  'usdc-ars',
+  'usdc-pen',
+]);
 
 /**
  * Maintainer-set "typical" USDC amounts per corridor, used to seed the
@@ -246,23 +266,26 @@ export const TYPICAL_AMOUNTS: Record<string, number[]> = {
   'usdc-pen': [50, 150, 300],
   'usdc-eur': [100, 300, 500],
   'brl-brl': [100, 250, 500],
+  'ars-ars': [50000, 100000, 250000],
+  'pen-pen': [100, 300, 500],
   'usdc-zar': [50, 150, 300],
   'usdc-xof': [50, 100, 200],
 };
 
 /** Corridor IDs that at least one anchor in the registry currently serves. */
-const SERVED_CORRIDOR_IDS: ReadonlySet<string> = new Set(
+export const SERVED_CORRIDOR_IDS: ReadonlySet<string> = new Set(
   ANCHORS.flatMap((anchor) => anchor.corridors)
 );
 
 /**
- * Corridors safe to surface in selectors. Non-gated corridors always appear;
- * v1.1 gated corridors appear only when the `v11Corridors` flag is on AND an
- * anchor serves them — so a scaffolded corridor stays hidden until it's live.
+ * Corridors safe to surface in selectors. The set is gated by the registry's
+ * served-corridor coverage, and v1.1 target corridors additionally require the
+ * feature flag. A corridor can never appear unless an anchor actually serves it.
  */
 export const VISIBLE_CORRIDORS: Corridor[] = CORRIDORS.filter((c) => {
+  if (!SERVED_CORRIDOR_IDS.has(c.id)) return false;
   if (!V11_CORRIDOR_IDS.has(c.id)) return true;
-  return flags.v11Corridors && SERVED_CORRIDOR_IDS.has(c.id);
+  return flags.v11Corridors;
 });
 
 // ─── Registry stats ─────────────────────────────────────────────────────────────
@@ -276,6 +299,30 @@ export interface RegistryStats {
   /** Distinct destination countries reachable through those corridors. */
   countries: number;
 }
+
+const COUNT_WORDS = [
+  'zero',
+  'one',
+  'two',
+  'three',
+  'four',
+  'five',
+  'six',
+  'seven',
+  'eight',
+  'nine',
+  'ten',
+  'eleven',
+  'twelve',
+] as const;
+
+/**
+ * The registry size, spelled out, for prose that names the count. Copy on the
+ * home page and in llms.txt used to hard-code "seven" and went stale the moment
+ * an anchor was delisted -- on a page whose own comment says it "cannot drift
+ * from the registry it describes". Falls back to digits past twelve.
+ */
+export const ANCHOR_COUNT_WORD: string = COUNT_WORDS[ANCHORS.length] ?? String(ANCHORS.length);
 
 /**
  * Derive headline counts from the registry (#B074). Corridors and countries are

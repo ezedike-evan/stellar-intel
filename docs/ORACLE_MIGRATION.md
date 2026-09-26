@@ -1,204 +1,209 @@
-# Oracle migration and rollback rehearsal
+# Oracle storage migration — v1 → v2
 
-This is the operator rehearsal for a Soroban contract upgrade. The goal is not to re-run the deploy as a shortcut; the goal is to prove that a previously known-good deployment can be restored in a controlled way before mainnet.
+**Last reviewed:** 2026-09-24
 
-If the launch checklist says "Rollback rehearsed", do this against a testnet deployment first and record every observation in a log. That log becomes the baseline for the real mainnet rehearsal.
+The corridor aggregate changed shape. This is the runbook for executing that
+migration against a deployed contract, and the compatibility guarantee for
+anyone already reading v1.
 
-## Why this exists
+**The guarantee first, because it is the question most readers have:
+v1 keys are never deleted.** `migrate_corridor_v2` (implemented internally via
+`migration::migrate_corridor`) writes a new key and leaves the
+old one untouched, so a contract or script reading `get_corridor_aggregate` keeps
+working indefinitely, before and after migration, with no cutover window and
+nothing to coordinate. There is no deprecation date on the v1 read path.
 
-A deploy is not a rollback. A rollback is a restoration to a prior artifact and state, with a clear before/after comparison. If the upgrade changes storage layout, admin rights, or contract wasm, re-running the deploy does not restore the previous behavior.
+---
 
-This rehearsal is deliberately written so someone with no prior deployment experience can follow it.
+## What changed
 
-## Required tools
+| Version | Data key                            | Tuple                                                                     |
+| ------- | ----------------------------------- | ------------------------------------------------------------------------- |
+| v1      | `DataKey::Corridor(anchor, corr)`   | `(fill_rate_bps, slippage_bps, settle_seconds_p50, n)`                    |
+| v2      | `DataKey::CorridorV2(anchor, corr)` | `(fill_rate_bps, slippage_bps, **composite_bps**, settle_seconds_p50, n)` |
 
-- Soroban CLI installed and on PATH
-- A funded testnet admin keypair
-- The current contract wasm artifact and the previous known-good wasm artifact
-- A place to save terminal output (copy/paste into a ticket, markdown file, or runbook notes)
+The only addition is `composite_bps`, and it is **derived, not new data**:
+`migrate_corridor_v2` (via internal `migration::migrate_corridor`) recomputes it from the v1 metrics via
+`score::compute_composite_bps(fill_rate_bps, slippage_bps, settle_seconds_p50)`.
+Nothing is read from off-chain and nothing is lost.
 
-## Environment variables
+Read entrypoints, all of which coexist:
 
-Use a shell profile or a temporary `.env` file for the rehearsal.
+| v1                            | v2                               |
+| ----------------------------- | -------------------------------- |
+| `get_corridor_aggregate(...)` | `get_corridor_aggregate_v2(...)` |
+| `get_score_for_corridor(...)` | `get_score_for_corridor_v2(...)` |
+
+The TypeScript readers in `lib/oracle/read.ts` call the v2 entrypoint and fall
+back to v1 on error, so the app works against a contract in either state.
+
+---
+
+## Properties of the migration
+
+**Admin-gated.** `migrate_corridor_v2` and `migrate_all_v2` (internally
+`migration::migrate_corridor` and `migration::migrate_all`) both call
+`admin::require_admin`, which calls `require_auth` on the admin address. If the
+admin is an M-of-N multisig account (see [`GOVERNANCE.md`](GOVERNANCE.md)), the
+threshold is enforced by the host — the contract needs no multisig awareness.
+
+**Idempotent.** The first thing `migrate_corridor_unchecked` (internal helper in
+`migration.rs`) does is `if env.storage().persistent().has(&v2_key) { return; }`. Re-running is a no-op,
+so a migration interrupted by a resource limit can be re-invoked safely and only
+the unmigrated pairs do work.
+
+**Safe on missing data.** A pair with no v1 metrics migrates to
+`(0, 0, composite_of_zeros, 0, 0)` rather than failing — `get`
+`unwrap_or`s a zero tuple. This means `migrate_all_v2` over a fleet where only some
+anchors have history does not need the caller to know which.
+
+**Not atomic across pairs.** `migrate_all_v2` loops; there is no transaction
+boundary around the set. A run that exhausts its resource budget leaves some
+pairs migrated and some not. That state is **legal, not corrupt**: v1 readers
+are unaffected, v2 readers see the pairs that landed, and re-running finishes
+the rest.
+
+---
+
+## The corridor list
+
+`migrate_all_v2` (internally `migration::migrate_all`) walks the registered anchors × a hardcoded corridor list in
+`contracts/reputation/src/migration.rs`:
+
+```rust
+const V2_CORRIDORS: &[&str] = &[
+    "usdc-ngn", "usdc-kes", "usdc-mxn", "usdc-php", "usdc-brl", "usdc-ars",
+];
+```
+
+**Known drift:** `V2_CORRIDORS` contains `usdc-php`, which is not an active app corridor,
+and lacks `usdc-ghs`, `usdc-pen`, `usdc-eur`, `brl-brl`, `usdc-zar`, and `usdc-xof`. This is documented as
+a known drift between the compiled contract constant and the application corridor list.
+
+**Adding a corridor to the app does not add it here.** This constant is compiled
+into the contract, so extending it requires a contract change and a redeploy or
+upgrade. Until that happens, a new corridor's aggregate is reachable via
+`migrate_corridor_v2` per pair, which takes the corridor as an argument and is not
+bound by the list.
+
+If you add a corridor to `constants/anchors.ts`, add it here in the same PR or
+the fleet migration will silently skip it.
+
+---
+
+## Runbook
+
+### Before
+
+1. Confirm the deployed contract actually has the v2 entrypoints:
+
+   ```bash
+   npx tsx scripts/verify-oracle-read.mts
+   ```
+
+   The script prints `Contract version` and warns when the deployed bytecode
+   predates the current source. **If it warns, stop** — migrating a contract
+   without `migrate_all_v2` compiled in will simply fail, and the deployment
+   needs refreshing first.
+
+2. Note the current admin:
+
+   ```bash
+   stellar contract invoke --id <CONTRACT_ID> -- admin
+   ```
+
+3. Record the pre-migration read for at least one pair, so the post-check is a
+   comparison rather than an assertion of plausibility:
+
+   ```bash
+   stellar contract invoke --id <CONTRACT_ID> \
+     -- get_corridor_aggregate --anchor_id cowrie --corridor usdc-ngn
+   ```
+
+### Migrate
+
+Whole fleet, one invocation:
 
 ```bash
-export NETWORK=testnet
-export RPC_URL=https://soroban-testnet.stellar.org
-export ADMIN_SECRET=SXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXX
-export CURRENT_WASM=./target/wasm32-unknown-unknown/release/reputation_contract.wasm
-export PREVIOUS_WASM=./artifacts/reputation_contract_prev.wasm
-export CONTRACT_ID=CXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXX
+stellar contract invoke \
+  --id <CONTRACT_ID> \
+  --source <ADMIN_KEY> \
+  -- migrate_all_v2 \
+  --caller <ADMIN_ADDRESS>
 ```
 
-If you do not already have the contract ID, set it to the testnet deployment that you are rehearsing against.
+If the admin is a multisig account, compose and co-sign the transaction the same
+way as `accept_admin` — see [`GOVERNANCE.md`](GOVERNANCE.md) § "Accept with the
+multisig account".
 
-## Step-by-step rehearsal
-
-### Step 1: Confirm the starting point
-
-Record the current contract metadata before any change.
+One pair at a time, for a corridor outside `V2_CORRIDORS` or to bound resource
+usage:
 
 ```bash
-soroban contract info --id "$CONTRACT_ID" --network "$NETWORK"
-soroban contract invoke --id "$CONTRACT_ID" --network "$NETWORK" -- list_anchors
+stellar contract invoke \
+  --id <CONTRACT_ID> \
+  --source <ADMIN_KEY> \
+  -- migrate_corridor_v2 \
+  --caller <ADMIN_ADDRESS> \
+  --anchor_id cowrie \
+  --corridor usdc-ngn
 ```
 
-Record what you saw:
+### After
 
-- contract ID
-- current wasm hash or deployed version
-- admin address
-- registered anchors
-- any existing data you expect to be preserved
+1. Read both paths for the pair recorded above and confirm the first four
+   fields match, with `composite_bps` inserted third:
 
-This is the baseline for the real rehearsal. If the command fails, stop and fix the environment before continuing.
+   ```bash
+   stellar contract invoke --id <CONTRACT_ID> \
+     -- get_corridor_aggregate --anchor_id cowrie --corridor usdc-ngn
+   stellar contract invoke --id <CONTRACT_ID> \
+     -- get_corridor_aggregate_v2 --anchor_id cowrie --corridor usdc-ngn
+   ```
 
-### Step 2: Build or fetch the previous known-good artifact
+2. Confirm the v1 path still answers — that is the compatibility guarantee, and
+   it should be verified rather than assumed.
 
-Use the exact wasm that was previously working, not the newest build.
+3. Re-run `migrate_all_v2`. It must be a no-op. If anything changes on the
+   second run, the idempotency guard is not doing its job and that is a bug
+   worth stopping for.
 
-```bash
-# Example: use the previous artifact from a release or a saved build output.
-ls -l "$PREVIOUS_WASM"
-sha256sum "$PREVIOUS_WASM"
-```
+### If it fails partway
 
-Record:
+Re-run the same invocation. Already-migrated pairs short-circuit on the `has`
+check, so the retry costs only the remainder. There is no rollback and none is
+needed: v1 keys were never touched.
 
-- filename
-- SHA-256 hash
-- source of the artifact (release bundle, tagged build, or release branch)
+That covers this storage migration. Rolling back a contract _code_ upgrade is a
+different operation, with its own rehearsal:
+[`MAINNET_LAUNCH.md` section 5.1](MAINNET_LAUNCH.md#51-rehearsal-on-testnet).
 
-### Step 3: Upload the previous artifact to the testnet network
+---
 
-This simulates the rollback artifact, not a clean redeploy.
+## What is deliberately not here
 
-```bash
-soroban contract upload --wasm "$PREVIOUS_WASM" --source "$ADMIN_SECRET" --network "$NETWORK"
-```
+**A compatibility shim, and a cutover window.** Both were in the original scope
+for #872 and both are omitted.
 
-Record:
+The premise for them was "third-party contracts already reading v1." As of
+2026-08-05 that set was empty and structurally so: the deployment was testnet-only
+(`CCZ54NTE…`), its anchor registry was empty, and no corridor rate had ever been
+published. While the publisher now calls `publish_corridor_rate` (as of 2026-09-24,
+see `packages/publisher/src/batch.ts`), designing a shim against zero external readers
+was speculative work, and the property that actually protects a future reader — **v1 keys are never
+deleted** — already holds and is now written down.
 
-- upload transaction hash
-- uploaded wasm hash
-- whether the upload succeeded without retries or errors
+If a real third-party reader appears and a v1 removal is ever contemplated, that
+is a new decision and belongs in [`VERSIONING.md`](VERSIONING.md)'s deprecation
+process, not here.
 
-This proves the rollback artifact is valid on the network.
-
-### Step 4: Confirm the current deployment is still the upgraded one
-
-Before you upgrade or restore anything, confirm that the live contract is the version you intend to roll back from.
-
-```bash
-soroban contract info --id "$CONTRACT_ID" --network "$NETWORK"
-```
-
-Record:
-
-- the live deployed wasm hash
-- the current admin address
-- the active contract state
-
-This is the point where the team verifies: "we are rolling back from the upgrade we actually deployed, not from a stale artifact." 
-
-### Step 5: Simulate the rollback as a controlled restore
-
-The exact mechanism depends on your governance and contract tooling, but the rehearsal must follow the same path the mainnet rollback will use.
-
-Typical pattern for a contract upgrade or restore:
-
-```bash
-# Example pattern only: adjust to your actual upgrade command.
-# soroban contract upgrade --id "$CONTRACT_ID" --wasm "$PREVIOUS_WASM" --source "$ADMIN_SECRET" --network "$NETWORK"
-```
-
-If your deployment uses a different approval path, follow that path exactly and write down the commands used.
-
-Record:
-
-- exact command used
-- transaction hash
-- whether the transaction required signature collection or admin authorization
-- whether the operation succeeded on the first attempt
-
-### Step 6: Verify the contract after rollback
-
-Immediately check the post-restore state.
-
-```bash
-soroban contract info --id "$CONTRACT_ID" --network "$NETWORK"
-soroban contract invoke --id "$CONTRACT_ID" --network "$NETWORK" -- list_anchors
-```
-
-Then invoke any contract read path that matters for production behavior.
-
-Example:
-
-```bash
-# replace with actual production-facing read calls
-# soroban contract invoke --id "$CONTRACT_ID" --network "$NETWORK" -- recent_outcomes --anchor-id "example.anchor" --n 5
-```
-
-Record:
-
-- live wasm/hash after rollback
-- admin still matches the expected rollback key
-- anchor registry is intact
-- outcome reads work
-- no state is missing or corrupted
-
-### Step 7: Validate the rollback is complete
-
-Check the behavior that would have broken if the rollback were incomplete.
-
-At a minimum, verify:
-
-- the contract still loads on the network
-- the admin gate still works
-- the read path is functional
-- historical data remains readable
-- the contract behavior matches the last known-good version
-
-If any check differs from the baseline recorded in Step 1, stop and escalate. Do not proceed to a mainnet rehearsal.
-
-## Baseline log template
-
-Copy this into the deployment ticket and fill it in during rehearsal:
-
-```text
-Rollback rehearsal: <date>
-Network: testnet
-Contract ID: <id>
-Previous known-good wasm: <path>
-Previous wasm sha256: <hash>
-Current deployed wasm before rollback: <hash>
-Admin before rollback: <address>
-
-Observed before rollback:
-- list_anchors:
-- read path output:
-- admin state:
-
-Rollback command used:
-- <command>
-
-Observed after rollback:
-- post-rollback wasm hash:
-- admin state:
-- list_anchors:
-- read path output:
-- errors: none / details
-
-Status:
-- PASS / FAIL
-- Operator:
-- Reviewer:
-```
-
-## Release gate
-
-Do not mark the mainnet launch as ready until the rollback rehearsal has been completed on testnet, logged, and reviewed by a second operator. The mainnet rollback is not considered rehearsed just because the deploy script ran again.
+---
 
 ## Related
 
-- [docs/MAINNET_LAUNCH.md](MAINNET_LAUNCH.md)
+- [`ORACLE_SPEC.md`](ORACLE_SPEC.md) — the contract interface
+- [`GOVERNANCE.md`](GOVERNANCE.md) — admin custody and the multisig runbook
+- [`VERSIONING.md`](VERSIONING.md) — the deprecation policy a future v1 removal
+  would follow
+- `contracts/reputation/src/migration.rs` — the implementation
+- `contracts/reputation/tests/auth_gaps.rs`, `contracts/reputation/tests/hardening.rs` — migration tests

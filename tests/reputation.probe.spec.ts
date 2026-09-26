@@ -15,6 +15,7 @@ import {
   probeAllAnchorQuotes,
   quoteLatencyPercentiles,
   probeIssuerMismatch,
+  defaultCheckIssuer,
   probeAllAnchorIssuers,
   probeTomlIntegrity,
   probeAllAnchorIntegrity,
@@ -152,9 +153,25 @@ describe('reputation probe', () => {
     expect(classifyFailure('UNABLE_TO_VERIFY_LEAF_SIGNATURE')).toBe('tls');
     expect(classifyFailure('self signed certificate in chain')).toBe('tls');
     expect(classifyFailure('ERR_SSL_TLSV1_ALERT_PROTOCOL_VERSION')).toBe('tls');
+
+    // A hostname inside the anchor's own toml must not be read as a TLS fault.
+    // NGNC's stellar.toml embeds `https://uploads-ssl.webflow.com/...`, and
+    // when the toml failed to parse that URL travelled inside the error
+    // message — filing 26 days of TOML parse errors as certificate failures
+    // against a host whose certificate verifies cleanly.
+    expect(
+      classifyFailure(
+        'stellar.toml is invalid - Parsing error on line 67, column 100: Invalid TOML document: ' +
+          'image="https://uploads-ssl.webflow.com/6512d40f/65f06c75_KESc.png" s'
+      )
+    ).toBe('integrity');
   });
 
   it('classifies timeout failures', () => {
+    expect(classifyFailure('stellar.toml is invalid')).toBe('integrity');
+    expect(classifyFailure('toml integrity check failed')).toBe('integrity');
+    expect(classifyFailure('parse error at line 4')).toBe('integrity');
+
     expect(classifyFailure('The operation was aborted')).toBe('timeout');
     expect(classifyFailure('connect ETIMEDOUT 1.2.3.4:443')).toBe('timeout');
     expect(classifyFailure('request timeout after 5000ms')).toBe('timeout');
@@ -505,6 +522,123 @@ describe('issuer-mismatch probe', () => {
     expect(samples).toHaveLength(2);
     expect(store.samples('a.example')).toHaveLength(1);
     expect(store.samples('b.example')).toHaveLength(1);
+  });
+
+  describe('defaultCheckIssuer & on-chain verification (#1243)', () => {
+    it('returns match when TOML advertised issuer exists on-chain', async () => {
+      const anchor = testAnchor({ assetCode: 'USDC', homeDomain: 'anchor.example' });
+      const fetchToml = async (): Promise<TomlResult> => ({
+        ok: true,
+        data: tomlData({ CURRENCIES: [{ code: 'USDC', issuer: 'GVALIDUSDCISSUER' }] }),
+      });
+      const verifyOnChain = vi.fn(async () => true);
+
+      const result = await defaultCheckIssuer(anchor, fetchToml, verifyOnChain);
+      expect(result.ok).toBe(true);
+      expect(result.advertisedIssuer).toBe('GVALIDUSDCISSUER');
+      expect(result.actualIssuer).toBe('GVALIDUSDCISSUER');
+      expect(verifyOnChain).toHaveBeenCalledWith('USDC', 'GVALIDUSDCISSUER');
+
+      const store = new InMemoryProbeStore();
+      const sample = await probeIssuerMismatch(anchor, store, {
+        fetchToml,
+        verifyOnChainAsset: verifyOnChain,
+      });
+      expect(sample.reachable).toBe(true);
+      expect(sample.failureType ?? null).toBeNull();
+    });
+
+    it('returns mismatch when advertised issuer does not exist on-chain', async () => {
+      const anchor = testAnchor({ assetCode: 'USDC', homeDomain: 'anchor.example' });
+      const fetchToml = async (): Promise<TomlResult> => ({
+        ok: true,
+        data: tomlData({ CURRENCIES: [{ code: 'USDC', issuer: 'GFAKEISSUER' }] }),
+      });
+      const verifyOnChain = vi.fn(async () => false);
+
+      const result = await defaultCheckIssuer(anchor, fetchToml, verifyOnChain);
+      expect(result.ok).toBe(true);
+      expect(result.advertisedIssuer).toBe('GFAKEISSUER');
+      expect(result.actualIssuer).toBeNull();
+
+      const store = new InMemoryProbeStore();
+      const sample = await probeIssuerMismatch(anchor, store, {
+        fetchToml,
+        verifyOnChainAsset: verifyOnChain,
+      });
+      expect(sample.reachable).toBe(false);
+      expect(sample.failureType).toBe('mismatch');
+      expect(sample.error).toContain('GFAKEISSUER');
+    });
+
+    it('returns mismatch when TOML CURRENCIES has no entry for the anchor asset', async () => {
+      const anchor = testAnchor({ assetCode: 'USDC', homeDomain: 'anchor.example' });
+      const fetchToml = async (): Promise<TomlResult> => ({
+        ok: true,
+        data: tomlData({ CURRENCIES: [] }),
+      });
+      const verifyOnChain = vi.fn();
+
+      const result = await defaultCheckIssuer(anchor, fetchToml, verifyOnChain);
+      expect(result.ok).toBe(true);
+      expect(result.advertisedIssuer).toBeNull();
+      expect(result.actualIssuer).toBeNull();
+      expect(verifyOnChain).not.toHaveBeenCalled();
+
+      const store = new InMemoryProbeStore();
+      const sample = await probeIssuerMismatch(anchor, store, {
+        fetchToml,
+        verifyOnChainAsset: verifyOnChain,
+      });
+      expect(sample.reachable).toBe(false);
+      expect(sample.failureType).toBe('mismatch');
+    });
+
+    it('returns probe failure when TOML fetch fails', async () => {
+      const anchor = testAnchor({ assetCode: 'USDC', homeDomain: 'anchor.example' });
+      const fetchToml = async (): Promise<TomlResult> => ({
+        ok: false,
+        error: 'HTTP 503',
+      });
+      const verifyOnChain = vi.fn();
+
+      const result = await defaultCheckIssuer(anchor, fetchToml, verifyOnChain);
+      expect(result.ok).toBe(false);
+      expect(result.error).toBe('HTTP 503');
+
+      const store = new InMemoryProbeStore();
+      const sample = await probeIssuerMismatch(anchor, store, {
+        fetchToml,
+        verifyOnChainAsset: verifyOnChain,
+      });
+      expect(sample.reachable).toBe(false);
+      expect(sample.failureType).toBe('http');
+      expect(sample.error).toBe('HTTP 503');
+    });
+
+    it('returns probe failure when on-chain asset verification throws a network error', async () => {
+      const anchor = testAnchor({ assetCode: 'USDC', homeDomain: 'anchor.example' });
+      const fetchToml = async (): Promise<TomlResult> => ({
+        ok: true,
+        data: tomlData({ CURRENCIES: [{ code: 'USDC', issuer: 'GISSUER' }] }),
+      });
+      const verifyOnChain = vi.fn(async () => {
+        throw new Error('ETIMEDOUT');
+      });
+
+      const result = await defaultCheckIssuer(anchor, fetchToml, verifyOnChain);
+      expect(result.ok).toBe(false);
+      expect(result.error).toBe('ETIMEDOUT');
+
+      const store = new InMemoryProbeStore();
+      const sample = await probeIssuerMismatch(anchor, store, {
+        fetchToml,
+        verifyOnChainAsset: verifyOnChain,
+      });
+      expect(sample.reachable).toBe(false);
+      expect(sample.failureType).toBe('timeout');
+      expect(sample.error).toBe('ETIMEDOUT');
+    });
   });
 });
 

@@ -35,7 +35,9 @@ exports[`Hero > matches the visual snapshot with live rate + leaderboard data 1`
     <p
       class="text-secondary-text measure mt-6 text-base sm:text-lg"
     >
-      A directory records what an anchor declares about itself, and stays correct until that anchor's deployment changes without the listing changing with it. This is the other half: seven registered off-ramp anchors, probed on a clock, with the scoring method published and small samples labelled as small.
+      A directory records what an anchor declares about itself, and stays correct until that anchor's deployment changes without the listing changing with it. This is the other half: 
+      six
+       registered off-ramp anchors, probed on a clock, with the scoring method published and small samples labelled as small.
     </p>
     <div
       class="mt-10 flex flex-wrap items-center gap-3"

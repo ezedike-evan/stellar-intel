@@ -75,6 +75,8 @@ function outcomeRow(
     disputedReason: null,
     publishedAt: null,
     oracleTxHash: null,
+    attested: true,
+    signerAccount: null,
     ...overrides,
   };
 }
@@ -271,8 +273,8 @@ describe('GET /api/reputation/leaderboard — with corridor filter', () => {
     expect(ids).not.toContain('anclap');
   });
 
-  it('returns only anclap for the usdc-ars corridor', async () => {
-    const ids = idsOf(await leaderboardFor({ corridor: 'usdc-ars' }));
+  it('returns only anclap for the ars-ars corridor', async () => {
+    const ids = idsOf(await leaderboardFor({ corridor: 'ars-ars' }));
     expect(ids).toEqual(['anclap']);
   });
 
@@ -284,7 +286,7 @@ describe('GET /api/reputation/leaderboard — with corridor filter', () => {
   });
 
   it('queries the oracle once per anchor that serves the corridor', async () => {
-    await leaderboardFor({ corridor: 'usdc-ars' });
+    await leaderboardFor({ corridor: 'ars-ars' });
 
     expect(oracleRequests()).toHaveLength(1);
     expect(oracleRequests()[0]?.method).toBe('simulateTransaction');
@@ -293,7 +295,7 @@ describe('GET /api/reputation/leaderboard — with corridor filter', () => {
   it('reports an anchor the oracle has no outcomes for as absent, not as zero', async () => {
     // The contract returns a zeroed tuple for a pair it has never seen;
     // `getScoreForCorridor` reports that as null rather than a real 0 score.
-    const data = await leaderboardFor({ corridor: 'usdc-ars' });
+    const data = await leaderboardFor({ corridor: 'ars-ars' });
 
     expect(oracleRequests()).toHaveLength(1);
     expect(entryFor(data, 'anclap').onChain).toBeNull();
@@ -302,7 +304,7 @@ describe('GET /api/reputation/leaderboard — with corridor filter', () => {
   it('surfaces the on-chain score returned by the oracle', async () => {
     server.use(scoredOracleHandler);
 
-    const data = await leaderboardFor({ corridor: 'usdc-ars' });
+    const data = await leaderboardFor({ corridor: 'ars-ars' });
 
     expect(entryFor(data, 'anclap').onChain).toEqual({
       compositeBps: 8123,
@@ -315,7 +317,7 @@ describe('GET /api/reputation/leaderboard — with corridor filter', () => {
   it('degrades onChain to null when the oracle read fails', async () => {
     server.use(failingOracleHandler);
 
-    const anclap = entryFor(await leaderboardFor({ corridor: 'usdc-ars' }), 'anclap');
+    const anclap = entryFor(await leaderboardFor({ corridor: 'ars-ars' }), 'anclap');
 
     expect(anclap.onChain).toBeNull();
     // The off-chain scorecard is unaffected by an oracle outage.
@@ -383,5 +385,31 @@ describe('GET /api/reputation/leaderboard — validation errors', () => {
   it('rejects an unknown corridor without touching the network', async () => {
     await GET(makeRequest({ corridor: 'usdc-xyz' }));
     expect(oracleRequests()).toHaveLength(0);
+  });
+});
+
+// ─── Attestation gate ─────────────────────────────────────────────────────────
+
+describe('GET /api/reputation/leaderboard — unattested rows', () => {
+  it('ignores rows without a verified sender signature', async () => {
+    const store = new InMemoryReputationStore();
+    for (const row of SEED_ROWS) await store.append(row);
+    // Forged failures against moneygram: stored, but never attested.
+    for (let i = 0; i < 5; i++) {
+      await store.append(
+        outcomeRow({
+          intentHash: `forged-${i}`,
+          outcome: 'error',
+          deliveredRate: null,
+          deliveredAmount: null,
+          attested: false,
+        })
+      );
+    }
+    _setReputationStore(store);
+
+    const moneygram = entryFor(await leaderboardFor(), 'moneygram');
+    expect(moneygram.n).toBe(2);
+    expect(moneygram.composite).toBeCloseTo(MONEYGRAM_COMPOSITE, 4);
   });
 });

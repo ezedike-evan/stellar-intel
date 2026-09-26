@@ -27,6 +27,8 @@ import { useWithdrawStatus, type OutcomeAppendContext } from '@/hooks/useWithdra
 import { useWalletBalance } from '@/hooks/useWalletBalance';
 import { amountBucket, FUNNEL_EVENTS, trackFunnelEvent } from '@/lib/analytics';
 import { VISIBLE_CORRIDORS } from '@/constants/anchors';
+import { signIntent } from '@/lib/intent/sign';
+import type { Intent } from '@/lib/intent/hash';
 import type { AnchorRate } from '@/types';
 
 // Not needed until the user picks a rate to execute — split into its own
@@ -147,20 +149,45 @@ function OfframpContent() {
       setTrackingAnchorHomeDomain(anchorHomeDomain);
 
       // Capture the quote so the terminal outcome of this real transaction is
-      // logged to the reputation store (#799). The SEP-24 transaction id is the
-      // stable per-transaction identity; a null exchangeRate can't be quoted so
-      // it's skipped (the user can't execute against an unreachable anchor).
-      if (selectedRate && selectedRate.exchangeRate !== null) {
-        setOutcomeContext({
-          intentHash: transactionId,
+      // logged to the reputation store (#799). A null exchangeRate can't be
+      // quoted so it's skipped (the user can't execute against an unreachable
+      // anchor).
+      //
+      // The append route only accepts outcomes signed by the sender, so the
+      // intent — which binds the SEP-24 transaction id to this wallet, anchor
+      // and corridor — is hashed and signed with Freighter here. If the user
+      // declines the signature, the off-ramp itself is unaffected; its outcome
+      // simply isn't recorded.
+      if (selectedRate && selectedRate.exchangeRate !== null && publicKey) {
+        const [sourceAsset = '', destinationAsset = ''] = selectedRate.corridorId.split('-');
+        const intent: Intent = {
+          type: 'offramp-outcome',
+          sourceAsset: sourceAsset.toUpperCase(),
+          destinationAsset: destinationAsset.toUpperCase(),
+          amount,
+          sender: publicKey,
+          recipient: selectedRate.anchorId,
+          anchorId: selectedRate.anchorId,
+          corridor: selectedRate.corridorId,
+          transactionId,
+        };
+        const quote = {
           anchorId: selectedRate.anchorId,
           corridor: selectedRate.corridorId,
           quotedRate: String(selectedRate.exchangeRate),
           quotedAmount: amount,
-        });
+        };
+        signIntent(intent)
+          .then(({ intentHash, signature, publicKey: signer }) => {
+            setOutcomeContext({ ...quote, intentHash, signature, publicKey: signer });
+          })
+          .catch(() => {
+            // Best-effort, like the append itself: an unsigned outcome would be
+            // rejected by the server, so there is nothing to record.
+          });
       }
     },
-    [router, selectedRate, amount]
+    [router, selectedRate, amount, publicKey]
   );
 
   useEffect(() => {

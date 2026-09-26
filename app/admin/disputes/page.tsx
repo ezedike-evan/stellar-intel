@@ -93,7 +93,7 @@ export default function AdminDisputesPage() {
   return (
     <div className="py-8">
       <div className="mb-6 flex items-center justify-between">
-        <h2 className="text-xl font-semibold text-gray-900 dark:text-white">Dispute queue</h2>
+        <h1 className="text-xl font-semibold text-primary-text">Dispute queue</h1>
         <button
           onClick={() => fetchDisputes(adminKey)}
           disabled={fetchState === 'loading'}

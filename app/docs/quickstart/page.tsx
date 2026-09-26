@@ -1,4 +1,11 @@
+import type { Metadata } from 'next';
 import { CodeBlock } from '@/components/docs/CodeBlock';
+
+export const metadata: Metadata = {
+  title: 'Quickstart',
+  description:
+    'Make your first Stellar Intel API call in under 5 minutes — fetch off-ramp rates, check anchor reputation, and submit an intent using curl or the Rust client. No SDK required.',
+};
 
 export default function QuickstartPage() {
   return (

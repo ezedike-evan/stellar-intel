@@ -160,22 +160,36 @@ export async function getResolvedAnchorById(id: string): Promise<ResolvedAnchor>
   return { ...anchor, ...result.data };
 }
 
-// SEPs that indicate transfer capability (deposit/withdrawal/send)
-// SEP-6: programmatic transfer, SEP-24: interactive transfer,
-// SEP-31: cross-border payment
-const TRANSFER_SEPS: ReadonlyArray<NonNullable<Anchor['seps']>[number]> = [
-  'sep6',
-  'sep24',
-  'sep31',
-];
+// SEPs that indicate routable transfer capability (deposit/withdrawal).
+// SEP-6: programmatic transfer, SEP-24: interactive transfer.
+// SEP-31 (cross-border payment) is tracked for health/reputation but never routed directly.
+export const ROUTABLE_SEPS: ReadonlyArray<NonNullable<Anchor['seps']>[number]> = ['sep6', 'sep24'];
 
 /**
- * Returns true if the anchor supports at least one transfer SEP
- * (SEP-6, SEP-24, or SEP-31). Issuer-only anchors that lack all
- * three are excluded from corridor selectors and the rate engine.
+ * Returns true if the anchor supports at least one routable transfer SEP
+ * (SEP-6 or SEP-24). SEP-31-only and issuer-only anchors that lack both
+ * are excluded from corridor selectors and the rate engine.
  */
 export function transferCapable(anchor: Anchor): boolean {
-  return anchor.seps?.some((sep) => TRANSFER_SEPS.includes(sep)) ?? false;
+  return anchor.seps?.some((sep) => ROUTABLE_SEPS.includes(sep)) ?? false;
+}
+
+/**
+ * Returns true if the anchor supports SEP-31 and neither SEP-6 nor SEP-24.
+ * SEP-31-only anchors are tracked for health and survey coverage, but are
+ * never routed into corridor selectors or the rate engine.
+ */
+export function isSep31Only(anchor: Anchor): boolean {
+  const seps = anchor.seps ?? [];
+  return seps.includes('sep31') && !seps.includes('sep6') && !seps.includes('sep24');
+}
+
+/**
+ * Returns all tracked anchors in the registry regardless of routability or health status.
+ * Used by health probes and surveys; routing paths must use `getAnchorsByCorridorId` instead.
+ */
+export function getTrackedAnchors(): Anchor[] {
+  return [...ANCHORS];
 }
 
 /**
@@ -258,4 +272,48 @@ export function getCorridorById(id: string): Corridor {
  */
 export function isValidCorridorId(id: string): boolean {
   return CORRIDORS.some((c) => c.id === id);
+}
+
+/**
+ * Validates structural rules for anchor registry fields:
+ * - every id in unverifiedCorridors is also in corridors;
+ * - sep31Corridors and corridors are disjoint, and every sep31Corridors id exists in CORRIDORS;
+ * - an anchor with a non-empty sep31Corridors lists 'sep31' in seps.
+ */
+export function registryShapeViolations(anchors: Anchor[], corridors: Corridor[]): string[] {
+  const violations: string[] = [];
+  const validCorridorIds = new Set(corridors.map((c) => c.id));
+
+  for (const anchor of anchors) {
+    if (anchor.unverifiedCorridors) {
+      for (const id of anchor.unverifiedCorridors) {
+        if (!anchor.corridors.includes(id)) {
+          violations.push(
+            `${anchor.id}: unverifiedCorridors contains '${id}' but it is not in corridors`
+          );
+        }
+      }
+    }
+
+    if (anchor.sep31Corridors && anchor.sep31Corridors.length > 0) {
+      if (!anchor.seps?.includes('sep31')) {
+        violations.push(`${anchor.id}: has sep31Corridors but 'sep31' is not in seps`);
+      }
+
+      for (const id of anchor.sep31Corridors) {
+        if (!validCorridorIds.has(id)) {
+          violations.push(
+            `${anchor.id}: sep31Corridors contains '${id}' which is not a known corridor`
+          );
+        }
+        if (anchor.corridors.includes(id)) {
+          violations.push(
+            `${anchor.id}: sep31Corridors and corridors are not disjoint ('${id}' is in both)`
+          );
+        }
+      }
+    }
+  }
+
+  return violations;
 }

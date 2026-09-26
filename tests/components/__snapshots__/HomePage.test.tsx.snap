@@ -43,7 +43,9 @@ exports[`HomePage > matches snapshot 1`] = `
       <p
         class="text-secondary-text measure mt-6 text-base sm:text-lg"
       >
-        A directory records what an anchor declares about itself, and stays correct until that anchor's deployment changes without the listing changing with it. This is the other half: seven registered off-ramp anchors, probed on a clock, with the scoring method published and small samples labelled as small.
+        A directory records what an anchor declares about itself, and stays correct until that anchor's deployment changes without the listing changing with it. This is the other half: 
+        six
+         registered off-ramp anchors, probed on a clock, with the scoring method published and small samples labelled as small.
       </p>
       <div
         class="mt-10 flex flex-wrap items-center gap-3"
@@ -139,6 +141,14 @@ exports[`HomePage > matches snapshot 1`] = `
     style="transition-delay: 0ms;"
   >
     <section
+      aria-label="record proof stub"
+    />
+  </section>
+  <section
+    class="transition-all duration-700 ease-out opacity-0 translate-y-8 motion-reduce:transition-none motion-reduce:transform-none motion-reduce:opacity-100"
+    style="transition-delay: 0ms;"
+  >
+    <section
       aria-labelledby="registry-heading"
     >
       <div
@@ -148,7 +158,8 @@ exports[`HomePage > matches snapshot 1`] = `
           class="type-title"
           id="registry-heading"
         >
-          The seven
+          The 
+          six
         </h2>
         <p
           class="text-fg-muted font-mono text-xs tracking-wide"

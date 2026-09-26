@@ -6,7 +6,7 @@ import { verifyIntentSignature } from '@/lib/intent/verify';
 const INTENT_HASH = 'a'.repeat(64);
 
 function sign(hashHex: string, kp: Keypair): string {
-  return kp.sign(Buffer.from(hashHex, 'hex')).toString('base64');
+  return Buffer.from(kp.sign(Buffer.from(hashHex, 'hex'))).toString('base64');
 }
 
 describe('verifyIntentSignature', () => {
@@ -32,6 +32,34 @@ describe('verifyIntentSignature', () => {
     const signature = sign('b'.repeat(64), kp);
     expect(
       verifyIntentSignature({ intentHash: INTENT_HASH, publicKey: kp.publicKey(), signature })
+    ).toBe(false);
+  });
+
+  it('accepts a SEP-53 signature over the hex hash (what Freighter signMessage produces)', () => {
+    const kp = Keypair.random();
+    const signature = Buffer.from(kp.signMessage(INTENT_HASH)).toString('base64');
+    expect(
+      verifyIntentSignature({ intentHash: INTENT_HASH, publicKey: kp.publicKey(), signature })
+    ).toBe(true);
+  });
+
+  it('rejects a SEP-53 signature from a different key or over a different hash', () => {
+    const kp = Keypair.random();
+    const otherKey = Buffer.from(Keypair.random().signMessage(INTENT_HASH)).toString('base64');
+    const otherHash = Buffer.from(kp.signMessage('b'.repeat(64))).toString('base64');
+    expect(
+      verifyIntentSignature({
+        intentHash: INTENT_HASH,
+        publicKey: kp.publicKey(),
+        signature: otherKey,
+      })
+    ).toBe(false);
+    expect(
+      verifyIntentSignature({
+        intentHash: INTENT_HASH,
+        publicKey: kp.publicKey(),
+        signature: otherHash,
+      })
     ).toBe(false);
   });
 

@@ -7,6 +7,9 @@
  * citable by both search engines and AI models.  Per schema.org/Dataset, all
  * fields describe the *underlying data*, not the page rendering it.
  *
+ * `FAQPage` is generated from `docs/FAQ.md` so the markdown stays the only
+ * copy of the Q&A (#1061).
+ *
  * Honesty rules (issue: "[FEAT][seo] JSON-LD: Dataset for the anchor corpus"):
  *   - The coverage window is always computed from real rows — never hardcoded.
  *   - Sample size is stated plainly.
@@ -30,6 +33,45 @@ export const JSONLD_MIN_SUFFICIENT_SAMPLES = parseInt(
   process.env.NEXT_PUBLIC_MIN_OUTCOMES ?? '30',
   10
 );
+
+export const MAX_FAQ_BYTES = 256 * 1024;
+export const MAX_FAQ_ITEMS = 50;
+export const MAX_QUESTION_CHARS = 300;
+export const MAX_ANSWER_CHARS = 8000;
+export const FAQ_MARKDOWN_REL_PATH = 'docs/FAQ.md';
+
+// `readFaqMarkdown` lives in lib/seo/faq-source.ts: this module is imported by
+// client components, and a top-level `node:fs` import here reaches the browser
+// chunking context and fails the Turbopack build on /anchors/page.
+
+export class FaqJsonLdError extends Error {
+  constructor(message: string) {
+    super(message);
+    this.name = 'FaqJsonLdError';
+  }
+}
+
+export interface FaqEntry {
+  question: string;
+  answer: string;
+}
+
+export interface FaqAnswerNode {
+  '@type': 'Answer';
+  text: string;
+}
+
+export interface FaqQuestionNode {
+  '@type': 'Question';
+  name: string;
+  acceptedAnswer: FaqAnswerNode;
+}
+
+export interface FaqPageJsonLd {
+  '@context': 'https://schema.org';
+  '@type': 'FAQPage';
+  mainEntity: FaqQuestionNode[];
+}
 
 // ─── Types ────────────────────────────────────────────────────────────────────
 
@@ -64,6 +106,82 @@ export interface DatasetJsonLdOptions {
   license: string;
   /** ISO 8601 timestamp when this markup was generated (`dateModified`). */
   dateModified: string;
+}
+
+/** Collapse markdown to the plain text that belongs in JSON-LD. */
+export function stripMarkdown(text: string): string {
+  return text
+    .replace(/\r\n/g, '\n')
+    .replace(/\[([^\]]+)\]\([^)]+\)/g, '$1')
+    .replace(/\*\*([^*]+)\*\*/g, '$1')
+    .replace(/`([^`]+)`/g, '$1')
+    .replace(/\s+/g, ' ')
+    .trim();
+}
+
+export function parseFaqMarkdown(source: string): FaqEntry[] {
+  if (typeof source !== 'string') {
+    throw new FaqJsonLdError('FAQ markdown source must be a string');
+  }
+
+  const sections = source.split(/^### /m).slice(1);
+  if (sections.length === 0) {
+    throw new FaqJsonLdError('FAQ markdown contains no ### questions');
+  }
+  if (sections.length > MAX_FAQ_ITEMS) {
+    throw new FaqJsonLdError(
+      `FAQ markdown has ${sections.length} questions; max is ${MAX_FAQ_ITEMS}`
+    );
+  }
+
+  const entries: FaqEntry[] = [];
+  for (const section of sections) {
+    const newline = section.indexOf('\n');
+    const rawQuestion = newline === -1 ? section : section.slice(0, newline);
+    const rawAnswer = newline === -1 ? '' : section.slice(newline + 1);
+    const question = stripMarkdown(rawQuestion);
+    const answer = stripMarkdown(rawAnswer);
+
+    if (question.length === 0) {
+      throw new FaqJsonLdError('FAQ question is empty after stripping markdown');
+    }
+    if (answer.length === 0) {
+      throw new FaqJsonLdError(`FAQ answer is empty for question: ${question}`);
+    }
+    if (question.length > MAX_QUESTION_CHARS) {
+      throw new FaqJsonLdError(
+        `FAQ question exceeds ${MAX_QUESTION_CHARS} characters (${question.length})`
+      );
+    }
+    if (answer.length > MAX_ANSWER_CHARS) {
+      throw new FaqJsonLdError(
+        `FAQ answer exceeds ${MAX_ANSWER_CHARS} characters for question: ${question}`
+      );
+    }
+
+    entries.push({ question, answer });
+  }
+
+  return entries;
+}
+
+export function buildFaqPageJsonLd(entries: FaqEntry[]): FaqPageJsonLd {
+  if (!Array.isArray(entries) || entries.length === 0) {
+    throw new FaqJsonLdError('FAQPage JSON-LD requires at least one question');
+  }
+
+  return {
+    '@context': 'https://schema.org',
+    '@type': 'FAQPage',
+    mainEntity: entries.map((entry) => ({
+      '@type': 'Question',
+      name: entry.question,
+      acceptedAnswer: {
+        '@type': 'Answer',
+        text: entry.answer,
+      },
+    })),
+  };
 }
 
 // ─── Builder ──────────────────────────────────────────────────────────────────
@@ -163,6 +281,144 @@ export function buildDatasetJsonLd(options: DatasetJsonLdOptions): Record<string
  * The `<` → `\u003c` replacement prevents script-injection via embedded
  * close-tags (same guard used across the rest of the codebase).
  */
-export function serializeJsonLd(jsonLd: Record<string, unknown>): string {
+export function serializeJsonLd(
+  jsonLd: Record<string, unknown> | FaqPageJsonLd | BreadcrumbListJsonLd
+): string {
   return JSON.stringify(jsonLd).replace(/</g, '\\u003c');
+}
+
+// ─── BreadcrumbList (#1062) ───────────────────────────────────────────────────
+
+export interface BreadcrumbItem {
+  name: string;
+  url: string;
+}
+
+export interface BreadcrumbListJsonLd {
+  '@context': 'https://schema.org';
+  '@type': 'BreadcrumbList';
+  itemListElement: Array<{
+    '@type': 'ListItem';
+    position: number;
+    name: string;
+    item: string;
+  }>;
+}
+
+/**
+ * Builds a `BreadcrumbList` for the `/docs/*` and `/anchors/*` trails (#1062).
+ * Positions are 1-based, as schema.org requires.
+ */
+export function buildBreadcrumbList(items: BreadcrumbItem[]): BreadcrumbListJsonLd {
+  return {
+    '@context': 'https://schema.org',
+    '@type': 'BreadcrumbList',
+    itemListElement: items.map((item, index) => ({
+      '@type': 'ListItem',
+      position: index + 1,
+      name: item.name,
+      item: item.url,
+    })),
+  };
+}
+
+/**
+ * Props for a `<script type="application/ld+json">` tag. The payload goes
+ * through `serializeJsonLd`, so the `<` escaping that stops an embedded
+ * `</script>` from closing the tag early lives in exactly one place.
+ */
+export function jsonLdScriptProps(data: Record<string, unknown> | BreadcrumbListJsonLd): {
+  type: 'application/ld+json';
+  dangerouslySetInnerHTML: { __html: string };
+} {
+  return {
+    type: 'application/ld+json',
+    dangerouslySetInnerHTML: { __html: serializeJsonLd(data) },
+  };
+}
+
+// ─── Organization / WebSite (#1059) ───────────────────────────────────────────
+
+export const DEFAULT_SITE_URL = 'https://stellar-intel.vercel.app';
+export const GITHUB_ORG_URL = 'https://github.com/ezedike-evan';
+export const GITHUB_REPO_URL = 'https://github.com/ezedike-evan/stellar-intel';
+// Same Discord invite the footer links (components/layout/Footer.tsx).
+export const DISCORD_URL = 'https://discord.gg/stellar';
+
+export interface OrganizationSchema {
+  '@context': 'https://schema.org';
+  '@type': 'Organization';
+  name: string;
+  url: string;
+  logo: string;
+  description: string;
+  sameAs: string[];
+}
+
+export interface WebSiteSchema {
+  '@context': 'https://schema.org';
+  '@type': 'WebSite';
+  name: string;
+  url: string;
+  description: string;
+  publisher: {
+    '@type': 'Organization';
+    name: string;
+    url: string;
+  };
+  potentialAction: {
+    '@type': 'SearchAction';
+    target: {
+      '@type': 'EntryPoint';
+      urlTemplate: string;
+    };
+    'query-input': string;
+  };
+}
+
+export function getOrganizationJsonLd(siteUrl: string = DEFAULT_SITE_URL): OrganizationSchema {
+  const url = siteUrl.replace(/\/+$/, '');
+  return {
+    '@context': 'https://schema.org',
+    '@type': 'Organization',
+    name: 'Stellar Intel',
+    url,
+    logo: `${url}/favicons/icon-512x512.png`,
+    description:
+      'A public health record for Stellar off-ramp anchors — probing uptime, quote availability, issuer mismatch, and TOML integrity.',
+    sameAs: [GITHUB_ORG_URL, GITHUB_REPO_URL, DISCORD_URL],
+  };
+}
+
+export function getWebSiteJsonLd(siteUrl: string = DEFAULT_SITE_URL): WebSiteSchema {
+  const url = siteUrl.replace(/\/+$/, '');
+  return {
+    '@context': 'https://schema.org',
+    '@type': 'WebSite',
+    name: 'Stellar Intel',
+    url,
+    description:
+      'Every registered Stellar off-ramp anchor, probed every five minutes across four signals — uptime, quote availability, issuer mismatch, TOML integrity.',
+    publisher: {
+      '@type': 'Organization',
+      name: 'Stellar Intel',
+      url,
+    },
+    potentialAction: {
+      '@type': 'SearchAction',
+      target: {
+        '@type': 'EntryPoint',
+        urlTemplate: `${url}/anchors?search={search_term_string}`,
+      },
+      'query-input': 'required name=search_term_string',
+    },
+  };
+}
+
+/** Both root-level schemas in one `@graph`, for the root layout's single script tag. */
+export function getRootJsonLd(siteUrl: string = DEFAULT_SITE_URL) {
+  return {
+    '@context': 'https://schema.org',
+    '@graph': [getOrganizationJsonLd(siteUrl), getWebSiteJsonLd(siteUrl)],
+  };
 }

@@ -1,5 +1,6 @@
 import Link from 'next/link';
 import { ANCHORS, CORRIDORS } from '@/constants';
+import { ANCHOR_COUNT_WORD } from '@/constants/anchors';
 
 const SEP_ORDER = ['sep6', 'sep10', 'sep24', 'sep31', 'sep38'] as const;
 
@@ -7,12 +8,12 @@ const SEP_ORDER = ['sep6', 'sep10', 'sep24', 'sep31', 'sep38'] as const;
  * The registry, stated plainly.
  *
  * This replaces a row of anchor logos. A logo wall asserts credibility by
- * association and says nothing checkable; these are the seven anchors the
+ * association and says nothing checkable; these are the anchors the
  * record actually covers, with the corridors they are registered for and the
  * SEPs they advertise — every value read from `constants/anchors.ts`, so the
  * page cannot drift from the registry it describes.
  *
- * The SEP-38 column is the point. Exactly one of seven anchors advertises a
+ * The SEP-38 column is the point. Exactly one anchor in the registry advertises a
  * quote server, which is why `docs/POSITIONING.md` retires the claim that this
  * product compares firm quotes across anchors today. Showing the count is more
  * persuasive than any sentence about rigour, and it costs nothing to verify.
@@ -25,7 +26,7 @@ export function AnchorRegistry() {
     <section aria-labelledby="registry-heading">
       <div className="flex flex-wrap items-baseline justify-between gap-x-6 gap-y-2">
         <h2 id="registry-heading" className="type-title">
-          The seven
+          The {ANCHOR_COUNT_WORD}
         </h2>
         <p className="text-fg-muted font-mono text-xs tracking-wide">
           {withQuoteServer} of {ANCHORS.length} advertise a quote server

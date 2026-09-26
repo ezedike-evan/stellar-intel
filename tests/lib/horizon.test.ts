@@ -66,7 +66,8 @@ describe('buildWithdrawPayment', () => {
       assetIssuer: USDC_ISSUER,
     });
 
-    expect(tx.memo.value).toBe('abc123');
+    // sdk 17 exposes a text memo's value as a Uint8Array rather than a string.
+    expect(Buffer.from(tx.memo.value as Uint8Array).toString('utf8')).toBe('abc123');
   });
 
   it('uses the correct USDC asset code and issuer', async () => {
@@ -144,5 +145,72 @@ describe('buildWithdrawPayment', () => {
     // ... rest of the test
     const { signAndSubmitPayment } = await import('@/lib/stellar/horizon');
     await expect(signAndSubmitPayment('xdr' as any)).rejects.toThrow();
+  });
+});
+
+describe('verifyAssetOnChain', () => {
+  it('returns true when Horizon returns matching asset records', async () => {
+    const { verifyAssetOnChain } = await import('@/lib/stellar/horizon');
+    vi.stubGlobal(
+      'fetch',
+      vi.fn(async () => ({
+        ok: true,
+        json: async () => ({
+          _embedded: {
+            records: [{ asset_code: 'USDC', asset_issuer: USDC_ISSUER }],
+          },
+        }),
+      }))
+    );
+
+    const result = await verifyAssetOnChain('USDC', USDC_ISSUER);
+    expect(result).toBe(true);
+  });
+
+  it('returns false when Horizon returns empty records (unissued/unknown)', async () => {
+    const { verifyAssetOnChain } = await import('@/lib/stellar/horizon');
+    vi.stubGlobal(
+      'fetch',
+      vi.fn(async () => ({
+        ok: true,
+        json: async () => ({
+          _embedded: {
+            records: [],
+          },
+        }),
+      }))
+    );
+
+    const result = await verifyAssetOnChain('USDC', 'GBOGUSISSUER');
+    expect(result).toBe(false);
+  });
+
+  it('returns false when Horizon returns HTTP 400/404', async () => {
+    const { verifyAssetOnChain } = await import('@/lib/stellar/horizon');
+    vi.stubGlobal(
+      'fetch',
+      vi.fn(async () => ({
+        ok: false,
+        status: 400,
+      }))
+    );
+
+    const result = await verifyAssetOnChain('USDC', 'invalid-key');
+    expect(result).toBe(false);
+  });
+
+  it('throws when Horizon returns HTTP 500/503 server error', async () => {
+    const { verifyAssetOnChain } = await import('@/lib/stellar/horizon');
+    vi.stubGlobal(
+      'fetch',
+      vi.fn(async () => ({
+        ok: false,
+        status: 503,
+      }))
+    );
+
+    await expect(verifyAssetOnChain('USDC', USDC_ISSUER)).rejects.toThrow(
+      'Horizon /assets returned HTTP 503'
+    );
   });
 });

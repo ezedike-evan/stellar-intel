@@ -20,7 +20,7 @@
     "test": "vitest run"
   },
   "dependencies": {
-    "@stellar/stellar-sdk": "^16.0.1",
+    "@stellar/stellar-sdk": "^17.0.1",
     "pg": "^8.13.1"
   },
   "devDependencies": {

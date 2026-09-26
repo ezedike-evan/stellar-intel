@@ -10,7 +10,11 @@ import { test, expect } from '@playwright/test';
 test.describe('[#104] keyboard-only navigation', () => {
   test.beforeEach(async ({ page }) => {
     await page.goto('/offramp');
-    await page.waitForLoadState('networkidle');
+    // /offramp polls Freighter every 5s and refreshes rates on a timer, so the
+    // network never goes idle — wait for the heading, as smoke.spec.ts does.
+    await expect(
+      page.getByRole('heading', { name: 'Off-ramp Comparator', level: 1 })
+    ).toBeVisible();
   });
 
   // ── Tab order: first stop ───────────────────────────────────────────────────
@@ -99,8 +103,12 @@ test.describe('[#104] keyboard-only navigation', () => {
   // ── Rate table ──────────────────────────────────────────────────────────────
 
   test('Off-ramp buttons in rate table are Tab-reachable', async ({ page }) => {
-    // Wait up to 15 s for rates to load; skip if API is unavailable in test env
-    const offRampBtn = page.getByRole('button', { name: /off-ramp/i }).first();
+    // Wait up to 15 s for rates to load; skip if API is unavailable in test env.
+    // `disabled: false` matters: with no rates the table still renders its
+    // off-ramp buttons in a disabled state, and a disabled button is correctly
+    // not focusable -- the old guard checked only visibility, matched one of
+    // those, and then failed asserting focus on an element that must not take it.
+    const offRampBtn = page.getByRole('button', { name: /off-ramp/i, disabled: false }).first();
     const appeared = await offRampBtn
       .waitFor({ state: 'visible', timeout: 15_000 })
       .then(() => true)

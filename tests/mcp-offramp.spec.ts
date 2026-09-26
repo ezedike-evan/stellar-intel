@@ -4,7 +4,7 @@
  * Runs in the Node environment (not jsdom): Keypair.random() relies on Node's
  * crypto for secure entropy, which jsdom does not provide.
  */
-import { describe, it, expect, vi, beforeEach } from 'vitest';
+import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
 import { Keypair, TransactionBuilder, Networks } from '@stellar/stellar-sdk';
 import type { ServerRatesResult } from '@/lib/stellar/server-rates';
 
@@ -33,7 +33,7 @@ vi.mock('@stellar/stellar-sdk', async (importOriginal) => {
 const LIVE_RATES: Record<string, { anchorId: string; totalReceived: (amount: number) => number }> =
   {
     'usdc-ngn': { anchorId: 'cowrie', totalReceived: (amount) => (amount - 2) * 1600 },
-    'usdc-kes': { anchorId: 'flutterwave', totalReceived: (amount) => (amount - 1.5) * 129 },
+    'usdc-kes': { anchorId: 'moneygram', totalReceived: (amount) => (amount - 1.5) * 129 },
   };
 
 /** Sentinel amount that makes the stub simulate the routed anchor being unquotable. */
@@ -74,6 +74,19 @@ vi.mock('@/lib/stellar/server-rates', () => ({
   }),
 }));
 
+// Routing resolves each corridor against the registry filtered to anchors with
+// a verified account in ANCHOR_PAYMENT_ACCOUNTS — there is no built-in table.
+// Only cowrie is configured by default, so usdc-ngn routes to it even though
+// moneygram is listed first in the registry.
+const COWRIE_ACCOUNT = Keypair.random().publicKey();
+const MONEYGRAM_ACCOUNT = Keypair.random().publicKey();
+beforeEach(() => {
+  vi.stubEnv('ANCHOR_PAYMENT_ACCOUNTS', JSON.stringify({ cowrie: COWRIE_ACCOUNT }));
+});
+afterEach(() => {
+  vi.unstubAllEnvs();
+});
+
 const {
   getQuote,
   prepareIntent,
@@ -97,8 +110,9 @@ describe('intel.offramp.quote (#135)', () => {
   });
 
   it('computes net received for a second corridor', async () => {
+    vi.stubEnv('ANCHOR_PAYMENT_ACCOUNTS', JSON.stringify({ moneygram: MONEYGRAM_ACCOUNT }));
     const quote = await getQuote({ from: 'USDC', to: 'KES', amount: '50' });
-    expect(quote.anchor).toBe('flutterwave');
+    expect(quote.anchor).toBe('moneygram');
     // live-rate stub: (50 - 1.5) * 129 = 6256.5
     expect(quote.netReceived).toBe('6256.5');
   });
@@ -113,6 +127,13 @@ describe('intel.offramp.quote (#135)', () => {
     await expect(getQuote({ from: 'USDC', to: 'ZZZ', amount: '10' })).rejects.toBeInstanceOf(
       OfframpToolError
     );
+  });
+
+  it('throws NO_ROUTE when no registered anchor has a verified account', async () => {
+    vi.stubEnv('ANCHOR_PAYMENT_ACCOUNTS', '');
+    await expect(getQuote({ from: 'USDC', to: 'NGN', amount: '10' })).rejects.toMatchObject({
+      code: 'NO_ROUTE',
+    });
   });
 
   it('throws RATE_UNAVAILABLE when the routed anchor has no live quote', async () => {
@@ -138,8 +159,7 @@ describe('intel.offramp.prepare (#136)', () => {
     sourceAsset: 'USDC',
     destinationAsset: 'NGN',
     amount: '100',
-    // A real, valid Stellar public key generated below in tests when needed.
-    sender: 'GAIJ3VXNY7RPPLGVVCLGBK7NPHLL5ZRKATHETOA7M7UPZPAAHEGQQIY2',
+    sender: Keypair.random().publicKey(),
     recipient: 'recipient-123',
   };
 
@@ -178,6 +198,8 @@ describe('intel.offramp.prepare (#136)', () => {
     const { TransactionBuilder, Networks } = await import('@stellar/stellar-sdk');
     const tx = TransactionBuilder.fromXDR(result.unsignedTx, Networks.PUBLIC);
     expect(tx.operations.length).toBeGreaterThan(0);
+    // Pays the configured, verified account — not a built-in address.
+    expect((tx.operations[0] as { destination?: string }).destination).toBe(COWRIE_ACCOUNT);
     // Unsigned: no signatures attached yet.
     expect(tx.signatures.length).toBe(0);
   });
@@ -211,7 +233,9 @@ describe('intel.execute (#819)', () => {
     const intent = { ...validIntent, sender: kp.publicKey() };
     const { unsignedEnvelope, unsignedTx } = await prepareIntent(intent);
 
-    const signature = kp.sign(Buffer.from(unsignedEnvelope.intentHash, 'utf8')).toString('base64');
+    const signature = Buffer.from(
+      kp.sign(Buffer.from(unsignedEnvelope.intentHash, 'utf8'))
+    ).toString('base64');
 
     const tx = TransactionBuilder.fromXDR(unsignedTx, Networks.PUBLIC);
     tx.sign(kp);
@@ -277,9 +301,9 @@ describe('intel.execute (#819)', () => {
     const kp = Keypair.random();
     const other = Keypair.random();
     const { unsignedEnvelope, signedTx } = await prepareAndSign(kp);
-    const wrongSignature = other
-      .sign(Buffer.from(unsignedEnvelope.intentHash, 'utf8'))
-      .toString('base64');
+    const wrongSignature = Buffer.from(
+      other.sign(Buffer.from(unsignedEnvelope.intentHash, 'utf8'))
+    ).toString('base64');
 
     await expect(
       executeIntent({ unsignedEnvelope, signature: wrongSignature, signedTx })
@@ -290,7 +314,9 @@ describe('intel.execute (#819)', () => {
     const kp = Keypair.random();
     const intent = { ...validIntent, sender: kp.publicKey() };
     const { unsignedEnvelope, unsignedTx } = await prepareIntent(intent);
-    const signature = kp.sign(Buffer.from(unsignedEnvelope.intentHash, 'utf8')).toString('base64');
+    const signature = Buffer.from(
+      kp.sign(Buffer.from(unsignedEnvelope.intentHash, 'utf8'))
+    ).toString('base64');
 
     await expect(
       executeIntent({ unsignedEnvelope, signature, signedTx: unsignedTx })
@@ -322,7 +348,7 @@ describe('intel.execute (#819)', () => {
     // NO_ROUTE check.
     const { hashIntent } = await import('@/lib/intent/hash');
     const intentHash = await hashIntent(intent as unknown as import('@/lib/intent/hash').Intent);
-    const signature = kp.sign(Buffer.from(intentHash, 'utf8')).toString('base64');
+    const signature = Buffer.from(kp.sign(Buffer.from(intentHash, 'utf8'))).toString('base64');
 
     await expect(
       executeIntent({

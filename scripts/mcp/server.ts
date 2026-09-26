@@ -15,10 +15,17 @@ for (const [key, value] of Object.entries(MCP_ENV_DEFAULTS)) {
 }
 
 export async function createServer(): Promise<McpServer> {
+  // Preload the Stellar SDK. It is massive and its CJS/ESM interop loading can
+  // block the event loop for 20+ seconds on slow CI machines. Preloading it here
+  // shifts that cold-start penalty to the server startup phase (which has generous
+  // timeouts) instead of letting it blow up the first tool call's strict timeout.
+  await import('@stellar/stellar-sdk');
+
   // Dynamic imports so env defaults above are applied before lib/config loads.
   const { registerQuoteTool } = await import('./tools/quote');
   const { registerPrepareTool } = await import('./tools/prepare');
   const { registerExecuteTool } = await import('./tools/execute');
+  const { registerLeaderboardTool } = await import('./tools/leaderboard');
 
   const server = new McpServer({
     name: 'stellar-intel',
@@ -27,6 +34,7 @@ export async function createServer(): Promise<McpServer> {
   registerQuoteTool(server);
   registerPrepareTool(server);
   registerExecuteTool(server);
+  registerLeaderboardTool(server);
   return server;
 }
 

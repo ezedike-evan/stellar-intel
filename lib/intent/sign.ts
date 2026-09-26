@@ -18,6 +18,21 @@ export class IntentSignError extends Error {
 }
 
 /**
+ * Freighter's v4+ API returns the signature as a base64 string; the older v3
+ * shape returns raw bytes. Normalize both to base64, which is what the server
+ * verifier (`lib/intent/verify.ts`) decodes.
+ */
+function toBase64Signature(value: unknown): string {
+  if (typeof value === 'string') return value;
+  if (value instanceof Uint8Array) {
+    let binary = '';
+    for (const byte of value) binary += String.fromCharCode(byte);
+    return btoa(binary);
+  }
+  return '';
+}
+
+/**
  * Sign an intent hash using Freighter's signMessage API.
  * Returns the intent hash, Freighter's base64 signature, and the signer's public key.
  */
@@ -53,8 +68,8 @@ export async function signIntent(intent: Intent): Promise<SignedIntentEnvelope> 
     throw new IntentSignError('Freighter returned no public key', 'FREIGHTER_UNAVAILABLE');
   }
 
-  const sig = signResult as { signedMessage?: string; signature?: string };
-  const signature = sig.signedMessage ?? sig.signature ?? '';
+  const sig = signResult as { signedMessage?: unknown; signature?: unknown };
+  const signature = toBase64Signature(sig.signedMessage ?? sig.signature);
 
   if (!signature) {
     throw new IntentSignError('Freighter returned no signature', 'SIGN_FAILED');

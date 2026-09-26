@@ -56,9 +56,7 @@ export interface GateInput {
 export type GateAllowReason = 'testnet' | 'coverage_met' | 'override';
 
 export type GateBlockReason =
-  | 'insufficient_probe_coverage'
-  | 'coverage_unavailable'
-  | 'testnet_contract_on_mainnet';
+  'insufficient_probe_coverage' | 'coverage_unavailable' | 'testnet_contract_on_mainnet';
 
 export interface GateShortfall {
   anchorId: string;

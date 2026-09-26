@@ -8,10 +8,10 @@
 // Idempotent: a block whose exact title already exists is skipped, so a partial
 // run can be repeated safely. Dry run is the default.
 //
-//   node scripts/create-issues.mjs issues-ui.md
-//   node scripts/create-issues.mjs issues-ui.md --apply
-//   node scripts/create-issues.mjs issues-ui.md --apply --only C002,C003
-//   node scripts/create-issues.mjs issues-ui.md --apply --repo owner/name
+//   node scripts/create-issues.mjs issues.md
+//   node scripts/create-issues.mjs issues.md --apply
+//   node scripts/create-issues.mjs issues.md --apply --only C002,C003
+//   node scripts/create-issues.mjs issues.md --apply --repo owner/name
 
 import { readFileSync, writeFileSync, mkdtempSync } from 'node:fs';
 import { basename, join } from 'node:path';

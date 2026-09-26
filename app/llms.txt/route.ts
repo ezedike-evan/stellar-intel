@@ -1,3 +1,5 @@
+import { ANCHOR_COUNT_WORD } from '@/constants/anchors';
+
 const SITE_URL = process.env.NEXT_PUBLIC_SITE_URL ?? 'https://stellar-intel.vercel.app';
 
 // The short orientation file a model fetches to learn what this site is and
@@ -10,7 +12,7 @@ function buildLlmsTxt(): string {
 
 > A public health record for Stellar off-ramp anchors: what an anchor says about itself, checked against what it actually did.
 
-Stellar Intel probes seven registered SEP off-ramp anchors on Stellar every five minutes across four signals — uptime, quote availability, issuer mismatch, and TOML integrity — and aggregates settlement outcomes (fill rate, slippage, settlement time) into public reputation scorecards over 7-, 30-, and 90-day windows. A non-custodial execution path (quote, prepare, sign, submit) sits on top of that record: Stellar Intel never holds a private key or takes custody of funds, and every payment leg is signed by the user's or agent's own wallet.
+Stellar Intel probes ${ANCHOR_COUNT_WORD} registered SEP off-ramp anchors on Stellar every five minutes across four signals — uptime, quote availability, issuer mismatch, and TOML integrity — and aggregates settlement outcomes (fill rate, slippage, settlement time) into public reputation scorecards over 7-, 30-, and 90-day windows. A non-custodial execution path (quote, prepare, sign, submit) sits on top of that record: Stellar Intel never holds a private key or takes custody of funds, and every payment leg is signed by the user's or agent's own wallet.
 
 ## What the data is not
 

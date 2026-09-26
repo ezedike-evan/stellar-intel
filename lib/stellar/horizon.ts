@@ -266,3 +266,34 @@ export async function getStrictSendPaths(
     return resultRoute;
   });
 }
+
+// ─── On-chain asset verification ──────────────────────────────────────────────
+
+/**
+ * Verifies whether an asset exists on-chain for a given asset code and issuer.
+ * Queries Horizon's /assets endpoint.
+ */
+export async function verifyAssetOnChain(assetCode: string, issuer: string): Promise<boolean> {
+  const url = new URL(`${HORIZON_URL}/assets`);
+  url.searchParams.set('asset_code', assetCode);
+  url.searchParams.set('asset_issuer', issuer);
+
+  const res = await fetch(url.toString(), {
+    headers: { Accept: 'application/json' },
+  });
+
+  if (!res.ok) {
+    if (res.status === 404 || res.status === 400) {
+      return false;
+    }
+    throw new Error(`Horizon /assets returned HTTP ${res.status}`);
+  }
+
+  const data = (await res.json()) as {
+    _embedded?: {
+      records?: Array<{ asset_code?: string; asset_issuer?: string }>;
+    };
+  };
+  const records = data._embedded?.records ?? [];
+  return records.some((r) => r.asset_code === assetCode && r.asset_issuer === issuer);
+}

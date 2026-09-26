@@ -94,11 +94,13 @@ describe('useWithdrawStatus', () => {
 // ─── Reputation-event recording from real transactions (#799) ─────────────────
 
 const OUTCOME_CONTEXT = {
-  intentHash: TXN_ID,
+  intentHash: 'c'.repeat(64),
   anchorId: 'cowrie',
   corridor: 'usdc-ngn',
   quotedRate: '1650',
   quotedAmount: '100',
+  publicKey: 'GBRPYHIL2CI3FNQ4BXLFMNDLFJUNPU2HY3ZMFSHONUCEOASW7QC7OX2H',
+  signature: 'c2lnbmF0dXJl',
 };
 
 /** Mock fetch that answers both the SEP-24 poll and the reputation append POST. */
@@ -201,6 +203,9 @@ describe('useWithdrawStatus — reputation recording (#799)', () => {
       'deliveredAmount',
       'settleSeconds',
       'stellarTransactionId',
+      // The attestation: a public key and a signature, never a secret.
+      'publicKey',
+      'signature',
     ]);
     expect(Object.keys(body).every((k) => allowed.has(k))).toBe(true);
     const serialized = JSON.stringify(body).toLowerCase();

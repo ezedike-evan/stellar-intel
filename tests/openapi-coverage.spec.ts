@@ -35,11 +35,25 @@ const spec = JSON.parse(readFileSync('public/openapi.json', 'utf8')) as {
   info: { version: string };
 };
 
+/**
+ * Routes deliberately absent from the spec, with the reason.
+ *
+ * `/api/v1/openapi.json` serves this document. Listing it inside itself buys a
+ * consumer nothing, and because it sits under `/api/v1/`, documenting it would
+ * oblige every SDK to expose a meta-operation for it — tests/sdk-spec-sync.spec.ts
+ * (#806) fails on any published v1 operation the SDKs do not cover, and there
+ * are three of them (ts, py, rs). The guard this file exists for is an
+ * undocumented *data* route; this is not one.
+ */
+const UNDOCUMENTED_BY_DESIGN = new Set(['/api/v1/openapi.json']);
+
 describe('OpenAPI coverage (#918)', () => {
   const files = [...routeFiles('app/api'), ...routeFiles('app/v1')];
 
   it('documents every route file', () => {
-    const undocumented = files.map(toSpecPath).filter((p) => !(p in spec.paths));
+    const undocumented = files
+      .map(toSpecPath)
+      .filter((p) => !UNDOCUMENTED_BY_DESIGN.has(p) && !(p in spec.paths));
     expect(undocumented).toEqual([]);
   });
 

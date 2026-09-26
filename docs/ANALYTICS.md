@@ -310,8 +310,5 @@ npm run test -- analytics
 
 ## Related
 
-- [`issues-ui.md` #C096](../issues-ui.md) — Plausible integration issue
-- [`issues-ui.md` #C097](../issues-ui.md) — Funnel event tracking issue
-- [`issues-ui.md` #C098](../issues-ui.md) — Error event tracking issue
 - [`lib/metrics.ts`](../lib/metrics.ts) — Server-side operational metrics
 - [`docs/ROADMAP.md`](ROADMAP.md) — v1.3 observability wave

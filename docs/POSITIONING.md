@@ -50,7 +50,7 @@ They are listed rather than quietly deleted, because the point of narrowing is
 to stop making them.
 
 1. **"Live SEP-38 quotes across every integrated anchor."** On 2026-08-05,
-   **one of seven registered anchors advertises `ANCHOR_QUOTE_SERVER` at all**,
+   **one of six registered anchors advertises `ANCHOR_QUOTE_SERVER` at all**,
    and that one does not quote the corridor it is registered for. Comparing
    firm quotes across anchors is not a thing that can be done today, because
    the quotes do not exist. The worked evidence is in the Anchor Directory
@@ -161,7 +161,7 @@ Three things this section deliberately does not say:
    for it. Judging it by a monitor's refresh rate would be judging it against a
    purpose it never claimed.
 2. **Not "we are more complete."** This project tracks a **small registered
-   set** — currently seven anchors — against a directory that lists many more.
+   set** — currently six anchors — against a directory that lists many more.
    On coverage the directory wins outright.
 3. **Not "reserve attestation is a gap we fill."** It is not implemented here
    either. It is noted as pending on SDF's side because

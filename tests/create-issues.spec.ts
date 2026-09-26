@@ -1,17 +1,40 @@
 ﻿import { describe, expect, it } from 'vitest';
 import { execFileSync } from 'node:child_process';
-import { writeFileSync, mkdtempSync } from 'node:fs';
+import { writeFileSync, mkdtempSync, chmodSync } from 'node:fs';
 import { tmpdir } from 'node:os';
-import { join } from 'node:path';
+import { delimiter, join } from 'node:path';
+
+/**
+ * A stand-in `gh` put first on PATH, so a dry run never reaches GitHub. The real
+ * CLI made these tests depend on network, auth and the 5s test timeout, and the
+ * CRLF case timed out under load. It answers `label list` with the labels the
+ * fixtures use, and every other query with an empty list.
+ */
+function fakeGhDir(): string {
+  const dir = mkdtempSync(join(tmpdir(), 'fake-gh-'));
+  const bin = join(dir, 'gh');
+  writeFileSync(
+    bin,
+    `#!${process.execPath}
+const args = process.argv.slice(2);
+const labels = [{ name: 'feature' }, { name: 'module/ui' }];
+process.stdout.write(JSON.stringify(args[0] === 'label' ? labels : []));
+`
+  );
+  chmodSync(bin, 0o755);
+  return dir;
+}
 
 describe('scripts/create-issues.mjs', () => {
   const scriptPath = join(process.cwd(), 'scripts', 'create-issues.mjs');
+  const ghDir = fakeGhDir();
 
   function runScript(args: string[]) {
     try {
       const out = execFileSync(process.execPath, [scriptPath, ...args], {
         encoding: 'utf8',
         stdio: ['ignore', 'pipe', 'pipe'],
+        env: { ...process.env, PATH: `${ghDir}${delimiter}${process.env.PATH ?? ''}` },
       });
       return { status: 0, stdout: out, stderr: '' };
     } catch (err: any) {
@@ -74,11 +97,11 @@ Body 1 without labels
       '#B001 [FEAT] [UI] Reflowed issue\r\nSome body text\r\n  Labels: feature, module/ui\r\n'
     );
 
-    // Dry run will attempt checkLabels/checkMilestones; check that parsing itself succeeds.
-    // When labels or milestones checks run or fail, it should not fail on parse error.
+    // The dry run parses, then checks labels against the fake gh above.
     const result = runScript([catalogPath]);
     expect(result.stderr).not.toContain('missing a "Labels:" line');
     expect(result.stderr).not.toContain('duplicate id');
+    expect(result.status).toBe(0);
   });
 
   it('exits with error if --only matches no blocks', () => {

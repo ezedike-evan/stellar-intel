@@ -70,8 +70,7 @@ const MOCK_ANCHORS_3: Anchor[] = [
  * rate, or rejection flag.
  */
 type FetchConfig =
-  | { delayMs: number; fee: string; exchangeRate: number }
-  | { delayMs: number; reject: true };
+  { delayMs: number; fee: string; exchangeRate: number } | { delayMs: number; reject: true };
 
 function buildFetchMock(domainConfig: Record<string, FetchConfig>) {
   return vi.fn(async (url: string) => {

@@ -3,7 +3,7 @@
  *
  * Swap hop connector (#816): integrates Soroswap's aggregator
  * (lib/stellar/soroswap.ts) as a Hop, rather than rebuilding a swap
- * aggregator (ROADMAP.md line 90).
+ * aggregator (docs/ROADMAP.md).
  */
 
 import {

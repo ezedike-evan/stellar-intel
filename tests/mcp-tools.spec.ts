@@ -78,6 +78,12 @@ describe('MCP tool contracts, offline (#1052)', () => {
 
   const SENDER = Keypair.random();
 
+  // Routing has no built-in table: only anchors with a verified account in
+  // ANCHOR_PAYMENT_ACCOUNTS are routable. cowrie is the default here, so
+  // usdc-ngn routes to it even though moneygram precedes it in the registry.
+  const COWRIE_ACCOUNT = Keypair.random().publicKey();
+  const MONEYGRAM_ACCOUNT = Keypair.random().publicKey();
+
   const PREPARE_ARGS = {
     type: 'offramp',
     sourceAsset: 'USDC',
@@ -103,12 +109,14 @@ describe('MCP tool contracts, offline (#1052)', () => {
   });
 
   afterAll(async () => {
+    vi.unstubAllEnvs();
     await client?.close();
     await server?.close();
     globalThis.fetch = realFetch;
   });
 
   beforeEach(() => {
+    vi.stubEnv('ANCHOR_PAYMENT_ACCOUNTS', JSON.stringify({ cowrie: COWRIE_ACCOUNT }));
     fetchCorridorRates.mockClear();
     submitTransaction.mockReset();
     // Anything not explicitly stubbed throws rather than dialling out.
@@ -146,13 +154,14 @@ describe('MCP tool contracts, offline (#1052)', () => {
     });
 
     it('routes each corridor to its own anchor', async () => {
+      vi.stubEnv('ANCHOR_PAYMENT_ACCOUNTS', JSON.stringify({ moneygram: MONEYGRAM_ACCOUNT }));
       const result = await client.callTool({
         name: 'intel.offramp.quote',
         arguments: { from: 'USDC', to: 'KES', amount: '50' },
       });
 
       const quote = result.structuredContent as { anchor: string; netReceived: string };
-      expect(quote.anchor).toBe('flutterwave');
+      expect(quote.anchor).toBe('moneygram');
       expect(Number(quote.netReceived)).toBe(expectedNetReceived('usdc-kes', '50'));
     });
 
@@ -247,9 +256,11 @@ describe('MCP tool contracts, offline (#1052)', () => {
 
       // The memo is what ties the on-chain payment back to the intent that
       // authorised it; without it the settlement record is unattributable.
-      const memo = 'memo' in tx ? (tx.memo as { type: string; value: Buffer }) : undefined;
+      // stellar-sdk 17 types the hash memo value as Uint8Array rather than Buffer.
+      const memo =
+        'memo' in tx ? (tx.memo as unknown as { type: string; value: Uint8Array }) : undefined;
       expect(memo?.type).toBe('hash');
-      expect(memo?.value.toString('hex')).toBe(unsignedEnvelope.intentHash);
+      expect(memo && Buffer.from(memo.value).toString('hex')).toBe(unsignedEnvelope.intentHash);
     });
 
     it('is deterministic — the same intent hashes the same way twice', async () => {
@@ -291,9 +302,9 @@ describe('MCP tool contracts, offline (#1052)', () => {
         unsignedTx: string;
       };
 
-      const signature = SENDER.sign(Buffer.from(unsignedEnvelope.intentHash, 'utf8')).toString(
-        'base64'
-      );
+      const signature = Buffer.from(
+        SENDER.sign(Buffer.from(unsignedEnvelope.intentHash, 'utf8'))
+      ).toString('base64');
       const tx = TransactionBuilder.fromXDR(unsignedTx, Networks.PUBLIC);
       tx.sign(SENDER);
 
@@ -366,9 +377,9 @@ describe('MCP tool contracts, offline (#1052)', () => {
         name: 'intel.execute',
         arguments: {
           unsignedEnvelope,
-          signature: SENDER.sign(Buffer.from(unsignedEnvelope.intentHash, 'utf8')).toString(
-            'base64'
-          ),
+          signature: Buffer.from(
+            SENDER.sign(Buffer.from(unsignedEnvelope.intentHash, 'utf8'))
+          ).toString('base64'),
           signedTx: unsignedTx,
         },
       });

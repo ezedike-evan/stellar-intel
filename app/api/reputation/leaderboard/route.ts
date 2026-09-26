@@ -8,6 +8,7 @@ import { getScoreForCorridor, type CorridorScore } from '@/lib/oracle/read';
 import type { ApiError } from '@/types';
 import { enforceRateLimit } from '@/lib/api/response';
 import { weightedComposite } from '@/lib/reputation/composite';
+import { loadAnchorHealth, toHealthSummary, type HealthSummary } from '@/lib/reputation/health';
 
 // ─── Query param schema ────────────────────────────────────────────────────────
 
@@ -33,12 +34,29 @@ export interface LeaderboardEntry {
    * registered on-chain yet, or the read failed. Never blocks the response.
    */
   onChain: CorridorScore | null;
+  /**
+   * Probe-derived health: what we observed by checking this anchor every five
+   * minutes. Separate from every other field on this row, all of which are
+   * execution-derived and need settled transactions to mean anything.
+   *
+   * Null only when no durable store is configured. An anchor with a store but
+   * no probes yet reports `state: 'insufficient_data'` with a null score.
+   */
+  health: HealthSummary | null;
 }
 
 export interface LeaderboardResponse {
   leaderboard: LeaderboardEntry[];
   corridor: string | null;
   generatedAt: string;
+  /**
+   * States plainly where each half of a row comes from, so a consumer cannot
+   * read a health number as a reputation number.
+   */
+  basis: {
+    reputation: 'execution-outcomes';
+    health: 'probe-observations';
+  };
 }
 
 /**
@@ -60,6 +78,22 @@ async function buildLeaderboard(corridorFilter: string | undefined): Promise<Lea
   // whole leaderboard failing. This used to be attempted around `store.query`
   // below, which could never work, because construction throws first.
   const store = tryGetReputationStore();
+
+  // One query for the whole fleet, hoisted out of the per-anchor map below —
+  // health is loaded from probe_samples in a single pass rather than once per
+  // anchor. Never blocks the leaderboard: a failure here leaves health null and
+  // the execution-derived columns unchanged.
+  let healthByAnchor = new Map<string, ReturnType<typeof toHealthSummary>>();
+  if (store) {
+    try {
+      const loaded = await loadAnchorHealth(store);
+      healthByAnchor = new Map(
+        [...loaded].map(([anchorId, health]) => [anchorId, toHealthSummary(health)])
+      );
+    } catch {
+      healthByAnchor = new Map();
+    }
+  }
 
   const entries = await Promise.all(
     anchors.map(async (anchor): Promise<LeaderboardEntry> => {
@@ -86,12 +120,29 @@ async function buildLeaderboard(corridorFilter: string | undefined): Promise<Lea
         }
       }
 
-      return { anchor_id: anchor.id, composite, fill_rate, settle_p50, slippage_p50, n, onChain };
+      return {
+        anchor_id: anchor.id,
+        composite,
+        fill_rate,
+        settle_p50,
+        slippage_p50,
+        n,
+        onChain,
+        health: healthByAnchor.get(anchor.id) ?? null,
+      };
     })
   );
 
-  // Sort descending by composite score
-  return entries.sort((a, b) => b.composite - a.composite);
+  // Composite stays the primary sort: execution outcomes decide reputation.
+  // Health only breaks ties, which today is the whole table — every anchor
+  // scores 0 composite on n=0, and ordering those by observed health is more
+  // useful than ordering them by their position in the registry. It is a
+  // tiebreak, never a contribution: health cannot move an anchor past one with
+  // a real composite score.
+  return entries.sort((a, b) => {
+    if (b.composite !== a.composite) return b.composite - a.composite;
+    return (b.health?.score ?? -1) - (a.health?.score ?? -1);
+  });
 }
 
 // ─── Cache helpers ────────────────────────────────────────────────────────────
@@ -157,6 +208,10 @@ export async function GET(request: NextRequest): Promise<NextResponse> {
       leaderboard,
       corridor: corridor ?? null,
       generatedAt,
+      basis: {
+        reputation: 'execution-outcomes',
+        health: 'probe-observations',
+      },
     };
 
     return NextResponse.json<LeaderboardResponse>(body, {

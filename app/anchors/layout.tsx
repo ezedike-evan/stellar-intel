@@ -1,4 +1,5 @@
 import type { Metadata } from 'next';
+import { AnchorsBreadcrumbs } from '@/components/seo/AnchorsBreadcrumbs';
 
 const SITE_URL = process.env.NEXT_PUBLIC_SITE_URL ?? 'https://stellar-intel.vercel.app';
 const TITLE = 'Anchor directory — Stellar Intel';
@@ -33,5 +34,10 @@ export const metadata: Metadata = {
 };
 
 export default function AnchorsLayout({ children }: { children: React.ReactNode }) {
-  return children;
+  return (
+    <>
+      <AnchorsBreadcrumbs />
+      {children}
+    </>
+  );
 }

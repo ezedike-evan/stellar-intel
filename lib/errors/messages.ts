@@ -1,4 +1,10 @@
-import { AnchorError, NetworkError, TimeoutError, UserRejectedError } from '@/lib/stellar/errors';
+import {
+  AnchorError,
+  NetworkError,
+  Sep10ChallengeRejectedError,
+  TimeoutError,
+  UserRejectedError,
+} from '@/lib/stellar/errors';
 import { NetworkMismatchError } from '@/lib/stellar/sep10';
 import { Sep24WithdrawError } from '@/lib/stellar/sep24';
 import { QuoteExpiredError } from '@/lib/stellar/sep38';
@@ -14,6 +20,10 @@ export function classifyExecuteError(err: unknown): string {
   const message = err instanceof Error ? err.message : 'Unknown error';
 
   if (err instanceof NetworkMismatchError) return message;
+  // Already written for the user, and must not be collapsed into the generic
+  // "challenge expired" hint below — an expired challenge is only one of the
+  // reasons a challenge is refused.
+  if (err instanceof Sep10ChallengeRejectedError) return message;
   if (err instanceof UserRejectedError) return 'Freighter rejected the signature request.';
   if (err instanceof QuoteExpiredError) {
     return 'Your firm quote expired before the transaction could complete. Get a new quote to continue at the current price.';
@@ -44,6 +54,9 @@ export function classifyExecuteError(err: unknown): string {
 export function isRetryableExecuteError(err: unknown): boolean {
   if (err instanceof NetworkMismatchError) return false;
   if (err instanceof UserRejectedError) return false;
+  // A refused challenge reflects the anchor's toml or challenge, not a blip —
+  // retrying immediately would just fail the same check.
+  if (err instanceof Sep10ChallengeRejectedError) return false;
   if (err instanceof QuoteExpiredError) return true;
   if (err instanceof TimeoutError) return true;
   if (err instanceof NetworkError) return true;

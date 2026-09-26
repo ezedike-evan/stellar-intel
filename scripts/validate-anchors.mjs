@@ -55,6 +55,8 @@ const LEDGER_PATH = new URL('constants/anchor-health.json', ROOT);
  * @property {string} [assetIssuer] Canonical issuer literal, when written inline.
  * @property {string} [assetIssuerRef] Identifier the source assigns to assetIssuer
  *   (e.g. "USDC_ISSUER") when it is a reference rather than a literal.
+ * @property {boolean} [requiresSep24] Whether the registry declares SEP-24 as a
+ *   supported rail; SEP-6-only anchors are validated against TRANSFER_SERVER.
  *
  * @typedef {Object} Currency
  * @property {string} code
@@ -135,6 +137,8 @@ export function parseAnchors(source) {
     const ref = { id, domain, requiresSep24 };
     const assetCode = block.match(/assetCode:\s*['"]([^'"]+)['"]/)?.[1];
     if (assetCode) ref.assetCode = assetCode;
+    const seps = block.match(/seps:\s*\[([^\]]*)\]/)?.[1] ?? '';
+    if (/(?:['"]sep24['"])/.test(seps)) ref.requiresSep24 = true;
 
     // assetIssuer may be a quoted literal (e.g. nTokens) or a bare identifier
     // reference (e.g. `assetIssuer: USDC_ISSUER`); capture whichever form appears.

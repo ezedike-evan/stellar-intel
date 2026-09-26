@@ -1,18 +1,49 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest';
-import { Networks } from '@stellar/stellar-sdk';
+import { Keypair, Networks } from '@stellar/stellar-sdk';
 import {
-  fetchChallenge,
+  fetchSep10Challenge,
   signChallenge,
   submitChallenge,
   authenticate,
+  validateSep10Challenge,
   NetworkMismatchError,
 } from '@/lib/stellar/sep10';
-import * as sep1 from '@/lib/stellar/sep1';
+import type { Sep10Challenge } from '@/lib/stellar/sep10';
+import { buildValidChallenge } from '../fixtures/sep10-challenge';
 
+const HOME_DOMAIN = 'cowrie.exchange';
 const WEB_AUTH_ENDPOINT = 'https://cowrie.exchange/auth';
-const PUBLIC_KEY = 'GABCDEFGHIJKLMNOPQRSTUVWXYZ012345678901234567890123456789';
-const CHALLENGE_XDR = 'AAAAAQAAAAC...';
+const SERVER = Keypair.random();
+const PUBLIC_KEY = Keypair.random().publicKey();
 const SIGNED_XDR = 'AAAAAQAAAAD...';
+
+/** A real challenge from SERVER for PUBLIC_KEY, built fresh so its timebounds are current. */
+function challengeXdr(): string {
+  return buildValidChallenge({
+    server: SERVER,
+    clientAccountId: PUBLIC_KEY,
+    homeDomain: HOME_DOMAIN,
+    webAuthDomain: new URL(WEB_AUTH_ENDPOINT).host,
+  });
+}
+
+function validatedChallenge(): Sep10Challenge {
+  return validateSep10Challenge(
+    challengeXdr(),
+    Networks.PUBLIC,
+    {
+      serverSigningKey: SERVER.publicKey(),
+      homeDomains: HOME_DOMAIN,
+      webAuthEndpoint: WEB_AUTH_ENDPOINT,
+      clientAccountId: PUBLIC_KEY,
+    },
+    HOME_DOMAIN
+  );
+}
+
+function fetchCowrieChallenge(endpoint: string, publicKey: string) {
+  return fetchSep10Challenge(endpoint, publicKey, HOME_DOMAIN, SERVER.publicKey());
+}
 function makeJwt(expSeconds: number): string {
   const b64 = (s: string) => btoa(s).replace(/=+$/, '').replace(/\+/g, '-').replace(/\//g, '_');
   const header = b64(JSON.stringify({ alg: 'HS256', typ: 'JWT' }));
@@ -33,9 +64,9 @@ const MOCK_RESOLVED_ANCHOR = {
   assetIssuer: 'G...',
   TRANSFER_SERVER_SEP0024: 'https://cowrie.exchange/sep24',
   WEB_AUTH_ENDPOINT: WEB_AUTH_ENDPOINT,
-  SIGNING_KEY: 'G...',
+  SIGNING_KEY: SERVER.publicKey(),
   capabilities: { sep10: true, sep24: true, sep38: false, sep12: false },
-  domain: 'anchor.domain',
+  domain: HOME_DOMAIN,
   ANCHOR_QUOTE_SERVER: null,
   NETWORK_PASSPHRASE: null,
   ORG_URL: null,
@@ -57,9 +88,9 @@ async function getFreighter() {
   return await import('@stellar/freighter-api');
 }
 
-// ─── fetchChallenge ───────────────────────────────────────────────────────────
+// ─── fetchSep10Challenge ──────────────────────────────────────────────────────
 
-describe('fetchChallenge', () => {
+describe('fetchSep10Challenge', () => {
   it('constructs the correct challenge URL with the public key', async () => {
     let capturedUrl = '';
     vi.stubGlobal(
@@ -69,14 +100,14 @@ describe('fetchChallenge', () => {
         return {
           ok: true,
           json: async () => ({
-            transaction: CHALLENGE_XDR,
+            transaction: challengeXdr(),
             network_passphrase: Networks.PUBLIC,
           }),
         };
       })
     );
 
-    await fetchChallenge(WEB_AUTH_ENDPOINT, PUBLIC_KEY);
+    await fetchCowrieChallenge(WEB_AUTH_ENDPOINT, PUBLIC_KEY);
     expect(capturedUrl).toContain(`account=${PUBLIC_KEY}`);
   });
 
@@ -86,13 +117,15 @@ describe('fetchChallenge', () => {
       vi.fn(async () => ({
         ok: true,
         json: async () => ({
-          transaction: CHALLENGE_XDR,
+          transaction: challengeXdr(),
           network_passphrase: 'Test SDF Network ; September 2015',
         }),
       }))
     );
 
-    await expect(fetchChallenge(WEB_AUTH_ENDPOINT, PUBLIC_KEY)).rejects.toThrow(/wrong network/);
+    await expect(fetchCowrieChallenge(WEB_AUTH_ENDPOINT, PUBLIC_KEY)).rejects.toThrow(
+      /wrong network/
+    );
   });
 
   it('throws when transaction is absent', async () => {
@@ -104,7 +137,9 @@ describe('fetchChallenge', () => {
       }))
     );
 
-    await expect(fetchChallenge(WEB_AUTH_ENDPOINT, PUBLIC_KEY)).rejects.toThrow(/"transaction"/);
+    await expect(fetchCowrieChallenge(WEB_AUTH_ENDPOINT, PUBLIC_KEY)).rejects.toThrow(
+      /"transaction"/
+    );
   });
 
   it('throws when network_passphrase is absent', async () => {
@@ -112,11 +147,11 @@ describe('fetchChallenge', () => {
       'fetch',
       vi.fn(async () => ({
         ok: true,
-        json: async () => ({ transaction: CHALLENGE_XDR }),
+        json: async () => ({ transaction: challengeXdr() }),
       }))
     );
 
-    await expect(fetchChallenge(WEB_AUTH_ENDPOINT, PUBLIC_KEY)).rejects.toThrow(
+    await expect(fetchCowrieChallenge(WEB_AUTH_ENDPOINT, PUBLIC_KEY)).rejects.toThrow(
       /"network_passphrase"/
     );
   });
@@ -166,7 +201,7 @@ describe('signChallenge', () => {
       signerAddress: PUBLIC_KEY,
     });
 
-    const result = await signChallenge(CHALLENGE_XDR, Networks.PUBLIC);
+    const result = await signChallenge(validatedChallenge());
     expect(result).toBe(SIGNED_XDR);
   });
 
@@ -178,9 +213,7 @@ describe('signChallenge', () => {
       networkPassphrase: Networks.TESTNET,
     });
 
-    await expect(signChallenge(CHALLENGE_XDR, Networks.PUBLIC)).rejects.toBeInstanceOf(
-      NetworkMismatchError
-    );
+    await expect(signChallenge(validatedChallenge())).rejects.toBeInstanceOf(NetworkMismatchError);
     expect(freighter.signTransaction).not.toHaveBeenCalled();
   });
 
@@ -191,7 +224,7 @@ describe('signChallenge', () => {
       networkPassphrase: Networks.TESTNET,
     });
 
-    await expect(signChallenge(CHALLENGE_XDR, Networks.PUBLIC)).rejects.toThrow(
+    await expect(signChallenge(validatedChallenge())).rejects.toThrow(
       /Switch network in Freighter to Mainnet \(Public\).*currently set to Testnet/
     );
   });
@@ -204,7 +237,7 @@ describe('signChallenge', () => {
       signerAddress: PUBLIC_KEY,
     });
 
-    const result = await signChallenge(CHALLENGE_XDR, Networks.PUBLIC);
+    const result = await signChallenge(validatedChallenge());
     expect(result).toBe(SIGNED_XDR);
   });
 
@@ -220,16 +253,14 @@ describe('signChallenge', () => {
       error: { message: 'User declined', code: -1 },
     });
 
-    await expect(signChallenge(CHALLENGE_XDR, Networks.PUBLIC)).rejects.toThrow(
-      'User rejected the request'
-    );
+    await expect(signChallenge(validatedChallenge())).rejects.toThrow('User rejected the request');
   });
 });
 
 // ─── authenticate ─────────────────────────────────────────────────────────────
 
 describe('authenticate', () => {
-  it('calls fetchChallenge, signChallenge, and submitChallenge in sequence', async () => {
+  it('calls fetchSep10Challenge, signChallenge, and submitChallenge in sequence', async () => {
     const freighter = await getFreighter();
     vi.mocked(freighter.signTransaction).mockResolvedValue({
       signedTxXdr: SIGNED_XDR,
@@ -242,7 +273,7 @@ describe('authenticate', () => {
         .fn()
         .mockResolvedValueOnce({
           ok: true,
-          json: async () => ({ transaction: CHALLENGE_XDR, network_passphrase: Networks.PUBLIC }),
+          json: async () => ({ transaction: challengeXdr(), network_passphrase: Networks.PUBLIC }),
         })
         .mockResolvedValueOnce({
           ok: true,

@@ -70,6 +70,11 @@ test.describe('[#721] SEP-24 live execution flow (USDC→NGN corridor)', () => {
   });
 
   test('StatusTracker reflects state transitions through to completed status', async ({ page }) => {
+    // Five states, each held for two polls, on a backoff that widens as the
+    // status repeats: the run reaches `completed` around the 40s mark. The
+    // default 30s per-test budget capped every assertion below it, so the
+    // generous per-assertion timeouts could never actually be spent.
+    test.setTimeout(150_000);
     await page.addInitScript(seedSession(MOCK_SEP24_NONCE, MOCK_SEP24_JWT));
 
     const pollSequence = [
@@ -80,9 +85,15 @@ test.describe('[#721] SEP-24 live execution flow (USDC→NGN corridor)', () => {
       pollSep24Completed,
     ];
 
+    // Each state is served for two consecutive polls. The tracker's first paint
+    // carries a status but none of the transaction fields, and only the second
+    // poll renders a state fully; advancing the fixture once per request meant
+    // the opening state was replaced before it was ever painted, so the first
+    // assertion below could not hold.
     let pollIndex = 0;
     await page.route(`${MOCK_SEP24_TRANSFER_SERVER}/transaction**`, (route) => {
-      const response = pollSequence[Math.min(pollIndex++, pollSequence.length - 1)];
+      const step = Math.floor(pollIndex++ / 2);
+      const response = pollSequence[Math.min(step, pollSequence.length - 1)];
       route.fulfill({
         status: 200,
         contentType: 'application/json',
@@ -92,14 +103,21 @@ test.describe('[#721] SEP-24 live execution flow (USDC→NGN corridor)', () => {
 
     await page.goto(trackingUrl());
 
-    // 1. Initial state: pending_user_transfer_start -> "Awaiting your payment"
-    await expect(page.getByText('Awaiting your payment')).toBeVisible({ timeout: 10_000 });
+    // 1. Initial state: pending_user_transfer_start -> "Awaiting your payment".
+    // `exact` because the stage timeline further down renders its own row with
+    // the same words, which would otherwise make this a strict-mode violation.
+    await expect(page.getByText('Awaiting your payment', { exact: true })).toBeVisible({
+      timeout: 15_000,
+    });
 
-    // 2. Final state: completed -> "Completed" & "Delivered" with bank transfer ID
-    await expect(page.getByText('Completed').first()).toBeVisible({ timeout: 30_000 });
-    await expect(page.getByText('Delivered')).toBeVisible();
-    await expect(page.getByText('ngn-bank-ref-721')).toBeVisible();
-    await expect(page.getByText('View transaction history')).toBeVisible();
+    // 2. Final state: completed -> "Completed" & "Delivered" with bank transfer ID.
+    // Wait on "Delivered" rather than "Completed": the stage timeline renders a
+    // "Completed" row long before the completed poll lands, so waiting on that
+    // released the remaining assertions while the tracker was still mid-flight.
+    await expect(page.getByText('Delivered')).toBeVisible({ timeout: 60_000 });
+    await expect(page.getByText('Completed', { exact: true }).first()).toBeVisible();
+    await expect(page.getByText('ngn-bank-ref-721')).toBeVisible({ timeout: 15_000 });
+    await expect(page.getByText('View transaction history')).toBeVisible({ timeout: 15_000 });
   });
 
   test('StatusTracker reaches terminal pending_external state accurately', async ({ page }) => {
@@ -115,9 +133,15 @@ test.describe('[#721] SEP-24 live execution flow (USDC→NGN corridor)', () => {
 
     await page.goto(trackingUrl());
 
-    await expect(page.getByText('Sending to bank')).toBeVisible({ timeout: 10_000 });
-    await expect(page.getByText('ngn-bank-ref-721')).toBeVisible();
-    await expect(page.getByText('Live')).toBeVisible();
+    // `exact` keeps this off the stage-timeline row, which reads
+    // "Sending to Bank (Current stage)" and matches the same substring.
+    await expect(page.getByText('Sending to bank', { exact: true })).toBeVisible({
+      timeout: 15_000,
+    });
+    // The bank transfer id arrives with the second poll, not the first paint.
+    await expect(page.getByText('ngn-bank-ref-721')).toBeVisible({ timeout: 15_000 });
+    // `exact` again: the non-custodial disclaimer says "Rates are live quotes".
+    await expect(page.getByText('Live', { exact: true })).toBeVisible({ timeout: 15_000 });
   });
 
   test('no JS errors during full SEP-24 execution flow', async ({ page }) => {

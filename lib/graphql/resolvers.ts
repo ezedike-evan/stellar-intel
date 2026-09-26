@@ -1,4 +1,4 @@
-import { createGraphQLError } from 'graphql-yoga';
+import { GraphQLError } from 'graphql';
 import {
   ANCHORS,
   getAnchorById,
@@ -49,14 +49,14 @@ async function resolveRates(
   args: { corridor: string; amount?: string | null; forceRefresh?: boolean | null }
 ) {
   if (!isValidCorridorId(args.corridor)) {
-    throw createGraphQLError(`Unknown corridor: "${args.corridor}"`, {
+    throw new GraphQLError(`Unknown corridor: "${args.corridor}"`, {
       extensions: { code: 'BAD_USER_INPUT' },
     });
   }
 
   const amount = args.amount ?? '100';
   if (!AMOUNT_PATTERN.test(amount) || Number(amount) <= 0) {
-    throw createGraphQLError('amount must be a positive decimal string', {
+    throw new GraphQLError('amount must be a positive decimal string', {
       extensions: { code: 'BAD_USER_INPUT' },
     });
   }
@@ -102,14 +102,14 @@ async function resolveSubmitOfframpIntent(
   const parsed = IntentSchema.safeParse({ type: 'offramp', ...args.input });
   if (!parsed.success) {
     const first = parsed.error.issues[0];
-    throw createGraphQLError(first?.message ?? 'Invalid intent payload', {
+    throw new GraphQLError(first?.message ?? 'Invalid intent payload', {
       extensions: { code: 'BAD_USER_INPUT' },
     });
   }
 
   const result = await createOfframpIntent(parsed.data as Intent);
   if (!result.ok) {
-    throw createGraphQLError(result.message, { extensions: { code: result.code } });
+    throw new GraphQLError(result.message, { extensions: { code: result.code } });
   }
   return result.response;
 }

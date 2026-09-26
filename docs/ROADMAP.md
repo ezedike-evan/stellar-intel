@@ -888,9 +888,8 @@ any one is a PR that breaks all four.
 Reviewer → Maintainer. Every wave's PR burndown names contributors;
 every release note credits them.
 
-**Benchmarks** — [`docs/BENCHMARKS.md`](BENCHMARKS.md) is updated every
-wave with corridor latency, quote-to-signed time, split-vs-single
-savings, and per-anchor success rate. Numbers stale by > 60 days block
+**Benchmarks** — each wave's release notes report corridor latency,
+quote-to-signed time, split-vs-single savings, and per-anchor success rate. Numbers stale by > 60 days block
 the next release gate.
 
 ---

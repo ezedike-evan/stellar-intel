@@ -1,13 +1,25 @@
 # Stellar Intel — MCP Server
 
-**Last reviewed:** 2026-08-26
+**Last reviewed:** 2026-09-01
 
-The MCP server exposes Stellar Intel's off-ramp routing to MCP-capable agents
-over stdio or streamable HTTP. It lives in
+The MCP server exposes Stellar Intel's off-ramp routing and anchor
+intelligence to MCP-capable agents over stdio or streamable HTTP. It lives in
 [`scripts/mcp`](../scripts/mcp) (in-repo dev server) and
-[`packages/mcp`](../packages/mcp) (the published `@stellarintel/mcp` package),
-and both reuse the same routing + canonical-hashing logic as the web app
-(`lib/mcp/offramp.ts`).
+[`packages/mcp`](../packages/mcp) (the `@stellarintel/mcp` package — **not
+yet published to npm**), and both reuse the same routing + canonical-hashing
+logic as the web app (`lib/mcp/offramp.ts`).
+
+The two entry points do not expose the same tool set:
+
+| Tool                      | `/api/mcp` (hosted) | `packages/mcp` | `scripts/mcp/server.ts` (dev) |
+| ------------------------- | ------------------- | -------------- | ----------------------------- |
+| `intel.offramp.quote`     | ✓                   | ✓              | ✓                             |
+| `intel.offramp.prepare`   | ✓                   | ✓              | ✓                             |
+| `intel.execute`           | ✓                   | ✓              | ✓                             |
+| `intel.anchor.reputation` | —                   | ✓              | —                             |
+| `intel.anchor.health`     | —                   | ✓              | —                             |
+| `intel.probe.coverage`    | —                   | ✓              | —                             |
+| `intel.leaderboard`       | ✓                   | ✓              | ✓                             |
 
 **Scope:** Stellar Intel abstracts anchors, not chains. These tools answer
 "what's my best fiat exit price, and which Stellar anchor should I trust to
@@ -15,33 +27,100 @@ execute it" — not "move this value across chains." For cross-chain pay/bridge
 intents, an agent should reach for ROZO instead. See
 [docs/AGENT_POSITIONING.md](AGENT_POSITIONING.md) for the full comparison.
 
-## Running
+## Hosted endpoint (nothing to install)
+
+The deployed app serves the MCP server directly, so a client needs a URL and
+nothing else — no clone, no npm install, no local process:
+
+```
+https://stellar-intel.vercel.app/api/mcp
+```
+
+```json
+{
+  "mcpServers": {
+    "stellar-intel": {
+      "type": "http",
+      "url": "https://stellar-intel.vercel.app/api/mcp"
+    }
+  }
+}
+```
+
+It is a **stateless** Streamable HTTP endpoint: every request carries its own
+context and there is no `Mcp-Session-Id` to track, which is what suits a
+serverless function with no instance affinity between calls. Send JSON-RPC over
+`POST` with `Accept: application/json, text/event-stream`. `GET` and `DELETE`
+answer `405` — `GET` would otherwise open a standalone SSE stream that nothing
+closes, and this server never initiates messages.
+
+The endpoint is served by [`app/api/mcp/route.ts`](../app/api/mcp/route.ts),
+which builds its server from the same `createServer()` in
+[`scripts/mcp/server.ts`](../scripts/mcp/server.ts) that the stdio dev server
+uses, so those two cannot drift apart. Requests are rate-limited to 60 per
+minute per IP.
+
+**It serves the four-tool set**, matching the `scripts/mcp` column in the table
+above — `intel.offramp.quote`, `intel.offramp.prepare`, `intel.execute` and
+`intel.leaderboard`. The four `packages/mcp`-only tools are not on the hosted
+endpoint yet: that package's modules use explicit `./tool.js` specifiers which
+the app's bundler does not resolve back to their `.ts` sources, and
+`npm run build --workspace=@stellarintel/mcp` currently fails on pre-existing
+errors in `lib/oracle/read.ts` and `lib/stellar/anchors.ts`, so there is no
+compiled output to import either. Porting them is tracked separately.
+
+## Running it yourself
+
+> **Note:** `@stellarintel/mcp` is **not yet published to npm** —
+> `npm install @stellarintel/mcp` currently 404s. The package name is
+> reserved in `packages/mcp/package.json`; until it is published, run the
+> server from a clone of this repository as shown below.
+
+All commands start from a checkout:
+
+```bash
+git clone https://github.com/ezedike-evan/stellar-intel.git
+cd stellar-intel
+npm install
+```
 
 ### stdio (default)
 
 ```bash
+# Full tool set, from the workspace package
+npx tsx packages/mcp/src/index.ts
+
+# In-repo dev server (off-ramp tools only, stdio only)
 npx tsx scripts/mcp/server.ts
-# or the published package
-npx @stellarintel/mcp
 ```
+
+Point any MCP-capable client at either `tsx` command as a stdio server.
 
 ### Streamable HTTP
 
 The same tool set is served over streamable HTTP behind a flag; stdio stays
-the default. From the published package:
+the default:
 
 ```bash
-npx @stellarintel/mcp --transport http [--host 127.0.0.1] [--port 3000]
+npx tsx packages/mcp/src/index.ts --transport http --host 127.0.0.1 --port 3000
 ```
 
-This binds `http://<host>:<port>/mcp`; point an MCP client at that URL — no
-local install required. Sessions are managed per agent (each initialization
-gets its own session ID), so multiple hosted agents can use the server
-concurrently. The in-repo dev server at
-[`scripts/mcp/server.ts`](../scripts/mcp/server.ts) is stdio-only.
+This binds `http://<host>:<port>/mcp`; point an MCP client at that URL.
+Sessions are managed per agent (each initialization gets its own session ID),
+so multiple hosted agents can use the server concurrently. The in-repo dev
+server at [`scripts/mcp/server.ts`](../scripts/mcp/server.ts) is stdio-only.
+
+This self-hosted mode is **stateful**, unlike the hosted endpoint above: it
+runs its own long-lived `node:http` server, so it can hold a session per agent.
+Reach for it when you want the server on your own infrastructure; otherwise the
+hosted endpoint needs no process at all.
 
 The server applies safe mainnet defaults for the `NEXT_PUBLIC_*` config values,
-so an agent does not need the web app's `.env` to invoke it.
+so an agent does not need the web app's `.env` to invoke it. The two
+`intel.anchor.*` tools additionally call the Stellar Intel HTTP API at
+`NEXT_PUBLIC_APP_URL` (default `http://localhost:3000`), so they need a
+running app instance — `npm run dev` locally, or point `NEXT_PUBLIC_APP_URL`
+at a deployed instance.
 
 ## Tools
 
@@ -75,6 +154,24 @@ Annotated `readOnlyHint: true` — nothing is submitted on-chain until
 - **Input:** an off-ramp intent without a signature
   `{ type: "offramp", sourceAsset, destinationAsset, amount, sender, recipient }`
 - **Output:** `{ unsignedEnvelope: { intent, intentHash }, unsignedTx }`
+
+#### Routing and payment accounts
+
+`quote`, `prepare` and `execute` all route a corridor the same way the web
+intent API does (`lib/intent/anchor-accounts.ts`): the anchors registered for
+the corridor in `constants/anchors.ts`, narrowed to those with an
+operator-verified Stellar receiving account in `ANCHOR_PAYMENT_ACCOUNTS`
+(JSON, anchor id to account), first match in registry order. The server has
+**no built-in payout addresses**. A corridor with no registered anchor, or no
+verified account for one, returns `NO_ROUTE` and no transaction is built.
+`intel.execute` resolves the corridor again at submission time and rejects
+(`TX_MISMATCH`) a payment whose destination is not a currently verified
+account for it.
+
+Self-hosting the server, set `ANCHOR_PAYMENT_ACCOUNTS` for every corridor you
+want `prepare`/`execute` to serve. Check each address against Horizon and the
+anchor's own published details first: a wrong address is a payment to a
+stranger.
 
 ### `intel.execute` (#819)
 
@@ -125,15 +222,125 @@ above. Per #819, broader intent types (beyond off-ramp) are deferred until the
 universal intent collapse work lands, so the tool doesn't ship off-ramp-only
 assumptions baked into a wider surface prematurely.
 
+### `intel.anchor.reputation` (packages/mcp only)
+
+Returns 7/30/90-day rolling percentile scorecards for an anchor, fetched from
+the Stellar Intel API (`/api/reputation/{anchor}`).
+
+- **Input:** `{ anchor: string }` — anchor identifier (e.g. `cowrie`,
+  `moneygram`)
+- **Output:** `{ anchorId, scorecards }` where `scorecards` maps each window
+  (`7`, `30`, `90`) to either an `ok` scorecard
+  (`{ state: "ok", window, sampleSize, fillRate, settleMs: { p50, p95 }, slippage: { p50, p95 }, computedAt, lastPublisherTxTimestamp }`)
+  or `{ state: "insufficient_data", window, sampleSize, computedAt, lastPublisherTxTimestamp }`
+  when the window has too few samples to score.
+
+```jsonc
+// input
+{ "anchor": "cowrie" }
+// output (abridged)
+{
+  "anchorId": "cowrie",
+  "scorecards": {
+    "7": {
+      "state": "ok",
+      "window": 7,
+      "sampleSize": 42,
+      "fillRate": 0.97,
+      "settleMs": { "p50": 41000, "p95": 92000 },
+      "slippage": { "p50": 0.001, "p95": 0.004 },
+      "computedAt": "2026-…Z",
+      "lastPublisherTxTimestamp": "2026-…Z"
+    },
+    "30": { "state": "insufficient_data", "window": 30, "sampleSize": 3, "computedAt": "2026-…Z", "lastPublisherTxTimestamp": null }
+  }
+}
+```
+
+### `intel.anchor.health` (packages/mcp only)
+
+Returns the current health of an anchor, fetched from the Stellar Intel API
+(`/api/v1/anchors/{id}/health`). The anchor is looked up by home or service
+domain; passing an `asset` the anchor does not support is an error.
+
+- **Input:** `{ domain: string, asset?: string }` — anchor domain (e.g.
+  `anclap.com`) and an optional asset code to check (e.g. `USDC`, `NGN`)
+- **Output:**
+  `{ anchorId, status, consecutiveFailures, degraded, lastCheckedAt, lastError, stale }`
+
+```jsonc
+// input
+{ "domain": "anclap.com", "asset": "USDC" }
+// output
+{
+  "anchorId": "anclap",
+  "status": "healthy",
+  "consecutiveFailures": 0,
+  "degraded": false,
+  "lastCheckedAt": "2026-…Z",
+  "lastError": null,
+  "stale": false
+}
+```
+
+### `intel.probe.coverage` (packages/mcp only, #1046)
+
+Answers "is the reputation data trustworthy yet" before an agent believes a
+score. Same payload as `GET /api/reputation/probe-coverage` for the same
+moment, read straight from the reputation store.
+
+- **Input:** none
+- **Output:** `{ thresholdDays, asOfDay, computedAt, fleetThresholdMet,
+daysUntilFleetThreshold, anchors[] }`, where each `anchors[]` entry carries
+  that anchor's `continuousDays`, `coveredDays`, `daysUntilThreshold`,
+  `thresholdMet` and any coverage `gaps`.
+
+```jsonc
+// output (abridged)
+{
+  "thresholdDays": 90,
+  "asOfDay": "2026-…",
+  "fleetThresholdMet": false,
+  "daysUntilFleetThreshold": 47,
+  "anchors": [{ "anchorId": "cowrie", "continuousDays": 43, "thresholdMet": false }],
+}
+```
+
+### `intel.leaderboard` (#1044)
+
+Ranks anchors by corridor, delegating to `GET /api/reputation/leaderboard`
+rather than reimplementing the ranking. Entries are annotated with the
+human-readable standing label and the measured/unmeasured distinction the raw
+API carries as `n === 0`. Like the `intel.anchor.*` tools it needs a running
+app instance at `NEXT_PUBLIC_APP_URL`.
+
+- **Input:** `{ corridor?: string }` — a corridor ID such as `usdc-ngn`;
+  omitting it ranks every registered anchor globally
+- **Output:** the leaderboard rows, each with its score, sample size,
+  `measured` flag and standing label
+
+## Prompts
+
+`packages/mcp` also registers two prompts (#1048), so an agent can start from
+an intent rather than assembling the tool calls itself:
+
+- **`intel.offramp.choose-anchor`** — arguments `{ from, to }`. Compares the
+  anchors available on a corridor so the agent can pick one before quoting.
+- **`intel.offramp.quote-and-prepare`** — arguments
+  `{ from, to, amount, sender, recipient }`. Walks quote → prepare → execute,
+  leaving the signature to the agent.
+
 ## Tests
 
-- `tests/mcp-offramp.spec.ts` — unit tests for both tool cores, including the
-  acceptance check that the returned envelope signs correctly with a provided
-  keypair (#136).
-- `tests/mcp-e2e.spec.ts` — spawns the server as a subprocess and exercises both
+- `tests/mcp-offramp.spec.ts` — unit tests for the off-ramp tool cores,
+  including the acceptance check that the returned envelope signs correctly
+  with a provided keypair (#136).
+- `tests/mcp-e2e.spec.ts` — spawns the server as a subprocess and exercises the
   tools through a real MCP client, asserting valid responses and a clean exit
   (#137).
+- `tests/mcp-http-e2e.spec.ts` — the same end-to-end pass over the streamable
+  HTTP transport.
 
 ```bash
-npm run test -- tests/mcp-offramp.spec.ts tests/mcp-e2e.spec.ts
+npm run test -- tests/mcp-offramp.spec.ts tests/mcp-e2e.spec.ts tests/mcp-http-e2e.spec.ts
 ```

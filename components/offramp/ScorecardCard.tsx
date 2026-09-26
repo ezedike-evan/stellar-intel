@@ -115,6 +115,131 @@ function parseNestedScorecard(
   };
 }
 
+/**
+ * Probe-derived health, as returned alongside `scorecards` by
+ * GET /api/reputation/[anchor]. Deliberately a separate shape from
+ * ReputationMetrics: one is what we observed by probing, the other is what
+ * happened when someone settled. They are never merged.
+ */
+interface HealthSignalView {
+  rate: number | null;
+  samples: number;
+  incomplete: number;
+}
+
+interface HealthView {
+  state: 'ok' | 'insufficient_data';
+  score: number | null;
+  observedDays: number;
+  continuousDays: number;
+  probeSamples: number;
+  uptime: HealthSignalView;
+  quoteAvailability: HealthSignalView;
+  issuerMatch: HealthSignalView;
+  tomlIntegrity: HealthSignalView;
+}
+
+function parseHealth(body: unknown): HealthView | null {
+  const payload = toObject(body);
+  const health = payload ? toObject(payload.health) : null;
+  if (!health) return null;
+
+  const signals = toObject(health.signals) ?? {};
+  const signalOf = (key: string): HealthSignalView => {
+    const signal = toObject(signals[key]);
+    return {
+      rate: signal ? toNumber(signal.successRate) : null,
+      samples: (signal ? toNumber(signal.samples) : null) ?? 0,
+      incomplete: (signal ? toNumber(signal.incomplete) : null) ?? 0,
+    };
+  };
+
+  const samples = toNumber(health.sampleSize) ?? 0;
+  const incomplete = toNumber(health.incompleteChecks) ?? 0;
+  if (samples <= 0 && incomplete <= 0) return null;
+
+  return {
+    state: health.state === 'ok' ? 'ok' : 'insufficient_data',
+    score: toNumber(health.healthScore),
+    observedDays: toNumber(health.observedDays) ?? 0,
+    continuousDays: toNumber(health.continuousDays) ?? 0,
+    probeSamples: samples,
+    uptime: signalOf('uptime'),
+    quoteAvailability: signalOf('quoteAvailability'),
+    issuerMatch: signalOf('issuerMatch'),
+    tomlIntegrity: signalOf('tomlIntegrity'),
+  };
+}
+
+function formatRate(signal: HealthSignalView): string {
+  // Three different states that must never render the same:
+  //   a rate            the check ran and this is the answer
+  //   check unavailable the check ran and could not reach a verdict
+  //   not sampled       the check has not run at all
+  // Printing 0% for either of the last two would accuse the anchor of failing
+  // something it was never actually measured on.
+  if (signal.rate !== null) return `${(signal.rate * 100).toFixed(1)}%`;
+  if (signal.incomplete > 0) return 'check unavailable';
+  return 'not sampled';
+}
+
+/**
+ * The panel a visitor sees when an anchor has been probed but never settled
+ * through — which today is every anchor. Before this, that case rendered a flat
+ * "No reputation metrics available", and the probe record was invisible on the
+ * site despite existing in the ledger.
+ */
+function HealthPanel({ health, anchorName }: { health: HealthView; anchorName: string }) {
+  const signalRows: Array<{ label: string; signal: HealthSignalView }> = [
+    { label: 'Uptime', signal: health.uptime },
+    { label: 'Quote availability', signal: health.quoteAvailability },
+    { label: 'Issuer match', signal: health.issuerMatch },
+    { label: 'TOML integrity', signal: health.tomlIntegrity },
+  ];
+
+  return (
+    <div className="rounded-xl border border-border bg-bg-sunken p-4">
+      <div className="flex flex-wrap items-baseline justify-between gap-2">
+        <h3 className="text-sm font-semibold text-primary-text">Observed health</h3>
+        <p className="font-mono text-xs text-fg-muted">
+          {health.probeSamples.toLocaleString()} probes · {health.observedDays} days
+          {health.continuousDays > 0 ? ` · ${health.continuousDays}-day streak` : ''}
+        </p>
+      </div>
+
+      {health.score !== null && (
+        <p className="mt-3 font-mono text-3xl tabular-nums text-primary-text">
+          {(health.score * 100).toFixed(1)}
+          <span className="text-base text-fg-muted">/100</span>
+        </p>
+      )}
+
+      <dl className="mt-4 space-y-2">
+        {signalRows.map((row) => (
+          <div key={row.label} className="flex items-baseline justify-between gap-4 text-sm">
+            <dt className="text-secondary-text">{row.label}</dt>
+            <dd
+              className={
+                row.signal.rate === null
+                  ? 'font-mono text-xs text-fg-muted'
+                  : 'font-mono tabular-nums text-primary-text'
+              }
+            >
+              {formatRate(row.signal)}
+            </dd>
+          </div>
+        ))}
+      </dl>
+
+      <p className="mt-4 border-t border-border pt-3 text-xs text-fg-muted">
+        Health is what we observed by probing {anchorName} every five minutes. Reputation — fill
+        rate, settlement time, slippage — is measured from settled transactions, and this anchor has
+        none yet. It has not performed badly; it has not been observed performing.
+      </p>
+    </div>
+  );
+}
+
 function parseReputationResponse(body: unknown, timeframe: ReputationWindow): ReputationMetrics {
   const payload = toObject(body) ?? {};
   const nestedMetrics = parseNestedScorecard(payload, timeframe);
@@ -361,6 +486,7 @@ export function ScorecardCard({
   latestOracleTxHash,
 }: ScorecardCardProps) {
   const [metrics, setMetrics] = useState<ReputationMetrics>(emptyMetrics);
+  const [health, setHealth] = useState<HealthView | null>(null);
   const [historyData, setHistoryData] = useState<number[]>([]);
   const [freshness, setFreshness] = useState<FreshnessResult | null>(null);
   const [isLoading, setIsLoading] = useState(true);
@@ -372,6 +498,7 @@ export function ScorecardCard({
     setIsLoading(true);
     setError(null);
     setMetrics(emptyMetrics);
+    setHealth(null);
     setHistoryData([]);
     setFreshness(null);
 
@@ -387,6 +514,7 @@ export function ScorecardCard({
         if (!isActive) return;
         const parsedMetrics = parseReputationResponse(body, timeframe);
         setMetrics(parsedMetrics);
+        setHealth(parseHealth(body));
         // Probe-backed responses may omit computedAt while still exposing the
         // publisher's latest observation — fall back to that rather than
         // leaving the badge stuck on "unknown".
@@ -482,9 +610,16 @@ export function ScorecardCard({
           {error}
         </div>
       ) : !hasReputationMetrics(metrics) ? (
-        <div className="rounded-xl border border-border bg-bg-sunken p-4 text-sm text-secondary-text /60">
-          No reputation metrics available for this anchor.
-        </div>
+        // An anchor with no settled outcomes still has a probe record, and until
+        // now this branch threw that away and rendered a flat "no metrics" card.
+        // Absence of reputation is not absence of observation.
+        health ? (
+          <HealthPanel health={health} anchorName={anchorName} />
+        ) : (
+          <div className="rounded-xl border border-border bg-bg-sunken p-4 text-sm text-secondary-text /60">
+            No reputation metrics available for this anchor.
+          </div>
+        )
       ) : !enoughData ? (
         <div className="flex flex-col items-center justify-center py-10 px-4 text-center border rounded-xl bg-bg-sunken/50 /30 border-border">
           <div className="w-12 h-12 mb-4 rounded-full bg-accent-subtle flex items-center justify-center text-accent dark:text-accent">

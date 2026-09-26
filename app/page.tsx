@@ -6,6 +6,7 @@ import { CorridorStrip } from '@/components/landing/CorridorStrip';
 import { LeaderboardTeaser } from '@/components/landing/LeaderboardTeaser';
 import { RatePreview } from '@/components/landing/RatePreview';
 import { Faq } from '@/components/landing/Faq';
+import { RecordProof } from '@/components/landing/RecordProof';
 import { LandingSection } from '@/components/landing/LandingSection';
 import { registryStats } from '@/constants';
 
@@ -73,7 +74,12 @@ const STRUCTURED_DATA = {
  * quote server at all. It is replaced by a plain numbered sequence with copy
  * that survives contact with the network.
  */
-export default function HomePage() {
+// The page reads the probe ledger for RecordProof, so it revalidates on the
+// same five-minute cadence the probes run on rather than hitting the database
+// per request. Matches /anchors and /anchors/standings.
+export const revalidate = 300;
+
+export default async function HomePage() {
   const stats = registryStats();
 
   return (
@@ -87,6 +93,14 @@ export default function HomePage() {
       />
 
       <Hero />
+
+      {/* Evidence, immediately after the claim. The hero says the anchors are
+          probed on a clock; this is the ledger saying how long that has been
+          true. Renders nothing when the store is unavailable rather than
+          showing zeros. */}
+      <LandingSection delay={25}>
+        <RecordProof />
+      </LandingSection>
 
       {/* The registry the record covers, read straight from constants/anchors.ts. */}
       <LandingSection delay={0}>

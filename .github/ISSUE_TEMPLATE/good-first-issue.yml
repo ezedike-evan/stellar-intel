@@ -143,15 +143,17 @@ body:
       label: Wave / milestone
       description: Where does this sit in [`docs/ROADMAP.md`](../blob/main/docs/ROADMAP.md)?
       options:
-        - v1.0 — Core Executable
-        - v1.1 — Hardening + SEP-38
-        - v1.2 — Router + Seeds
-        - v1.3 — Polish + Release Gate
-        - v2.0 — Reputation as Product Surface
-        - v2.1 — Soroban Oracle Live
-        - v2.2 — Multi-Anchor Split Routing
-        - v2.3 — Public Reputation API + Bootstrap
-        - cross-cutting (docs, ops, observability)
+        - Wave 1.0 — Core Executable
+        - Wave 1.1 — Hardening + SEP-38
+        - Wave 1.2 — Router + Seeds
+        - Wave 1.3 — Polish + Release Gate
+        - Wave 1.4 — SEP-6
+        - Wave 1.5 — Anchor Fleet
+        - Wave 1.6 — Landing Polish
+        - Wave 2.0 — Reputation as Product Surface
+        - Wave 2.1 — Soroban Oracle Live
+        - Rung 1 — Data Infra
+        - Unsure / not wave-scoped
     validations:
       required: true
 

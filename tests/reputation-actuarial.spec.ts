@@ -26,6 +26,8 @@ function outcome(overrides: Partial<OutcomeLogRow> = {}): OutcomeLogRow {
     disputedReason: null,
     publishedAt: null,
     oracleTxHash: null,
+    attested: true,
+    signerAccount: null,
     ...overrides,
   };
 }

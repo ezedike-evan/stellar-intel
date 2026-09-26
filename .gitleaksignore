@@ -1,0 +1,15 @@
+# Findings the full-history scan (.github/workflows/secret-scan.yml) must not
+# re-report. One line per fingerprint, each justified — an entry here is a
+# security decision, not a way to quiet a noisy rule.
+#
+# Regenerate a fingerprint with:
+#   gitleaks git . --config .gitleaks.toml -f json -r leaks.json
+#
+# Two SEP-10 test keypairs in a spec file that no longer exists. Both seeds are
+# the canonical base32 filler pattern (SAAQCAIBAEAQ… / SABAEAQCAIBA…), decoding
+# to counting-sequence bytes rather than entropy — they were written to sign a
+# challenge transaction in a unit test, never funded, and the file was deleted
+# in a later refactor. Kept as fingerprints rather than exempting `tests/` from
+# the seed rule: a real seed committed to a test file is still a leak.
+f4a0f91da60ffa00bf363803b11b5d461f223dac:tests/sep10-sign.spec.ts:stellar-secret-seed:18
+f4a0f91da60ffa00bf363803b11b5d461f223dac:tests/sep10-sign.spec.ts:stellar-secret-seed:19

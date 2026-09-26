@@ -105,6 +105,10 @@ async function seedPostgresOutcome(
     disputedReason: null,
     publishedAt: null,
     oracleTxHash: null,
+    // The publisher reads attested rows only; this seeds one directly, as the
+    // append route would after verifying the sender's signature.
+    attested: true,
+    signerAccount: 'GBRPYHIL2CI3FNQ4BXLFMNDLFJUNPU2HY3ZMFSHONUCEOASW7QC7OX2H',
   };
   await store.append(row);
   return store;
