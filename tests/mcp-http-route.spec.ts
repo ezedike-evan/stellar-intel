@@ -40,7 +40,16 @@ function mcpRequest(body: unknown, headers: Record<string, string> = {}): NextRe
  * a tool silently disappearing from the remote surface fails a test rather than
  * going unnoticed.
  */
-const EXPECTED_TOOLS = ['intel.offramp.quote', 'intel.offramp.prepare', 'intel.execute'];
+const EXPECTED_TOOLS = [
+  'intel.offramp.quote',
+  'intel.offramp.prepare',
+  'intel.execute',
+  'intel.anchor.reputation',
+  'intel.anchor.health',
+  'intel.probe.coverage',
+  'intel.leaderboard',
+  'intel.corridors',
+];
 
 const INITIALIZE = {
   jsonrpc: '2.0',

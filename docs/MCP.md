@@ -9,17 +9,18 @@ intelligence to MCP-capable agents over stdio or streamable HTTP. It lives in
 yet published to npm**), and both reuse the same routing + canonical-hashing
 logic as the web app (`lib/mcp/offramp.ts`).
 
-The two entry points do not expose the same tool set:
+The entry points expose the full tool set:
 
 | Tool                      | `/api/mcp` (hosted) | `packages/mcp` | `scripts/mcp/server.ts` (dev) |
 | ------------------------- | ------------------- | -------------- | ----------------------------- |
 | `intel.offramp.quote`     | ✓                   | ✓              | ✓                             |
 | `intel.offramp.prepare`   | ✓                   | ✓              | ✓                             |
 | `intel.execute`           | ✓                   | ✓              | ✓                             |
-| `intel.anchor.reputation` | —                   | ✓              | —                             |
-| `intel.anchor.health`     | —                   | ✓              | —                             |
-| `intel.probe.coverage`    | —                   | ✓              | —                             |
+| `intel.anchor.reputation` | ✓                   | ✓              | ✓                             |
+| `intel.anchor.health`     | ✓                   | ✓              | ✓                             |
+| `intel.probe.coverage`    | ✓                   | ✓              | ✓                             |
 | `intel.leaderboard`       | ✓                   | ✓              | ✓                             |
+| `intel.corridors`         | ✓                   | ✓              | ✓                             |
 
 **Scope:** Stellar Intel abstracts anchors, not chains. These tools answer
 "what's my best fiat exit price, and which Stellar anchor should I trust to
@@ -55,19 +56,13 @@ answer `405` — `GET` would otherwise open a standalone SSE stream that nothing
 closes, and this server never initiates messages.
 
 The endpoint is served by [`app/api/mcp/route.ts`](../app/api/mcp/route.ts),
-which builds its server from the same `createServer()` in
-[`scripts/mcp/server.ts`](../scripts/mcp/server.ts) that the stdio dev server
-uses, so those two cannot drift apart. Requests are rate-limited to 60 per
-minute per IP.
+which builds its server from the canonical `createServer()` in
+[`lib/mcp/server.ts`](../lib/mcp/server.ts) shared with the stdio dev server
+and the `@stellarintel/mcp` package, so they cannot drift apart. Requests are
+rate-limited to 60 per minute per IP.
 
-**It serves the four-tool set**, matching the `scripts/mcp` column in the table
-above — `intel.offramp.quote`, `intel.offramp.prepare`, `intel.execute` and
-`intel.leaderboard`. The four `packages/mcp`-only tools are not on the hosted
-endpoint yet: that package's modules use explicit `./tool.js` specifiers which
-the app's bundler does not resolve back to their `.ts` sources, and
-`npm run build --workspace=@stellarintel/mcp` currently fails on pre-existing
-errors in `lib/oracle/read.ts` and `lib/stellar/anchors.ts`, so there is no
-compiled output to import either. Porting them is tracked separately.
+**It serves the full eight-tool suite** alongside prompts and the anchor health
+ledger resource across all transports.
 
 ## Running it yourself
 
@@ -222,7 +217,7 @@ above. Per #819, broader intent types (beyond off-ramp) are deferred until the
 universal intent collapse work lands, so the tool doesn't ship off-ramp-only
 assumptions baked into a wider surface prematurely.
 
-### `intel.anchor.reputation` (packages/mcp only)
+### `intel.anchor.reputation`
 
 Returns 7/30/90-day rolling percentile scorecards for an anchor, fetched from
 the Stellar Intel API (`/api/reputation/{anchor}`).
@@ -257,7 +252,7 @@ the Stellar Intel API (`/api/reputation/{anchor}`).
 }
 ```
 
-### `intel.anchor.health` (packages/mcp only)
+### `intel.anchor.health`
 
 Returns the current health of an anchor, fetched from the Stellar Intel API
 (`/api/v1/anchors/{id}/health`). The anchor is looked up by home or service
@@ -283,7 +278,7 @@ domain; passing an `asset` the anchor does not support is an error.
 }
 ```
 
-### `intel.probe.coverage` (packages/mcp only, #1046)
+### `intel.probe.coverage` (#1046)
 
 Answers "is the reputation data trustworthy yet" before an agent believes a
 score. Same payload as `GET /api/reputation/probe-coverage` for the same
@@ -319,9 +314,19 @@ app instance at `NEXT_PUBLIC_APP_URL`.
 - **Output:** the leaderboard rows, each with its score, sample size,
   `measured` flag and standing label
 
+### `intel.corridors`
+
+Lists every corridor Stellar Intel currently surfaces, with its id, display name,
+source asset, destination fiat currency, country, and the anchors that serve it.
+Call this before any tool that takes a corridor id rather than guessing one.
+Flag-gated corridors hidden in the UI are omitted.
+
+- **Input:** none
+- **Output:** `{ count: number, corridors: CorridorSummary[] }`
+
 ## Prompts
 
-`packages/mcp` also registers two prompts (#1048), so an agent can start from
+The server also registers two prompts (#1048), so an agent can start from
 an intent rather than assembling the tool calls itself:
 
 - **`intel.offramp.choose-anchor`** — arguments `{ from, to }`. Compares the
@@ -329,6 +334,11 @@ an intent rather than assembling the tool calls itself:
 - **`intel.offramp.quote-and-prepare`** — arguments
   `{ from, to, amount, sender, recipient }`. Walks quote → prepare → execute,
   leaving the signature to the agent.
+
+## Resources
+
+- **`stellarintel://anchor-health/ledger`** — exposes raw public ledger health
+  probe records directly as a structured JSON resource.
 
 ## Tests
 

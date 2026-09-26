@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 import type { McpServer } from '@modelcontextprotocol/sdk/server/mcp.js';
 import { WebStandardStreamableHTTPServerTransport } from '@modelcontextprotocol/sdk/server/webStandardStreamableHttp.js';
-import { createServer } from '@/scripts/mcp/server';
+import { createServer } from '@/lib/mcp/server';
 import { checkRateLimit, getClientIp } from '@/lib/api/rate-limit';
 import { getLogger } from '@/lib/logger';
 
@@ -23,16 +23,8 @@ import { getLogger } from '@/lib/logger';
  *       "url": "https://stellar-intel.vercel.app/api/mcp" } } }
  *
  * Tool definitions are not duplicated here. The route builds its server from
- * the same `createServer()` in `scripts/mcp/server.ts` that the stdio entry
- * point uses, so the two transports always expose an identical surface.
- *
- * That is the stdio dev server's four-tool set, not the eight-tool set in
- * `packages/mcp`. The richer package cannot be imported here: its modules use
- * explicit `./tool.js` specifiers, which Turbopack does not resolve back to
- * `.ts` sources, and `npm run build --workspace=@stellarintel/mcp` currently
- * fails on unrelated pre-existing errors in `lib/oracle/read.ts` and
- * `lib/stellar/anchors.ts`, so there is no dist to import either. Porting the
- * remaining four tools is tracked separately.
+ * `createServer()` in `lib/mcp/server.ts`, exposing the complete 8-tool suite
+ * alongside stdio and the publishable package.
  */
 export const runtime = 'nodejs';
 export const dynamic = 'force-dynamic';

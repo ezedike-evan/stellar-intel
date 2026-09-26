@@ -15,7 +15,7 @@
   "types": "dist/packages/mcp/src/index.d.ts",
   "bin": "dist/packages/mcp/src/index.js",
   "scripts": {
-    "prebuild": "rm -rf dist",
+    "prebuild": "node -e \"fs.rmSync('dist', {recursive:true,force:true})\"",
     "build": "tsc && tsc-alias -p tsconfig.json",
     "start": "node dist/packages/mcp/src/index.js",
     "dev": "ts-node -r tsconfig-paths/register src/index.ts"

@@ -1,6 +1,6 @@
 #!/usr/bin/env node
-import { startStdioServer } from './transports/stdio.js';
-import { startStreamableHttpServer } from './transports/streamable-http.js';
+import { startStdioServer } from './transports/stdio';
+import { startStreamableHttpServer } from './transports/streamable-http';
 
 interface CliOptions {
   transport: 'stdio' | 'http';
