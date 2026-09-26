@@ -103,29 +103,23 @@ export const ANCHORS: Anchor[] = [
     assetIssuer: 'GDVKY2GU2DRXWTBEYJJWSFXIGBZV6AZNBVVSUHEPZI54LIS6BA7DVVSP',
     seps: ['sep6', 'sep24', 'sep31'],
   },
-  // zeam.money: ZAR fiat corridor — SEP-24 withdraw/deposit enabled.
-  // Verified 2026-08-28. The home domain publishes the SEP-24 endpoint; the
-  // legacy anchor.zeam.money service host returns 404 for stellar.toml.
-  // /info: deposit/withdraw for USDC enabled.
-  //
-  // Re-probed 2026-08-04 (#720): also declares
-  // ANCHOR_QUOTE_SERVER = https://anchor.zeam.money/sep38, which the `seps`
-  // array omitted. It is the ONLY registered anchor advertising SEP-38.
-  //
-  // Note the corridor mismatch: this entry claims `usdc-zar`, but the SEP-38
-  // /info offers USDC and BRL only — no ZAR asset at all. The ZAR corridor may
-  // still be served over SEP-24; the two rails are not required to cover the
-  // same currencies. Flagged rather than silently "corrected", because dropping
-  // usdc-zar would change corridor routing on the strength of one rail's
-  // capability list. See tests/fixtures/sep38/capability-capture.json.
+  // zeam.money: verified payment rails for BRL and a separate ZAR claim.
+  // Verified 2026-09-23. SEP-24 /info at https://anchor.zeam.money/sep24/info
+  // lists deposit/withdraw asset pairs [USDC, native]; SEP-31 receive is [USDC].
+  // SEP-38 /info at https://anchor.zeam.money/sep38/info advertises assets
+  // stellar:USDC:..., stellar:BRL:..., and iso4217:BRL, with country_codes ["BR"].
+  // No ZAR asset or country code appears anywhere in the live /info responses.
+  // We keep the ZAR route on the registry but flag it as unverified pending an
+  // interactive check, rather than silently rewriting the corridor claim.
   {
     id: 'zeam',
     name: 'Zeam Money',
     homeDomain: 'zeam.money',
-    corridors: ['usdc-zar'],
+    corridors: ['usdc-zar', 'usdc-brl'],
+    unverifiedCorridors: ['usdc-zar'],
     assetCode: 'USDC',
     assetIssuer: USDC_ISSUER,
-    seps: ['sep24', 'sep31', 'sep38'],
+    seps: ['sep10', 'sep24', 'sep31', 'sep38'],
   },
 ];
 

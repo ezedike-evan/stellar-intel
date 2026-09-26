@@ -9,6 +9,8 @@ export interface Anchor {
   name: string;
   homeDomain: string;
   corridors: string[]; // corridor IDs this anchor serves
+  /** Corridor IDs that are still being validated and should remain gated pending confirmation. */
+  unverifiedCorridors?: string[];
   /** Primary Stellar asset sold through this anchor's registered corridors. */
   assetCode: string;
   /** Issuer account for `assetCode`; used to build SEP-38 asset identifiers. */
