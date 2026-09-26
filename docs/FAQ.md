@@ -27,8 +27,9 @@ surface. It's the execution layer, not just a price page.
 ### Why did anchor X not show up in the comparison?
 
 Most often: the anchor doesn't serve that corridor, or it only exposes a SEP the
-rate engine doesn't yet quote. Historically SEP-6-only anchors (e.g. Cowrie) were
-dropped because the flow was SEP-24-only — SEP-6 support is being added (see
+rate engine doesn't yet quote. SEP-6-only anchors such as Cowrie appear in the
+comparison with an **Indicative** rate (from their SEP-6 `/info` fees), and
+executing through them in-app is not available yet (see
 [`docs/SEP_COMPLIANCE.md`](SEP_COMPLIANCE.md)). Failed anchors render as
 "unavailable" rather than disappearing silently.
 
@@ -45,8 +46,9 @@ user's wallet. See [`docs/MCP.md`](MCP.md).
 
 ### Is there an SDK?
 
-A typed client (`@stellarintel/sdk`) is on the roadmap (v4). Today you can call the
-[HTTP API](INTENT_API.md) directly. See [`docs/SDK.md`](SDK.md).
+`@stellarintel/sdk` is built in this repository (`packages/sdk`) but not yet
+published to npm; see [`docs/SDK.md`](SDK.md). Today you can call the
+[HTTP API](INTENT_API.md) directly.
 
 ### How do I contribute?
 
