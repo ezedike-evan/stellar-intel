@@ -174,6 +174,10 @@ Re-run the same invocation. Already-migrated pairs short-circuit on the `has`
 check, so the retry costs only the remainder. There is no rollback and none is
 needed: v1 keys were never touched.
 
+That covers this storage migration. Rolling back a contract _code_ upgrade is a
+different operation, with its own rehearsal:
+[`MAINNET_LAUNCH.md` section 5.1](MAINNET_LAUNCH.md#51-rehearsal-on-testnet).
+
 ---
 
 ## What is deliberately not here
