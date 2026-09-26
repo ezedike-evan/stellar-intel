@@ -324,7 +324,7 @@ export function validateSep10Challenge(
   const hash = tx.hash();
   const signed = tx.signatures.some((sig) => {
     try {
-      return serverKey.verify(hash, sig.signature.toBytes());
+      return serverKey.verify(hash, sig.signature());
     } catch {
       return false; // malformed signature bytes
     }
