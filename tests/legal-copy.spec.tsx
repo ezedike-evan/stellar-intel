@@ -66,7 +66,7 @@ describe('short-form disclaimer (#739)', () => {
   it('covers non-custody, user-signing and rate uncertainty', () => {
     expect(DISCLAIMER_TEXT).toContain('non-custodial');
     expect(DISCLAIMER_TEXT).toContain('sign every transaction');
-    expect(DISCLAIMER_TEXT).toContain('not guarantees');
+    expect(DISCLAIMER_TEXT).toContain('not guaranteed quotes');
   });
 
   it('appears verbatim in the Terms document', () => {

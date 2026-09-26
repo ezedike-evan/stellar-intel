@@ -18,7 +18,7 @@
 export const DISCLAIMER_SENTENCES = [
   'Stellar Intel is non-custodial.',
   'You sign every transaction with your own wallet.',
-  'Rates are live quotes, not guarantees.',
+  'Most rates are indicative estimates, not guaranteed quotes.',
 ] as const;
 
 /** The same disclaimer as a single paragraph. */
