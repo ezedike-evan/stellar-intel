@@ -61,7 +61,9 @@ export async function getDurablePublisherHealth(now = Date.now()): Promise<Durab
   try {
     const { rows } = await getSqlExecutor().query(
       `SELECT MAX(published_at) AS last_published_at,
-              COUNT(*) FILTER (WHERE published_at IS NULL AND reconciled_at IS NOT NULL)
+              COUNT(*) FILTER (
+                WHERE published_at IS NULL AND reconciled_at IS NOT NULL AND attested = TRUE
+              )
                 AS pending_count
          FROM outcome_log`
     );

@@ -1,4 +1,6 @@
+import { randomBytes } from 'node:crypto';
 import { expect, test, type APIRequestContext } from '@playwright/test';
+import { Keypair } from '@stellar/stellar-sdk';
 
 type Scorecard =
   | {
@@ -11,11 +13,18 @@ type Scorecard =
       sampleSize: number;
     };
 
-async function appendCompletedOutcome(
-  request: APIRequestContext,
-  anchorId: string,
-  intentHash: string
-): Promise<void> {
+// The append route only accepts outcomes signed by the sender over the intent
+// hash, for a registered anchor and a corridor it serves. Each call uses a fresh
+// random hash, since appends are insert-only.
+const signer = Keypair.random();
+
+function randomHash(): string {
+  return randomBytes(32).toString('hex');
+}
+
+async function appendCompletedOutcome(request: APIRequestContext, anchorId: string): Promise<void> {
+  const intentHash = randomHash();
+  const signature = Buffer.from(signer.sign(Buffer.from(intentHash, 'hex'))).toString('base64');
   const response = await request.post('/api/reputation/append', {
     data: {
       intentHash,
@@ -27,7 +36,9 @@ async function appendCompletedOutcome(
       deliveredAmount: '158000',
       settleSeconds: 4,
       outcome: 'completed',
-      stellarTransactionId: `tx-${intentHash}`,
+      stellarTransactionId: randomHash(),
+      publicKey: signer.publicKey(),
+      signature,
     },
   });
 
@@ -63,35 +74,29 @@ function summarize(scorecard: Scorecard): {
 }
 
 test.describe('scorecard freshness', () => {
-  test('scorecard aggregate reflects a terminal outcome within 5 seconds', async ({
-    request,
-  }, testInfo) => {
-    const anchorId = `scorecard-freshness-${testInfo.workerIndex}-${Date.now()}`;
+  test('scorecard aggregate reflects a terminal outcome within 5 seconds', async ({ request }) => {
+    // A registered anchor: the append route rejects ids outside the registry.
+    // Other workers may append to it too, so assert on growth, not exact counts.
+    const anchorId = 'cowrie';
+    const before = await readSevenDayScorecard(request, anchorId);
 
-    await appendCompletedOutcome(request, anchorId, `${anchorId}-baseline`);
+    await appendCompletedOutcome(request, anchorId);
 
     await expect
-      .poll(async () => summarize(await readSevenDayScorecard(request, anchorId)), {
+      .poll(async () => (await readSevenDayScorecard(request, anchorId)).sampleSize, {
         timeout: 5_000,
         intervals: [100, 250, 500, 1_000],
       })
-      .toEqual({ state: 'ok', sampleSize: 1, fillRate: 1 });
+      .toBeGreaterThanOrEqual(before.sampleSize + 1);
 
-    const initial = await readSevenDayScorecard(request, anchorId);
-    expect(initial.state).toBe('ok');
-    if (initial.state !== 'ok') return;
-
-    await appendCompletedOutcome(request, anchorId, `${anchorId}-terminal`);
+    const middle = await readSevenDayScorecard(request, anchorId);
+    await appendCompletedOutcome(request, anchorId);
 
     await expect
-      .poll(async () => summarize(await readSevenDayScorecard(request, anchorId)), {
+      .poll(async () => summarize(await readSevenDayScorecard(request, anchorId)).sampleSize, {
         timeout: 5_000,
         intervals: [100, 250, 500, 1_000],
       })
-      .toEqual({
-        state: 'ok',
-        sampleSize: initial.sampleSize + 1,
-        fillRate: initial.fillRate,
-      });
+      .toBeGreaterThanOrEqual(middle.sampleSize + 1);
   });
 });

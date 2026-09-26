@@ -1,5 +1,5 @@
 'use client';
-import { CORRIDORS } from '@/constants/anchors';
+import { VISIBLE_CORRIDORS } from '@/constants/anchors';
 import { getAnchorsByCorridorId } from '@/lib/stellar/anchors';
 
 const COUNTRY_FLAGS: Record<string, string> = {
@@ -13,8 +13,11 @@ const COUNTRY_FLAGS: Record<string, string> = {
   DE: '🇩🇪',
 };
 
-// Only show corridors that have at least one transfer-capable anchor
-const SELECTABLE_CORRIDORS = CORRIDORS.filter((c) => getAnchorsByCorridorId(c.id).length > 0);
+// Only show corridors that are visible to the app and still served by at least
+// one healthy, transfer-capable anchor.
+const SELECTABLE_CORRIDORS = VISIBLE_CORRIDORS.filter(
+  (c) => getAnchorsByCorridorId(c.id).length > 0
+);
 
 interface CorridorSelectorProps {
   value: string;

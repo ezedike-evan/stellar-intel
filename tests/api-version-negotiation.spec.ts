@@ -260,4 +260,8 @@ describe('docs/VERSIONING.md matches the enforced support window (#874)', () => 
       expect(versioningDoc).toContain('Not yet implemented');
     }
   });
+
+  it('contains the current API_VERSION string', () => {
+    expect(versioningDoc).toContain(API_VERSION);
+  });
 });

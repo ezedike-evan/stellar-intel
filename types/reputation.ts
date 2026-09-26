@@ -36,6 +36,14 @@ export interface OutcomeLogRow {
   publishedAt: string | null;
   /** Tx hash of the `submit_outcome` call that published this row on-chain; null until published. */
   oracleTxHash: string | null;
+  /**
+   * True when the append route verified an Ed25519 signature over `intentHash`
+   * by `signerAccount`. Scoring, aggregation and the oracle publisher read only
+   * attested rows; unattested ones (legacy rows, dev seeds) are kept but ignored.
+   */
+  attested: boolean;
+  /** Stellar account (G...) whose signature attested this row; null when unattested. */
+  signerAccount: string | null;
 }
 
 // ─── Uptime / quote-latency / issuer-mismatch / toml-integrity probe ledger ────

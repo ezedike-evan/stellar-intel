@@ -11,8 +11,31 @@ export const runtime = 'nodejs';
 // ─── POST /api/reputation/append (Issue #129 / #220) ───────────────────────────
 //
 // The single server-side write path for outcome rows. The client never writes
-// to the store directly — it POSTs here when an intent reaches a terminal state,
-// and the row is validated against the #218 schema before being persisted.
+// to the store directly — it POSTs here when an intent reaches a terminal state.
+//
+// Accepted rows feed anchor scores and, through the publisher, the on-chain
+// oracle, so the route is strict:
+//
+// - 401 when `publicKey` or `signature` is missing.
+// - 400 when the body fails `AppendOutcomeInputSchema` (unknown anchor, a
+//   corridor that anchor does not serve, out-of-range numbers, bad hashes).
+// - 401 when `signature` is not a valid Ed25519 signature by `publicKey` over
+//   `intentHash`. Unsigned rows are no longer accepted as telemetry.
+// - 409 when a row for `intentHash` already exists. Appends are insert-only:
+//   the stored row is never rewritten, even by a byte-identical retry, so a
+//   repeat POST cannot change an outcome or reset its reconcile/publish state.
+// - 201 with `attested: true` otherwise; the row stores `publicKey` as its signer.
+
+function hasAttestationFields(body: unknown): boolean {
+  if (body === null || typeof body !== 'object') return false;
+  const { publicKey, signature } = body as Record<string, unknown>;
+  return (
+    typeof publicKey === 'string' &&
+    publicKey.length > 0 &&
+    typeof signature === 'string' &&
+    signature.length > 0
+  );
+}
 
 export async function POST(request: NextRequest): Promise<NextResponse> {
   return withRequestLogger(request, 'api.reputation.append', async (logger) => {
@@ -22,7 +45,18 @@ export async function POST(request: NextRequest): Promise<NextResponse> {
     });
     if (limited) return limited;
 
-    const body = await request.json().catch(() => null);
+    const body: unknown = await request.json().catch(() => null);
+
+    // An unsigned write is an authentication failure, not a malformed body, so
+    // it gets 401 before the schema runs (which would otherwise report a 400).
+    if (!hasAttestationFields(body)) {
+      logger.warn({ event: 'append_unsigned' });
+      return NextResponse.json<ApiError>(
+        { code: 'UNAUTHORIZED', message: 'publicKey and signature are required' },
+        { status: 401 }
+      );
+    }
+
     const parsed = AppendOutcomeInputSchema.safeParse(body);
 
     if (!parsed.success) {
@@ -33,45 +67,34 @@ export async function POST(request: NextRequest): Promise<NextResponse> {
       );
     }
 
-    // Optional attestation. Both fields must be supplied together; when present
-    // the signature is verified over intentHash and a bad one is rejected — so a
-    // forged, signed row cannot get in. An unsigned row is still accepted as
-    // telemetry (attested=false). Gating the on-chain publish path on `attested`
-    // is a deliberate follow-up: it must wait until clients actually attest, or
-    // the score feed would go empty overnight.
-    const { signature, publicKey } = parsed.data;
-    if ((signature === undefined) !== (publicKey === undefined)) {
+    const { intentHash, publicKey, signature } = parsed.data;
+    if (!verifyIntentSignature({ intentHash, publicKey, signature })) {
+      logger.warn({ event: 'append_attestation_failed', publicKey });
       return NextResponse.json<ApiError>(
-        { code: 'VALIDATION_ERROR', message: 'signature and publicKey must be provided together' },
-        { status: 400 }
+        { code: 'UNAUTHORIZED', message: 'Signature verification failed' },
+        { status: 401 }
       );
     }
 
-    let attested = false;
-    if (signature !== undefined && publicKey !== undefined) {
-      attested = verifyIntentSignature({
-        intentHash: parsed.data.intentHash,
-        publicKey,
-        signature,
-      });
-      if (!attested) {
-        logger.warn({ event: 'append_attestation_failed', publicKey });
-        return NextResponse.json<ApiError>(
-          { code: 'FORBIDDEN', message: 'Signature verification failed' },
-          { status: 403 }
-        );
-      }
-    }
-
     const row = toOutcomeLogRow(parsed.data);
-    await getReputationStore().append(row);
+    const inserted = await getReputationStore().append(row);
+    if (!inserted) {
+      logger.warn({ event: 'append_duplicate', intentHash });
+      return NextResponse.json<ApiError>(
+        { code: 'CONFLICT', message: 'An outcome for this intentHash was already recorded' },
+        { status: 409 }
+      );
+    }
 
     logger.info({
       event: 'outcome_appended',
       anchorId: row.anchorId,
       outcome: row.outcome,
-      attested,
+      attested: true,
     });
-    return NextResponse.json({ ok: true, intentHash: row.intentHash, attested }, { status: 201 });
+    return NextResponse.json(
+      { ok: true, intentHash: row.intentHash, attested: true },
+      { status: 201 }
+    );
   });
 }

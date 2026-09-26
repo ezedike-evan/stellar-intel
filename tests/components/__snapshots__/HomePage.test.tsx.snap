@@ -141,6 +141,14 @@ exports[`HomePage > matches snapshot 1`] = `
     style="transition-delay: 0ms;"
   >
     <section
+      aria-label="record proof stub"
+    />
+  </section>
+  <section
+    class="transition-all duration-700 ease-out opacity-0 translate-y-8 motion-reduce:transition-none motion-reduce:transform-none motion-reduce:opacity-100"
+    style="transition-delay: 0ms;"
+  >
+    <section
       aria-labelledby="registry-heading"
     >
       <div

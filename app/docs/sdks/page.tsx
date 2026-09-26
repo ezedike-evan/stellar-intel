@@ -263,16 +263,32 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
         </div>
 
         <p className="text-secondary-text">
-          The MCP package exposes Stellar Intel&apos;s off-ramp routing to MCP-capable AI agents. It
-          is built but not yet published to npm, so install and run it from this repository:
+          The MCP package exposes Stellar Intel&apos;s off-ramp routing to MCP-capable AI agents.
+          The deployed app serves the MCP server directly, so a client needs only a URL — no clone,
+          no npm install, no local process:
+        </p>
+        <CodeBlock language="text" code={`https://stellar-intel.vercel.app/api/mcp`} />
+        <CodeBlock
+          language="json"
+          code={`{
+  "mcpServers": {
+    "stellar-intel": {
+      "type": "http",
+      "url": "https://stellar-intel.vercel.app/api/mcp"
+    }
+  }
+}`}
+        />
+        <p className="text-secondary-text">
+          To run the server locally instead (stdio transport, no build step needed), clone the
+          repository and start the dev server:
         </p>
         <CodeBlock
           language="bash"
           code={`git clone https://github.com/ezedike-evan/stellar-intel
 cd stellar-intel
 npm install
-npm run build --workspace=@stellarintel/mcp
-npm start --workspace=@stellarintel/mcp`}
+npx tsx scripts/mcp/server.ts`}
         />
         <p className="text-sm text-secondary-text">
           See the{' '}

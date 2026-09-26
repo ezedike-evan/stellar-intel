@@ -140,6 +140,42 @@ export class Sep6NotSupportedError extends AnchorError {
   }
 }
 
+/** Why a SEP-10 challenge was refused before it reached the wallet. */
+export type Sep10ChallengeRejection =
+  /** stellar.toml has no usable SIGNING_KEY, so the challenge cannot be authenticated. */
+  | 'MISSING_SIGNING_KEY'
+  /** WEB_AUTH_ENDPOINT is not an https:// URL. */
+  | 'INSECURE_ENDPOINT'
+  /** The challenge transaction failed SEP-10 structural or signature checks. */
+  | 'INVALID_CHALLENGE'
+  /** The challenge asks a different account to sign than the connected wallet. */
+  | 'WRONG_ACCOUNT';
+
+/**
+ * Thrown when an anchor's SEP-10 challenge fails verification, before anything
+ * is handed to the wallet for signing. A challenge that fails these checks may
+ * be a real transaction dressed up as a login, so the flow stops here rather
+ * than asking the user to judge an opaque XDR blob. The message is written to
+ * be shown to the user as-is.
+ */
+export class Sep10ChallengeRejectedError extends AnchorError {
+  readonly domain: string;
+  readonly reason: Sep10ChallengeRejection;
+  readonly detail: string;
+
+  constructor(domain: string, reason: Sep10ChallengeRejection, detail: string) {
+    super(
+      `Stopped before signing: the login challenge from "${domain}" failed verification ` +
+        `(${detail}). Nothing was sent to your wallet.`,
+      ErrorCode.ANCHOR_INVALID_RESPONSE
+    );
+    this.name = 'Sep10ChallengeRejectedError';
+    this.domain = domain;
+    this.reason = reason;
+    this.detail = detail;
+  }
+}
+
 // ─── Type guards ──────────────────────────────────────────────────────────────
 
 export function isStellarIntelError(value: unknown): value is StellarIntelError {

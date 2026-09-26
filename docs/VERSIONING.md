@@ -24,21 +24,18 @@
 
 ## Versioning scheme
 
-The public API uses a **date-based versioning** scheme: `vYYYY-MM-DD` (e.g.
-`v2026-07-01`). This allows asynchronous, semantic releases without the
-overhead of a monotonically incrementing integer major version. Each date
-version is a stable snapshot of the API surface.
+The public API uses **Semantic Versioning** (`MAJOR.MINOR.PATCH`, e.g. `1.3.0`), defined in `lib/api/api-version.ts` via `API_VERSION` and kept in sync with `info.version` in `public/openapi.json`. Each version is a stable snapshot of the API surface.
 
-| Component      | Version identifier           | Where it lives                  |
-| -------------- | ---------------------------- | ------------------------------- |
-| HTTP API       | `v2026-07-01`                | `Accept` / `API-Version` header |
-| Soroban oracle | Contract address (immutable) | `.deployments/{network}.json`   |
-| MCP tools      | `@stellarintel/mcp` npm      | `package.json` version          |
-| TypeScript SDK | `@stellarintel/sdk` npm      | `package.json` version          |
-| OpenAPI spec   | `v1` (snapshot)              | `public/openapi.json`           |
+| Component      | Version identifier             | Where it lives                  |
+| -------------- | ------------------------------ | ------------------------------- |
+| HTTP API       | `1.3.0` (Semantic Versioning)  | `Accept` / `API-Version` header |
+| Soroban oracle | Contract address (immutable)   | `.deployments/{network}.json`   |
+| MCP tools      | Latest `main` (not yet on npm) | `package.json` version          |
+| TypeScript SDK | Latest `main` (not yet on npm) | `package.json` version          |
+| OpenAPI spec   | `1.3.0` (`info.version`)       | `public/openapi.json`           |
 
 The HTTP API and the Soroban oracle are versioned independently. The REST API
-may ship `v2026-10-01` while the oracle contract remains at its initial
+may ship a new semver release while the oracle contract remains at its initial
 deployment address.
 
 ---
@@ -102,13 +99,13 @@ Expedited removals are announced on all channels with the reason.
 
 ## Version support window
 
-| Surface                          | Supported versions       | Window                                            |
-| -------------------------------- | ------------------------ | ------------------------------------------------- |
-| HTTP REST API                    | Current only¹            | Current + 1 previous, 180 days (computed)         |
-| Soroban oracle contract          | Current deployed address | Until a migration is announced and executed       |
-| MCP tools                        | Latest npm release only  | Semver within `@stellarintel/mcp`                 |
-| TypeScript SDK                   | Latest npm release only  | Semver within `@stellarintel/sdk`                 |
-| Web UI (`app.stellar-intel.com`) | Latest only              | No version guarantee — always use the current URL |
+| Surface                             | Supported versions                       | Window                                            |
+| ----------------------------------- | ---------------------------------------- | ------------------------------------------------- |
+| HTTP REST API                       | Current only¹                            | Current + 1 previous, 180 days (computed)         |
+| Soroban oracle contract             | Current deployed address                 | Until a migration is announced and executed       |
+| MCP tools                           | Latest `main` (not yet published to npm) | Semver within repository                          |
+| TypeScript SDK                      | Latest `main` (not yet published to npm) | Semver within repository                          |
+| Web UI (`stellar-intel.vercel.app`) | Latest only                              | No version guarantee — always use the current URL |
 
 ¹ **The stated window is not yet what the code enforces**, in the sense that
 `SUPPORTED_API_VERSIONS` in `lib/api/api-version.ts` currently contains
@@ -133,19 +130,15 @@ version, which may change without notice.
 
 Deprecations and breaking changes are announced on:
 
-1. **GitHub releases** — every versioned API release is a GitHub Release with
-   a changelog entry. Subscribe at
-   `https://github.com/ezedike-evan/stellar-intel/releases`.
+1. **Status endpoint** — `GET /api/status` (`app/api/status/route.ts`) returns
+   `version`, `supported_versions`, and `announced_deprecations` as JSON fields.
 2. **CHANGELOG.md** — the `[Unreleased]` section lists pending deprecations;
    dated sections record shipped ones.
 3. **API response headers** — a deprecated-but-still-supported pin returns
    `Sunset` and `Warning: 299` on every response (see deprecation process
    above). No endpoint is deprecated today, so no live response carries
    either header yet.
-4. **Status page** — `GET /api/status` (`app/api/status/route.ts`) returns
-   `version`, `supported_versions`, and `announced_deprecations` as a JSON
-   array. The array is empty today for the same reason: nothing has been
-   deprecated yet.
+4. **GitHub repository** — releases and changelogs are tracked in `CHANGELOG.md` in the repository (GitHub Releases are not used yet).
 5. **Mailing list** — subscribe at
    `https://stellar-intel.vercel.app/updates` (planned).
 
@@ -181,16 +174,6 @@ comes from `lib/api/api-version.ts`, and a test asserts it matches
 Requests may pin a version with the same header. An unsupported value returns
 `400` with a `supportedVersions` list; omitting the header still means "latest",
 so pinning is opt-in and no existing client is broken by the check.
-
-**Known mismatch with the scheme above.** The _Versioning scheme_ section
-declares date-based versions (`vYYYY-MM-DD`), but nothing has ever emitted one.
-`API-Version` carries the semver spec version (`1.3.0`), kept in step with
-`info.version` in `public/openapi.json`, and that is what the negotiation
-accepts. Adopting date versions is a live decision, not an oversight in the
-implementation: it means changing `API_VERSION` in `lib/api/api-version.ts` and
-adding the old value to `SUPPORTED_API_VERSIONS` so pinned clients keep working
-across the switch. Documented here rather than resolved silently in either
-direction.
 
 ---
 

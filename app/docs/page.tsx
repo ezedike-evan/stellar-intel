@@ -20,7 +20,7 @@ const CARD_DETAIL: Record<string, { title: string; description: string }> = {
   },
   '/docs/auth': {
     title: 'Auth & Rate Limits',
-    description: 'Authentication methods, API keys, and rate-limit tiers.',
+    description: 'Admin authentication and per-IP rate limits.',
   },
   '/docs/webhooks': {
     title: 'Webhooks',

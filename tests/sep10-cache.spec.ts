@@ -1,13 +1,12 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest';
-import { Networks } from '@stellar/stellar-sdk';
+import { Keypair, Networks } from '@stellar/stellar-sdk';
 import { authenticate, invalidateSep10Token } from '@/lib/stellar/sep10';
 import { clearJwtCache, setJwtCacheCapacity, getCachedJwt } from '@/lib/stellar/jwt-cache';
-import * as sep1 from '@/lib/stellar/sep1';
+import { buildValidChallenge } from './fixtures/sep10-challenge';
 
-const WEB_AUTH_ENDPOINT = 'https://cowrie.exchange/auth';
 const ANCHOR = 'cowrie.exchange';
-const PUBLIC_KEY = 'GABCDEFGHIJKLMNOPQRSTUVWXYZ012345678901234567890123456789';
-const CHALLENGE_XDR = 'AAAAAQAAAAC...';
+const SERVER = Keypair.random();
+const PUBLIC_KEY = Keypair.random().publicKey();
 const SIGNED_XDR = 'AAAAAQAAAAD...';
 
 const mockResolvedAnchor = (domain: string) => ({
@@ -19,9 +18,9 @@ const mockResolvedAnchor = (domain: string) => ({
   assetIssuer: 'G...',
   TRANSFER_SERVER_SEP0024: `https://${domain}/sep24`,
   WEB_AUTH_ENDPOINT: `https://${domain}/auth`,
-  SIGNING_KEY: 'G...',
+  SIGNING_KEY: SERVER.publicKey(),
   capabilities: { sep10: true, sep24: true, sep38: false, sep12: false },
-  domain: 'anchor.domain',
+  domain,
   ANCHOR_QUOTE_SERVER: null,
   NETWORK_PASSPHRASE: null,
   ORG_URL: null,
@@ -46,12 +45,20 @@ async function getFreighter() {
   return await import('@stellar/freighter-api');
 }
 
-function stubChallengeAndJwt(jwt: string) {
+function stubChallengeAndJwt(jwt: string, domain: string = ANCHOR) {
+  // A real challenge from the anchor's SIGNING_KEY, built at the current
+  // (possibly faked) time so its timebounds are valid when it is validated.
+  const challenge = buildValidChallenge({
+    server: SERVER,
+    clientAccountId: PUBLIC_KEY,
+    homeDomain: domain,
+    webAuthDomain: domain,
+  });
   const fetchMock = vi
     .fn()
     .mockResolvedValueOnce({
       ok: true,
-      json: async () => ({ transaction: CHALLENGE_XDR, network_passphrase: Networks.PUBLIC }),
+      json: async () => ({ transaction: challenge, network_passphrase: Networks.PUBLIC }),
     })
     .mockResolvedValueOnce({
       ok: true,
@@ -146,16 +153,16 @@ describe('SEP-10 JWT cache', () => {
     setJwtCacheCapacity(2);
     const exp = Math.floor(Date.now() / 1000) + 3600;
 
-    stubChallengeAndJwt(makeJwt(exp));
+    stubChallengeAndJwt(makeJwt(exp), 'a.example');
     await authenticate(mockResolvedAnchor('a.example'), PUBLIC_KEY);
 
-    stubChallengeAndJwt(makeJwt(exp));
+    stubChallengeAndJwt(makeJwt(exp), 'b.example');
     await authenticate(mockResolvedAnchor('b.example'), PUBLIC_KEY);
 
     // Touch 'a' so 'b' becomes the LRU
     expect(getCachedJwt('a.example', PUBLIC_KEY)).toBeDefined();
 
-    stubChallengeAndJwt(makeJwt(exp));
+    stubChallengeAndJwt(makeJwt(exp), 'c.example');
     await authenticate(mockResolvedAnchor('c.example'), PUBLIC_KEY);
 
     expect(getCachedJwt('a.example', PUBLIC_KEY)).toBeDefined();

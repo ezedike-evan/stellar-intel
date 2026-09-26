@@ -11,15 +11,15 @@ logic as the web app (`lib/mcp/offramp.ts`).
 
 The two entry points do not expose the same tool set:
 
-| Tool                      | `packages/mcp` | `scripts/mcp/server.ts` (dev) |
-| ------------------------- | -------------- | ----------------------------- |
-| `intel.offramp.quote`     | ✓              | ✓                             |
-| `intel.offramp.prepare`   | ✓              | ✓                             |
-| `intel.execute`           | ✓              | ✓                             |
-| `intel.anchor.reputation` | ✓              | —                             |
-| `intel.anchor.health`     | ✓              | —                             |
-| `intel.probe.coverage`    | ✓              | —                             |
-| `intel.leaderboard`       | ✓              | ✓                             |
+| Tool                      | `/api/mcp` (hosted) | `packages/mcp` | `scripts/mcp/server.ts` (dev) |
+| ------------------------- | ------------------- | -------------- | ----------------------------- |
+| `intel.offramp.quote`     | ✓                   | ✓              | ✓                             |
+| `intel.offramp.prepare`   | ✓                   | ✓              | ✓                             |
+| `intel.execute`           | ✓                   | ✓              | ✓                             |
+| `intel.anchor.reputation` | —                   | ✓              | —                             |
+| `intel.anchor.health`     | —                   | ✓              | —                             |
+| `intel.probe.coverage`    | —                   | ✓              | —                             |
+| `intel.leaderboard`       | ✓                   | ✓              | ✓                             |
 
 **Scope:** Stellar Intel abstracts anchors, not chains. These tools answer
 "what's my best fiat exit price, and which Stellar anchor should I trust to
@@ -27,7 +27,49 @@ execute it" — not "move this value across chains." For cross-chain pay/bridge
 intents, an agent should reach for ROZO instead. See
 [docs/AGENT_POSITIONING.md](AGENT_POSITIONING.md) for the full comparison.
 
-## Running
+## Hosted endpoint (nothing to install)
+
+The deployed app serves the MCP server directly, so a client needs a URL and
+nothing else — no clone, no npm install, no local process:
+
+```
+https://stellar-intel.vercel.app/api/mcp
+```
+
+```json
+{
+  "mcpServers": {
+    "stellar-intel": {
+      "type": "http",
+      "url": "https://stellar-intel.vercel.app/api/mcp"
+    }
+  }
+}
+```
+
+It is a **stateless** Streamable HTTP endpoint: every request carries its own
+context and there is no `Mcp-Session-Id` to track, which is what suits a
+serverless function with no instance affinity between calls. Send JSON-RPC over
+`POST` with `Accept: application/json, text/event-stream`. `GET` and `DELETE`
+answer `405` — `GET` would otherwise open a standalone SSE stream that nothing
+closes, and this server never initiates messages.
+
+The endpoint is served by [`app/api/mcp/route.ts`](../app/api/mcp/route.ts),
+which builds its server from the same `createServer()` in
+[`scripts/mcp/server.ts`](../scripts/mcp/server.ts) that the stdio dev server
+uses, so those two cannot drift apart. Requests are rate-limited to 60 per
+minute per IP.
+
+**It serves the four-tool set**, matching the `scripts/mcp` column in the table
+above — `intel.offramp.quote`, `intel.offramp.prepare`, `intel.execute` and
+`intel.leaderboard`. The four `packages/mcp`-only tools are not on the hosted
+endpoint yet: that package's modules use explicit `./tool.js` specifiers which
+the app's bundler does not resolve back to their `.ts` sources, and
+`npm run build --workspace=@stellarintel/mcp` currently fails on pre-existing
+errors in `lib/oracle/read.ts` and `lib/stellar/anchors.ts`, so there is no
+compiled output to import either. Porting them is tracked separately.
+
+## Running it yourself
 
 > **Note:** `@stellarintel/mcp` is **not yet published to npm** —
 > `npm install @stellarintel/mcp` currently 404s. The package name is
@@ -68,6 +110,11 @@ Sessions are managed per agent (each initialization gets its own session ID),
 so multiple hosted agents can use the server concurrently. The in-repo dev
 server at [`scripts/mcp/server.ts`](../scripts/mcp/server.ts) is stdio-only.
 
+This self-hosted mode is **stateful**, unlike the hosted endpoint above: it
+runs its own long-lived `node:http` server, so it can hold a session per agent.
+Reach for it when you want the server on your own infrastructure; otherwise the
+hosted endpoint needs no process at all.
+
 The server applies safe mainnet defaults for the `NEXT_PUBLIC_*` config values,
 so an agent does not need the web app's `.env` to invoke it. The two
 `intel.anchor.*` tools additionally call the Stellar Intel HTTP API at
@@ -107,6 +154,24 @@ Annotated `readOnlyHint: true` — nothing is submitted on-chain until
 - **Input:** an off-ramp intent without a signature
   `{ type: "offramp", sourceAsset, destinationAsset, amount, sender, recipient }`
 - **Output:** `{ unsignedEnvelope: { intent, intentHash }, unsignedTx }`
+
+#### Routing and payment accounts
+
+`quote`, `prepare` and `execute` all route a corridor the same way the web
+intent API does (`lib/intent/anchor-accounts.ts`): the anchors registered for
+the corridor in `constants/anchors.ts`, narrowed to those with an
+operator-verified Stellar receiving account in `ANCHOR_PAYMENT_ACCOUNTS`
+(JSON, anchor id to account), first match in registry order. The server has
+**no built-in payout addresses**. A corridor with no registered anchor, or no
+verified account for one, returns `NO_ROUTE` and no transaction is built.
+`intel.execute` resolves the corridor again at submission time and rejects
+(`TX_MISMATCH`) a payment whose destination is not a currently verified
+account for it.
+
+Self-hosting the server, set `ANCHOR_PAYMENT_ACCOUNTS` for every corridor you
+want `prepare`/`execute` to serve. Check each address against Horizon and the
+anchor's own published details first: a wrong address is a payment to a
+stranger.
 
 ### `intel.execute` (#819)
 
@@ -163,7 +228,7 @@ Returns 7/30/90-day rolling percentile scorecards for an anchor, fetched from
 the Stellar Intel API (`/api/reputation/{anchor}`).
 
 - **Input:** `{ anchor: string }` — anchor identifier (e.g. `cowrie`,
-  `flutterwave`)
+  `moneygram`)
 - **Output:** `{ anchorId, scorecards }` where `scorecards` maps each window
   (`7`, `30`, `90`) to either an `ok` scorecard
   (`{ state: "ok", window, sampleSize, fillRate, settleMs: { p50, p95 }, slippage: { p50, p95 }, computedAt, lastPublisherTxTimestamp }`)

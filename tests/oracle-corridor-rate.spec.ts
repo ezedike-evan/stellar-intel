@@ -25,6 +25,8 @@ function outcome(corridor: string, deliveredRate: string | null): OutcomeLogRow 
     disputedReason: null,
     publishedAt: null,
     oracleTxHash: null,
+    attested: true,
+    signerAccount: null,
   };
 }
 

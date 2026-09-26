@@ -186,11 +186,12 @@ re-exported verbatim by `lib/stellar/anchors.ts`. The entry is an `Anchor`
 | `metadata`      |                | Operator regions / KYC model / fee model. Defined on the type, but not written inline today — see the flat-entry constraint below.                         |
 
 > **`seps` is not optional in practice.** `transferCapable()` is
-> `anchor.seps?.some(sep => TRANSFER_SEPS.includes(sep)) ?? false`. An entry with
+> `anchor.seps?.some(sep => ROUTABLE_SEPS.includes(sep)) ?? false`. An entry with
 > no `seps` — or with only `sep10` / `sep38` — is silently excluded from
 > `getAnchorsByCorridorId`, so the anchor never reaches a corridor selector or
-> the rate engine, and nothing errors. Declare at least one of `sep6`, `sep24`,
-> `sep31`.
+> the rate engine, and nothing errors. Declare at least one of `sep6` or `sep24` for
+> routed off-ramp anchors; SEP-31-only anchors are tracked for health but never routed,
+> and must use `corridors: []` plus `sep31Corridors`.
 
 > **Keep the entry flat.** `scripts/validate-anchors.mjs` and
 > `scripts/check-registry.mjs` isolate anchor objects with a brace-free

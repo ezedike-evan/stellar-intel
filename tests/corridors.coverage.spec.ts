@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { ANCHORS, CORRIDORS } from '@/constants/anchors';
+import { ANCHORS, CORRIDORS, VISIBLE_CORRIDORS } from '@/constants/anchors';
 import type { Anchor, Corridor } from '@/types';
 
 // usdc-zar was flagged off until zeam.money (#465) started serving it.
@@ -10,6 +10,8 @@ const FLAGGED_OFF_CORRIDORS = {
   // the host its own TOML advertises for both SEP-6 and SEP-24, stopped
   // resolving. No other anchor serves EUR.
   'usdc-eur': 'Orphaned again by the mykobo delisting; no anchor serves EUR.',
+  'usdc-ars': 'Orphaned when anclap was corrected to its own tokens 2026-09-23.',
+  'usdc-pen': 'Orphaned when anclap was corrected to its own tokens 2026-09-23.',
 } as const satisfies Record<string, string>;
 
 function anchorIdsByCorridor(anchors: readonly Anchor[]): Map<string, string[]> {
@@ -59,6 +61,18 @@ describe('per-corridor anchor coverage', () => {
 
   it('requires every visible corridor to have at least one registered anchor', () => {
     expect(orphanVisibleCorridorIds(CORRIDORS, ANCHORS, flaggedOffCorridorIds)).toEqual([]);
+  });
+
+  it('keeps every visible corridor anchored by registry data', () => {
+    const visibleIds = new Set(VISIBLE_CORRIDORS.map((corridor) => corridor.id));
+    const coveredIds = new Set(ANCHORS.flatMap((anchor) => anchor.corridors));
+
+    for (const corridorId of visibleIds) {
+      expect(
+        coveredIds.has(corridorId),
+        `visible corridor ${corridorId} is missing anchor coverage`
+      ).toBe(true);
+    }
   });
 
   it('catches an orphan corridor that is not flagged off', () => {

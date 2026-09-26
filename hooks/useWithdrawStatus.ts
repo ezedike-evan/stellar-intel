@@ -4,13 +4,22 @@ import { TERMINAL_STATES, getSep24Transaction } from '@/lib/stellar/sep24';
 import type { Sep24Transaction, WithdrawStatusValue } from '@/types';
 import type { OutcomeStatus } from '@/types/reputation';
 
-/** Context the page supplies so a terminal outcome can be logged (#129/#220). */
+/**
+ * Context the page supplies so a terminal outcome can be logged (#129/#220).
+ *
+ * The append route only accepts signed outcomes: `signature` is the sender's
+ * Freighter signature over `intentHash` (see `lib/intent/sign.ts`) and
+ * `publicKey` the account that produced it. Both are public values — no key
+ * material is ever part of this context.
+ */
 export interface OutcomeAppendContext {
   intentHash: string;
   anchorId: string;
   corridor: string;
   quotedRate: string;
   quotedAmount: string;
+  publicKey: string;
+  signature: string;
 }
 
 function outcomeFromStatus(status: WithdrawStatusValue): OutcomeStatus {

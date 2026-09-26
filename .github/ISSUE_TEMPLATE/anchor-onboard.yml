@@ -43,7 +43,7 @@ body:
     id: toml-url
     attributes:
       label: Full stellar.toml URL (for our parser to hit)
-      description: We validate SEP-1 parse, `TRANSFER_SERVER_SEP0024`, `WEB_AUTH_ENDPOINT`, and signing key presence.
+      description: We validate SEP-1 parse, `TRANSFER_SERVER_SEP0024` (SEP-24) or `TRANSFER_SERVER` (SEP-6), `WEB_AUTH_ENDPOINT`, and signing key presence.
       placeholder: 'https://stellar.moneygram.com/.well-known/stellar.toml'
     validations:
       required: true
@@ -52,7 +52,7 @@ body:
     id: asset-code
     attributes:
       label: Primary asset code
-      description: 'The Stellar asset users withdraw in. Today: `USDC`; `USDT` supported in v1.1+.'
+      description: 'The Stellar asset users withdraw in. Today: `USDC`; `USDT` supported when enabled.'
       placeholder: 'USDC'
     validations:
       required: true
@@ -70,7 +70,7 @@ body:
     id: corridors
     attributes:
       label: Corridors you support
-      description: Check every corridor you can settle fiat on. We'll register your anchor against these in `lib/stellar/anchors.ts`.
+      description: Check every corridor you can settle fiat on. We'll register your anchor against these in `constants/anchors.ts`.
       options:
         - label: USDC → NGN (Nigeria)
         - label: USDC → KES (Kenya)
@@ -79,17 +79,17 @@ body:
         - label: USDC → BRL (Brazil)
         - label: USDC → ARS (Argentina)
         - label: USDC → PEN (Peru)
-        - label: USDC → XOF (Senegal / Côte d'Ivoire) — v1.1 target
-        - label: USDC → ZAR (South Africa) — v1.1 target
-        - label: USDC → PHP (Philippines) — v1.2 target
-        - label: USDC → IDR (Indonesia) — v1.2 target
+        - label: USDC → EUR (Germany)
+        - label: BRL → BRL (Brazil)
+        - label: USDC → ZAR (South Africa)
+        - label: USDC → XOF (Senegal / Côte d'Ivoire)
         - label: Other (name in the notes section below)
 
   - type: checkboxes
     id: seps
     attributes:
       label: SEPs implemented
-      description: We require SEP-1, SEP-10, and SEP-24 at minimum. SEP-38 firm quotes are required from v1.1 onward.
+      description: We require SEP-1, SEP-10, and at least one transfer rail (SEP-24 or SEP-6). SEP-38 firm quotes are optional and preferred.
       options:
         - label: SEP-1 — stellar.toml
           required: true
@@ -98,9 +98,8 @@ body:
           required: true
         - label: SEP-12 — KYC API
         - label: SEP-24 — interactive hosted deposit / withdraw
-          required: true
         - label: SEP-31 — cross-border payments
-        - label: SEP-38 — firm-quote RFQ (required v1.1+)
+        - label: SEP-38 — firm-quote RFQ (optional)
 
   - type: dropdown
     id: kyc-model

@@ -26,6 +26,14 @@ import { Client } from '@modelcontextprotocol/sdk/client/index.js';
 import { StdioClientTransport } from '@modelcontextprotocol/sdk/client/stdio.js';
 
 import { pathToFileURL } from 'node:url';
+import { Keypair } from '@stellar/stellar-sdk';
+
+// Any valid public key works as the sender: prepare never touches the network.
+const SENDER = Keypair.random().publicKey();
+
+// The server has no built-in payout accounts; routing needs a verified one in
+// ANCHOR_PAYMENT_ACCOUNTS. A throwaway key stands in for cowrie's here.
+const ANCHOR_PAYMENT_ACCOUNTS = JSON.stringify({ cowrie: Keypair.random().publicKey() });
 
 const SERVER = path.resolve(__dirname, '../scripts/mcp/server.ts');
 
@@ -65,6 +73,7 @@ describe('MCP server round-trip via subprocess (#137)', () => {
         RATES_SEP24_INFO_TIMEOUT_MS: '3000',
         RATES_TOML_TIMEOUT_MS: '3000',
         DATABASE_URL: '', // Prevent slow remote DB queries from fetchReputationScores
+        ANCHOR_PAYMENT_ACCOUNTS,
       },
     });
     client = new Client({ name: 'e2e-test-client', version: '1.0.0' });
@@ -129,7 +138,7 @@ describe('MCP server round-trip via subprocess (#137)', () => {
         sourceAsset: 'USDC',
         destinationAsset: 'NGN',
         amount: '100',
-        sender: 'GAIJ3VXNY7RPPLGVVCLGBK7NPHLL5ZRKATHETOA7M7UPZPAAHEGQQIY2',
+        sender: SENDER,
         recipient: 'recipient-123',
       },
     });
@@ -156,7 +165,7 @@ describe('MCP server round-trip via subprocess (#137)', () => {
         sourceAsset: 'USDC',
         destinationAsset: 'NGN',
         amount: '10',
-        sender: 'GAIJ3VXNY7RPPLGVVCLGBK7NPHLL5ZRKATHETOA7M7UPZPAAHEGQQIY2',
+        sender: SENDER,
         recipient: 'recipient-123',
       },
     });
@@ -195,7 +204,7 @@ describe('MCP server round-trip via subprocess (#137)', () => {
         sourceAsset: 'USDC',
         destinationAsset: 'NGN',
         amount: '10',
-        sender: 'GAIJ3VXNY7RPPLGVVCLGBK7NPHLL5ZRKATHETOA7M7UPZPAAHEGQQIY2',
+        sender: SENDER,
         recipient: 'recipient-123',
       },
     });

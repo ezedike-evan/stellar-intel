@@ -205,9 +205,8 @@ npx tsx scripts/verify-oracle-read.mts
 
 `Cargo.lock` is committed. The interface is documented in
 [`ORACLE_SPEC.md`](../ORACLE_SPEC.md), governance in
-[`GOVERNANCE.md`](../GOVERNANCE.md), and a broader honest inventory of what this
-project enforces versus claims in
-[`PRODUCTION_AUDIT.md`](../PRODUCTION_AUDIT.md).
+[`GOVERNANCE.md`](../GOVERNANCE.md), and the security posture and threat model in
+[`SECURITY.md`](../SECURITY.md) and [`THREAT_MODEL.md`](../THREAT_MODEL.md).
 
 ---
 

@@ -83,7 +83,7 @@ describe('seedReputationStore', () => {
     const store = new InMemoryReputationStore();
     const count = await seedReputationStore(store, TEST_ANCHORS, NOW);
     expect(count).toBe(3);
-    const all = await store.query({});
+    const all = await store.query({ includeUnattested: true });
     expect(all).toHaveLength(3);
     await store.close();
   });
@@ -92,27 +92,42 @@ describe('seedReputationStore', () => {
     const store = new InMemoryReputationStore();
     await seedReputationStore(store, TEST_ANCHORS, NOW);
 
-    const alphaRows = await store.query({ anchorId: 'alpha' });
+    const alphaRows = await store.query({ anchorId: 'alpha', includeUnattested: true });
     expect(alphaRows).toHaveLength(2);
 
-    const betaRows = await store.query({ anchorId: 'beta' });
+    const betaRows = await store.query({ anchorId: 'beta', includeUnattested: true });
     expect(betaRows).toHaveLength(1);
     await store.close();
   });
 
-  it('is idempotent — re-seeding replaces, not duplicates', async () => {
+  it('is idempotent — re-seeding keeps the existing rows, not duplicates', async () => {
     const store = new InMemoryReputationStore();
     await seedReputationStore(store, TEST_ANCHORS, NOW);
-    await seedReputationStore(store, TEST_ANCHORS, new Date('2099-01-01T00:00:00.000Z'));
-    const all = await store.query({});
+    const second = await seedReputationStore(
+      store,
+      TEST_ANCHORS,
+      new Date('2099-01-01T00:00:00.000Z')
+    );
+    expect(second).toBe(0);
+    const all = await store.query({ includeUnattested: true });
     expect(all).toHaveLength(3);
+    expect(all.every((row) => row.createdAt === NOW.toISOString())).toBe(true);
+    await store.close();
+  });
+
+  it('seeded rows are unattested and hidden from scoring reads', async () => {
+    const store = new InMemoryReputationStore();
+    await seedReputationStore(store, TEST_ANCHORS, NOW);
+    expect(await store.query({})).toHaveLength(0);
+    const all = await store.query({ includeUnattested: true });
+    expect(all.every((row) => !row.attested && row.signerAccount === null)).toBe(true);
     await store.close();
   });
 
   it('all seeded rows are identified as bootstrap', async () => {
     const store = new InMemoryReputationStore();
     await seedReputationStore(store, TEST_ANCHORS, NOW);
-    const all = await store.query({});
+    const all = await store.query({ includeUnattested: true });
     for (const row of all) {
       expect(isBootstrapRow(row)).toBe(true);
     }

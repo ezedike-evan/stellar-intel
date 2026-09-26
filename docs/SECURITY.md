@@ -30,20 +30,28 @@ for users — losing funds — is structurally out of scope because we never hol
   ([`docs/INTENT_API.md`](INTENT_API.md)).
 - **`ADMIN_SECRET_KEY`** gates `/admin/disputes` and admin reputation routes. Keep
   it server-side only; never expose it to the client (it is **not** a
-  `NEXT_PUBLIC_*` var). See `lib/config.ts` for env validation.
+  `NEXT_PUBLIC_*` var). See `lib/auth/admin.ts`.
 - **Publisher keys** (Soroban oracle) are server-held and never shipped to the
   browser. Rotation policy is a roadmap item ([`docs/ROADMAP.md`](ROADMAP.md)).
-- **Contract admin key** — the reputation contract's admin `Address` is
-  currently a single HSM-backed key. The migration path to a community-governed
-  multisig (M-of-N Stellar account) is documented in
-  [`docs/GOVERNANCE.md`](GOVERNANCE.md). The two-step `propose_admin` /
-  `accept_admin` entrypoints on the contract are in place to execute that
-  handoff safely once the signer set is ratified.
+- **Contract admin key** — on testnet the admin is a single key shared with the
+  publisher account; mainnet requires a separate multisig admin
+  ([`docs/MAINNET_LAUNCH.md`](MAINNET_LAUNCH.md), [`docs/GOVERNANCE.md`](GOVERNANCE.md)).
+  The two-step `propose_admin` / `accept_admin` entrypoints on the contract are in
+  place to execute that handoff safely once the signer set is ratified.
 
 ## Network & data integrity
 
 - **SEP-10** authentication asserts the mainnet network passphrase before signing a
   challenge (`lib/stellar/sep10.ts`), preventing cross-network challenge replay.
+- **SEP-10 challenges are verified before signing.** Strict checks, against the
+  anchor's stellar.toml `SIGNING_KEY`: sequence number 0; source account and a valid
+  signature from `SIGNING_KEY`; only `manage_data` operations, the first sourced from
+  the connected wallet and keyed `<d> auth` for one of the anchor's domains, the rest
+  sourced from `SIGNING_KEY`; timebounds present, finite, current and expiring within
+  24 hours. A toml without a `SIGNING_KEY`, or with a non-https `WEB_AUTH_ENDPOINT`,
+  fails closed. This stops an anchor passing off a payment as a login challenge.
+  Tolerated, because honest anchors send them and a sequence-0 transaction cannot be
+  submitted: a missing or home-domain-valued `web_auth_domain` op, and a text memo.
 - **Anchor calls run server-side** (e.g. `/api/rates/[corridor]`) so third-party
   anchor responses never execute with the user's origin/credentials.
 - **No fabricated rates.** A failed anchor renders as unavailable; the codebase and

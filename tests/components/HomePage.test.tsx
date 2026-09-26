@@ -16,6 +16,14 @@ vi.mock('@/constants', () => ({
   registryStats: () => ({ anchors: 3, corridors: 2, countries: 2 }),
 }));
 
+// RecordProof is an async server component that reads the probe ledger. The
+// unit suite has no store, so the real one would return null anyway — stubbing
+// it keeps the page renderable by Testing Library, which cannot render an
+// async component, and keeps this file about the page's own structure.
+vi.mock('@/components/landing/RecordProof', () => ({
+  RecordProof: () => <section aria-label="record proof stub" />,
+}));
+
 vi.mock('next/link', () => ({
   default: ({ href, children }: { href: string; children: React.ReactNode }) => (
     <a href={href}>{children}</a>
@@ -56,8 +64,8 @@ describe('HomePage', () => {
     vi.useRealTimers();
   });
 
-  it('renders health-monitor hero copy', () => {
-    const { getByRole } = render(<HomePage />);
+  it('renders health-monitor hero copy', async () => {
+    const { getByRole } = render(await HomePage());
     const heading = getByRole('heading', { level: 1 });
     // The hero states the declaration/observation gap directly rather than
     // describing the category.
@@ -65,26 +73,26 @@ describe('HomePage', () => {
     expect(heading.textContent).toContain('What anchors did.');
   });
 
-  it('subcopy leads with the probe/reputation framing', () => {
-    const { getByText } = render(<HomePage />);
+  it('subcopy leads with the probe/reputation framing', async () => {
+    const { getByText } = render(await HomePage());
     expect(getByText(/registered off-ramp anchors, probed on a clock/i)).toBeTruthy();
   });
 
-  it('keeps no intent framing above the fold', () => {
-    const { getByRole, getByText } = render(<HomePage />);
+  it('keeps no intent framing above the fold', async () => {
+    const { getByRole, getByText } = render(await HomePage());
     expect(getByRole('heading', { level: 1 }).textContent).not.toMatch(/intent/i);
     expect(getByText(/registered off-ramp anchors, probed on a clock/i).textContent).not.toMatch(
       /intent/i
     );
   });
 
-  it('keeps the intent framing further down the page', () => {
-    const { getByText } = render(<HomePage />);
+  it('keeps the intent framing further down the page', async () => {
+    const { getByText } = render(await HomePage());
     expect(getByText(/sign a single intent in freighter/i)).toBeTruthy();
   });
 
-  it('off-ramp card is the primary CTA and links to /offramp', () => {
-    const { getByRole } = render(<HomePage />);
+  it('off-ramp card is the primary CTA and links to /offramp', async () => {
+    const { getByRole } = render(await HomePage());
     // The Hero now also renders an "Off-ramp now" CTA to the same route, so
     // match on the card's distinguishing body copy rather than "off-ramp"
     // alone to keep this query unambiguous.
@@ -93,8 +101,8 @@ describe('HomePage', () => {
     expect((link as HTMLAnchorElement).href).toContain('/offramp');
   });
 
-  it('renders valid FinancialProduct JSON-LD structured data', () => {
-    const { container } = render(<HomePage />);
+  it('renders valid FinancialProduct JSON-LD structured data', async () => {
+    const { container } = render(await HomePage());
     const script = container.querySelector('script[type="application/ld+json"]');
     expect(script).not.toBeNull();
     const data = JSON.parse(script!.textContent ?? '{}');
@@ -104,8 +112,8 @@ describe('HomePage', () => {
     expect(typeof data.url).toBe('string');
   });
 
-  it('matches snapshot', () => {
-    const { container } = render(<HomePage />);
+  it('matches snapshot', async () => {
+    const { container } = render(await HomePage());
     expect(container.firstChild).toMatchSnapshot();
   });
 });

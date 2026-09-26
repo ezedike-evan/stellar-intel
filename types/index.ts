@@ -21,6 +21,22 @@ export interface Anchor {
   serviceDomain?: string;
   /** Known SEP protocol support flags for this anchor. */
   seps?: Array<'sep6' | 'sep10' | 'sep24' | 'sep31' | 'sep38'>;
+  /**
+   * subset of corridors whose payout currency has not been confirmed on any live /info response;
+   * still routable, but flagged to users.
+   */
+  unverifiedCorridors?: string[];
+  /**
+   * corridors this anchor serves ONLY as a SEP-31 receiving anchor.
+   * Tracked for the record, never routed (SEP-31 needs a bilateral sending-anchor agreement).
+   * Must NOT also appear in corridors.
+   */
+  sep31Corridors?: string[];
+  /**
+   * false when the anchor's own /info deposit map is empty/disabled for its asset;
+   * default (undefined) means enabled.
+   */
+  depositEnabled?: boolean;
   /** Structured operator-supplied metadata, as collected by the anchor onboarding template. */
   metadata?: AnchorMetadata;
 }
@@ -439,7 +455,7 @@ export type SolverResult =
 // ─── Hop chain (H3 primitive II — chained atomic execution, #815) ─────────────
 //
 // A hop chain composes on-ramp, swap, and yield legs — the modules H2
-// deliberately deferred (see ROADMAP.md) — into a single sequenced plan.
+// deliberately deferred (see docs/ROADMAP.md) — into a single sequenced plan.
 // "Atomic" here means every hop's preconditions are validated together
 // before any hop executes (see planHopChain in lib/router/hops.ts), not a
 // single ledger-level rollback: on-ramp/off-ramp legs are off-chain SEP

@@ -273,7 +273,6 @@ write PRs that auto-link correctly.
 | ------------- | -------------- | -------------------------------------------------------------------------------------------------------------------------------------------------- |
 | `#001–#250`   | Main tracker   | Wave-scoped engineering tickets (see `docs/ROADMAP.md`).                                                                                           |
 | `#B001–#B100` | Batch 2        | Supplementary issues from `issues-batch-2.md`.                                                                                                     |
-| `#W1.1–W7.x`  | Wave issues    | Per-workstream milestone issues from `WAVE_ISSUES.md`.                                                                                             |
 | `#D001–D999`  | Doc/infra debt | Documentation gaps, infra improvements, and technical-debt tickets that don't fit a wave. Sometimes referenced as `#D047` inline in code comments. |
 | `#N/A`        | Meta           | Issues opened against the issue tracker itself (template improvements, workflow changes).                                                          |
 

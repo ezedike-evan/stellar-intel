@@ -488,7 +488,13 @@ registry.registerPath({
   method: 'post',
   path: '/api/reputation/append',
   summary: 'Append outcome log row',
-  description: 'The single server-side write path for reputation outcome rows.',
+  description:
+    'The single server-side write path for reputation outcome rows. The body must carry the ' +
+    "sender's Stellar account (`publicKey`) and an Ed25519 signature by that account over " +
+    '`intentHash` — raw over the 32 hash bytes, or SEP-53 over the hex string (what Freighter ' +
+    '`signMessage` produces). `anchorId` must be a registered anchor and `corridor` one it ' +
+    'serves. Appends are insert-only: a second POST for a known `intentHash` returns 409 and ' +
+    'never changes the stored row. Rate-limited per client IP.',
   tags: ['Reputation'],
   request: {
     body: {
@@ -496,10 +502,30 @@ registry.registerPath({
       content: {
         'application/json': {
           schema: z.object({
-            intentHash: z.string(),
-            anchorId: z.string(),
-            corridor: z.string(),
+            intentHash: z
+              .string()
+              .regex(/^[0-9a-f]{64}$/)
+              .openapi({ description: 'Lowercase hex SHA-256 of the canonical intent' }),
+            anchorId: z.string().openapi({ example: 'cowrie' }),
+            corridor: z.string().openapi({ example: 'usdc-ngn' }),
+            quotedRate: z.string().regex(AMOUNT_PATTERN).openapi({ example: '1500.0' }),
+            quotedAmount: z.string().regex(AMOUNT_PATTERN).openapi({ example: '100' }),
             outcome: z.enum(['completed', 'partial', 'refunded', 'expired', 'error']),
+            deliveredRate: z.string().regex(AMOUNT_PATTERN).nullable().optional(),
+            deliveredAmount: z.string().regex(AMOUNT_PATTERN).nullable().optional(),
+            settleSeconds: z.number().int().min(0).max(7_776_000).nullable().optional(),
+            stellarTransactionId: z
+              .string()
+              .regex(/^[0-9a-fA-F]{64}$/)
+              .nullable()
+              .optional(),
+            publicKey: z
+              .string()
+              .regex(STELLAR_PUBKEY_PATTERN)
+              .openapi({ description: 'The sender account that signed intentHash' }),
+            signature: z
+              .string()
+              .openapi({ description: 'Base64 Ed25519 signature by publicKey over intentHash' }),
           }),
         },
       },
@@ -507,15 +533,27 @@ registry.registerPath({
   },
   responses: {
     201: {
-      description: 'Outcome appended',
+      description: 'Outcome appended and attested',
       content: {
         'application/json': {
-          schema: z.object({ ok: z.boolean(), intentHash: z.string() }),
+          schema: z.object({ ok: z.boolean(), intentHash: z.string(), attested: z.boolean() }),
         },
       },
     },
     400: {
       description: 'Validation error',
+      content: { 'application/json': { schema: ApiErrorSchema } },
+    },
+    401: {
+      description: 'Missing signature, or the signature does not verify for publicKey',
+      content: { 'application/json': { schema: ApiErrorSchema } },
+    },
+    409: {
+      description: 'An outcome for this intentHash is already recorded',
+      content: { 'application/json': { schema: ApiErrorSchema } },
+    },
+    429: {
+      description: 'Rate limited',
       content: { 'application/json': { schema: ApiErrorSchema } },
     },
   },
@@ -711,6 +749,53 @@ registry.registerPath({
       description: 'Tick already in progress',
       content: { 'application/json': { schema: ApiErrorSchema } },
     },
+  },
+});
+
+registry.registerPath({
+  method: 'post',
+  path: '/api/mcp',
+  summary: 'MCP server (Streamable HTTP)',
+  description:
+    'Model Context Protocol server over the Streamable HTTP transport, so an MCP client can ' +
+    'reach the off-ramp tools with a URL and nothing installed. Stateless: every request ' +
+    'carries its own context and no Mcp-Session-Id is issued. The body is JSON-RPC 2.0, and ' +
+    'Accept must include both application/json and text/event-stream. GET and DELETE return ' +
+    '405 — this server never initiates messages, so there is no stream to open and no session ' +
+    'to delete. See docs/MCP.md for the tool list and client configuration.',
+  tags: ['System'],
+  request: {
+    body: {
+      description: 'A JSON-RPC 2.0 request, e.g. an initialize handshake or tools/list.',
+      content: {
+        'application/json': {
+          schema: z.object({
+            jsonrpc: z.literal('2.0'),
+            id: z.union([z.string(), z.number()]).optional(),
+            method: z.string(),
+            params: z.record(z.string(), z.unknown()).optional(),
+          }),
+        },
+      },
+    },
+  },
+  responses: {
+    200: {
+      description: 'JSON-RPC result',
+      content: {
+        'application/json': {
+          schema: z.object({
+            jsonrpc: z.literal('2.0'),
+            id: z.union([z.string(), z.number()]).nullable(),
+            result: z.record(z.string(), z.unknown()).optional(),
+            error: z.object({ code: z.number(), message: z.string() }).optional(),
+          }),
+        },
+      },
+    },
+    406: { description: 'Accept header does not include text/event-stream' },
+    415: { description: 'Content-Type is not application/json' },
+    429: { description: 'Rate limit exceeded' },
   },
 });
 

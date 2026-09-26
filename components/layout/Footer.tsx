@@ -87,7 +87,11 @@ export function Footer() {
         <div className="mt-10 flex flex-col gap-3 border-t border-border pt-6 text-sm text-secondary-text md:flex-row md:items-center md:justify-between">
           <div className="space-y-1">
             <p className="font-medium text-primary-text">Stellar Intel</p>
-            <p>Real-time rate comparison on Stellar.</p>
+            {/* Was "Real-time rate comparison on Stellar." — the claim
+                docs/POSITIONING.md retires by name, sitting on every page of
+                the site. Rate comparison is one surface built on the record,
+                not what the project is. */}
+            <p>A public health record for Stellar off-ramp anchors.</p>
           </div>
 
           <div className="flex flex-col gap-2 text-xs md:items-end">

@@ -6,12 +6,11 @@ import { envSchema } from '@/lib/env';
 /**
  * Custody boundary guard (#1147).
  *
- * docs/NON_CUSTODY.md and docs/PRODUCTION_AUDIT.md §1 both state that this
- * app never takes custody of user funds, and describe it as architectural —
- * no code path could take custody, not merely a policy against it. Nothing in
- * CI checked that. A server-side signing key, a held secret, or a route that
- * submits a transaction on a user's behalf would previously have merged
- * green.
+ * docs/NON_CUSTODY.md states that this app never takes custody of user funds,
+ * and describes it as architectural — no code path could take custody, not
+ * merely a policy against it. Nothing in CI checked that. A server-side
+ * signing key, a held secret, or a route that submits a transaction on a
+ * user's behalf would previously have merged green.
  *
  * Source scan, not a runtime test — the invariant is about what code exists
  * (does anything under `lib/`/`app/` construct a signer from a raw secret?),

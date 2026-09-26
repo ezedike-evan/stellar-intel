@@ -55,6 +55,7 @@ the hardening contract (see `lib/api/v1.ts`):
 - **System**
   - [`POST /api/admin/cache/invalidate`](#post-apiadmincacheinvalidate)
   - [`POST /api/graphql`](#post-apigraphql)
+  - [`POST /api/mcp`](#post-apimcp)
   - [`GET /api/mcp/ping`](#get-apimcpping)
   - [`GET /api/metrics`](#get-apimetrics)
   - [`GET /api/publisher/health`](#get-apipublisherhealth)
@@ -322,7 +323,7 @@ Progress toward statistically meaningful anchor scoring, combining settled outco
 
 **Summary:** Append outcome log row  
 
-The single server-side write path for reputation outcome rows.
+The single server-side write path for reputation outcome rows. The body must carry the sender's Stellar account (`publicKey`) and an Ed25519 signature by that account over `intentHash` — raw over the 32 hash bytes, or SEP-53 over the hex string (what Freighter `signMessage` produces). `anchorId` must be a registered anchor and `corridor` one it serves. Appends are insert-only: a second POST for a known `intentHash` returns 409 and never changes the stored row. Rate-limited per client IP.
 
 #### Request Body
 
@@ -330,17 +331,28 @@ The single server-side write path for reputation outcome rows.
 
 | Field | Type | Required | Description |
 | :--- | :--- | :--- | :--- |
-| `intentHash` | `string` | **Yes** | - |
+| `intentHash` | `string` | **Yes** | Lowercase hex SHA-256 of the canonical intent |
 | `anchorId` | `string` | **Yes** | - |
 | `corridor` | `string` | **Yes** | - |
+| `quotedRate` | `string` | **Yes** | - |
+| `quotedAmount` | `string` | **Yes** | - |
 | `outcome` | `"completed" | "partial" | "refunded" | "expired" | "error"` | **Yes** | - |
+| `deliveredRate` | `object` | No | - |
+| `deliveredAmount` | `object` | No | - |
+| `settleSeconds` | `object` | No | - |
+| `stellarTransactionId` | `object` | No | - |
+| `publicKey` | `string` | **Yes** | The sender account that signed intentHash |
+| `signature` | `string` | **Yes** | Base64 Ed25519 signature by publicKey over intentHash |
 
 #### Responses
 
 | Status | Description | Content-Type | Schema |
 | :--- | :--- | :--- | :--- |
-| `201` | Outcome appended | `application/json` | `object` |
+| `201` | Outcome appended and attested | `application/json` | `object` |
 | `400` | Validation error | `application/json` | `ApiError` |
+| `401` | Missing signature, or the signature does not verify for publicKey | `application/json` | `ApiError` |
+| `409` | An outcome for this intentHash is already recorded | `application/json` | `ApiError` |
+| `429` | Rate limited | `application/json` | `ApiError` |
 
 ---
 
@@ -544,6 +556,36 @@ Additive GraphQL surface over the same data the REST API serves (see docs/GRAPHQ
 | :--- | :--- | :--- | :--- |
 | `200` | GraphQL result envelope | `application/json` | `object` |
 | `429` | Rate limited | `application/json` | `ApiError` |
+
+---
+
+### `POST /api/mcp`
+
+**Summary:** MCP server (Streamable HTTP)  
+
+Model Context Protocol server over the Streamable HTTP transport, so an MCP client can reach the off-ramp tools with a URL and nothing installed. Stateless: every request carries its own context and no Mcp-Session-Id is issued. The body is JSON-RPC 2.0, and Accept must include both application/json and text/event-stream. GET and DELETE return 405 — this server never initiates messages, so there is no stream to open and no session to delete. See docs/MCP.md for the tool list and client configuration.
+
+#### Request Body
+
+A JSON-RPC 2.0 request, e.g. an initialize handshake or tools/list.
+
+**Content-Type:** `application/json`
+
+| Field | Type | Required | Description |
+| :--- | :--- | :--- | :--- |
+| `jsonrpc` | `"2.0"` | **Yes** | - |
+| `id` | `object` | No | - |
+| `method` | `string` | **Yes** | - |
+| `params` | `object` | No | - |
+
+#### Responses
+
+| Status | Description | Content-Type | Schema |
+| :--- | :--- | :--- | :--- |
+| `200` | JSON-RPC result | `application/json` | `object` |
+| `406` | Accept header does not include text/event-stream | - | - |
+| `415` | Content-Type is not application/json | - | - |
+| `429` | Rate limit exceeded | - | - |
 
 ---
 
