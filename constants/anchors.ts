@@ -256,18 +256,19 @@ export const TYPICAL_AMOUNTS: Record<string, number[]> = {
 };
 
 /** Corridor IDs that at least one anchor in the registry currently serves. */
-const SERVED_CORRIDOR_IDS: ReadonlySet<string> = new Set(
+export const SERVED_CORRIDOR_IDS: ReadonlySet<string> = new Set(
   ANCHORS.flatMap((anchor) => anchor.corridors)
 );
 
 /**
- * Corridors safe to surface in selectors. Non-gated corridors always appear;
- * v1.1 gated corridors appear only when the `v11Corridors` flag is on AND an
- * anchor serves them — so a scaffolded corridor stays hidden until it's live.
+ * Corridors safe to surface in selectors. The set is gated by the registry's
+ * served-corridor coverage, and v1.1 target corridors additionally require the
+ * feature flag. A corridor can never appear unless an anchor actually serves it.
  */
 export const VISIBLE_CORRIDORS: Corridor[] = CORRIDORS.filter((c) => {
+  if (!SERVED_CORRIDOR_IDS.has(c.id)) return false;
   if (!V11_CORRIDOR_IDS.has(c.id)) return true;
-  return flags.v11Corridors && SERVED_CORRIDOR_IDS.has(c.id);
+  return flags.v11Corridors;
 });
 
 // ─── Registry stats ─────────────────────────────────────────────────────────────
