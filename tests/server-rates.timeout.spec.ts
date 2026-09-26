@@ -42,6 +42,8 @@ const anchor: Anchor = {
 const corridor: Corridor = {
   id: 'usdc-ngn',
   from: 'USDC',
+  fromIssuer: 'GA5ZSEJYB37JRC5AVCIA5MOP4RHTM335X2KGX3IHOJAPP5RE34K4KZVN',
+  fromPeg: 'USD',
   to: 'NGN',
   countryCode: 'NG',
   countryName: 'Nigeria',

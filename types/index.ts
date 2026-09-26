@@ -60,7 +60,11 @@ export interface AnchorMetadata {
 /** A payment corridor from one asset to a fiat currency in a given country. */
 export interface Corridor {
   id: string; // e.g. 'usdc-ngn'
-  from: string; // asset code, e.g. 'USDC'
+  from: string; // on-chain asset code, e.g. 'USDC', 'ARST', 'NGNT'
+  /** Issuer G-address of the on-chain asset sold on this corridor; `null` only for native XLM. */
+  fromIssuer: string | null;
+  /** ISO 4217 code of the currency the on-chain asset is pegged to (`'USD'` for USDC, `'BRL'` for the nTokens BRL token). */
+  fromPeg: string;
   to: string; // fiat currency code, e.g. 'NGN'
   countryCode: string; // ISO 3166-1 alpha-2
   countryName: string;

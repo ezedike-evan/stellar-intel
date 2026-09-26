@@ -11,8 +11,24 @@ describe('Anchor registry shape', () => {
 
   describe('registryShapeViolations pure logic', () => {
     const fakeCorridors: Corridor[] = [
-      { id: 'usdc-ngn', from: 'USDC', to: 'NGN', countryCode: 'NG', countryName: 'Nigeria' },
-      { id: 'usdc-php', from: 'USDC', to: 'PHP', countryCode: 'PH', countryName: 'Philippines' },
+      {
+        id: 'usdc-ngn',
+        from: 'USDC',
+        fromIssuer: 'GA5ZSEJYB37JRC5AVCIA5MOP4RHTM335X2KGX3IHOJAPP5RE34K4KZVN',
+        fromPeg: 'USD',
+        to: 'NGN',
+        countryCode: 'NG',
+        countryName: 'Nigeria',
+      },
+      {
+        id: 'usdc-php',
+        from: 'USDC',
+        fromIssuer: 'GA5ZSEJYB37JRC5AVCIA5MOP4RHTM335X2KGX3IHOJAPP5RE34K4KZVN',
+        fromPeg: 'USD',
+        to: 'PHP',
+        countryCode: 'PH',
+        countryName: 'Philippines',
+      },
     ];
 
     it('rejects unverifiedCorridors that are not in corridors', () => {
