@@ -3146,7 +3146,7 @@ method that does not match the running code is worse than no published method.
    `weightedComposite()` instead — a clamped `0.4 × fill + 0.3 × (1 −
 slippage/0.05) + 0.3 × (1 − settle/300)` bounded to `[0, 1]`. The two produce
    different orderings. `lib/reputation/composite.ts` acknowledges the split in
-   its own comments; picking one is tracked in #917.
+   its own comments; the choice is still open (the follow-up to #917).
 2. **`state` flips at one outcome, not thirty.** `MIN_SAMPLES = 1` in
    `lib/reputation/aggregate.ts` is what moves a scorecard from
    `insufficient_data` to `ok`. `MIN_OUTCOMES_THRESHOLD = 30` is a _display_
@@ -3174,13 +3174,16 @@ are in `lib/reputation/migrations/`.
 
 | Method & path                                   | Purpose                                                                                                                        |
 | ----------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------ |
+| `GET /api/reputation/actuarial`                 | settlement-SLA actuarial accumulation (#813).                                                                                  |
 | `GET /api/reputation/leaderboard?corridor=…`    | Ranked anchors (optionally per-corridor).                                                                                      |
+| `GET /api/reputation/probe-coverage`            | 90-day probe-accumulation progress JSON.                                                                                       |
 | `GET /api/reputation/[anchor]`                  | Current score + bands for one anchor.                                                                                          |
 | `GET /api/reputation/[anchor]/history?window=…` | Historical score series.                                                                                                       |
 | `POST /api/reputation/append`                   | Append a signed outcome tuple.                                                                                                 |
 | `POST /api/reputation/dispute`                  | File a dispute against an outcome.                                                                                             |
-| `POST /api/reputation/reconcile`                | Reconcile aggregates (maintenance).                                                                                            |
-| `POST /api/reputation/refresh`                  | Refresh materialized aggregates.                                                                                               |
+| `GET\|POST /api/reputation/reconcile`           | Reconcile aggregates (maintenance).                                                                                            |
+| `GET\|POST /api/reputation/reconcile-volume-savings` | Reconciles DB volume and savings against on-chain stats.                                                                       |
+| `GET\|POST /api/reputation/refresh`             | Refresh materialized aggregates.                                                                                               |
 | `GET /api/reputation/sdf-export`                | Candidate export for SDF's Anchor Directory — see [`docs/ANCHOR_DIRECTORY_CONTRIBUTION.md`](ANCHOR_DIRECTORY_CONTRIBUTION.md). |
 
 Outcomes are signed and replayable, so a dispute resolves on evidence, not
@@ -3232,7 +3235,7 @@ separate table and are unaffected.
 The same outcomes are written to the Soroban reputation contract for permissionless
 reads. The contract interface (`submit_outcome`, anchor registry, admin) is
 specified in [`docs/ORACLE_SPEC.md`](ORACLE_SPEC.md). Mainnet deployment is a
-roadmap gate (see [`docs/ROADMAP.md`](ROADMAP.md), Wave 2.1).
+roadmap gate (see [`docs/MAINNET_LAUNCH.md`](MAINNET_LAUNCH.md), the 90-day probe window and the audit).
 
 ## Disputes
 
