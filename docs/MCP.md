@@ -1,6 +1,6 @@
 # Stellar Intel — MCP Server
 
-**Last reviewed:** 2026-09-01
+**Last reviewed:** 2026-09-26
 
 The MCP server exposes Stellar Intel's off-ramp routing and anchor
 intelligence to MCP-capable agents over stdio or streamable HTTP. It lives in
@@ -20,6 +20,7 @@ The two entry points do not expose the same tool set:
 | `intel.anchor.health`     | —                   | ✓              | —                             |
 | `intel.probe.coverage`    | —                   | ✓              | —                             |
 | `intel.leaderboard`       | ✓                   | ✓              | ✓                             |
+| `intel.corridors`         | —                   | ✓              | —                             |
 
 **Scope:** Stellar Intel abstracts anchors, not chains. These tools answer
 "what's my best fiat exit price, and which Stellar anchor should I trust to
@@ -62,7 +63,7 @@ minute per IP.
 
 **It serves the four-tool set**, matching the `scripts/mcp` column in the table
 above — `intel.offramp.quote`, `intel.offramp.prepare`, `intel.execute` and
-`intel.leaderboard`. The four `packages/mcp`-only tools are not on the hosted
+`intel.leaderboard`. The five `packages/mcp`-only tools are not on the hosted
 endpoint yet: that package's modules use explicit `./tool.js` specifiers which
 the app's bundler does not resolve back to their `.ts` sources, and
 `npm run build --workspace=@stellarintel/mcp` currently fails on pre-existing
@@ -318,6 +319,39 @@ app instance at `NEXT_PUBLIC_APP_URL`.
   omitting it ranks every registered anchor globally
 - **Output:** the leaderboard rows, each with its score, sample size,
   `measured` flag and standing label
+
+### `intel.corridors` (packages/mcp only)
+
+Enumerates every corridor Stellar Intel currently surfaces, with its id, display
+name, source asset, destination fiat currency, country, and the anchors that
+serve it. Call this before any tool that takes a corridor id rather than
+guessing one. Flag-gated corridors that the UI hides are omitted.
+
+- **Input:** `{}`
+- **Output:** `{ count: number, corridors: CorridorSummary[] }` where each
+  `CorridorSummary` carries `id`, `displayName`, `from`, `to`, `countryCode`,
+  `countryName`, and `anchors[]` (each with `id`, `name`, `homeDomain`).
+
+```jsonc
+// output (abridged)
+{
+  "count": 6,
+  "corridors": [
+    {
+      "id": "usdc-ngn",
+      "displayName": "Nigeria (NGN)",
+      "from": "USDC",
+      "to": "NGN",
+      "countryCode": "NG",
+      "countryName": "Nigeria",
+      "anchors": [
+        { "id": "cowrie", "name": "Cowrie Exchange", "homeDomain": "cowrie.exchange" },
+        { "id": "ngnc", "name": "NGNC", "homeDomain": "ngnc.online" },
+      ],
+    },
+  ],
+}
+```
 
 ## Prompts
 

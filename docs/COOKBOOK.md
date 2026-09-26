@@ -1,6 +1,6 @@
 # Cookbook
 
-**Last reviewed:** 2026-08-26
+**Last reviewed:** 2026-09-26
 
 End-to-end recipes against the live API. Base URL in examples:
 `https://stellar-intel.vercel.app` (swap for `http://localhost:3000` in dev).
@@ -62,9 +62,24 @@ Score formula: `fillRate × (1 − slippage) ÷ (settleSeconds / 300)` — see
 
 ## 4. Off-ramp via an AI agent (MCP)
 
-Run the MCP server and let an agent price/compare, then sign with the user's
-wallet to execute. See [`docs/MCP.md`](MCP.md) for the `npx tsx scripts/mcp/server.ts`
-run command and tool list. The agent cannot spend without a user signature.
+Use the hosted MCP endpoint (nothing to install):
+
+```json
+{
+  "mcpServers": {
+    "stellar-intel": {
+      "type": "http",
+      "url": "https://stellar-intel.vercel.app/api/mcp"
+    }
+  }
+}
+```
+
+The endpoint serves `intel.offramp.quote`, `intel.offramp.prepare`, `intel.execute`,
+and `intel.leaderboard`. For the full tool set including `intel.corridors`,
+`intel.anchor.reputation`, `intel.anchor.health`, and `intel.probe.coverage`,
+run the server locally — see [`docs/MCP.md`](MCP.md) for the `npx tsx scripts/mcp/server.ts`
+run command. The agent cannot spend without a user signature.
 
 ## 5. Consume the reputation oracle on-chain
 
