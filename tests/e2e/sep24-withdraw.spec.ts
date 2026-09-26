@@ -140,7 +140,7 @@ test.describe('[#721] SEP-24 live execution flow (USDC→NGN corridor)', () => {
     });
     // The bank transfer id arrives with the second poll, not the first paint.
     await expect(page.getByText('ngn-bank-ref-721')).toBeVisible({ timeout: 15_000 });
-    // `exact` again: the non-custodial disclaimer says "Rates are live quotes".
+    // `exact` again: the non-custodial disclaimer says "Most rates are indicative estimates".
     await expect(page.getByText('Live', { exact: true })).toBeVisible({ timeout: 15_000 });
   });
 

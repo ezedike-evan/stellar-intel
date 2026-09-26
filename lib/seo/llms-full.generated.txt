@@ -5127,7 +5127,7 @@ systems are outside Stellar Intel's control and therefore outside its threat mod
 
 ## 11. Changes
 
-These terms may change. Material changes will be reflected in the "Last updated"
+These terms may change. Material changes will be reflected in the "Last reviewed"
 date. Continued use after a change constitutes acceptance.
 
 ---
@@ -5138,14 +5138,15 @@ The user-facing summary rendered in the product (issue #739). It must remain
 consistent with the sections above; if one changes, change both.
 
 > Stellar Intel is non-custodial. You sign every transaction with your own wallet.
-> Rates are live quotes, not guarantees.
+> Most rates are indicative estimates, not guaranteed quotes.
 
 Kept to three sentences deliberately — it appears in a banner, and a disclaimer
 too long to read is not a disclaimer. Each sentence maps to a section above:
 non-custody (§2), user-signed (§2), rates are estimates (§3).
 
-`components/offramp/DisclaimerBanner.tsx` renders this text and links here, so
-this document is the single source for the wording.
+`components/offramp/DisclaimerBanner.tsx` renders `DISCLAIMER_TEXT` from
+`lib/legal.ts`, which mirrors this block, and links here, so this document is
+the single source for the wording.
 
 ---
 
