@@ -7,11 +7,10 @@ on-chain so any consumer can read an anchor's track record without Stellar Intel
 permission.
 
 Source of truth: [`contracts/reputation/`](../contracts/reputation/)
-(`Cargo.toml`, `src/lib.rs`, `src/admin.rs`, `src/anchors.rs`, `src/outcome.rs`,
-`tests/basic.rs`).
+(`Cargo.toml`, 14 source files in `src/`, and 14 test files in `tests/`).
 
 > **Status.** The contract is implemented and unit-tested
-> (`contracts/reputation/tests/basic.rs`) and deployed to testnet at
+> (`contracts/reputation/tests/`) and deployed to testnet at
 > `CCZ54NTEOVL2DKWCGJA5XHTHOGRDS7JHFKYWEC6QH2IMZLYNM3FBFKDG` (see
 > `.deployments/testnet.json`), with `submitToOracle`
 > (`packages/publisher/src/batch.ts`) wired against it. Mainnet deployment,
@@ -26,29 +25,39 @@ Source of truth: [`contracts/reputation/`](../contracts/reputation/)
 ### Outcomes — `src/outcome.rs`, `src/lib.rs`
 
 ```rust
-pub fn submit_outcome(/* … outcome fields … */) -> Result<(), Error>
+pub fn submit_outcome(
+    env: Env,
+    publisher: Address,
+    anchor_id: String,
+    corridor: String,
+    outcome_hash: String,
+    settle_seconds: u64,
+    success: bool,
+) -> Result<(), Error>
 ```
 
 Records a single anchor outcome (the on-chain mirror of an off-chain outcome
 tuple — fill, slippage, settle latency). Writes are restricted to authorized
 publishers via the admin gate.
 
-### Anchor registry — `src/anchors.rs`
+### Anchor registry — `src/anchors.rs`, `src/lib.rs`
 
 ```rust
-pub fn list(env: &Env) -> Vec<String>            // registered anchor ids
-pub fn register(env: &Env, anchor_id: String) -> Result<(), Error>
+pub fn list_anchors(env: Env) -> Vec<String>
+pub fn register_anchor(env: Env, caller: Address, anchor_id: String) -> Result<(), Error>
 ```
 
-### Admin — `src/admin.rs`
+### Admin — `src/admin.rs`, `src/lib.rs`
 
 ```rust
-pub fn set_admin(env: &Env, admin: &Address) -> Result<(), Error>
-pub fn get_admin(env: &Env) -> Option<Address>
-pub fn require_admin(env: &Env, caller: &Address) -> Result<(), Error>  // internal gate
+pub fn admin(env: Env) -> Option<Address>
+pub fn propose_admin(env: Env, caller: Address, candidate: Address) -> Result<(), Error>
+pub fn accept_admin(env: Env, candidate: Address) -> Result<(), Error>
+pub fn cancel_admin_proposal(env: Env, caller: Address) -> Result<(), Error>
+pub fn pending_admin(env: Env) -> Option<Address>
 ```
 
-`require_admin` is the authorization check that guards `register`.
+`require_admin` is the internal authorization check in `src/admin.rs` that guards `register_anchor`, publisher management, and migrations.
 
 ### Custody
 
@@ -77,7 +86,7 @@ It prints the admin, the upgrade admin, the pending admin and the contract
 version, and warns when the two authorities are the same account — one
 compromised key that can both forge data and replace the code.
 
-> **Current testnet state (checked 2026-08-28, tracked in #1149).**
+> **Current testnet state (checked 2026-08-28, #1149, closed; redeploy pending).**
 > `contract_version` is `0` and the upgrade admin is unset: the deployed
 > bytecode is seven weeks old and predates both the constructor-based
 > `__constructor(admin, upgrade_admin)` binding (see "Fresh deploy" below) and
@@ -93,12 +102,13 @@ Every state-changing entrypoint is gated. There are two gates, and which one
 applies depends on whether the write is an operational data feed or a
 governance action.
 
-| Gate                                                         | Entrypoints                                                                                                                               |
-| ------------------------------------------------------------ | ----------------------------------------------------------------------------------------------------------------------------------------- |
-| **Publisher** (`publishers::is_authorized` + `require_auth`) | `submit_outcome`, `set_corridor_metrics`, `publish_corridor_rate`, `add_volume_savings`                                                   |
-| **Admin** (`admin::require_admin`)                           | `register_anchor`, `add_publisher`, `revoke_publisher`, `propose_admin`, `cancel_admin_proposal`, `migrate_corridor_v2`, `migrate_all_v2` |
-| **Candidate self-auth**                                      | `accept_admin`                                                                                                                            |
-| **Upgrade admin**                                            | `upgrade`                                                                                                                                 |
+| Gate                                                         | Entrypoints                                                                                                                                                                                   |
+| ------------------------------------------------------------ | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| **Publisher** (`publishers::is_authorized` + `require_auth`) | `submit_outcome`, `set_corridor_metrics`, `publish_corridor_rate`, `add_volume_savings`                                                                                                       |
+| **Admin** (`admin::require_admin`)                           | `register_anchor`, `add_publisher`, `revoke_publisher`, `reset_corridor_aggregate`, `reset_volume_savings`, `propose_admin`, `cancel_admin_proposal`, `migrate_corridor_v2`, `migrate_all_v2` |
+| **Candidate self-auth**                                      | `accept_admin`                                                                                                                                                                                |
+| **Upgrade admin**                                            | `upgrade`, `propose_upgrade_admin`, `cancel_upgrade_proposal`                                                                                                                                 |
+| **Upgrade candidate self-auth**                              | `accept_upgrade_admin`                                                                                                                                                                        |
 
 `set_corridor_metrics`, `migrate_corridor_v2` and `migrate_all_v2` were
 **unguarded** until #907 — they took no caller at all, so any account could
@@ -109,14 +119,16 @@ a breaking ABI change: all three now take a leading caller `Address` and return
 ## Consuming the oracle
 
 Off-chain, read the same data through [`/api/reputation/*`](ANCHOR_REPUTATION.md).
-On-chain, a consumer contract calls the read entrypoints directly. A TypeScript
-read helper and JS/Python example consumers are roadmap deliverables (Wave 2.1).
+On-chain, a consumer contract calls the read entrypoints directly. Existing
+consumers and helpers include the TypeScript read helper (`lib/oracle/read.ts`),
+a JavaScript example consumer (`examples/consumer-contract/read-oracle.mjs`),
+and the Python SDK (`packages/python-sdk`).
 
 ## Building & testing
 
 ```bash
 cd contracts/reputation
-cargo test                                          # runs tests/basic.rs
+cargo test                                          # runs all 14 files in tests/
 ```
 
 Deploying is its own section below — `scripts/deploy-oracle-testnet.ts` needs
