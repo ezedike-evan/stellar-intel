@@ -33,7 +33,9 @@ move cross-chain value through a tool that only understands Stellar
 anchors. The tool descriptions themselves (see
 [docs/MCP.md](MCP.md) and the `scripts/mcp/tools/*.ts` registrations) carry
 this framing so an agent can disambiguate at the point of tool selection,
-without needing this document as context.
+without needing this document as context. The same tools are served over hosted
+Streamable HTTP at `/api/mcp` ([`app/api/mcp/route.ts`](../app/api/mcp/route.ts)),
+with no install required.
 
 ## Side by side
 
@@ -47,6 +49,7 @@ without needing this document as context.
 ## Where this shows up in this repo
 
 - [docs/MCP.md](MCP.md) — MCP server tool list, carries the same framing.
+- [`app/api/mcp/route.ts`](../app/api/mcp/route.ts) — hosted Streamable HTTP endpoint serving the same tool set.
 - [`scripts/mcp/tools/quote.ts`](../scripts/mcp/tools/quote.ts) and
   [`scripts/mcp/tools/prepare.ts`](../scripts/mcp/tools/prepare.ts) — the
   `intel.offramp.quote` / `intel.offramp.prepare` tool descriptions state the
