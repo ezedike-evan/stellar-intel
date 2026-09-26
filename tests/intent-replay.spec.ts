@@ -18,15 +18,15 @@ afterEach(() => {
 });
 
 describe('registerIntentReplay', () => {
-  it('accepts the first submission of an intent', () => {
-    const result = registerIntentReplay(BASE_INPUT, NOW);
+  it('accepts the first submission of an intent', async () => {
+    const result = await registerIntentReplay(BASE_INPUT, NOW);
     expect(result.ok).toBe(true);
   });
 
-  it('returns 409 for a repeated submission with the same public key and nonce', () => {
-    registerIntentReplay(BASE_INPUT, NOW);
+  it('returns 409 for a repeated submission with the same public key and nonce', async () => {
+    await registerIntentReplay(BASE_INPUT, NOW);
 
-    const result = registerIntentReplay(BASE_INPUT, NOW);
+    const result = await registerIntentReplay(BASE_INPUT, NOW);
 
     expect(result.ok).toBe(false);
     if (!result.ok) {
@@ -36,8 +36,8 @@ describe('registerIntentReplay', () => {
     }
   });
 
-  it('returns 410 when the deadline has passed', () => {
-    const result = registerIntentReplay(
+  it('returns 410 when the deadline has passed', async () => {
+    const result = await registerIntentReplay(
       { ...BASE_INPUT, deadline: '2026-05-29T11:59:59.000Z' },
       NOW
     );
@@ -50,10 +50,10 @@ describe('registerIntentReplay', () => {
     }
   });
 
-  it('keeps replay state isolated per public key', () => {
-    registerIntentReplay(BASE_INPUT, NOW);
+  it('keeps replay state isolated per public key', async () => {
+    await registerIntentReplay(BASE_INPUT, NOW);
 
-    const result = registerIntentReplay(
+    const result = await registerIntentReplay(
       { ...BASE_INPUT, publicKey: 'GBCDEFGHIJKLMNOPQRSTUVWXYZABCDEFGHIJKLMNOPQRSTUVWXYZABCD' },
       NOW
     );
