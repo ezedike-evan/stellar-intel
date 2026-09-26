@@ -4309,15 +4309,14 @@ for users — losing funds — is structurally out of scope because we never hol
   ([`docs/INTENT_API.md`](INTENT_API.md)).
 - **`ADMIN_SECRET_KEY`** gates `/admin/disputes` and admin reputation routes. Keep
   it server-side only; never expose it to the client (it is **not** a
-  `NEXT_PUBLIC_*` var). See `lib/config.ts` for env validation.
+  `NEXT_PUBLIC_*` var). See `lib/auth/admin.ts`.
 - **Publisher keys** (Soroban oracle) are server-held and never shipped to the
   browser. Rotation policy is a roadmap item ([`docs/ROADMAP.md`](ROADMAP.md)).
-- **Contract admin key** — the reputation contract's admin `Address` is
-  currently a single HSM-backed key. The migration path to a community-governed
-  multisig (M-of-N Stellar account) is documented in
-  [`docs/GOVERNANCE.md`](GOVERNANCE.md). The two-step `propose_admin` /
-  `accept_admin` entrypoints on the contract are in place to execute that
-  handoff safely once the signer set is ratified.
+- **Contract admin key** — on testnet the admin is a single key shared with the
+  publisher account; mainnet requires a separate multisig admin
+  ([`docs/MAINNET_LAUNCH.md`](MAINNET_LAUNCH.md), [`docs/GOVERNANCE.md`](GOVERNANCE.md)).
+  The two-step `propose_admin` / `accept_admin` entrypoints on the contract are in
+  place to execute that handoff safely once the signer set is ratified.
 
 ## Network & data integrity
 
@@ -4366,8 +4365,8 @@ the system is [non-custodial](NON_CUSTODY.md) and never holds either.
 | **Hostile SEP-10 challenge**     | Anchor serves a payment or other transaction as the login challenge | Before signing, `validateSep10Challenge` requires: sequence 0, source and signature from the toml `SIGNING_KEY`, `manage_data`-only ops with the first for this wallet and anchor domain, finite current timebounds. Missing `SIGNING_KEY` fails closed. Cosmetic deviations (text memo, `web_auth_domain` value) are tolerated. |
 | **Intent replay**                | Re-submitting a previously-signed envelope                          | `lib/intent/replay.ts` treats each signed envelope as single-use; server recomputes the canonical hash and verifies the signature.                                                                                                                                                                                               |
 | **Intent tampering**             | Altering amount/anchor after signing                                | Server recomputes SHA-256 over the canonical intent and verifies the Ed25519 signature; `publicKey` must match. Any change invalidates the signature.                                                                                                                                                                            |
-| **Reputation poisoning**         | Forged or spam outcomes to skew scores                              | Append needs the sender's signature over the intent hash, is insert-only and registry-checked; scores and the publisher read attested rows only. On-chain writes gated by `require_admin`.                                                                                                                                       |
-| **Oracle tampering**             | Unauthorized contract writes                                        | Soroban `require_admin` gate on `submit_outcome` / `register`; multi-signer admin + time-locked upgrade are roadmap hardening.                                                                                                                                                                                                   |
+| **Reputation poisoning**         | Forged or spam outcomes to skew scores                              | Append needs the sender's signature over the intent hash, is insert-only and registry-checked; scores and the publisher read attested rows only. On-chain writes gated by publisher authorization.                                                                                                                               |
+| **Oracle tampering**             | Unauthorized contract writes                                        | Publisher gate (`publishers::is_authorized` + `require_auth`) on `submit_outcome`; admin gate on `register_anchor`; multi-signer admin + time-locked upgrade are roadmap hardening.                                                                                                                                              |
 | **Admin-route abuse**            | Hitting `/admin/disputes` or admin reputation routes                | Gated by server-only `ADMIN_SECRET_KEY` (not a `NEXT_PUBLIC_*` var).                                                                                                                                                                                                                                                             |
 | **Agent misuse**                 | An AI agent tries to drain a wallet via MCP                         | MCP surface is advisory + user-signed: every executing call must be signed by the user's wallet. No held keys, no autonomous spend.                                                                                                                                                                                              |
 | **Griefing / DoS on rates**      | Hammering `/api/rates` or anchors                                   | Per-anchor timeouts + isolation (`server-rates.ts`); API rate limiting (`lib/api/rate-limit.ts`).                                                                                                                                                                                                                                |
