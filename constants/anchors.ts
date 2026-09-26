@@ -51,13 +51,17 @@ export const ANCHORS: Anchor[] = [
     assetCode: 'USDC',
     assetIssuer: USDC_ISSUER,
   },
+  // anclap.com: ARS and PEN fiat corridors — SEP-6 and SEP-24 deposit and withdraw enabled.
+  // Verified 2026-09-23. TOML CURRENCIES: ARS issuer GCYE7C77EB5AWAA25R5XMWNI2EDOKTTFTTPZKM2SR5DI4B4WFD52DARS,
+  // PEN issuer GA4TDPNUCZPTOHB3TKUYMDCRVATXKEADH7ZEYEBWJKQKE2UBFCYNBPEN.
+  // /info: deposit [ARS, PEN], withdraw [ARS, PEN]. No USDC on either rail.
   {
     id: 'anclap',
     name: 'Anclap',
     homeDomain: 'anclap.com',
-    corridors: ['usdc-ars', 'usdc-pen'],
-    assetCode: 'USDC',
-    assetIssuer: USDC_ISSUER,
+    corridors: ['ars-ars', 'pen-pen'],
+    assetCode: 'ARS',
+    assetIssuer: 'GCYE7C77EB5AWAA25R5XMWNI2EDOKTTFTTPZKM2SR5DI4B4WFD52DARS',
     seps: ['sep6', 'sep24'],
   },
   // ngnc.online: NGN fiat corridor — SEP-24 withdraw enabled.
@@ -197,6 +201,20 @@ export const CORRIDORS: Corridor[] = [
     countryCode: 'BR',
     countryName: 'Brazil',
   },
+  {
+    id: 'ars-ars',
+    from: 'ARS',
+    to: 'ARS',
+    countryCode: 'AR',
+    countryName: 'Argentina',
+  },
+  {
+    id: 'pen-pen',
+    from: 'PEN',
+    to: 'PEN',
+    countryCode: 'PE',
+    countryName: 'Peru',
+  },
   // ─── v1.1 target corridors ────────────────────────────────────────────────
   // Scaffolded ahead of anchor onboarding (see .github/ISSUE_TEMPLATE/anchor-onboard.yml).
   // Gated behind the `v11Corridors` flag AND anchor coverage — see V11_CORRIDOR_IDS
@@ -234,6 +252,9 @@ export const V11_CORRIDOR_IDS: ReadonlySet<string> = new Set([
   // corridor resolvable for lookups while hiding it from selectors until an
   // anchor serves it again. Same state it was in before mykobo onboarded.
   'usdc-eur',
+  // usdc-ars and usdc-pen: orphaned when anclap was corrected to its own tokens 2026-09-23
+  'usdc-ars',
+  'usdc-pen',
 ]);
 
 /**
@@ -251,6 +272,8 @@ export const TYPICAL_AMOUNTS: Record<string, number[]> = {
   'usdc-pen': [50, 150, 300],
   'usdc-eur': [100, 300, 500],
   'brl-brl': [100, 250, 500],
+  'ars-ars': [50000, 100000, 250000],
+  'pen-pen': [100, 300, 500],
   'usdc-zar': [50, 150, 300],
   'usdc-xof': [50, 100, 200],
 };
