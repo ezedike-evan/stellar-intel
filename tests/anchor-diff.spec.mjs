@@ -51,3 +51,72 @@ describe('anchor-diff: diffSnapshots / hasChanges', () => {
     expect(rendered).not.toContain('Issuer-only');
   });
 });
+
+describe('anchor-diff: survey tiers (#1320)', () => {
+  const withTiers = (tiers) => ({
+    transferCapableDomains: [],
+    issuerOnlyDomains: [],
+    unreachableDomains: [],
+    tiers,
+  });
+
+  it('diffs routable / health-only / listed when both snapshots have tiers', () => {
+    const before = withTiers({
+      routable: ['anclap.com'],
+      healthOnly: ['mykobo.co'],
+      listed: ['afreum.com'],
+      excluded: [],
+    });
+    const after = withTiers({
+      routable: ['anclap.com', 'zeam.money'],
+      healthOnly: [],
+      listed: ['afreum.com', 'mykobo.co'],
+      excluded: [],
+    });
+
+    const diff = diffSnapshots(before, after);
+    expect(hasChanges(diff)).toBe(true);
+    expect(diff.routable.added).toEqual(['zeam.money']);
+    expect(diff.healthOnly.removed).toEqual(['mykobo.co']);
+    expect(diff.listed.added).toEqual(['mykobo.co']);
+
+    const rendered = formatDiff(diff);
+    // Tier sections appear, in routable -> health-only -> listed order.
+    expect(rendered).toContain('Routable');
+    expect(rendered).toContain('Health-only');
+    expect(rendered).toContain('Listed');
+    expect(rendered.indexOf('Routable')).toBeLessThan(rendered.indexOf('Listed'));
+    expect(rendered).toContain('`zeam.money`');
+  });
+
+  it('reports no tier changes when tiers are identical', () => {
+    const snap = withTiers({ routable: ['anclap.com'], healthOnly: [], listed: [], excluded: [] });
+    const diff = diffSnapshots(snap, snap);
+    expect(hasChanges(diff)).toBe(false);
+    expect(formatDiff(diff)).toBe('No fleet changes since the last committed snapshot.');
+  });
+
+  it('skips tier sections when a snapshot predates tiers, without crashing', () => {
+    const legacy = {
+      transferCapableDomains: ['anclap.com'],
+      issuerOnlyDomains: [],
+      unreachableDomains: [],
+    };
+    const fresh = {
+      transferCapableDomains: ['anclap.com'],
+      issuerOnlyDomains: [],
+      unreachableDomains: [],
+      tiers: { routable: ['anclap.com'], healthOnly: [], listed: [], excluded: [] },
+    };
+
+    const diff = diffSnapshots(legacy, fresh);
+    expect(diff.routable).toBeUndefined();
+    expect(diff.healthOnly).toBeUndefined();
+    expect(diff.listed).toBeUndefined();
+    // No transfer-capable movement, and tiers were skipped, so nothing to report.
+    expect(hasChanges(diff)).toBe(false);
+    const rendered = formatDiff(diff);
+    expect(rendered).not.toContain('Routable');
+    expect(rendered).not.toContain('Health-only');
+  });
+});
