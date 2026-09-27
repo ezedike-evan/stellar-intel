@@ -1243,6 +1243,74 @@ registry.registerPath({
   },
 });
 
+const AnchorCensusRowSchema = registry.register(
+  'AnchorCensusRow',
+  z.object({
+    domain: z.string(),
+    tier: z.enum(['routable', 'health-only', 'listed']),
+    seps: z.object({
+      sep6: z.boolean(),
+      sep24: z.boolean(),
+      sep31: z.boolean(),
+      sep38: z.boolean(),
+      sep10: z.boolean(),
+    }),
+    withdrawAssets: z.array(z.string()),
+    depositAssets: z.array(z.string()),
+    receiveAssets: z.array(z.string()),
+    sources: z.array(z.string()),
+    registeredAnchorId: z
+      .string()
+      .nullable()
+      .describe('Matching constants/anchors.ts id, matched on home or service domain'),
+    checkedAt: z.string(),
+  })
+);
+
+const AnchorCensusResponseSchema = registry.register(
+  'AnchorCensusResponse',
+  z.object({
+    generatedAt: z.string().nullable(),
+    counts: z.object({
+      routable: z.number(),
+      healthOnly: z.number(),
+      listed: z.number(),
+      excluded: z.number(),
+    }),
+    rows: z.array(AnchorCensusRowSchema),
+  })
+);
+
+registry.registerPath({
+  method: 'get',
+  path: '/api/v1/anchors/census',
+  summary: 'Get the anchor census',
+  description:
+    'Serves the committed anchor census (constants/anchor-census.json), covering every surveyed ' +
+    'anchor — routable, health-only, or merely listed — not only the anchors registered for ' +
+    'routing. Optionally filtered to a single tier.',
+  tags: ['Anchors'],
+  request: {
+    query: z.object({
+      tier: z
+        .enum(['routable', 'health-only', 'listed'])
+        .optional()
+        .describe('Restrict the response to one tier. Omit for every row.'),
+    }),
+  },
+  responses: {
+    200: {
+      description: 'The anchor census, optionally filtered by tier',
+      content: { 'application/json': { schema: AnchorCensusResponseSchema } },
+    },
+    400: {
+      description: 'Invalid `tier` value',
+      content: { 'application/json': { schema: ApiErrorSchema } },
+    },
+    429: RATE_LIMITED_429,
+  },
+});
+
 registry.registerPath({
   method: 'get',
   path: '/api/reputation/reconcile-volume-savings',
