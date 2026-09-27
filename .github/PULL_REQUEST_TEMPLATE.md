@@ -135,14 +135,14 @@ merge a PR with an unaddressed box.
 
 **Data integrity**
 
-- [ ] No fabricated rates, stub prices, or placeholder exchange rates (see the no-fabricated-rates rule in [`CONTRIBUTING.md`](../CONTRIBUTING.md))
+- [ ] No fabricated rates, stub prices, or placeholder exchange rates
 - [ ] No `isMock`, `// MOCK`, `// TODO: replace with real data`, or commented-out real code
-- [ ] If touching an anchor: the anchor's `stellar.toml` is publicly resolvable at `https://{domain}/.well-known/stellar.toml` and contains `TRANSFER_SERVER_SEP0024`
+- [ ] If touching an anchor: the anchor's `stellar.toml` is publicly resolvable at `https://{domain}/.well-known/stellar.toml` and contains `TRANSFER_SERVER_SEP0024` (if the anchor registers `sep24`) or `TRANSFER_SERVER` (SEP-6)
 - [ ] If touching SEP-10: network passphrase assertion is intact (mainnet only)
 - [ ] If touching SEP-24: the 10s `AbortController` timeout is intact on anchor fetches
 - [ ] If touching the status poll: terminal states (`completed | refunded | error`) still stop the SWR loop
 
-**Security & non-custody** (see [`docs/NON_CUSTODY.md`](../docs/NON_CUSTODY.md) once it lands)
+**Security & non-custody** (see [`docs/NON_CUSTODY.md`](../docs/NON_CUSTODY.md))
 
 - [ ] No new code path holds user keys, user funds, or long-lived anchor JWTs
 - [ ] Every signing action is performed by the user's wallet (Freighter today)
@@ -153,7 +153,7 @@ merge a PR with an unaddressed box.
 - [ ] User-facing behaviour change → `CHANGELOG.md` entry under `[Unreleased]`
 - [ ] API / schema change → relevant `docs/*.md` updated in the same PR
 - [ ] Architecture change → [`docs/ARCHITECTURE.md`](../docs/ARCHITECTURE.md) updated (file map, diagram, or invariants as applicable)
-- [ ] Public-facing feature → screenshot added to `docs/showcase/images/` when relevant
+- [ ] Public-facing feature → screenshot attached to the PR description when relevant
 - [ ] New env var → `.env.example` + README env table updated
 
 **Release hygiene**
