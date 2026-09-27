@@ -1,4 +1,3 @@
-#!/usr/bin/env node
 // Nightly anchor validator — stale-anchor auto-disable (#495 / B062).
 //
 // Resolves every registered anchor's `.well-known/stellar.toml` and maintains a
@@ -130,15 +129,16 @@ export function parseAnchors(source) {
     const domain = service || home;
     if (!domain) continue;
 
-    const sepsList = block.match(/seps:\s*\[([^\]]*)\]/)?.[1] ?? '';
-    const requiresSep24 = /['"]sep24['"]/.test(sepsList);
+    const sepsMatch = block.match(/seps:\s*\[([^\]]*)\]/)?.[1];
+    const requiresSep24 = sepsMatch ? /['"]sep24['"]/.test(sepsMatch) : false;
 
     /** @type {AnchorRef} */
     const ref = { id, domain, requiresSep24 };
     const assetCode = block.match(/assetCode:\s*['"]([^'"]+)['"]/)?.[1];
     if (assetCode) ref.assetCode = assetCode;
-    const seps = block.match(/seps:\s*\[([^\]]*)\]/)?.[1] ?? '';
-    if (/(?:['"]sep24['"])/.test(seps)) ref.requiresSep24 = true;
+    if (sepsMatch !== undefined) {
+      ref.seps = Array.from(sepsMatch.matchAll(/['"]([^'"]+)['"]/g), (m) => m[1]);
+    }
 
     // assetIssuer may be a quoted literal (e.g. nTokens) or a bare identifier
     // reference (e.g. `assetIssuer: USDC_ISSUER`); capture whichever form appears.
@@ -153,6 +153,51 @@ export function parseAnchors(source) {
     anchors.push(ref);
   }
   return anchors;
+}
+
+/**
+ * Parse TRANSFER_SERVER (SEP-6) and TRANSFER_SERVER_SEP0024 (SEP-24) URLs
+ * from a raw stellar.toml. Only `https://` URLs are accepted.
+ *
+ * @param {string} toml
+ * @returns {{ sep6: string | null, sep24: string | null }}
+ */
+export function parseTransferServers(toml) {
+  if (!toml || typeof toml !== 'string') {
+    return { sep6: null, sep24: null };
+  }
+  const sep6Match = toml.match(/^[ \t]*TRANSFER_SERVER[ \t]*=[ \t]*["']?([^"'\s#]+)["']?/im);
+  const sep24Match = toml.match(
+    /^[ \t]*TRANSFER_SERVER_SEP0024[ \t]*=[ \t]*["']?([^"'\s#]+)["']?/im
+  );
+  const sep6Url = sep6Match?.[1]?.trim() ?? null;
+  const sep24Url = sep24Match?.[1]?.trim() ?? null;
+  return {
+    sep6: sep6Url && sep6Url.startsWith('https://') ? sep6Url : null,
+    sep24: sep24Url && sep24Url.startsWith('https://') ? sep24Url : null,
+  };
+}
+
+/**
+ * Determine the withdraw availability of an asset from a parsed /info response.
+ * Treats 'native' and 'XLM' as equivalent.
+ *
+ * @param {any} info Parsed /info JSON
+ * @param {string} assetCode
+ * @returns {'enabled' | 'disabled' | 'absent'}
+ */
+export function withdrawAssetStatus(info, assetCode) {
+  if (!info || typeof info !== 'object' || !info.withdraw || typeof info.withdraw !== 'object') {
+    return 'absent';
+  }
+  let entry = info.withdraw[assetCode];
+  if (entry === undefined && (assetCode === 'native' || assetCode === 'XLM')) {
+    entry = info.withdraw[assetCode === 'native' ? 'XLM' : 'native'];
+  }
+  if (!entry || typeof entry !== 'object') {
+    return 'absent';
+  }
+  return entry.enabled === true ? 'enabled' : 'disabled';
 }
 
 /**
@@ -294,12 +339,40 @@ export async function probeDomain(domain, requiresSep24) {
     const toml = await res.text();
     const currencies = parseCurrencies(toml);
     if (requiresSep24 && !/^\s*TRANSFER_SERVER_SEP0024\s*=/im.test(toml)) {
-      return { ok: false, error: 'missing TRANSFER_SERVER_SEP0024 (SEP-24)', currencies };
+      return { ok: false, error: 'missing TRANSFER_SERVER_SEP0024 (SEP-24)', currencies, toml };
     }
-    return { ok: true, error: null, currencies };
+    return { ok: true, error: null, currencies, toml };
   } catch (err) {
     const code = err?.cause?.code ? `:${err.cause.code}` : '';
     return { ok: false, error: `${err?.name ?? 'Error'}${code}`, currencies: [] };
+  } finally {
+    clearTimeout(timer);
+  }
+}
+
+/**
+ * Fetch and parse `<server>/info` with PROBE_TIMEOUT_MS and USER_AGENT.
+ *
+ * @param {string} serverUrl
+ * @returns {Promise<{ ok: true, info: any } | { ok: false, error: string }>}
+ */
+async function fetchInfo(serverUrl) {
+  const normalized = serverUrl.replace(/\/+$/, '');
+  const url = new URL(`${normalized}/info`);
+  const controller = new AbortController();
+  const timer = setTimeout(() => controller.abort(), PROBE_TIMEOUT_MS);
+  try {
+    const res = await fetch(url, {
+      redirect: 'follow',
+      signal: controller.signal,
+      headers: { 'User-Agent': USER_AGENT },
+    });
+    if (!res.ok) return { ok: false, error: `HTTP ${res.status}` };
+    const info = await res.json();
+    return { ok: true, info };
+  } catch (err) {
+    const code = err?.cause?.code ? `:${err.cause.code}` : '';
+    return { ok: false, error: `${err?.name ?? 'Error'}${code}` };
   } finally {
     clearTimeout(timer);
   }
@@ -409,6 +482,53 @@ async function main() {
         .map((m) => `${m.id} (${m.advertisedIssuer} != ${m.expectedIssuer})`)
         .join(', ')}`
     );
+  }
+
+  // Asset-drift validation (#1279): verify registered assets are enabled on
+  // live withdraw /info endpoints for declared rails (sep6 / sep24).
+  console.log('Asset-drift validation (live withdraw /info):');
+  /** @type {string[]} */
+  const driftWarnings = [];
+  for (const anchor of anchors) {
+    if (!anchor.assetCode) continue;
+    const probe = probesById[anchor.id];
+    if (!probe?.ok || !probe.toml) continue;
+
+    const servers = parseTransferServers(probe.toml);
+    const declaredRails = (anchor.seps ?? []).filter((sep) => sep === 'sep6' || sep === 'sep24');
+
+    for (const rail of declaredRails) {
+      const serverUrl = rail === 'sep6' ? servers.sep6 : servers.sep24;
+      if (!serverUrl) {
+        const warn = `::warning::${anchor.id}: ${anchor.assetCode} is absent on ${rail} /info (missing ${rail === 'sep6' ? 'TRANSFER_SERVER' : 'TRANSFER_SERVER_SEP0024'})`;
+        driftWarnings.push(warn);
+        console.log(
+          `  ${anchor.id.padEnd(12)} ${anchor.assetCode.padEnd(6)} ${rail.padEnd(6)} MISSING SERVER`
+        );
+        continue;
+      }
+      const infoRes = await fetchInfo(serverUrl);
+      if (!infoRes.ok) {
+        const warn = `::warning::${anchor.id}: failed to fetch ${rail} /info (${infoRes.error})`;
+        driftWarnings.push(warn);
+        console.log(
+          `  ${anchor.id.padEnd(12)} ${anchor.assetCode.padEnd(6)} ${rail.padEnd(6)} ERROR (${infoRes.error})`
+        );
+        continue;
+      }
+      const status = withdrawAssetStatus(infoRes.info, anchor.assetCode);
+      console.log(
+        `  ${anchor.id.padEnd(12)} ${anchor.assetCode.padEnd(6)} ${rail.padEnd(6)} ${status.toUpperCase()}`
+      );
+      if (status !== 'enabled') {
+        driftWarnings.push(
+          `::warning::${anchor.id}: ${anchor.assetCode} is ${status} on ${rail} /info`
+        );
+      }
+    }
+  }
+  for (const warn of driftWarnings) {
+    console.warn(warn);
   }
 
   // Publish this run's verdict as a step output. It is written before the

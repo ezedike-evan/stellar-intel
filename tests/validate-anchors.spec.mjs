@@ -7,9 +7,11 @@ import {
   formatLedgerDigest,
   parseAnchors,
   parseCurrencies,
+  parseTransferServers,
   probeDomain,
   resolveExpectedIssuer,
   validateIssuer,
+  withdrawAssetStatus,
 } from '../scripts/validate-anchors.mjs';
 
 const OK = { ok: true, error: null };
@@ -278,6 +280,121 @@ describe('validate-anchors: asset-issuer validation (#489)', () => {
         { code: 'USDC', issuer: CANONICAL },
       ])
     ).toEqual({ status: 'unverifiable', advertisedIssuer: CANONICAL });
+  });
+});
+
+describe('validate-anchors: parseTransferServers (#1279)', () => {
+  it('parses both SEP-6 and SEP-24 transfer servers from TOML', () => {
+    const toml = `
+      TRANSFER_SERVER = "https://example.com/sep6"
+      TRANSFER_SERVER_SEP0024 = "https://example.com/sep24"
+    `;
+    expect(parseTransferServers(toml)).toEqual({
+      sep6: 'https://example.com/sep6',
+      sep24: 'https://example.com/sep24',
+    });
+  });
+
+  it('parses only one transfer server when the other is omitted', () => {
+    const tomlSep6 = 'TRANSFER_SERVER = "https://example.com/sep6"';
+    expect(parseTransferServers(tomlSep6)).toEqual({
+      sep6: 'https://example.com/sep6',
+      sep24: null,
+    });
+
+    const tomlSep24 = 'TRANSFER_SERVER_SEP0024 = "https://example.com/sep24"';
+    expect(parseTransferServers(tomlSep24)).toEqual({
+      sep6: null,
+      sep24: 'https://example.com/sep24',
+    });
+  });
+
+  it('rejects non-https transfer server URLs', () => {
+    const toml = `
+      TRANSFER_SERVER = "http://insecure.com/sep6"
+      TRANSFER_SERVER_SEP0024 = "ftp://insecure.com/sep24"
+    `;
+    expect(parseTransferServers(toml)).toEqual({
+      sep6: null,
+      sep24: null,
+    });
+  });
+
+  it('handles empty or malformed toml gracefully', () => {
+    expect(parseTransferServers('')).toEqual({ sep6: null, sep24: null });
+    expect(parseTransferServers(null)).toEqual({ sep6: null, sep24: null });
+  });
+});
+
+describe('validate-anchors: withdrawAssetStatus (#1279)', () => {
+  it('identifies enabled withdraw asset', () => {
+    const info = {
+      withdraw: {
+        USDC: { enabled: true },
+        ARS: { enabled: false },
+      },
+    };
+    expect(withdrawAssetStatus(info, 'USDC')).toBe('enabled');
+  });
+
+  it('identifies disabled withdraw asset', () => {
+    const info = {
+      withdraw: {
+        USDC: { enabled: false },
+        ARS: {},
+      },
+    };
+    expect(withdrawAssetStatus(info, 'USDC')).toBe('disabled');
+    expect(withdrawAssetStatus(info, 'ARS')).toBe('disabled');
+  });
+
+  it('identifies absent asset using census-shaped fixtures (e.g. Anclap)', () => {
+    const anclapShape = {
+      withdraw: {
+        ARS: { enabled: true },
+        PEN: { enabled: true },
+      },
+    };
+    expect(withdrawAssetStatus(anclapShape, 'USDC')).toBe('absent');
+  });
+
+  it('treats native and XLM as equivalent', () => {
+    const nativeEnabled = {
+      withdraw: {
+        native: { enabled: true },
+      },
+    };
+    expect(withdrawAssetStatus(nativeEnabled, 'native')).toBe('enabled');
+    expect(withdrawAssetStatus(nativeEnabled, 'XLM')).toBe('enabled');
+
+    const xlmEnabled = {
+      withdraw: {
+        XLM: { enabled: true },
+      },
+    };
+    expect(withdrawAssetStatus(xlmEnabled, 'native')).toBe('enabled');
+    expect(withdrawAssetStatus(xlmEnabled, 'XLM')).toBe('enabled');
+
+    const nativeDisabled = {
+      withdraw: {
+        native: { enabled: false },
+      },
+    };
+    expect(withdrawAssetStatus(nativeDisabled, 'XLM')).toBe('disabled');
+
+    const neitherPresent = {
+      withdraw: {
+        BTC: { enabled: true },
+      },
+    };
+    expect(withdrawAssetStatus(neitherPresent, 'native')).toBe('absent');
+    expect(withdrawAssetStatus(neitherPresent, 'XLM')).toBe('absent');
+  });
+
+  it('returns absent for invalid /info shapes', () => {
+    expect(withdrawAssetStatus(null, 'USDC')).toBe('absent');
+    expect(withdrawAssetStatus({}, 'USDC')).toBe('absent');
+    expect(withdrawAssetStatus({ withdraw: null }, 'USDC')).toBe('absent');
   });
 });
 

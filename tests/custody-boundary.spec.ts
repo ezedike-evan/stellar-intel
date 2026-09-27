@@ -153,7 +153,7 @@ describe('custody boundary: no server-held user signing key (#1147)', () => {
       /\b(?:transaction|tx|envelope|builtTx|xdrTx)\s*\.\s*sign\s*\(|\bKeypair\s*\.\s*sign\s*\(|\bsignTransaction\s*\(|\bbasicNodeSigner\s*\(/;
 
     const routeFiles = sourceFiles(join('app', 'api')).filter((file) =>
-      /(^|\/)route\.(ts|tsx|mts)$/.test(file)
+      /(^|[\\/])route\.(ts|tsx|mts)$/.test(file)
     );
 
     // A scan that silently found no files would pass forever.
