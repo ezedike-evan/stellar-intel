@@ -3960,8 +3960,10 @@ means your quotes are being requested for an asset you are not advertising.
 `registry guard` job in CI) asserts that your `serviceDomain` **or** `homeDomain`
 appears in the committed survey snapshot's `transferCapableDomains`. If the
 public directory lists you under an issuer-only domain while your SEP endpoints
-live on a service subdomain the survey does not crawl, the entry needs an
-`ALLOWLIST` exception with a written reason — MoneyGram is the canonical case.
+live on a service subdomain the survey does not crawl (or the anchor sits outside
+the stellar.expert `anchor` tag), the entry needs an `ALLOWLIST` exception with a
+written reason — MoneyGram is the canonical case — until the multi-source survey
+snapshot includes them.
 
 ### 4. Reputation probes — how your score bootstraps
 
@@ -4017,17 +4019,20 @@ Once validated, your anchor is added to
 re-exported verbatim by `lib/stellar/anchors.ts`. The entry is an `Anchor`
 ([`types/index.ts`](../types/index.ts)):
 
-| Field           | Required       | Notes                                                                                                                                                      |
-| --------------- | -------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| `id`            | ✅             | Stable, lower-case. The key for the health ledger, the leaderboard, the SDF export and the on-chain oracle — changing it discards your reputation history. |
-| `name`          | ✅             | Display name in the rate table.                                                                                                                            |
-| `homeDomain`    | ✅             | Domain hosting `stellar.toml`. Plain public hostname only.                                                                                                 |
-| `serviceDomain` |                | Set when SEP endpoints live elsewhere; every probe and the runtime resolve `serviceDomain ?? homeDomain`.                                                  |
-| `corridors`     | ✅             | Corridor **ids** from `CORRIDORS`, e.g. `usdc-ngn` — never display names.                                                                                  |
-| `assetCode`     | ✅             | Asset sold through those corridors. `USDT` entries are ignored by the live rate path unless `NEXT_PUBLIC_USDT_ENABLED` is set.                             |
-| `assetIssuer`   | ✅             | Issuer account, or the `USDC_ISSUER` constant (the validator resolves that reference from `NEXT_PUBLIC_USDC_ISSUER`).                                      |
-| `seps`          | ✅ in practice | Declared capabilities. See the warning below.                                                                                                              |
-| `metadata`      |                | Operator regions / KYC model / fee model. Defined on the type, but not written inline today — see the flat-entry constraint below.                         |
+| Field                 | Required       | Notes                                                                                                                                                                                                 |
+| --------------------- | -------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `id`                  | ✅             | Stable, lower-case. The key for the health ledger, the leaderboard, the SDF export and the on-chain oracle — changing it discards your reputation history.                                            |
+| `name`                | ✅             | Display name in the rate table.                                                                                                                                                                       |
+| `homeDomain`          | ✅             | Domain hosting `stellar.toml`. Plain public hostname only.                                                                                                                                            |
+| `serviceDomain`       |                | Set when SEP endpoints live elsewhere; every probe and the runtime resolve `serviceDomain ?? homeDomain`.                                                                                             |
+| `corridors`           | ✅             | Corridor **ids** from `CORRIDORS`, e.g. `usdc-ngn` — never display names.                                                                                                                             |
+| `assetCode`           | ✅             | Primary asset (used for issuer validation and fixtures); each corridor's own asset comes from `CORRIDORS`. `USDT` entries are ignored by the live rate path unless `NEXT_PUBLIC_USDT_ENABLED` is set. |
+| `assetIssuer`         | ✅             | Issuer account, or the `USDC_ISSUER` constant (the validator resolves that reference from `NEXT_PUBLIC_USDC_ISSUER`).                                                                                 |
+| `seps`                | ✅ in practice | Declared capabilities. See the warning below.                                                                                                                                                         |
+| `unverifiedCorridors` |                | Subset of `corridors` whose payout currency has not been confirmed on any live `/info` response; still routable, but flagged to users.                                                                |
+| `sep31Corridors`      |                | Corridors this anchor serves ONLY as a SEP-31 receiving anchor. Tracked for the record, never routed (SEP-31 needs a bilateral sending-anchor agreement). Must NOT also appear in `corridors`.        |
+| `depositEnabled`      |                | `false` when the anchor's own `/info` deposit map is empty/disabled for its asset; default (`undefined`) means enabled.                                                                               |
+| `metadata`            |                | Operator regions / KYC model / fee model. Defined on the type, but not written inline today — see the flat-entry constraint below.                                                                    |
 
 > **`seps` is not optional in practice.** `transferCapable()` is
 > `anchor.seps?.some(sep => ROUTABLE_SEPS.includes(sep)) ?? false`. An entry with
@@ -4047,8 +4052,23 @@ re-exported verbatim by `lib/stellar/anchors.ts`. The entry is an `Anchor`
 > fine — they use `[ ]`. Keep each field on its own line as a quoted literal;
 > `assetIssuer: USDC_ISSUER` is the one bare identifier both parsers handle.
 
-Corridor ids must already exist in `CORRIDORS`. `usdc-zar` and `usdc-xof` are
-v1.1 corridors: they stay hidden until `NEXT_PUBLIC_V11_CORRIDORS=on` **and** an
+### Corridors
+
+Corridors define the source asset and destination fiat pair. Each corridor is registered in `CORRIDORS` in [`constants/anchors.ts`](../constants/anchors.ts):
+
+- **ID convention**: `<asset>-<fiat>` in lower-case (e.g. `usdc-ngn`, `ngnt-ngn`, `arst-ars`, `brl-brl`, `ars-ars`, `pen-pen`).
+- **Required fields**:
+  - `id`: Corridor identifier (e.g. `'arst-ars'`).
+  - `from`: On-chain asset code (e.g. `'ARST'`).
+  - `fromIssuer`: Issuer G-address of the on-chain asset sold on this corridor (`null` only for native XLM).
+  - `fromPeg`: ISO 4217 code of the currency the on-chain asset is pegged to (e.g. `'USD'` for USDC, `'BRL'` for the nTokens BRL token, `'ARS'` for ARST).
+  - `to`: Destination fiat currency code (e.g. `'NGN'`, `'ARS'`).
+  - `countryCode`: ISO 3166-1 alpha-2 country code (e.g. `'NG'`, `'AR'`).
+  - `countryName`: Display country name (e.g. `'Nigeria'`, `'Argentina'`).
+- **One corridor per (code, issuer) pair**: If multiple issuers exist for the same asset code, each distinct (code, issuer) combination represents a separate corridor.
+- Corridors must already exist in `CORRIDORS` before an anchor can list them in its `corridors` array.
+
+`usdc-zar` and `usdc-xof` are v1.1 corridors: they stay hidden until `NEXT_PUBLIC_V11_CORRIDORS=on` **and** an
 anchor serves them. Issuer-only domains (no transfer rail) are not listed as
 off-ramp anchors.
 
@@ -4058,6 +4078,7 @@ when:
 ```ts
 // ngnc.online: NGN fiat corridor — SEP-24 withdraw enabled.
 // Verified 2026-06-29. TOML: TRANSFER_SERVER_SEP0024 present. /info: withdraw.USDC.enabled = true.
+// Serves USDC→NGN corridor for Nigeria.
 ```
 
 Surveyed-and-rejected domains get the same treatment as a comment in place of an
