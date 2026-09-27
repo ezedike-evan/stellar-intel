@@ -132,6 +132,17 @@ const IntentRequestSchema = registry.register(
     amount: z.string().regex(AMOUNT_PATTERN),
     sender: z.string().min(1).describe('Stellar public key of the sender'),
     recipient: z.string().min(1).describe('Destination address for the payout'),
+    nonce: z
+      .string()
+      .regex(/^[0-9a-f]{32}$/i)
+      .optional()
+      .describe('128-bit random hex, required for replay protection when the intent is signed'),
+    deadline: z
+      .string()
+      .optional()
+      .describe(
+        'RFC 3339 datetime after which the intent must not execute; required when the intent is signed'
+      ),
   })
 );
 

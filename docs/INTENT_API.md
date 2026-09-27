@@ -58,11 +58,27 @@ Omitting both is allowed and routes the intent unattested.
 ## Replay protection
 
 `lib/intent/replay.ts` (`registerIntentReplay`) implements nonce + deadline
-replay protection and is available for callers that maintain a nonce. It is
-**not yet wired into `POST /api/intent/offramp`** — the off-ramp path is instead
-idempotent by construction (`quoteId = sha256(canonical intent)`, honoured by
-`Idempotency-Key`). Wiring replay into the signed path is tracked as follow-up
-work; until then, do not rely on the endpoint to reject a re-submitted envelope.
+replay protection and is enforced on every **signed** off-ramp intent, on both
+`POST /api/intent/offramp` and `POST /api/v1/intent/offramp`.
+
+A signed intent (one that supplied a verified `signature` + `publicKey`) MUST
+also include `nonce` (32 lowercase hex characters — 128 bits of randomness) and
+`deadline` (RFC 3339 datetime). Both fields are part of the canonical intent, so
+they are covered by the signature. After the signature verifies:
+
+- if `nonce` or `deadline` is missing, the request is rejected with **400**
+  (`VALIDATION_ERROR` / `validation_error`);
+- otherwise the pair is registered with `registerIntentReplay({ publicKey, nonce, deadline })`:
+  - a `nonce` already seen for that `publicKey` is rejected with **409**
+    (`REPLAY_DETECTED` / `replay_detected`);
+  - a `deadline` that has already passed is rejected with **410**
+    (`DEADLINE_EXPIRED` / `deadline_expired`).
+
+**Unsigned** intents are unaffected: `nonce` and `deadline` are optional and, if
+omitted, the intent still routes normally — it is not replay-checked. This
+mirrors the off-ramp path's existing idempotency (`quoteId = sha256(canonical
+intent)`, honoured by `Idempotency-Key`), which continues to apply independently
+of replay protection.
 
 ## Endpoint
 
@@ -74,8 +90,11 @@ Content-Type: application/json
 ```
 
 - **200** — intent accepted for routing (signature verified when one was supplied).
-- **400** — schema validation failed, or only one of `signature`/`publicKey` was supplied.
+- **400** — schema validation failed, only one of `signature`/`publicKey` was supplied,
+  or a signed intent omitted `nonce`/`deadline`.
 - **401** — a supplied signature did not verify.
+- **409** — the signed intent's `nonce` has already been used for that `publicKey`.
+- **410** — the signed intent's `deadline` has already passed.
 
 ```bash
 curl -sX POST https://stellar-intel.vercel.app/api/intent/offramp \

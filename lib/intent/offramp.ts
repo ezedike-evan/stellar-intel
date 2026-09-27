@@ -31,6 +31,14 @@ export const IntentSchema = z.object({
   amount: z.string().regex(AMOUNT_PATTERN, 'amount must be a positive decimal string'),
   sender: z.string().min(1),
   recipient: z.string().min(1),
+  // Replay protection for signed intents (enforced by the route handlers,
+  // not here, since unsigned intents may omit both). Part of the schema so
+  // they are included in the hashed + signed intent.
+  nonce: z
+    .string()
+    .regex(/^[0-9a-f]{32}$/i)
+    .optional(),
+  deadline: z.iso.datetime().optional(),
 });
 
 export interface OfframpRoute {

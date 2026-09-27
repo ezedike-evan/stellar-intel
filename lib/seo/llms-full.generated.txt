@@ -1084,6 +1084,8 @@ Resolves an anchor route for the given asset corridor, builds an unsigned Stella
 | `amount` | `string` | **Yes** | - |
 | `sender` | `string` | **Yes** | Stellar public key of the sender |
 | `recipient` | `string` | **Yes** | Destination address for the payout |
+| `nonce` | `string` | No | 128-bit random hex, required for replay protection when the intent is signed |
+| `deadline` | `string` | No | RFC 3339 datetime after which the intent must not execute; required when the intent is signed |
 
 #### Responses
 

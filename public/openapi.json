@@ -231,6 +231,15 @@
             "type": "string",
             "minLength": 1,
             "description": "Destination address for the payout"
+          },
+          "nonce": {
+            "type": "string",
+            "pattern": "^[0-9a-f]{32}$/i",
+            "description": "128-bit random hex, required for replay protection when the intent is signed"
+          },
+          "deadline": {
+            "type": "string",
+            "description": "RFC 3339 datetime after which the intent must not execute; required when the intent is signed"
           }
         },
         "required": [

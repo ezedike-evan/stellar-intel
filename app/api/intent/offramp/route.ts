@@ -12,6 +12,7 @@ import { withRequestLogger } from '@/lib/logger';
 import { recordIntentError, recordIntentSuccess } from '@/lib/metrics';
 import { IntentSchema, createOfframpIntent } from '@/lib/intent/offramp';
 import { verifyOptionalIntentAttestation } from '@/lib/intent/verify';
+import { registerIntentReplay } from '@/lib/intent/replay';
 import type { Intent } from '@/lib/intent/hash';
 import type { ApiError } from '@/types';
 
@@ -120,6 +121,30 @@ export async function POST(request: NextRequest): Promise<NextResponse> {
       destinationAsset: intent.destinationAsset,
       attested: attestation.attested,
     });
+
+    // Signed intents must carry a nonce + deadline so the signature covers
+    // replay protection; unsigned intents are not replay-checked.
+    if (attestation.attested) {
+      const { nonce, deadline } = intent as { nonce?: string; deadline?: string };
+      if (!nonce || !deadline) {
+        logger.warn({ event: 'intent_replay_fields_missing' });
+        recordIntentError('VALIDATION_ERROR');
+        return await respond<ApiError>(
+          {
+            code: 'VALIDATION_ERROR',
+            message: 'signed intents require nonce and deadline',
+          },
+          400
+        );
+      }
+
+      const replay = await registerIntentReplay({ publicKey: (body as { publicKey: string }).publicKey, nonce, deadline });
+      if (!replay.ok) {
+        logger.warn({ event: 'intent_replay_rejected', code: replay.code });
+        recordIntentError(replay.code === 'replay_detected' ? 'REPLAY_DETECTED' : 'DEADLINE_EXPIRED');
+        return await respond<ApiError>({ code: replay.code.toUpperCase(), message: replay.message }, replay.status);
+      }
+    }
 
     const result = await createOfframpIntent(intent);
     if (!result.ok) {
