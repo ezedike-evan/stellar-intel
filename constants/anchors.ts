@@ -121,6 +121,26 @@ export const ANCHORS: Anchor[] = [
     assetIssuer: USDC_ISSUER,
     seps: ['sep10', 'sep24', 'sep31', 'sep38'],
   },
+  // ramp.aps.money: APS (Advanced Payment Solutions) runs a live SEP-24 USDC ramp,
+  // found by the anchor census outside the `anchor` tag. Verified 2026-09-23.
+  // TOML: TRANSFER_SERVER_SEP0024 = https://ramp.aps.money/gollum/api/v1/sep0024,
+  // WEB_AUTH_ENDPOINT = https://ramp.aps.money/gollum/api/v1/sep0010 (alive, 400).
+  // USDC issuer = GA5ZSEJYB37JRC5AVCIA5MOP4RHTM335X2KGX3IHOJAPP5RE34K4KZVN (canonical).
+  // /info: deposit.USDC enabled (min 9.34, max 669.61, 4.5% + 0.25), withdraw.USDC
+  // enabled (min 32.33, max 681.81, 1% + 5). No SEP-6, no SEP-38.
+  // The SDF directory lists BRL, EUR and CLP payout currencies; /info does not
+  // expose them, so all three corridors are registered but flagged unverified:
+  // payout currency per corridor unverified (no interactive session run).
+  {
+    id: 'aps',
+    name: 'APS Ramp',
+    homeDomain: 'ramp.aps.money',
+    corridors: ['usdc-brl', 'usdc-eur', 'usdc-clp'],
+    unverifiedCorridors: ['usdc-brl', 'usdc-eur', 'usdc-clp'],
+    assetCode: 'USDC',
+    assetIssuer: USDC_ISSUER,
+    seps: ['sep10', 'sep24'],
+  },
 ];
 
 export const KNOWN_ANCHORS = ANCHORS;
@@ -217,6 +237,15 @@ export const CORRIDORS: Corridor[] = [
     countryName: 'Germany',
   },
   {
+    id: 'usdc-clp',
+    from: 'USDC',
+    fromIssuer: USDC_ISSUER,
+    fromPeg: 'USD',
+    to: 'CLP',
+    countryCode: 'CL',
+    countryName: 'Chile',
+  },
+  {
     id: 'brl-brl',
     from: 'BRL',
     fromIssuer: BRL_ISSUER,
@@ -278,12 +307,6 @@ export const CORRIDORS: Corridor[] = [
 export const V11_CORRIDOR_IDS: ReadonlySet<string> = new Set([
   'usdc-zar',
   'usdc-xof',
-  // usdc-eur is not a v1.1 scaffold -- it was live until mykobo, its only
-  // anchor, was delisted above. It sits here because this set is what
-  // VISIBLE_CORRIDORS checks anchor coverage against, so listing it keeps the
-  // corridor resolvable for lookups while hiding it from selectors until an
-  // anchor serves it again. Same state it was in before mykobo onboarded.
-  'usdc-eur',
   // usdc-ars and usdc-pen: orphaned when anclap was corrected to its own tokens 2026-09-23
   'usdc-ars',
   'usdc-pen',
@@ -303,6 +326,7 @@ export const TYPICAL_AMOUNTS: Record<string, number[]> = {
   'usdc-ars': [50, 150, 300],
   'usdc-pen': [50, 150, 300],
   'usdc-eur': [100, 300, 500],
+  'usdc-clp': [50, 150, 300],
   'brl-brl': [100, 250, 500],
   'ars-ars': [50000, 100000, 250000],
   'pen-pen': [100, 300, 500],

@@ -11,6 +11,7 @@ const COUNTRY_FLAGS: Record<string, string> = {
   AR: '🇦🇷',
   PE: '🇵🇪',
   DE: '🇩🇪',
+  CL: '🇨🇱',
 };
 
 // Only show corridors that are visible to the app and still served by at least

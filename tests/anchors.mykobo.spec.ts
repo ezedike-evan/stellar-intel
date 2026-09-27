@@ -29,8 +29,11 @@ describe('mykobo.co triage (B028) — delisted', () => {
     expect(ANCHOR_HOME_DOMAINS['mykobo']).toBeUndefined();
   });
 
-  it('leaves no anchor serving usdc-eur', () => {
-    expect(ANCHORS.filter((a) => a.corridors.includes('usdc-eur'))).toEqual([]);
+  it('no longer owns usdc-eur — APS Ramp serves it (#1299)', () => {
+    expect(ANCHORS.find((a) => a.id === 'mykobo')).toBeUndefined();
+    expect(ANCHORS.filter((a) => a.corridors.includes('usdc-eur')).map((a) => a.id)).toEqual([
+      'aps',
+    ]);
   });
 
   it('keeps the usdc-eur corridor defined so lookups still resolve', () => {
@@ -40,8 +43,8 @@ describe('mykobo.co triage (B028) — delisted', () => {
     expect(corridor?.to).toBe('EUR');
   });
 
-  it('hides usdc-eur from selectors while it has no anchor', () => {
-    expect(V11_CORRIDOR_IDS.has('usdc-eur')).toBe(true);
-    expect(VISIBLE_CORRIDORS.map((c) => c.id)).not.toContain('usdc-eur');
+  it('re-exposes usdc-eur now that APS Ramp serves it (#1299)', () => {
+    expect(V11_CORRIDOR_IDS.has('usdc-eur')).toBe(false);
+    expect(VISIBLE_CORRIDORS.map((c) => c.id)).toContain('usdc-eur');
   });
 });

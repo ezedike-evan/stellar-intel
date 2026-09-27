@@ -19,6 +19,7 @@ import anclap from './anclap.json';
 import ngnc from './ngnc.json';
 import ntokens from './ntokens.json';
 import zeam from './zeam.json';
+import aps from './aps.json';
 
 export interface OnrampDepositCapture {
   _comment: string;
@@ -51,6 +52,7 @@ export const ONRAMP_DEPOSIT_CAPTURES: Record<string, OnrampDepositCapture> = {
   ngnc,
   ntokens,
   zeam,
+  aps,
 };
 
 /** Anchors whose registered asset can actually be deposited today, per the capture above. */
