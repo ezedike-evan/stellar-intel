@@ -1,8 +1,11 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest';
 import { NextRequest } from 'next/server';
+import { TransactionBuilder } from '@stellar/stellar-sdk';
+import type { Transaction } from '@stellar/stellar-sdk';
 import { POST } from '@/app/api/intent/offramp/route';
 import { checkRateLimit, clearRateLimitStore } from '@/lib/api/rate-limit';
 import { clearIdempotencyStore } from '@/lib/api/idempotency';
+import { NETWORK_PASSPHRASE, USDC_ISSUER } from '@/lib/config';
 import type { OfframpIntentResponse } from '@/app/api/intent/offramp/route';
 import type { ApiError } from '@/types';
 
@@ -331,5 +334,63 @@ describe('POST /api/intent/offramp — idempotency', () => {
     const replay = await POST(makeRequest(VALID_INTENT, headers));
     expect(replay.status).toBe(200);
     expect(replay.headers.get('Idempotency-Replayed')).toBe('true');
+  });
+});
+
+// ─── Corridor asset issuer (#1291) ─────────────────────────────────────────────
+//
+// The unsigned off-ramp payment used to be built with `USDC_ISSUER` whatever the
+// corridor was, so a corridor whose on-chain asset is not USDC produced a payment
+// in an asset that does not exist. These tests decode the returned XDR and assert
+// the payment asset matches the corridor registry entry.
+
+describe('POST /api/intent/offramp — payment asset follows the corridor', () => {
+  // Well-formed Stellar accounts used only as a payment destination, matching the
+  // stand-ins the fixtures above already use.
+  const NTOKENS_PAYMENT_ACCOUNT = 'GAZW2PQFFJGH7RH6PB5VQASJIRAGEMZCID72CXYHRM27QYP4R5YRY777';
+  // nTokens issues the BRL token anchored 1:1 to the Real (see constants/anchors.ts).
+  const NTOKENS_BRL_ISSUER = 'GDVKY2GU2DRXWTBEYJJWSFXIGBZV6AZNBVVSUHEPZI54LIS6BA7DVVSP';
+
+  interface PaymentOp {
+    type: string;
+    asset: { getCode(): string; getIssuer(): string };
+  }
+
+  /** Decodes an envelope and returns the asset of its single payment operation. */
+  function paymentAsset(txXdr: string): PaymentOp['asset'] {
+    const tx = TransactionBuilder.fromXDR(txXdr, NETWORK_PASSPHRASE) as Transaction;
+    const op = tx.operations[0] as unknown as PaymentOp | undefined;
+    expect(op).toBeDefined();
+    expect(op!.type).toBe('payment');
+    return op!.asset;
+  }
+
+  it('builds the usdc-ngn payment in the corridor USDC asset', async () => {
+    const res = await POST(makeRequest(VALID_INTENT));
+    expect(res.status).toBe(200);
+
+    const data = (await res.json()) as OfframpIntentResponse;
+    expect(data.route.corridorId).toBe('usdc-ngn');
+
+    const asset = paymentAsset(data.unsignedTx);
+    expect(asset.getCode()).toBe('USDC');
+    expect(asset.getIssuer()).toBe(USDC_ISSUER);
+  });
+
+  it('builds the brl-brl payment in the nTokens BRL asset, not USDC', async () => {
+    vi.stubEnv('ANCHOR_PAYMENT_ACCOUNTS', JSON.stringify({ ntokens: NTOKENS_PAYMENT_ACCOUNT }));
+
+    const intent = { ...VALID_INTENT, sourceAsset: 'BRL', destinationAsset: 'BRL' };
+    const res = await POST(makeRequest(intent));
+    expect(res.status).toBe(200);
+
+    const data = (await res.json()) as OfframpIntentResponse;
+    expect(data.route.corridorId).toBe('brl-brl');
+    expect(data.route.anchorId).toBe('ntokens');
+
+    const asset = paymentAsset(data.unsignedTx);
+    expect(asset.getCode()).toBe('BRL');
+    expect(asset.getIssuer()).toBe(NTOKENS_BRL_ISSUER);
+    expect(asset.getIssuer()).not.toBe(USDC_ISSUER);
   });
 });

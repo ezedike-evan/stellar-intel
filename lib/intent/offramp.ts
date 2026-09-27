@@ -8,8 +8,9 @@ import {
 } from '@stellar/stellar-sdk';
 import { z } from 'zod';
 import { hashIntent, type Intent } from '@/lib/intent/hash';
-import { NETWORK_PASSPHRASE, USDC_ISSUER } from '@/lib/config';
+import { NETWORK_PASSPHRASE } from '@/lib/config';
 import { AMOUNT_PATTERN } from '@/lib/patterns';
+import { CORRIDORS } from '@/constants/anchors';
 import {
   registeredAnchorsForCorridor,
   routingTargetsForCorridor,
@@ -65,10 +66,12 @@ function buildUnsignedOfframpTx(
   anchorAccount: string,
   amount: string,
   assetCode: string,
-  assetIssuer: string,
+  assetIssuer: string | null,
   quoteId: string
 ): string {
-  const asset = new Asset(assetCode, assetIssuer);
+  // A `null` issuer means the corridor's on-chain asset is native XLM. `new
+  // Asset(code, null)` throws, so the native asset is constructed explicitly.
+  const asset = assetIssuer === null ? Asset.native() : new Asset(assetCode, assetIssuer);
   const account = new Account(senderPublicKey, '0');
 
   const tx = new TransactionBuilder(account, {
@@ -125,14 +128,29 @@ export async function createOfframpIntent(intent: Intent): Promise<OfframpResult
     return { ok: false, code: 'NO_ROUTE', message, status: 400 };
   }
 
+  // The asset actually sold on a corridor is not always USDC. This used to pass
+  // `intent.sourceAsset` as the code but always `USDC_ISSUER`, so any non-USDC
+  // intent (e.g. `ARST → ARS`) built a payment in a `ARST:<USDC issuer>` asset
+  // that does not exist (#1291). The registry entry carries both the code and
+  // the issuer for the corridor being served, so use it rather than assuming.
+  const corridor = CORRIDORS.find((c) => c.id === corridorId);
+  if (!corridor) {
+    return {
+      ok: false,
+      code: 'NO_ROUTE',
+      message: `No corridor registry entry for ${corridorId}`,
+      status: 400,
+    };
+  }
+
   const quoteId = await hashIntent(intent);
   try {
     const unsignedTx = buildUnsignedOfframpTx(
       intent.sender,
       anchorEntry.anchorAccount,
       intent.amount,
-      intent.sourceAsset,
-      USDC_ISSUER,
+      corridor.from,
+      corridor.fromIssuer,
       quoteId
     );
     return { ok: true, response: { route, unsignedTx, quoteId } };
