@@ -88,10 +88,18 @@ describe('custody boundary: no server-held user signing key (#1147)', () => {
     expect(files.length).toBeGreaterThan(100);
   });
 
+  // The one module under lib/ that constructs a signer from a server secret
+  // (#1327). It loads the `client_domain` key (`CLIENT_DOMAIN_SIGNING_SECRET`),
+  // never a user's key, used only to co-sign a sequence-0 SEP-10 challenge that
+  // can never be submitted — attribution, not custody. Kept in its own tiny
+  // module so this exemption stays narrow. See docs/NON_CUSTODY.md.
+  const CUSTODY_EXEMPT_FILES = [join('lib', 'stellar', 'client-domain.ts')];
+
   it('finds no Keypair.fromSecret under lib/ or app/', () => {
     const violations: string[] = [];
 
     for (const file of files) {
+      if (CUSTODY_EXEMPT_FILES.includes(file)) continue;
       const lines = readFileSync(file, 'utf8').split('\n');
       lines.forEach((line, i) => {
         if (CUSTODY_PATTERN.test(line)) {
@@ -153,13 +161,23 @@ describe('custody boundary: no server-held user signing key (#1147)', () => {
       /\b(?:transaction|tx|envelope|builtTx|xdrTx)\s*\.\s*sign\s*\(|\bKeypair\s*\.\s*sign\s*\(|\bsignTransaction\s*\(|\bbasicNodeSigner\s*\(/;
 
     const routeFiles = sourceFiles(join('app', 'api')).filter((file) =>
-      /(^|\/)route\.(ts|tsx|mts)$/.test(file)
+      /(^|[\\/])route\.(ts|tsx|mts)$/.test(file)
     );
 
     // A scan that silently found no files would pass forever.
     expect(routeFiles.length).toBeGreaterThan(20);
 
-    const offenders = routeFiles.filter((file) => SIGN_PATTERN.test(readFileSync(file, 'utf8')));
+    // The one route that legitimately produces a signature (#1327). It co-signs
+    // the `client_domain` operation of a SEP-10 challenge with the server's own
+    // client_domain key — never a user key. The envelope is a sequence-0 auth
+    // challenge that can never be submitted to the network, so no funds can move;
+    // this is attribution, not custody. See docs/NON_CUSTODY.md and the route's
+    // own guards (full SEP-10 re-validation, single client_domain op only).
+    const SIGN_EXEMPT_ROUTES = [join('app', 'api', 'sep10', 'client-domain', 'route.ts')];
+
+    const offenders = routeFiles.filter(
+      (file) => !SIGN_EXEMPT_ROUTES.includes(file) && SIGN_PATTERN.test(readFileSync(file, 'utf8'))
+    );
 
     expect(
       offenders,

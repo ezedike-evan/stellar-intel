@@ -641,6 +641,56 @@ registry.registerPath({
 });
 
 registry.registerPath({
+  method: 'post',
+  path: '/api/sep10/client-domain',
+  summary: 'Co-sign a SEP-10 client_domain challenge',
+  description:
+    'Adds the server-held `client_domain` signature to a verified SEP-10 challenge so an anchor can attribute the session to us. ' +
+    'The challenge is re-validated in full against the anchor’s published SIGNING_KEY (mainnet, sequence 0, anchor-signed, manage_data only, timebounds ≤ 24h) ' +
+    'and must carry exactly one `client_domain` operation naming our domain and sourced by our signing key. This route is not a general-purpose signing oracle.',
+  tags: ['SEP-10'],
+  request: {
+    body: {
+      required: true,
+      content: {
+        'application/json': {
+          schema: z.object({
+            transaction: z.string().describe('Base64 SEP-10 challenge XDR from the anchor'),
+            homeDomain: z
+              .string()
+              .describe('Home or service domain of a registered anchor the challenge is from'),
+          }),
+        },
+      },
+    },
+  },
+  responses: {
+    200: {
+      description: 'Challenge co-signed',
+      content: {
+        'application/json': {
+          schema: z.object({
+            transaction: z.string().describe('The challenge XDR with our client_domain signature'),
+          }),
+        },
+      },
+    },
+    400: {
+      description: 'Invalid request, unregistered anchor, or challenge failed validation',
+      content: { 'application/json': { schema: ApiErrorSchema } },
+    },
+    429: {
+      description: 'Rate limited',
+      content: { 'application/json': { schema: ApiErrorSchema } },
+    },
+    503: {
+      description: 'Server client_domain signing is not configured',
+      content: { 'application/json': { schema: ApiErrorSchema } },
+    },
+  },
+});
+
+registry.registerPath({
   method: 'get',
   path: '/api/snapshot',
   summary: 'Get best-anchor snapshot',
