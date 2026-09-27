@@ -14,6 +14,10 @@ permissions:
 jobs:
   recrawl:
     runs-on: ubuntu-latest
+    # The multi-source survey probes ~100 domains (directory + census) with
+    # retries and a 12s per-anchor timeout; 90 minutes leaves headroom for a slow
+    # crawl without hanging the runner indefinitely.
+    timeout-minutes: 90
     steps:
       - uses: actions/checkout@v7
 
@@ -25,7 +29,7 @@ jobs:
       - run: npm ci
 
       - name: Re-run the full anchor fleet survey
-        run: node scripts/anchor-survey.mjs --json > /tmp/anchor-survey.fresh.json
+        run: node scripts/anchor-survey.mjs --json --concurrency 12 --census constants/anchor-census.json > /tmp/anchor-survey.fresh.json
 
       - name: Diff against the committed snapshot
         id: diff
@@ -94,8 +98,12 @@ jobs:
           set -euo pipefail
           cp /tmp/anchor-survey.fresh.json scripts/anchor-survey.snapshot.json
 
-          if git diff --quiet -- scripts/anchor-survey.snapshot.json; then
-            echo "Snapshot unchanged after copy; nothing to propose"
+          # The survey rewrites constants/anchor-census.json in place with the
+          # accumulated domain roster. A census-only change (a new domain added to
+          # the fleet's memory) is worth proposing even when the snapshot buckets
+          # are unchanged, so both files are checked.
+          if git diff --quiet -- scripts/anchor-survey.snapshot.json constants/anchor-census.json; then
+            echo "Snapshot and census unchanged after run; nothing to propose"
             exit 0
           fi
 
@@ -106,8 +114,8 @@ jobs:
           git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
 
           git checkout -b "$BRANCH"
-          git add scripts/anchor-survey.snapshot.json
-          git commit -m "chore(anchors): refresh fleet survey snapshot ${TODAY}"
+          git add scripts/anchor-survey.snapshot.json constants/anchor-census.json
+          git commit -m "chore(anchors): refresh fleet survey snapshot and census ${TODAY}"
           git push --force-with-lease -u origin "$BRANCH"
 
           if gh pr view "$BRANCH" --json number >/dev/null 2>&1; then
@@ -116,6 +124,6 @@ jobs:
             gh pr create \
               --base main \
               --head "$BRANCH" \
-              --title "chore(anchors): refresh fleet survey snapshot ${TODAY}" \
-              --body "Monthly fleet re-crawl found changes against the committed snapshot. Companion to the \`anchor-fleet\` tracking issue for ${TODAY}; review new transfer-capable domains there before merging."
+              --title "chore(anchors): refresh fleet survey snapshot and census ${TODAY}" \
+              --body "Monthly fleet re-crawl found changes against the committed snapshot or census (\`constants/anchor-census.json\`). Companion to the \`anchor-fleet\` tracking issue for ${TODAY}; review new routable and transfer-capable domains there before merging."
           fi
