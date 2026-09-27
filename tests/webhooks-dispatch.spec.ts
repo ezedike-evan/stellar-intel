@@ -58,6 +58,18 @@ describe('deliverToSubscription — success path', () => {
 
     expect(mockFetch.mock.calls[0]?.[0]).toBe(SUB.url);
   });
+
+  it('calls fetch with redirect: manual and an abort signal', async () => {
+    const mockFetch = vi.fn().mockResolvedValueOnce({ ok: true, status: 200 });
+    vi.stubGlobal('fetch', mockFetch);
+
+    const event = makeWebhookEvent('intent.created', {});
+    await deliverToSubscription(SUB, event, store, noopSleep);
+
+    const [, init] = mockFetch.mock.calls[0] as [string, RequestInit];
+    expect(init.redirect).toBe('manual');
+    expect(init.signal).toBeInstanceOf(AbortSignal);
+  });
 });
 
 describe('deliverToSubscription — retry and dead-letter', () => {
@@ -109,6 +121,33 @@ describe('deliverToSubscription — retry and dead-letter', () => {
     const letters = await store.listDeadLetters();
     expect(letters[0]?.attempts).toBe(5);
     expect(letters[0]?.lastError).toContain('ECONNREFUSED');
+  });
+
+  it('dead-letters a redirect response without following it', async () => {
+    vi.stubGlobal('fetch', vi.fn().mockResolvedValue({ ok: false, status: 302 }));
+
+    const event = makeWebhookEvent('intent.created', {});
+    await deliverToSubscription(SUB, event, store, noopSleep);
+
+    const letters = await store.listDeadLetters();
+    expect(letters).toHaveLength(1);
+    expect(letters[0]?.attempts).toBe(5);
+    expect(letters[0]?.lastError).toBe('redirect not followed');
+  });
+
+  it('dead-letters a blocked (non-public-https) URL without calling fetch', async () => {
+    const mockFetch = vi.fn();
+    vi.stubGlobal('fetch', mockFetch);
+
+    const blockedSub: WebhookSubscription = { ...SUB, url: 'http://internal.example.com/hook' };
+    const event = makeWebhookEvent('intent.created', {});
+    await deliverToSubscription(blockedSub, event, store, noopSleep);
+
+    expect(mockFetch).not.toHaveBeenCalled();
+    const letters = await store.listDeadLetters();
+    expect(letters).toHaveLength(1);
+    expect(letters[0]?.lastError).toBe('blocked target');
+    expect(letters[0]?.attempts).toBe(0);
   });
 
   it('calls sleepFn between retries with exponential intervals', async () => {

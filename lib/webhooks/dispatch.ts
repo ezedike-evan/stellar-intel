@@ -2,6 +2,7 @@ import { randomUUID } from 'crypto';
 import type { WebhookEvent, WebhookSubscription, DeliveryRecord } from './types';
 import type { WebhookStore } from './store';
 import { buildSignatureHeader } from './sign';
+import { isPublicHttpsUrl } from './url';
 
 const MAX_ATTEMPTS = 5;
 
@@ -25,6 +26,24 @@ export async function deliverToSubscription(
   let lastStatusCode: number | null = null;
   let lastError: string | null = null;
 
+  if (!isPublicHttpsUrl(sub.url)) {
+    const record: DeliveryRecord = {
+      id: randomUUID(),
+      eventId: event.id,
+      eventKind: event.kind,
+      subscriptionId: sub.id,
+      url: sub.url,
+      status: 'dead_letter',
+      attempts: 0,
+      lastStatusCode: null,
+      lastError: 'blocked target',
+      deliveredAt: null,
+      createdAt: new Date().toISOString(),
+    };
+    await store.recordDelivery(record);
+    return;
+  }
+
   for (let attempt = 0; attempt < MAX_ATTEMPTS; attempt++) {
     if (attempt > 0) {
       await sleepFn(backoffMs(attempt - 1));
@@ -42,6 +61,8 @@ export async function deliverToSubscription(
           'x-webhook-timestamp': String(timestampSec),
         },
         body: rawBody,
+        redirect: 'manual',
+        signal: AbortSignal.timeout(10_000),
       });
       lastStatusCode = resp.status;
 
@@ -62,7 +83,14 @@ export async function deliverToSubscription(
         await store.recordDelivery(record);
         return;
       }
-      lastError = `HTTP ${resp.status}`;
+
+      // fetch's redirect: 'manual' surfaces a 3xx as an opaqueredirect
+      // response (status 0) rather than following it automatically.
+      if (resp.status >= 300 && resp.status < 400) {
+        lastError = 'redirect not followed';
+      } else {
+        lastError = `HTTP ${resp.status}`;
+      }
     } catch (err) {
       lastError = err instanceof Error ? err.message : 'unknown error';
       lastStatusCode = null;
