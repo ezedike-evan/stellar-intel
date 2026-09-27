@@ -42,6 +42,44 @@ export interface Anchor {
 }
 
 /**
+ * One row of the committed anchor census (constants/anchor-census.json),
+ * derived from scripts/anchor-survey.mjs. Covers every surveyed anchor —
+ * routable, health-only, or merely listed — not just the ones registered in
+ * constants/anchors.ts.
+ */
+export interface AnchorCensusRow {
+  domain: string;
+  tier: 'routable' | 'health-only' | 'listed';
+  seps: {
+    sep6: boolean;
+    sep24: boolean;
+    sep31: boolean;
+    sep38: boolean;
+    sep10: boolean;
+  };
+  withdrawAssets: string[];
+  depositAssets: string[];
+  receiveAssets: string[];
+  sources: string[];
+  /** Matching `constants/anchors.ts` id, matched on home or service domain; null if unregistered. */
+  registeredAnchorId: string | null;
+  checkedAt: string;
+}
+
+/** The committed anchor census, written by `node scripts/anchor-survey.mjs --census <path>`. */
+export interface AnchorCensus {
+  generatedAt: string | null;
+  sources: string[];
+  counts: {
+    routable: number;
+    healthOnly: number;
+    listed: number;
+    excluded: number;
+  };
+  rows: AnchorCensusRow[];
+}
+
+/**
  * Structured metadata collected via `.github/ISSUE_TEMPLATE/anchor-onboard.yml`.
  * All fields optional — populated only once an anchor operator has supplied them.
  */

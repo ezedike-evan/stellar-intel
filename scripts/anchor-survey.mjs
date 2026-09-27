@@ -1,4 +1,3 @@
-#!/usr/bin/env node
 // Anchor fleet survey — reproducible classification of Stellar anchors by SEP support.
 //
 // Pulls every account tagged `anchor` from the stellar.expert public directory,
@@ -29,7 +28,10 @@
 //   - "Transfer-capable" != "fiat off-ramp we care about": some hits are crypto
 //     anchors or DEX gateways with no fiat corridor.
 
+import { readFileSync, writeFileSync } from 'node:fs';
+import { pathToFileURL } from 'node:url';
 import { fetchDirectoryCandidates } from './lib/directory.mjs';
+import { extractAnchorsArray, parseAnchors, ANCHORS_PATH } from './check-registry.mjs';
 
 const DIRECTORY_URL = 'https://api.stellar.expert/explorer/public/directory?tag[]=anchor&limit=200';
 const PER_ANCHOR_TIMEOUT_MS = 12_000;
@@ -37,6 +39,76 @@ const CONCURRENCY = 24;
 
 const asJson = process.argv.includes('--json');
 const asRecheck = process.argv.includes('--recheck');
+const censusIdx = process.argv.indexOf('--census');
+const censusPath = censusIdx !== -1 ? process.argv[censusIdx + 1] : null;
+
+const TIER_ORDER = { routable: 0, 'health-only': 1, listed: 2 };
+
+/** The tier a live-classified result falls into, or null when excluded. */
+function tierOf(result) {
+  if (result.excluded || result.reachable === false) return null;
+  if (result.sep6 || result.sep24) return 'routable';
+  if (result.sep31) return 'health-only';
+  return 'listed';
+}
+
+/**
+ * Build the committed anchor census — one row per non-excluded survey result,
+ * sorted by tier then domain — from the full survey `results` array and the
+ * registered anchors from constants/anchors.ts. Pure: takes whatever shape
+ * `results` rows already carry (asset lists, sources) rather than fetching
+ * anything itself, so it is trivially unit-testable against fixtures.
+ *
+ * @param {Array<Record<string, unknown>>} results
+ * @param {Array<{ id: string; homeDomain?: string; serviceDomain?: string }>} registryAnchors
+ * @param {string | null} generatedAt
+ */
+export function buildCensus(results, registryAnchors, generatedAt) {
+  const registryByDomain = new Map();
+  for (const anchor of registryAnchors ?? []) {
+    for (const domain of [anchor.homeDomain, anchor.serviceDomain]) {
+      if (domain) registryByDomain.set(domain.toLowerCase(), anchor.id);
+    }
+  }
+
+  const counts = { routable: 0, healthOnly: 0, listed: 0, excluded: 0 };
+  const rows = [];
+
+  for (const result of results) {
+    const tier = tierOf(result);
+    if (tier === null) {
+      counts.excluded += 1;
+      continue;
+    }
+    if (tier === 'routable') counts.routable += 1;
+    else if (tier === 'health-only') counts.healthOnly += 1;
+    else counts.listed += 1;
+
+    rows.push({
+      domain: result.domain,
+      tier,
+      seps: {
+        sep6: Boolean(result.sep6),
+        sep24: Boolean(result.sep24),
+        sep31: Boolean(result.sep31),
+        sep38: Boolean(result.sep38),
+        sep10: Boolean(result.sep10),
+      },
+      withdrawAssets: result.withdrawAssets ?? [],
+      depositAssets: result.depositAssets ?? [],
+      receiveAssets: result.receiveAssets ?? [],
+      sources: result.sources ?? [],
+      registeredAnchorId: registryByDomain.get(result.domain.toLowerCase()) ?? null,
+      checkedAt: result.checkedAt ?? generatedAt,
+    });
+  }
+
+  rows.sort((a, b) => TIER_ORDER[a.tier] - TIER_ORDER[b.tier] || a.domain.localeCompare(b.domain));
+
+  const sources = [...new Set(rows.flatMap((r) => r.sources))].sort();
+
+  return { generatedAt, sources, counts, rows };
+}
 
 // Notes carried into the recheck ledger for domains that map to a known anchor
 // or are otherwise worth a second look. Keyed by directory domain.
@@ -150,6 +222,8 @@ async function classify(domain) {
         sep24: has('TRANSFER_SERVER_SEP0024'),
         sep38: has('ANCHOR_QUOTE_SERVER'),
         sep31: has('DIRECT_PAYMENT_SERVER'),
+        sep10: has('WEB_AUTH_ENDPOINT'),
+        sources: [DIRECTORY_URL],
       };
     } catch (err) {
       last = `${err?.name ?? 'Error'}${err?.cause?.code ? `:${err.cause.code}` : ''}`;
@@ -185,6 +259,13 @@ async function main() {
   const only24 = live.filter((r) => r.sep24 && !r.sep6);
   const transferCapable = live.filter((r) => r.sep6 || r.sep24);
   const issuerOnly = live.filter((r) => !r.sep6 && !r.sep24);
+  const generatedAt = new Date().toISOString();
+
+  if (censusPath) {
+    const registryAnchors = parseAnchors(extractAnchorsArray(readFileSync(ANCHORS_PATH, 'utf-8')));
+    const census = buildCensus(results, registryAnchors, generatedAt);
+    writeFileSync(censusPath, JSON.stringify(census, null, 2) + '\n');
+  }
 
   if (asRecheck) {
     console.log(renderRecheck(dead, new Date().toISOString().slice(0, 10)));
@@ -195,7 +276,7 @@ async function main() {
     console.log(
       JSON.stringify(
         {
-          generatedAt: new Date().toISOString(),
+          generatedAt,
           source: DIRECTORY_URL,
           totals: {
             tagged: domains.length,
@@ -242,7 +323,10 @@ async function main() {
   console.log(`\nTransfer-capable: ${transferCapable.map((r) => r.domain).join(', ')}`);
 }
 
-main().catch((err) => {
-  console.error(err);
-  process.exit(1);
-});
+const invokedDirectly = process.argv[1] && import.meta.url === pathToFileURL(process.argv[1]).href;
+if (invokedDirectly) {
+  main().catch((err) => {
+    console.error(err);
+    process.exit(1);
+  });
+}
