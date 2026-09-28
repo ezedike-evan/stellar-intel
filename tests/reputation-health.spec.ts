@@ -153,6 +153,32 @@ describe('computeAnchorHealth', () => {
     expect(health.healthScore).toBeCloseTo(1 - HEALTH_WEIGHTS.quoteAvailability, 10);
   });
 
+  it('a sep31-info row does not change any signal or the score', () => {
+    const withoutSep31 = computeAnchorHealth(
+      [
+        ...rows('uptime', 20),
+        ...rows('quote', 10, false),
+        ...rows('issuer-mismatch', 5),
+        ...rows('toml-integrity', 5),
+      ],
+      input
+    );
+    const withSep31 = computeAnchorHealth(
+      [
+        ...rows('uptime', 20),
+        ...rows('quote', 10, false),
+        ...rows('issuer-mismatch', 5),
+        ...rows('toml-integrity', 5),
+        ...rows('sep31-info', 20, false),
+      ],
+      input
+    );
+
+    expect(withSep31.signals).toEqual(withoutSep31.signals);
+    expect(withSep31.healthScore).toBe(withoutSep31.healthScore);
+    expect(withSep31.sampleSize).toBe(withoutSep31.sampleSize);
+  });
+
   it('leaves latency null for the two kinds that are comparisons, not round trips', () => {
     const health = computeAnchorHealth(
       [...rows('uptime', 20), ...rows('issuer-mismatch', 20), ...rows('toml-integrity', 20)],

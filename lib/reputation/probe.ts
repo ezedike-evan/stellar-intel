@@ -14,6 +14,7 @@
 import { getLogger } from '@/lib/logger';
 import { resolveToml, validateTomlIntegrity, type TomlResult } from '@/lib/stellar/sep1';
 import { assertSep38Capable, getSep38Price } from '@/lib/stellar/sep38';
+import { getSep31Info, sep31ReceiveAssets } from '@/lib/stellar/sep31';
 import { getCorridorById } from '@/lib/stellar/anchors';
 import { verifyAssetOnChain } from '@/lib/stellar/horizon';
 import {
@@ -28,7 +29,7 @@ import {
 } from './thresholds';
 import { ANCHORS } from '@/constants/anchors';
 import type { ProbeFailureType, ProbeKind, ProbeLedgerRow } from '@/types/reputation';
-import type { Anchor, Sep1TomlData } from '@/types';
+import type { Anchor, Sep1TomlData, Sep31Info } from '@/types';
 
 const logger = getLogger('reputation/probe');
 
@@ -953,6 +954,125 @@ export async function probeAllAnchorIntegrity(
   logger.info(
     { event: 'probe.integrity.all.complete', total: samples.length, failed },
     'toml-integrity probe run complete'
+  );
+  return samples;
+}
+
+// ─── SEP-31 probe (Issue ANC041) ────────────────────────────────────────────────
+//
+// Records SEP-31 receive-capability reachability in the health ledger like the
+// other probe dimensions, but this signal never moves the health score — we do
+// not route SEP-31 today, so an anchor's receive availability says nothing
+// about whether it's healthy to use for the flows we do run. See
+// `SIGNAL_BY_PROBE_KIND` in `lib/reputation/health.ts`, which maps this kind to
+// `null`.
+
+/** Injectable dependencies for the SEP-31 info probe. */
+export interface Sep31ProbeDeps {
+  /** Resolves an anchor's stellar.toml. Defaults to `resolveToml` from lib/stellar/sep1. */
+  fetchToml?: (domain: string) => Promise<TomlResult>;
+  /** Fetches an anchor's SEP-31 GET /info. Defaults to `getSep31Info` from lib/stellar/sep31. */
+  fetchInfo?: (directPaymentServer: string) => Promise<Sep31Info>;
+  /** Monotonic-ish millisecond clock. Defaults to `Date.now`. */
+  now?: () => number;
+}
+
+function resolveSep31Deps(deps?: Sep31ProbeDeps): Required<Sep31ProbeDeps> {
+  return {
+    fetchToml: deps?.fetchToml ?? resolveToml,
+    fetchInfo: deps?.fetchInfo ?? getSep31Info,
+    now: deps?.now ?? Date.now,
+  };
+}
+
+/**
+ * Probe one anchor's SEP-31 receive capability, recording exactly one sample.
+ * `reachable: true` means the toml advertised `DIRECT_PAYMENT_SERVER` and the
+ * SEP-31 `/info` response parsed; `reachable: false` covers both a missing
+ * `DIRECT_PAYMENT_SERVER` and a probe that could not complete, classified like
+ * the other probes.
+ */
+export async function probeSep31Info(
+  domain: string,
+  store: ProbeSampleStore,
+  deps?: Sep31ProbeDeps
+): Promise<ProbeSample> {
+  const { fetchToml, fetchInfo, now } = resolveSep31Deps(deps);
+  const start = now();
+
+  let reachable = false;
+  let error: string | undefined;
+  let failureType: ProbeFailureType | null = null;
+  let receiveAssets: string[] = [];
+
+  try {
+    const tomlResult = await fetchToml(domain);
+    if (!tomlResult.ok) {
+      error = tomlResult.error;
+    } else if (!tomlResult.data.DIRECT_PAYMENT_SERVER) {
+      error = `${domain} does not advertise DIRECT_PAYMENT_SERVER`;
+    } else {
+      const info = await fetchInfo(tomlResult.data.DIRECT_PAYMENT_SERVER);
+      reachable = true;
+      receiveAssets = sep31ReceiveAssets(info);
+    }
+  } catch (err) {
+    error = err instanceof Error ? err.message : String(err);
+    logger.warn({ event: 'probe.sep31.error', domain, error }, 'SEP-31 probe caught an exception');
+  }
+
+  if (!reachable && error !== undefined) {
+    failureType = classifyFailure(error);
+  }
+
+  const end = now();
+  const sample: ProbeSample = {
+    domain,
+    reachable,
+    latencyMs: Math.max(0, end - start),
+    at: end,
+    failureType,
+    ...(error !== undefined ? { error } : {}),
+  };
+  logger.info(
+    { event: 'probe.sep31.sample', domain, reachable, failureType, error, receiveAssets },
+    'SEP-31 sample recorded'
+  );
+  store.record(sample);
+  return sample;
+}
+
+/**
+ * Runs the SEP-31 info probe for every registered anchor that advertises
+ * `sep31` in its `seps`, concurrently. Anchors without `sep31` are skipped
+ * entirely — no sample is produced for them, matching this probe's
+ * record-only-what's-claimed scope. Defaults to the registered fleet in
+ * `constants/anchors.ts`; a different anchor list may be injected for tests.
+ */
+export async function probeAllAnchorSep31(
+  store: ProbeSampleStore,
+  deps?: Sep31ProbeDeps,
+  anchors: readonly Anchor[] = ANCHORS
+): Promise<ProbeSample[]> {
+  const sep31Anchors = anchors.filter((anchor) => anchor.seps?.includes('sep31'));
+  logger.info(
+    { event: 'probe.sep31.all.start', anchorCount: sep31Anchors.length },
+    'starting SEP-31 probe run'
+  );
+  const samples = await Promise.all(
+    sep31Anchors.map((anchor) =>
+      probeSep31Info(anchor.serviceDomain ?? anchor.homeDomain, store, deps)
+    )
+  );
+  const reachable = samples.filter((s) => s.reachable).length;
+  logger.info(
+    {
+      event: 'probe.sep31.all.complete',
+      total: samples.length,
+      reachable,
+      unreachable: samples.length - reachable,
+    },
+    'SEP-31 probe run complete'
   );
   return samples;
 }
