@@ -331,6 +331,9 @@
           },
           "quoteId": {
             "type": "string"
+          },
+          "unverifiedPayout": {
+            "type": "boolean"
           }
         },
         "required": [

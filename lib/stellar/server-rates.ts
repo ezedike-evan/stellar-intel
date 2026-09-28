@@ -435,6 +435,7 @@ async function quoteAnchorOnCorridor(
   }
 
   const reasons: string[] = [];
+  const isUnverifiedPayout = anchor.unverifiedCorridors?.includes(corridorId) ?? false;
 
   // Tier 1 — firm SEP-38 quote: the anchor's own live price. Preferred when
   // the anchor advertises a quote server.
@@ -472,6 +473,7 @@ async function quoteAnchorOnCorridor(
       totalReceived: buyAmount,
       source: 'sep38',
       updatedAt: new Date(),
+      ...(isUnverifiedPayout ? { unverifiedPayout: true as const } : {}),
     });
     return;
   } catch (err) {
@@ -482,7 +484,11 @@ async function quoteAnchorOnCorridor(
   // published SEP-24 withdraw fee. Differentiated per anchor by their fees;
   // the firm rate is confirmed by the anchor at execution time.
   try {
-    rates.push(await indicativeRate(anchor, toml, corridor.to, corridorId, amount, sellAmount));
+    const rate = await indicativeRate(anchor, toml, corridor.to, corridorId, amount, sellAmount);
+    if (isUnverifiedPayout) {
+      rate.unverifiedPayout = true;
+    }
+    rates.push(rate);
     return;
   } catch (err) {
     reasons.push(`Indicative: ${err instanceof Error ? err.message : String(err)}`);
@@ -493,9 +499,18 @@ async function quoteAnchorOnCorridor(
   // SEP-38 or SEP-24 (e.g. Cowrie on usdc-ngn).
   if (hasSep6(toml)) {
     try {
-      rates.push(
-        await sep6IndicativeRate(anchor, toml, corridor.to, corridorId, amount, sellAmount)
+      const rate = await sep6IndicativeRate(
+        anchor,
+        toml,
+        corridor.to,
+        corridorId,
+        amount,
+        sellAmount
       );
+      if (isUnverifiedPayout) {
+        rate.unverifiedPayout = true;
+      }
+      rates.push(rate);
       return;
     } catch (err) {
       reasons.push(`SEP-6: ${err instanceof Error ? err.message : String(err)}`);

@@ -110,6 +110,11 @@ export interface AnchorRate {
    * Present when the leaderboard API is reachable; absent otherwise.
    */
   reputationRank?: number;
+  /**
+   * The anchor's payout currency on this corridor has not been confirmed on a
+   * live /info; see Anchor.unverifiedCorridors.
+   */
+  unverifiedPayout?: boolean;
 }
 
 /**
