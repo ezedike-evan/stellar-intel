@@ -1,0 +1,11 @@
+{
+  "receive": {
+    "USDC": {
+      "enabled": true,
+      "min_amount": 0.1,
+      "max_amount": 1000,
+      "fee_fixed": 5,
+      "fee_percent": 1
+    }
+  }
+}
