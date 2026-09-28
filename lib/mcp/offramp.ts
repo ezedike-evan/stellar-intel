@@ -12,8 +12,9 @@
  * it is trivially unit-testable and reusable by the server in scripts/mcp.
  */
 import { z } from 'zod';
+import { CORRIDORS } from '@/constants';
 import { hashIntent, type Intent } from '@/lib/intent/hash';
-import { USDC_ISSUER, HORIZON_URL } from '@/lib/config';
+import { HORIZON_URL } from '@/lib/config';
 import { STELLAR_PUBKEY_PATTERN, AMOUNT_7DP_PATTERN } from '@/lib/patterns';
 import { fetchCorridorRates } from '@/lib/stellar/server-rates';
 import {
@@ -56,6 +57,12 @@ function resolveRoute(id: string): AnchorRoutingTarget {
   const target = routingTargetsForCorridor(id)[0];
   if (!target) throw noRouteError(id);
   return target;
+}
+
+function resolveCorridor(id: string) {
+  const corridor = CORRIDORS.find((candidate) => candidate.id === id);
+  if (!corridor) throw noRouteError(id);
+  return corridor;
 }
 
 // ─── Schemas ──────────────────────────────────────────────────────────────────
@@ -154,12 +161,12 @@ export async function buildUnsignedOfframpTx(
   anchorAccount: string,
   amount: string,
   assetCode: string,
-  assetIssuer: string,
+  assetIssuer: string | null,
   quoteId: string
 ): Promise<string> {
   const { Asset, Networks, TransactionBuilder, Operation, Memo, BASE_FEE, Account } =
     await import('@stellar/stellar-sdk');
-  const asset = new Asset(assetCode, assetIssuer);
+  const asset = assetIssuer !== null ? new Asset(assetCode, assetIssuer) : Asset.native();
   const account = new Account(senderPublicKey, '0');
   const tx = new TransactionBuilder(account, {
     fee: BASE_FEE,
@@ -231,6 +238,7 @@ export async function getQuote(
 export async function prepareIntent(input: PrepareInput): Promise<PrepareOutput> {
   const intent = PrepareInputSchema.parse(input);
   const id = corridorId(intent.sourceAsset, intent.destinationAsset);
+  const corridor = resolveCorridor(id);
   const route = resolveRoute(id);
 
   const intentHash = await hashIntent(intent as unknown as Intent);
@@ -241,8 +249,8 @@ export async function prepareIntent(input: PrepareInput): Promise<PrepareOutput>
       intent.sender,
       route.anchorAccount,
       intent.amount,
-      intent.sourceAsset,
-      USDC_ISSUER,
+      corridor.from,
+      corridor.fromIssuer,
       intentHash
     );
   } catch (err) {
@@ -313,6 +321,7 @@ export async function executeIntent(input: ExecuteInput): Promise<ExecuteOutput>
   }
 
   const id = corridorId(intent.sourceAsset, intent.destinationAsset);
+  const corridor = resolveCorridor(id);
   // Resolved again rather than trusted from the envelope: the payment must go
   // to an account that is verified for this corridor at submission time.
   const targets = routingTargetsForCorridor(id);
@@ -369,9 +378,35 @@ export async function executeIntent(input: ExecuteInput): Promise<ExecuteOutput>
         type: string;
         destination?: string;
         amount?: string;
-        asset?: { code: string; issuer: string };
+        asset?: {
+          isNative?: () => boolean;
+          getCode?: () => string;
+          getIssuer?: () => string | null;
+        };
       }
     | undefined;
+  const paymentAsset = payment?.asset;
+
+  // Asset instances decoded from XDR are real Stellar SDK objects; validate them
+  // semantically instead of comparing a hand-written stringified shape.
+  if (corridor.fromIssuer === null) {
+    if (!paymentAsset || typeof paymentAsset.isNative !== 'function' || !paymentAsset.isNative()) {
+      throw new OfframpToolError('Transaction operations do not match the intent', 'TX_MISMATCH');
+    }
+  } else {
+    if (
+      !paymentAsset ||
+      typeof paymentAsset.isNative !== 'function' ||
+      paymentAsset.isNative() ||
+      typeof paymentAsset.getCode !== 'function' ||
+      typeof paymentAsset.getIssuer !== 'function' ||
+      paymentAsset.getCode() !== corridor.from ||
+      paymentAsset.getIssuer() !== corridor.fromIssuer
+    ) {
+      throw new OfframpToolError('Transaction operations do not match the intent', 'TX_MISMATCH');
+    }
+  }
+
   // Amount comes back from XDR normalized to Stellar's fixed 7dp representation
   // (e.g. "100" -> "100.0000000"), so compare numerically rather than as strings.
   if (
@@ -380,9 +415,7 @@ export async function executeIntent(input: ExecuteInput): Promise<ExecuteOutput>
     payment.type !== 'payment' ||
     !payment.destination ||
     payment.amount === undefined ||
-    Number(payment.amount) !== Number(intent.amount) ||
-    payment.asset?.code !== intent.sourceAsset ||
-    payment.asset?.issuer !== USDC_ISSUER
+    Number(payment.amount) !== Number(intent.amount)
   ) {
     throw new OfframpToolError('Transaction operations do not match the intent', 'TX_MISMATCH');
   }
