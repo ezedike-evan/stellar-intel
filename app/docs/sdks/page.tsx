@@ -4,7 +4,7 @@ import { CodeBlock } from '@/components/docs/CodeBlock';
 export const metadata: Metadata = {
   title: 'SDKs & Libraries',
   description:
-    'Client libraries for integrating Stellar Intel: a published Rust crate for on-chain reputation data, an MCP npm package, and typed fetch wrappers for TypeScript and Python.',
+    'Client libraries for Stellar Intel (not yet published to package registries): a Rust crate for on-chain reputation reads, an MCP server, and typed wrappers for TypeScript and Python.',
 };
 
 export default function SdksPage() {
@@ -35,19 +35,10 @@ export default function SdksPage() {
           <code className="text-xs">@stellarintel/sdk</code>,{' '}
           <code className="text-xs">@stellarintel/mcp</code>, and{' '}
           <code className="text-xs">@stellarintel/publisher</code> are not on npm,{' '}
-          <code className="text-xs">stellar-intel</code> is not on PyPI, and{' '}
+          <code className="text-xs">stellarintel</code> is not on PyPI, and{' '}
           <code className="text-xs">stellar-intel-reputation</code> is not on crates.io — running
-          their install commands returns 404 today. The packages are built, and publication is
-          tracked in{' '}
-          <a
-            href="https://github.com/ezedike-evan/stellar-intel/issues/806"
-            target="_blank"
-            rel="noopener noreferrer"
-            className="font-medium underline underline-offset-2"
-          >
-            #806
-          </a>{' '}
-          for status updates. Until they ship, use the HTTP API directly (examples below).
+          their install commands returns 404 today. The packages are built but not yet published.
+          Until they ship, use the HTTP API directly (examples below).
         </p>
       </section>
 
@@ -134,7 +125,7 @@ export async function submitOfframpIntent(body: unknown) {
           <div>
             <h2 className="text-xl font-semibold text-primary-text">Python</h2>
             <p className="text-sm text-secondary-text">
-              <code className="text-xs">stellar-intel</code> — Not yet published (PyPI)
+              <code className="text-xs">stellarintel</code> — Not yet published (PyPI)
             </p>
           </div>
         </div>
@@ -355,7 +346,7 @@ npx tsx scripts/mcp/server.ts`}
                 <td className="px-3 py-2 text-secondary-text">crates.io</td>
               </tr>
               <tr>
-                <td className="px-3 py-2 font-mono text-xs text-accent">stellar-intel (Python)</td>
+                <td className="px-3 py-2 font-mono text-xs text-accent">stellarintel (Python)</td>
                 <td className="px-3 py-2 text-secondary-text">Python</td>
                 <td className="px-3 py-2">
                   <span className="rounded-full bg-bg-sunken px-2 py-0.5 text-xs text-status-unknown">
