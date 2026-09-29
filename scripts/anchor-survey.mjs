@@ -29,7 +29,10 @@
 //   - "Transfer-capable" != "fiat off-ramp we care about": some hits are crypto
 //     anchors or DEX gateways with no fiat corridor.
 
+import { pathToFileURL } from 'node:url';
+
 import { fetchDirectoryCandidates } from './lib/directory.mjs';
+import { parseCurrencies } from './validate-anchors.mjs';
 
 const DIRECTORY_URL = 'https://api.stellar.expert/explorer/public/directory?tag[]=anchor&limit=200';
 const PER_ANCHOR_TIMEOUT_MS = 12_000;
@@ -125,8 +128,144 @@ async function attempt(url) {
   }
 }
 
+/** Fetch a rail's `/info` JSON; same timeout/User-Agent as the TOML probe. */
+async function fetchInfoJson(url) {
+  const ctrl = new AbortController();
+  const timer = setTimeout(() => ctrl.abort(), PER_ANCHOR_TIMEOUT_MS);
+  try {
+    const res = await fetch(url, {
+      redirect: 'follow',
+      signal: ctrl.signal,
+      headers: { 'User-Agent': 'stellar-intel-anchor-survey/1.0' },
+    });
+    if (!res.ok) return { ok: false, error: `HTTP ${res.status}` };
+    try {
+      return { ok: true, json: await res.json() };
+    } catch {
+      // Some anchors serve HTML or truncated bodies on /info; record it as a
+      // failure rather than crashing the survey.
+      const body = await res.text().catch(() => '');
+      void body;
+      return { ok: false, error: 'invalid JSON' };
+    }
+  } catch (err) {
+    return {
+      ok: false,
+      error: `${err?.name ?? 'Error'}${err?.cause?.code ? `:${err.cause.code}` : ''}`,
+    };
+  } finally {
+    clearTimeout(timer);
+  }
+}
+
+const TOML_ENDPOINT_KEYS = {
+  sep6: 'TRANSFER_SERVER',
+  sep24: 'TRANSFER_SERVER_SEP0024',
+  sep31: 'DIRECT_PAYMENT_SERVER',
+  sep38: 'ANCHOR_QUOTE_SERVER',
+  sep10: 'WEB_AUTH_ENDPOINT',
+  sep12: 'KYC_SERVER',
+};
+
+/**
+ * Pull SEP endpoint URLs out of a raw stellar.toml without a full TOML parse.
+ * Line-anchored, quoted values only; only `https://` URLs are returned,
+ * everything else is null (plain http, relative paths, missing keys).
+ *
+ * @param {string} toml
+ * @returns {{ sep6: string | null, sep24: string | null, sep31: string | null,
+ *   sep38: string | null, sep10: string | null, sep12: string | null }}
+ */
+export function parseTomlEndpoints(toml) {
+  const out = { sep6: null, sep24: null, sep31: null, sep38: null, sep10: null, sep12: null };
+  if (typeof toml !== 'string') return out;
+  for (const [field, key] of Object.entries(TOML_ENDPOINT_KEYS)) {
+    const match = new RegExp(`^\\s*${key}\\s*=\\s*["']([^"']+)["']`, 'im').exec(toml);
+    const value = match?.[1]?.trim() ?? null;
+    out[field] = value && value.startsWith('https://') ? value : null;
+  }
+  return out;
+}
+
+/** Codes whose entry has `enabled === true` (SEP-6/SEP-24 `/info` asset maps). */
+function enabledCodes(node) {
+  if (!node || typeof node !== 'object' || Array.isArray(node)) return [];
+  return Object.entries(node)
+    .filter(([, entry]) => entry?.enabled === true)
+    .map(([code]) => code);
+}
+
+/**
+ * Summarize a SEP-6/SEP-24 `GET /info` payload (port of the research probe):
+ * enabled deposit/withdraw codes, enabled exchange codes, and per-code
+ * withdraw `types` (e.g. `bank_account`) for withdraw entries that carry a
+ * `types` object.
+ *
+ * @param {any} json
+ * @returns {{ deposit: string[], withdraw: string[], depositExchange: string[],
+ *   withdrawExchange: string[], withdrawTypes: Record<string, string[]> }}
+ */
+export function summarizeTransferInfo(json) {
+  const src = json && typeof json === 'object' ? json : {};
+  const withdrawNode = src.withdraw && typeof src.withdraw === 'object' ? src.withdraw : {};
+  /** @type {Record<string, string[]>} */
+  const withdrawTypes = {};
+  for (const [code, entry] of Object.entries(withdrawNode)) {
+    if (
+      entry &&
+      typeof entry === 'object' &&
+      entry.types &&
+      typeof entry.types === 'object' &&
+      !Array.isArray(entry.types)
+    ) {
+      withdrawTypes[code] = Object.keys(entry.types).sort();
+    }
+  }
+  return {
+    deposit: enabledCodes(src.deposit),
+    withdraw: enabledCodes(src.withdraw),
+    depositExchange: enabledCodes(src['deposit-exchange']),
+    withdrawExchange: enabledCodes(src['withdraw-exchange']),
+    withdrawTypes,
+  };
+}
+
+/**
+ * Summarize a SEP-31 `GET /info` payload: receive codes whose entry is not
+ * explicitly disabled (`enabled !== false`, so a missing flag still counts).
+ *
+ * @param {any} json
+ * @returns {{ receive: string[] }}
+ */
+export function summarizeSep31Info(json) {
+  const node = json?.receive && typeof json.receive === 'object' ? json.receive : {};
+  const receive = Object.entries(node)
+    .filter(([, entry]) => entry?.enabled !== false)
+    .map(([code]) => code);
+  return { receive };
+}
+
+/**
+ * Summarize a SEP-38 `GET /info` payload: the advertised asset strings.
+ *
+ * @param {any} json
+ * @returns {{ assets: string[] }}
+ */
+export function summarizeSep38Info(json) {
+  const assets = Array.isArray(json?.assets)
+    ? json.assets.map((entry) => entry?.asset).filter((asset) => typeof asset === 'string')
+    : [];
+  return { assets };
+}
+
 /**
  * Fetch + classify a single domain's stellar.toml. Retries once.
+ *
+ * On a reachable TOML the SEP endpoint URLs are parsed out and each present
+ * rail's `/info` is fetched (same timeout/User-Agent): `rails.sep6`/`sep24`
+ * carry the SEP-6/SEP-24 transfer summary, `sep31` the SEP-31 receive map,
+ * `sep38` the SEP-38 asset list. Each rail is `{ url, ok: true, …summary }`
+ * or `{ url, ok: false, error }`. `currencies` is the parsed [[CURRENCIES]].
  *
  * NOTE: Node's `fetch` (undici) verifies TLS and uses the runtime CA store, so a
  * domain with an expired/mismatched cert — or a runtime missing CA certs — fails
@@ -135,7 +274,7 @@ async function attempt(url) {
  * authoritative reachable/transfer-capable split is the documented curl crawl; a
  * strict cert-verifying client legitimately sees fewer.
  */
-async function classify(domain) {
+export async function classify(domain) {
   const url = `https://${domain}/.well-known/stellar.toml`;
   let last;
   for (let i = 0; i < 2; i++) {
@@ -143,14 +282,62 @@ async function classify(domain) {
       const { status, toml } = await attempt(url);
       if (toml == null) return { domain, reachable: false, reason: `HTTP ${status}` };
       const has = (key) => new RegExp(`^\\s*${key}\\s*=`, 'im').test(toml);
-      return {
+      const endpoints = parseTomlEndpoints(toml);
+      const result = {
         domain,
         reachable: true,
         sep6: has('TRANSFER_SERVER'),
         sep24: has('TRANSFER_SERVER_SEP0024'),
         sep38: has('ANCHOR_QUOTE_SERVER'),
         sep31: has('DIRECT_PAYMENT_SERVER'),
+        currencies: parseCurrencies(toml),
+        rails: {},
       };
+      const railJobs = [];
+      if (endpoints.sep6) {
+        railJobs.push(
+          fetchInfoJson(`${endpoints.sep6.replace(/\/$/, '')}/info`).then((info) => [
+            'sep6',
+            info.ok
+              ? { url: endpoints.sep6, ok: true, ...summarizeTransferInfo(info.json) }
+              : { url: endpoints.sep6, ok: false, error: info.error },
+          ])
+        );
+      }
+      if (endpoints.sep24) {
+        railJobs.push(
+          fetchInfoJson(`${endpoints.sep24.replace(/\/$/, '')}/info`).then((info) => [
+            'sep24',
+            info.ok
+              ? { url: endpoints.sep24, ok: true, ...summarizeTransferInfo(info.json) }
+              : { url: endpoints.sep24, ok: false, error: info.error },
+          ])
+        );
+      }
+      if (endpoints.sep31) {
+        railJobs.push(
+          fetchInfoJson(`${endpoints.sep31.replace(/\/$/, '')}/info`).then((info) => [
+            'sep31',
+            info.ok
+              ? { url: endpoints.sep31, ok: true, ...summarizeSep31Info(info.json) }
+              : { url: endpoints.sep31, ok: false, error: info.error },
+          ])
+        );
+      }
+      if (endpoints.sep38) {
+        railJobs.push(
+          fetchInfoJson(`${endpoints.sep38.replace(/\/$/, '')}/info`).then((info) => [
+            'sep38',
+            info.ok
+              ? { url: endpoints.sep38, ok: true, ...summarizeSep38Info(info.json) }
+              : { url: endpoints.sep38, ok: false, error: info.error },
+          ])
+        );
+      }
+      for (const [rail, summary] of await Promise.all(railJobs)) {
+        result.rails[rail] = summary;
+      }
+      return result;
     } catch (err) {
       last = `${err?.name ?? 'Error'}${err?.cause?.code ? `:${err.cause.code}` : ''}`;
     }
@@ -242,7 +429,12 @@ async function main() {
   console.log(`\nTransfer-capable: ${transferCapable.map((r) => r.domain).join(', ')}`);
 }
 
-main().catch((err) => {
-  console.error(err);
-  process.exit(1);
-});
+// Guard the run so the module stays importable for tests (parseTomlEndpoints
+// et al.) without kicking off a full survey crawl on import.
+const invokedDirectly = process.argv[1] && import.meta.url === pathToFileURL(process.argv[1]).href;
+if (invokedDirectly) {
+  main().catch((err) => {
+    console.error(err);
+    process.exit(1);
+  });
+}
