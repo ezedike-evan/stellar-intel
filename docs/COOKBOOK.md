@@ -107,7 +107,11 @@ zero-setup path to live data.
 ```bash
 node scripts/anchor-survey.mjs           # human summary
 node scripts/anchor-survey.mjs --json    # machine output
+node scripts/anchor-survey.mjs --sources registry,sdf-anchor-directory
+                                         # limit candidate sources (default: all)
 ```
 
-Classifies directory anchors by SEP support — see
+Builds the candidate set from every source (the anchor registry, the full
+stellar.expert directory, top asset home domains and the SDF Anchor Directory),
+then classifies each domain by SEP support — see
 [`docs/SEP_COMPLIANCE.md`](SEP_COMPLIANCE.md).

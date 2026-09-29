@@ -103,8 +103,19 @@ describe('validate-anchors: parseAnchors', () => {
       export const CORRIDORS = [{ id: 'usdc-ngn', homeDomain: 'should-not-match' }];
     `;
     expect(parseAnchors(source)).toEqual([
-      { id: 'moneygram', domain: 'stellar.moneygram.com', requiresSep24: false },
-      { id: 'cowrie', domain: 'cowrie.exchange', requiresSep24: false },
+      {
+        id: 'moneygram',
+        domain: 'stellar.moneygram.com',
+        requiresSep24: false,
+        homeDomain: 'mgusd.moneygram.com',
+        serviceDomain: 'stellar.moneygram.com',
+      },
+      {
+        id: 'cowrie',
+        domain: 'cowrie.exchange',
+        requiresSep24: false,
+        homeDomain: 'cowrie.exchange',
+      },
     ]);
   });
 
@@ -144,6 +155,7 @@ describe('validate-anchors: parseAnchors', () => {
         id: 'cowrie',
         domain: 'cowrie.exchange',
         requiresSep24: false,
+        homeDomain: 'cowrie.exchange',
         assetCode: 'USDC',
         assetIssuerRef: 'USDC_ISSUER',
       },
@@ -151,6 +163,7 @@ describe('validate-anchors: parseAnchors', () => {
         id: 'ntokens',
         domain: 'ntokens.com',
         requiresSep24: false,
+        homeDomain: 'ntokens.com',
         assetCode: 'BRL',
         assetIssuer: 'GDVKY2GU2DRXWTBEYJJWSFXIGBZV6AZNBVVSUHEPZI54LIS6BA7DVVSP',
       },
