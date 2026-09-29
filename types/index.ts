@@ -718,3 +718,35 @@ export interface Sep12CustomerResponse {
   provided_fields?: Record<string, Sep12CustomerField>;
   message?: string;
 }
+
+// ─── Anchor Census ─────────────────────────────────────────────────────────────
+
+export interface AnchorCensusRow {
+  domain: string;
+  tier: 'routable' | 'health-only' | 'listed';
+  seps: {
+    sep6: boolean;
+    sep24: boolean;
+    sep31: boolean;
+    sep38: boolean;
+    sep10: boolean;
+  };
+  withdrawAssets: string[];
+  depositAssets: string[];
+  receiveAssets: string[];
+  sources: string[];
+  registeredAnchorId: string | null;
+  checkedAt: string;
+}
+
+export interface AnchorCensus {
+  generatedAt: string | null;
+  sources: string[];
+  counts: {
+    routable: number;
+    healthOnly: number;
+    listed: number;
+    excluded: number;
+  };
+  rows: AnchorCensusRow[];
+}
