@@ -62,9 +62,25 @@ describe('buildBestAnchorSnapshot', () => {
     expect(snap.corridors).toHaveLength(CORRIDORS.length);
     expect(snap.corridors[0]).toMatchObject({
       corridorId: CORRIDORS[0]!.id,
+      from: CORRIDORS[0]!.from,
+      fromIssuer: CORRIDORS[0]!.fromIssuer,
       to: CORRIDORS[0]!.to,
       countryCode: CORRIDORS[0]!.countryCode,
       best: { anchorId: 'cowrie' },
+    });
+  });
+
+  it('carries from and fromIssuer for every corridor matching CORRIDORS', async () => {
+    fetchCorridorRates.mockResolvedValue(result([rate({ anchorId: 'cowrie' })], 'cowrie'));
+
+    const snap = await buildBestAnchorSnapshot();
+
+    snap.corridors.forEach((corridor, idx) => {
+      const expected = CORRIDORS[idx];
+      expect(corridor).toMatchObject({
+        from: expected!.from,
+        fromIssuer: expected!.fromIssuer,
+      });
     });
   });
 

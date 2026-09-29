@@ -33,6 +33,8 @@ export interface BestAnchorEntry {
 export interface CorridorBest {
   corridorId: string;
   from: string;
+  /** Issuer G-address of the on-chain asset sold on this corridor; `null` only for native XLM. */
+  fromIssuer: string | null;
   to: string;
   countryCode: string;
   countryName: string;
@@ -51,7 +53,7 @@ export interface BestAnchorSnapshot {
   generatedAt: string;
   /** Amount of `baseAsset` compared across anchors (e.g. "100"). */
   baseAmount: string;
-  /** Asset sold into each corridor (USDC). */
+  /** Asset of the USDC corridors (typically 'USDC'); per-corridor asset is from/fromIssuer. */
   baseAsset: string;
   corridors: CorridorBest[];
 }
@@ -83,6 +85,7 @@ function toCorridorBest(
   return {
     corridorId: corridor.id,
     from: corridor.from,
+    fromIssuer: corridor.fromIssuer,
     to: corridor.to,
     countryCode: corridor.countryCode,
     countryName: corridor.countryName,
