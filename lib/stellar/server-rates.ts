@@ -4,7 +4,7 @@ import { getAnchorsByCorridorId, getCorridorById } from './anchors';
 import { resolveAnchor } from './sep1';
 import { assertSep38Capable, getSep38Price } from './sep38';
 import { getSep24Info } from './sep24';
-import { getSep6Info } from './sep6';
+import { getSep6Info, Sep6AssetDisabledError } from './sep6';
 import { getUsdFxRate } from '@/lib/fx/rates';
 import { SepError, TimeoutError } from './errors';
 import { fetchReputationScores } from '@/lib/reputation/scores';
@@ -269,9 +269,18 @@ async function sep6IndicativeRate(
 ): Promise<AnchorRate> {
   const transferServer = toml.TRANSFER_SERVER!;
 
+  // Plain `withdraw` first; when the anchor disables USDC there but offers it
+  // via `withdraw-exchange` (Latamex's ARS/BRL corridors, #1296), retry once
+  // against that map. Fee semantics are the same either way, so the rate
+  // stays `source: 'sep6-fee'` — still indicative, not a firm quote.
   const [config, fxRate] = await Promise.all([
     withTimeout(
-      getSep6Info(transferServer, USDC_ASSET.code),
+      getSep6Info(transferServer, USDC_ASSET.code).catch((err) => {
+        if (err instanceof Sep6AssetDisabledError) {
+          return getSep6Info(transferServer, USDC_ASSET.code, { exchange: true });
+        }
+        throw err;
+      }),
       SEP6_INFO_TIMEOUT_MS,
       `${anchor.name} SEP-6 /info`
     ),

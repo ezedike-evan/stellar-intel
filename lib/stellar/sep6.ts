@@ -90,7 +90,8 @@ function withTimeout<T>(promise: Promise<T>, ms: number, label: string): Promise
 
 export async function getSep6Info(
   transferServer: string,
-  assetCode: string
+  assetCode: string,
+  opts?: { exchange?: boolean }
 ): Promise<Sep6WithdrawConfig> {
   const raw = await withTimeout(
     (async (): Promise<unknown> => {
@@ -114,7 +115,12 @@ export async function getSep6Info(
   });
 
   const data = raw as Record<string, unknown>;
-  const withdraw = data['withdraw'] as Record<string, unknown> | undefined;
+  // Some anchors (Latamex, census 2026-09-23) disable plain `withdraw` for an
+  // asset and offer it only via `withdraw-exchange` — the cross-asset map with
+  // the same per-asset shape. `exchange: true` reads that map instead; return
+  // shape and errors are identical (issue #1296 / ANC028).
+  const mapKey = opts?.exchange ? 'withdraw-exchange' : 'withdraw';
+  const withdraw = data[mapKey] as Record<string, unknown> | undefined;
 
   if (!withdraw || typeof withdraw[assetCode] !== 'object' || withdraw[assetCode] === null) {
     throw new Sep6AssetDisabledError(assetCode, transferServer);

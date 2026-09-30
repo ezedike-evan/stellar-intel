@@ -608,3 +608,34 @@ describe('sep6IndicativeRate', () => {
     expect(fxSpy).toHaveBeenCalledWith('NGN');
   });
 });
+
+describe('getSep6Info — withdraw-exchange (#1296)', () => {
+  const EXCHANGE_ONLY_FIXTURE = {
+    withdraw: { ARST: { enabled: true } },
+    'withdraw-exchange': { USDC: { enabled: true, fee_fixed: 1 } },
+  };
+
+  beforeEach(() => {
+    vi.stubGlobal(
+      'fetch',
+      vi.fn(async () => ({ ok: true, json: async () => EXCHANGE_ONLY_FIXTURE }))
+    );
+  });
+
+  it('plain withdraw still throws for an asset only offered via withdraw-exchange', async () => {
+    await expect(getSep6Info(TRANSFER_SERVER, 'USDC')).rejects.toThrow(Sep6AssetDisabledError);
+  });
+
+  it('exchange: true reads the withdraw-exchange map with the same return shape', async () => {
+    const result = await getSep6Info(TRANSFER_SERVER, 'USDC', { exchange: true });
+    expect(result.enabled).toBe(true);
+    expect(result.feeFixed).toBe(1);
+    expect(result.feePercent).toBe(0);
+  });
+
+  it('exchange: true throws the same error when the asset is absent there too', async () => {
+    await expect(getSep6Info(TRANSFER_SERVER, 'ARST', { exchange: true })).rejects.toThrow(
+      Sep6AssetDisabledError
+    );
+  });
+});
