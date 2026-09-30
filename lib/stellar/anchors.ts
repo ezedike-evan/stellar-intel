@@ -126,6 +126,40 @@ export function validateAnchorAssetIssuer(
   };
 }
 
+/**
+ * Validates the issuer of every distinct on-chain asset an anchor serves, not just
+ * its primary `assetCode`/`assetIssuer`. A multi-asset anchor (e.g. Latamex: ARST,
+ * BRLT, USDC) could otherwise advertise an impostor issuer for a secondary asset
+ * unnoticed.
+ *
+ * Returns one validation per distinct `(corridor.from, corridor.fromIssuer)` across
+ * `anchor.corridors`, in first-seen order. Native corridors (`fromIssuer === null`)
+ * and corridor ids missing from `corridors` are skipped. `corridors` defaults to the
+ * registry and is injectable for tests.
+ */
+export function validateCorridorAssetIssuers(
+  anchor: Pick<Anchor, 'id' | 'corridors'>,
+  currencies: Sep1TomlData['CURRENCIES'],
+  corridors: Corridor[] = CORRIDORS
+): AnchorIssuerValidation[] {
+  const seen = new Set<string>();
+  const results: AnchorIssuerValidation[] = [];
+  for (const corridorId of anchor.corridors) {
+    const corridor = corridors.find((c) => c.id === corridorId);
+    if (!corridor || corridor.fromIssuer === null) continue;
+    const key = `${corridor.from}:${corridor.fromIssuer}`;
+    if (seen.has(key)) continue;
+    seen.add(key);
+    results.push(
+      validateAnchorAssetIssuer(
+        { id: anchor.id, assetCode: corridor.from, assetIssuer: corridor.fromIssuer },
+        currencies
+      )
+    );
+  }
+  return results;
+}
+
 // ─── Lookup helpers ───────────────────────────────────────────────────────────
 
 /**
@@ -230,11 +264,20 @@ export async function discoverAnchorsForCorridor(corridorId: string): Promise<Re
       // different issuer is settling an impostor asset. We surface it loudly rather
       // than drop it — the registry's canonical issuer still governs downstream
       // SEP-38 identifiers, so the warning is for operators/CI to act on.
-      const issuerCheck = validateAnchorAssetIssuer(anchor, sep1.CURRENCIES);
-      if (issuerCheck.status === 'mismatch') {
+      // The corridor being discovered decides which asset is checked (an anchor may
+      // serve several), not the anchor's primary asset.
+      const corridor = CORRIDORS.find((c) => c.id === corridorId);
+      const issuerCheck =
+        corridor && corridor.fromIssuer !== null
+          ? validateAnchorAssetIssuer(
+              { id: anchor.id, assetCode: corridor.from, assetIssuer: corridor.fromIssuer },
+              sep1.CURRENCIES
+            )
+          : null;
+      if (issuerCheck?.status === 'mismatch') {
         // eslint-disable-next-line no-console
         console.warn(
-          `[anchors] ${anchor.id} advertises a look-alike ${anchor.assetCode} issuer ` +
+          `[anchors] ${anchor.id} advertises a look-alike ${issuerCheck.assetCode} issuer ` +
             `(${issuerCheck.advertisedIssuer}); expected ${issuerCheck.expectedIssuer}`
         );
       }
