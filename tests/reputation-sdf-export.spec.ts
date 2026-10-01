@@ -1,3 +1,4 @@
+import * as fs from 'node:fs';
 import { describe, it, expect } from 'vitest';
 import { NextRequest } from 'next/server';
 import {
@@ -55,6 +56,8 @@ describe('buildSdfAnchorDirectoryExport', () => {
 
     expect(report.schemaVersion).toBe(SDF_EXPORT_SCHEMA_VERSION);
     expect(report.generatedAt).toBe(NOW.toISOString());
+    expect(report.note).toContain('docs/ANCHOR_DIRECTORY_CONTRIBUTION.md');
+    expect(fs.existsSync('docs/ANCHOR_DIRECTORY_CONTRIBUTION.md')).toBe(true);
     expect(report.anchors).toHaveLength(1);
 
     const entry = report.anchors[0]!;

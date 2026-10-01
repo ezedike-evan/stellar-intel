@@ -12,7 +12,9 @@ import { withRequestLogger } from '@/lib/logger';
 import { recordIntentError, recordIntentSuccess } from '@/lib/metrics';
 import { IntentSchema, createOfframpIntent } from '@/lib/intent/offramp';
 import { verifyOptionalIntentAttestation } from '@/lib/intent/verify';
+import { registerIntentReplay } from '@/lib/intent/replay';
 import type { Intent } from '@/lib/intent/hash';
+import { emitWebhookEvent } from '@/lib/webhooks/emit';
 import type { ApiError } from '@/types';
 
 // Response types now live with the shared core; re-exported for existing importers.
@@ -121,6 +123,39 @@ export async function POST(request: NextRequest): Promise<NextResponse> {
       attested: attestation.attested,
     });
 
+    // Signed intents must carry a nonce + deadline so the signature covers
+    // replay protection; unsigned intents are not replay-checked.
+    if (attestation.attested) {
+      const { nonce, deadline } = intent as { nonce?: string; deadline?: string };
+      if (!nonce || !deadline) {
+        logger.warn({ event: 'intent_replay_fields_missing' });
+        recordIntentError('VALIDATION_ERROR');
+        return await respond<ApiError>(
+          {
+            code: 'VALIDATION_ERROR',
+            message: 'signed intents require nonce and deadline',
+          },
+          400
+        );
+      }
+
+      const replay = await registerIntentReplay({
+        publicKey: (body as { publicKey: string }).publicKey,
+        nonce,
+        deadline,
+      });
+      if (!replay.ok) {
+        logger.warn({ event: 'intent_replay_rejected', code: replay.code });
+        recordIntentError(
+          replay.code === 'replay_detected' ? 'REPLAY_DETECTED' : 'DEADLINE_EXPIRED'
+        );
+        return await respond<ApiError>(
+          { code: replay.code.toUpperCase(), message: replay.message },
+          replay.status
+        );
+      }
+    }
+
     const result = await createOfframpIntent(intent);
     if (!result.ok) {
       logger.warn({
@@ -140,6 +175,16 @@ export async function POST(request: NextRequest): Promise<NextResponse> {
       quoteId: result.response.quoteId,
     });
     recordIntentSuccess();
+    // Field by field, never a spread: the intent carries sender and recipient.
+    // A replay returns from the cache above and never reaches this line.
+    emitWebhookEvent('intent.created', {
+      corridorId: result.response.route.corridorId,
+      anchorId: result.response.route.anchorId,
+      quoteId: result.response.quoteId,
+      amount: intent.amount,
+      sourceAsset: intent.sourceAsset,
+      destinationAsset: intent.destinationAsset,
+    });
     return await respond<OfframpIntentResponse>(result.response, 200);
   });
 }

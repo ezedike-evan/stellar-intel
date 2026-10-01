@@ -62,4 +62,15 @@ describe('onramp deposit fixtures (#1095)', () => {
       }
     }
   });
+
+  it('every anchor with depositEnabled === false has supportsDeposit === false in its capture', () => {
+    for (const anchor of ANCHORS) {
+      if (anchor.depositEnabled === false) {
+        expect(
+          ONRAMP_DEPOSIT_CAPTURES[anchor.id]?.supportsDeposit,
+          `${anchor.id} has depositEnabled === false in constants/anchors.ts but its onramp fixture has supportsDeposit !== false`
+        ).toBe(false);
+      }
+    }
+  });
 });

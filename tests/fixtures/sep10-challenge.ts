@@ -36,6 +36,37 @@ export function buildValidChallenge(opts: ValidChallengeOptions): string {
   );
 }
 
+export interface ValidChallengeWithClientDomainOptions extends ValidChallengeOptions {
+  /** The `client_domain` value to embed in the challenge. */
+  clientDomain: string;
+}
+
+/**
+ * A spec-conformant challenge that includes a `client_domain` manage_data
+ * operation, as required by anchors that set `sep10ClientDomain: true`.
+ * The SDK's `WebAuth.buildChallengeTx` doesn't add this op, so we build the
+ * challenge manually via `buildCustomChallenge` and append the extra op.
+ */
+export function buildValidChallengeWithClientDomain(
+  opts: ValidChallengeWithClientDomainOptions
+): string {
+  return buildCustomChallenge({
+    signer: opts.server,
+    clientAccountId: opts.clientAccountId,
+    homeDomain: opts.homeDomain,
+    webAuthDomain: opts.webAuthDomain,
+    appendOps: [
+      Operation.manageData({
+        name: 'client_domain',
+        value: opts.clientDomain,
+        // client_domain op is sourced from the server account per SEP-10 spec
+        source: opts.server.publicKey(),
+      }),
+    ],
+    ...(opts.timeoutSeconds !== undefined ? { timeoutSeconds: opts.timeoutSeconds } : {}),
+  });
+}
+
 export interface CustomChallengeOptions {
   /** Transaction source account. Defaults to the signer's key. */
   sourceAccountId?: string;

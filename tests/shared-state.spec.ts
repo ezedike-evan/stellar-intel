@@ -13,10 +13,11 @@ function resetEnv(): void {
   process.env = { ...ORIGINAL_ENV };
 }
 
-/** Minimal in-memory stand-in for the two tables the shared layer uses. */
+/** Minimal in-memory stand-in for the tables the shared layer uses. */
 function makeFakeDb() {
   const buckets = new Map<string, number>();
   const locks = new Map<string, number>();
+  const nonces = new Map<string, number>();
 
   const query = vi.fn(async (sql: string, params: unknown[] = []) => {
     if (sql.includes('CREATE TABLE')) return { rows: [] };
@@ -57,10 +58,28 @@ function makeFakeDb() {
       return { rows: held !== undefined && held > now ? [{ '?column?': 1 }] : [] };
     }
 
+    if (sql.includes('INSERT INTO intent_nonces')) {
+      const [publicKey, nonce, expiresAt, now] = params as [string, string, number, number];
+      const id = `${publicKey}/${nonce}`;
+      const held = nonces.get(id);
+      // Mirrors `DO UPDATE ... WHERE intent_nonces.expires_at <= $4`.
+      if (held !== undefined && held > now) return { rows: [] };
+      nonces.set(id, expiresAt);
+      return { rows: [{ nonce }] };
+    }
+
+    if (sql.includes('DELETE FROM intent_nonces')) {
+      const [now] = params as [number];
+      for (const [id, expiresAt] of [...nonces]) {
+        if (expiresAt <= now) nonces.delete(id);
+      }
+      return { rows: [] };
+    }
+
     return { rows: [] };
   });
 
-  return { query, buckets, locks };
+  return { query, buckets, locks, nonces };
 }
 
 async function loadWithFakeDb() {
@@ -77,7 +96,9 @@ async function loadWithFakeDb() {
 
   const rateLimit = await import('@/lib/api/rate-limit');
   const lock = await import('@/lib/reputation/lock');
-  return { db, ...rateLimit, ...lock };
+  const sharedState = await import('@/lib/api/shared-state');
+  const replay = await import('@/lib/intent/replay');
+  return { db, ...rateLimit, ...lock, ...sharedState, ...replay };
 }
 
 describe('shared rate limiter (#911)', () => {
@@ -195,5 +216,80 @@ describe('shared lock (#911)', () => {
 
     expect(await isLocked('tick')).toBe(false);
     expect(await acquireLock('tick', 60_000)).toBe(true);
+  });
+});
+
+describe('shared intent nonces (#1335)', () => {
+  const KEY = 'GABCDEFGHIJKLMNOPQRSTUVWXYZABCDEFGHIJKLMNOPQRSTUVWXYZABCDE';
+  const NOW = Date.parse('2026-05-29T12:00:00.000Z');
+  const INPUT = { publicKey: KEY, nonce: 'nonce-1', deadline: NOW + 60_000 };
+
+  beforeEach(() => {
+    vi.resetModules();
+    resetEnv();
+  });
+
+  afterEach(() => {
+    vi.doUnmock('@/lib/reputation/pool');
+    resetEnv();
+  });
+
+  it('claims a nonce once and refuses a second claim while it is live', async () => {
+    const { claimSharedIntentNonce } = await loadWithFakeDb();
+
+    expect(await claimSharedIntentNonce(KEY, 'nonce-1', NOW + 60_000, NOW)).toBe(true);
+    // A second instance with its own empty Map would have accepted this.
+    expect(await claimSharedIntentNonce(KEY, 'nonce-1', NOW + 60_000, NOW)).toBe(false);
+  });
+
+  it('lets a nonce be claimed again after it expires', async () => {
+    const { claimSharedIntentNonce } = await loadWithFakeDb();
+
+    expect(await claimSharedIntentNonce(KEY, 'nonce-1', NOW + 1_000, NOW)).toBe(true);
+    expect(await claimSharedIntentNonce(KEY, 'nonce-1', NOW + 60_000, NOW + 1_000)).toBe(true);
+  });
+
+  it('reports no backend when DATABASE_URL is unset', async () => {
+    delete process.env.DATABASE_URL;
+    const { claimSharedIntentNonce } = await import('@/lib/api/shared-state');
+
+    expect(await claimSharedIntentNonce(KEY, 'nonce-1', NOW + 60_000, NOW)).toBeNull();
+  });
+
+  it('rejects a replay through shared state with the existing 409', async () => {
+    const { registerIntentReplay, clearIntentReplayStore } = await loadWithFakeDb();
+
+    expect(await registerIntentReplay(INPUT, NOW)).toEqual({ ok: true });
+    // Simulate the replay landing on a different instance.
+    clearIntentReplayStore();
+
+    const replay = await registerIntentReplay(INPUT, NOW);
+    expect(replay).toMatchObject({ ok: false, status: 409, code: 'replay_detected' });
+  });
+
+  it('still rejects a shared-path nonce from the Map when the database later errors', async () => {
+    const { registerIntentReplay, db } = await loadWithFakeDb();
+
+    expect(await registerIntentReplay(INPUT, NOW)).toEqual({ ok: true });
+    db.query.mockRejectedValue(new Error('connection refused'));
+
+    const replay = await registerIntentReplay(INPUT, NOW);
+    expect(replay).toMatchObject({ ok: false, status: 409, code: 'replay_detected' });
+  });
+
+  it('prunes expired nonces periodically without blocking the claim', async () => {
+    const { registerIntentReplay, db } = await loadWithFakeDb();
+
+    for (let i = 0; i < 500; i++) {
+      await registerIntentReplay({ ...INPUT, nonce: `nonce-${i}` }, NOW);
+    }
+
+    // Fire and forget, so the DELETE lands after the claim has returned.
+    await vi.waitFor(() => {
+      const prunes = db.query.mock.calls.filter(([sql]) =>
+        String(sql).includes('DELETE FROM intent_nonces')
+      );
+      expect(prunes).toHaveLength(1);
+    });
   });
 });

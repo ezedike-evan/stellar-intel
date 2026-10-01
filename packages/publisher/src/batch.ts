@@ -5,7 +5,7 @@ import type { StellarNetwork } from './network';
 // Local copy of ProbeLedgerRow to avoid a monorepo path alias that the
 // publisher package's standalone tsconfig does not resolve. Mirrors
 // `types/reputation.ts` exactly; keep in sync when that type evolves.
-export type ProbeKind = 'uptime' | 'quote' | 'issuer-mismatch' | 'toml-integrity';
+export type ProbeKind = 'uptime' | 'quote' | 'issuer-mismatch' | 'toml-integrity' | 'sep31-info';
 export type ProbeFailureType =
   'dns' | 'tls' | 'http' | 'timeout' | 'mismatch' | 'integrity' | 'unknown';
 export interface ProbeLedgerRow {

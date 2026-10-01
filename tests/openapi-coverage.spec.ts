@@ -1,6 +1,6 @@
 import { describe, it, expect } from 'vitest';
 import { readFileSync, readdirSync, statSync } from 'fs';
-import { join } from 'path';
+import { join } from 'path/posix';
 
 // #918 — every route must appear in the OpenAPI spec, and stay there.
 //

@@ -103,9 +103,9 @@ surface. It's the execution layer, not just a price page.
 ### Why did anchor X not show up in the comparison?
 
 Most often: the anchor doesn't serve that corridor, or it only exposes a SEP the
-rate engine doesn't yet quote. Historically SEP-6-only anchors (e.g. Cowrie) were
-dropped because the flow was SEP-24-only — SEP-6 support is being added (see
-[`docs/SEP_COMPLIANCE.md`](SEP_COMPLIANCE.md)). Failed anchors render as
+rate engine doesn't yet quote. SEP-6-only anchors such as Cowrie appear in the
+comparison with an **Indicative** rate (from their SEP-6 `/info` fees), and
+executing through them in-app is not available yet. Failed anchors render as
 "unavailable" rather than disappearing silently.
 
 ### Which corridors and anchors are supported?
@@ -121,8 +121,9 @@ user's wallet. See [`docs/MCP.md`](MCP.md).
 
 ### Is there an SDK?
 
-A typed client (`@stellarintel/sdk`) is on the roadmap (v4). Today you can call the
-[HTTP API](INTENT_API.md) directly. See [`docs/SDK.md`](SDK.md).
+`@stellarintel/sdk` is built in this repository (`packages/sdk`) but not yet
+published to npm; see [`docs/SDK.md`](SDK.md). Today you can call the
+[HTTP API](INTENT_API.md) directly.
 
 ### How do I contribute?
 
@@ -168,6 +169,16 @@ must be signed by the user's wallet.
 client-facing env schema ever declares a variable that looks like one.
 `packages/publisher`'s own signing key (`PUBLISHER_SECRET`, below) is the one
 named exemption.
+
+One API route produces a signature: `POST /api/sep10/client-domain` co-signs the
+`client_domain` operation of a SEP-10 challenge with the server's own
+`client_domain` key (`CLIENT_DOMAIN_SIGNING_SECRET`). This is not custody: the
+key is never a user's, and the envelope is a sequence-0 authentication challenge
+that can never be submitted to the ledger, so no funds can move. The route
+re-runs full SEP-10 validation and signs only when the challenge carries exactly
+one `client_domain` operation naming our domain and sourced by our key, so it can
+never act as a general-purpose signing oracle. It is the single named exemption
+in the "no API route handler signs a transaction" guard.
 
 ## What we do hold
 
@@ -930,6 +941,8 @@ the hardening contract (see `lib/api/v1.ts`):
   - [`GET /api/reputation/{anchor}`](#get-apireputationanchor)
   - [`GET /api/reputation/{anchor}/history`](#get-apireputationanchorhistory)
   - [`GET /v1/public/scores`](#get-v1publicscores)
+- **SEP-10**
+  - [`POST /api/sep10/client-domain`](#post-apisep10client-domain)
 - **SEP-6**
   - [`POST /api/sep6/withdraw`](#post-apisep6withdraw)
 - **System**
@@ -1084,6 +1097,8 @@ Resolves an anchor route for the given asset corridor, builds an unsigned Stella
 | `amount` | `string` | **Yes** | - |
 | `sender` | `string` | **Yes** | Stellar public key of the sender |
 | `recipient` | `string` | **Yes** | Destination address for the payout |
+| `nonce` | `string` | No | 128-bit random hex, required for replay protection when the intent is signed |
+| `deadline` | `string` | No | RFC 3339 datetime after which the intent must not execute; required when the intent is signed |
 
 #### Responses
 
@@ -1375,6 +1390,34 @@ Returns public 30-day corridor reputation scores. Supports conditional GET with 
 | `200` | Public scores array | `application/json` | `object[]` |
 | `304` | Not modified | - | - |
 | `429` | Rate limited | `application/json` | `ApiError` |
+
+---
+
+## SEP-10
+
+### `POST /api/sep10/client-domain`
+
+**Summary:** Co-sign a SEP-10 client_domain challenge  
+
+Adds the server-held `client_domain` signature to a verified SEP-10 challenge so an anchor can attribute the session to us. The challenge is re-validated in full against the anchor’s published SIGNING_KEY (mainnet, sequence 0, anchor-signed, manage_data only, timebounds ≤ 24h) and must carry exactly one `client_domain` operation naming our domain and sourced by our signing key. This route is not a general-purpose signing oracle.
+
+#### Request Body
+
+**Content-Type:** `application/json`
+
+| Field | Type | Required | Description |
+| :--- | :--- | :--- | :--- |
+| `transaction` | `string` | **Yes** | Base64 SEP-10 challenge XDR from the anchor |
+| `homeDomain` | `string` | **Yes** | Home or service domain of a registered anchor the challenge is from |
+
+#### Responses
+
+| Status | Description | Content-Type | Schema |
+| :--- | :--- | :--- | :--- |
+| `200` | Challenge co-signed | `application/json` | `object` |
+| `400` | Invalid request, unregistered anchor, or challenge failed validation | `application/json` | `ApiError` |
+| `429` | Rate limited | `application/json` | `ApiError` |
+| `503` | Server client_domain signing is not configured | `application/json` | `ApiError` |
 
 ---
 
@@ -1734,11 +1777,27 @@ Omitting both is allowed and routes the intent unattested.
 ## Replay protection
 
 `lib/intent/replay.ts` (`registerIntentReplay`) implements nonce + deadline
-replay protection and is available for callers that maintain a nonce. It is
-**not yet wired into `POST /api/intent/offramp`** — the off-ramp path is instead
-idempotent by construction (`quoteId = sha256(canonical intent)`, honoured by
-`Idempotency-Key`). Wiring replay into the signed path is tracked as follow-up
-work; until then, do not rely on the endpoint to reject a re-submitted envelope.
+replay protection and is enforced on every **signed** off-ramp intent, on both
+`POST /api/intent/offramp` and `POST /api/v1/intent/offramp`.
+
+A signed intent (one that supplied a verified `signature` + `publicKey`) MUST
+also include `nonce` (32 lowercase hex characters — 128 bits of randomness) and
+`deadline` (RFC 3339 datetime). Both fields are part of the canonical intent, so
+they are covered by the signature. After the signature verifies:
+
+- if `nonce` or `deadline` is missing, the request is rejected with **400**
+  (`VALIDATION_ERROR` / `validation_error`);
+- otherwise the pair is registered with `registerIntentReplay({ publicKey, nonce, deadline })`:
+  - a `nonce` already seen for that `publicKey` is rejected with **409**
+    (`REPLAY_DETECTED` / `replay_detected`);
+  - a `deadline` that has already passed is rejected with **410**
+    (`DEADLINE_EXPIRED` / `deadline_expired`).
+
+**Unsigned** intents are unaffected: `nonce` and `deadline` are optional and, if
+omitted, the intent still routes normally — it is not replay-checked. This
+mirrors the off-ramp path's existing idempotency (`quoteId = sha256(canonical
+intent)`, honoured by `Idempotency-Key`), which continues to apply independently
+of replay protection.
 
 ## Endpoint
 
@@ -1750,8 +1809,11 @@ Content-Type: application/json
 ```
 
 - **200** — intent accepted for routing (signature verified when one was supplied).
-- **400** — schema validation failed, or only one of `signature`/`publicKey` was supplied.
+- **400** — schema validation failed, only one of `signature`/`publicKey` was supplied,
+  or a signed intent omitted `nonce`/`deadline`.
 - **401** — a supplied signature did not verify.
+- **409** — the signed intent's `nonce` has already been used for that `publicKey`.
+- **410** — the signed intent's `deadline` has already passed.
 
 ```bash
 curl -sX POST https://stellar-intel.vercel.app/api/intent/offramp \
@@ -2528,18 +2590,18 @@ intelligence to MCP-capable agents over stdio or streamable HTTP. It lives in
 yet published to npm**), and both reuse the same routing + canonical-hashing
 logic as the web app (`lib/mcp/offramp.ts`).
 
-The two entry points do not expose the same tool set:
+The entry points expose the full tool set:
 
 | Tool                      | `/api/mcp` (hosted) | `packages/mcp` | `scripts/mcp/server.ts` (dev) |
 | ------------------------- | ------------------- | -------------- | ----------------------------- |
 | `intel.offramp.quote`     | ✓                   | ✓              | ✓                             |
 | `intel.offramp.prepare`   | ✓                   | ✓              | ✓                             |
 | `intel.execute`           | ✓                   | ✓              | ✓                             |
-| `intel.anchor.reputation` | —                   | ✓              | —                             |
-| `intel.anchor.health`     | —                   | ✓              | —                             |
-| `intel.probe.coverage`    | —                   | ✓              | —                             |
+| `intel.anchor.reputation` | ✓                   | ✓              | ✓                             |
+| `intel.anchor.health`     | ✓                   | ✓              | ✓                             |
+| `intel.probe.coverage`    | ✓                   | ✓              | ✓                             |
 | `intel.leaderboard`       | ✓                   | ✓              | ✓                             |
-| `intel.corridors`         | —                   | ✓              | —                             |
+| `intel.corridors`         | ✓                   | ✓              | ✓                             |
 
 **Scope:** Stellar Intel abstracts anchors, not chains. These tools answer
 "what's my best fiat exit price, and which Stellar anchor should I trust to
@@ -2575,19 +2637,13 @@ answer `405` — `GET` would otherwise open a standalone SSE stream that nothing
 closes, and this server never initiates messages.
 
 The endpoint is served by [`app/api/mcp/route.ts`](../app/api/mcp/route.ts),
-which builds its server from the same `createServer()` in
-[`scripts/mcp/server.ts`](../scripts/mcp/server.ts) that the stdio dev server
-uses, so those two cannot drift apart. Requests are rate-limited to 60 per
-minute per IP.
+which builds its server from the canonical `createServer()` in
+[`lib/mcp/server.ts`](../lib/mcp/server.ts) shared with the stdio dev server
+and the `@stellarintel/mcp` package, so they cannot drift apart. Requests are
+rate-limited to 60 per minute per IP.
 
-**It serves the four-tool set**, matching the `scripts/mcp` column in the table
-above — `intel.offramp.quote`, `intel.offramp.prepare`, `intel.execute` and
-`intel.leaderboard`. The five `packages/mcp`-only tools are not on the hosted
-endpoint yet: that package's modules use explicit `./tool.js` specifiers which
-the app's bundler does not resolve back to their `.ts` sources, and
-`npm run build --workspace=@stellarintel/mcp` currently fails on pre-existing
-errors in `lib/oracle/read.ts` and `lib/stellar/anchors.ts`, so there is no
-compiled output to import either. Porting them is tracked separately.
+**It serves the full eight-tool suite** alongside prompts and the anchor health
+ledger resource across all transports.
 
 ## Running it yourself
 
@@ -2742,7 +2798,7 @@ above. Per #819, broader intent types (beyond off-ramp) are deferred until the
 universal intent collapse work lands, so the tool doesn't ship off-ramp-only
 assumptions baked into a wider surface prematurely.
 
-### `intel.anchor.reputation` (packages/mcp only)
+### `intel.anchor.reputation`
 
 Returns 7/30/90-day rolling percentile scorecards for an anchor, fetched from
 the Stellar Intel API (`/api/reputation/{anchor}`).
@@ -2777,7 +2833,7 @@ the Stellar Intel API (`/api/reputation/{anchor}`).
 }
 ```
 
-### `intel.anchor.health` (packages/mcp only)
+### `intel.anchor.health`
 
 Returns the current health of an anchor, fetched from the Stellar Intel API
 (`/api/v1/anchors/{id}/health`). The anchor is looked up by home or service
@@ -2803,7 +2859,7 @@ domain; passing an `asset` the anchor does not support is an error.
 }
 ```
 
-### `intel.probe.coverage` (packages/mcp only, #1046)
+### `intel.probe.coverage` (#1046)
 
 Answers "is the reputation data trustworthy yet" before an agent believes a
 score. Same payload as `GET /api/reputation/probe-coverage` for the same
@@ -2839,42 +2895,19 @@ app instance at `NEXT_PUBLIC_APP_URL`.
 - **Output:** the leaderboard rows, each with its score, sample size,
   `measured` flag and standing label
 
-### `intel.corridors` (packages/mcp only)
+### `intel.corridors`
 
-Enumerates every corridor Stellar Intel currently surfaces, with its id, display
-name, source asset, destination fiat currency, country, and the anchors that
-serve it. Call this before any tool that takes a corridor id rather than
-guessing one. Flag-gated corridors that the UI hides are omitted.
+Lists every corridor Stellar Intel currently surfaces, with its id, display name,
+source asset, destination fiat currency, country, and the anchors that serve it.
+Call this before any tool that takes a corridor id rather than guessing one.
+Flag-gated corridors hidden in the UI are omitted.
 
-- **Input:** `{}`
-- **Output:** `{ count: number, corridors: CorridorSummary[] }` where each
-  `CorridorSummary` carries `id`, `displayName`, `from`, `to`, `countryCode`,
-  `countryName`, and `anchors[]` (each with `id`, `name`, `homeDomain`).
-
-```jsonc
-// output (abridged)
-{
-  "count": 6,
-  "corridors": [
-    {
-      "id": "usdc-ngn",
-      "displayName": "Nigeria (NGN)",
-      "from": "USDC",
-      "to": "NGN",
-      "countryCode": "NG",
-      "countryName": "Nigeria",
-      "anchors": [
-        { "id": "cowrie", "name": "Cowrie Exchange", "homeDomain": "cowrie.exchange" },
-        { "id": "ngnc", "name": "NGNC", "homeDomain": "ngnc.online" },
-      ],
-    },
-  ],
-}
-```
+- **Input:** none
+- **Output:** `{ count: number, corridors: CorridorSummary[] }`
 
 ## Prompts
 
-`packages/mcp` also registers two prompts (#1048), so an agent can start from
+The server also registers two prompts (#1048), so an agent can start from
 an intent rather than assembling the tool calls itself:
 
 - **`intel.offramp.choose-anchor`** — arguments `{ from, to }`. Compares the
@@ -2882,6 +2915,11 @@ an intent rather than assembling the tool calls itself:
 - **`intel.offramp.quote-and-prepare`** — arguments
   `{ from, to, amount, sender, recipient }`. Walks quote → prepare → execute,
   leaving the signature to the agent.
+
+## Resources
+
+- **`stellarintel://anchor-health/ledger`** — exposes raw public ledger health
+  probe records directly as a structured JSON resource.
 
 ## Tests
 
@@ -3863,12 +3901,13 @@ From your `stellar.toml` at `https://{domain}/.well-known/stellar.toml`:
 - **SEP-10** — `WEB_AUTH_ENDPOINT` present (web authentication).
 - A transfer rail (one of):
   - **SEP-24** — `TRANSFER_SERVER_SEP0024` (interactive hosted withdraw). The
-    default, fully supported execution path today, and the only rail the nightly
-    probe accepts — see [What the probes require](#what-the-probes-require).
+    default, fully supported execution path today. Required by the nightly probe
+    only when your registry entry's `seps` includes `sep24` — see
+    [What the probes require](#what-the-probes-require).
   - **SEP-6** — `TRANSFER_SERVER` (programmatic withdraw). **Accepted** for
-    onboarding and rate comparison when it is the only transfer rail advertised,
-    subject to the caveats below; full SEP-6 + SEP-12 execution is rolling out —
-    see [`docs/SEP_COMPLIANCE.md`](SEP_COMPLIANCE.md).
+    onboarding and rate comparison, subject to the caveats below; full SEP-6 +
+    SEP-12 execution is rolling out — see [`docs/SEP_COMPLIANCE.md`](SEP_COMPLIANCE.md).
+    A SEP-6-only anchor must advertise `TRANSFER_SERVER`.
   - **SEP-31** — `DIRECT_PAYMENT_SERVER`. Detected as a transfer capability;
     there is no SEP-31 flow in the app today.
 - **SEP-38** — `ANCHOR_QUOTE_SERVER` for firm quotes. Optional today; required
@@ -3914,19 +3953,18 @@ with `npm run validate:anchors`. For each registered anchor it fetches
   alphabetic TLD. Ports, paths, IP literals, `localhost` and userinfo are
   rejected before the fetch is made;
 - **HTTP 200 within 15 seconds**, following redirects;
-- a line-anchored **`TRANSFER_SERVER_SEP0024 =`** in the body.
+- a line-anchored **`TRANSFER_SERVER_SEP0024 =`** in the body, but only when your
+  registry entry's `seps` includes `sep24`. `probeDomain` does not check for
+  SEP-24 otherwise, so a SEP-6-only anchor passes on the 200 alone. It must still
+  advertise **`TRANSFER_SERVER`**, which backs its `sep6` claim and is enforced
+  in CI rather than nightly (see the SEP-to-key table in
+  [What we validate](#what-we-validate)).
 
-> **SEP-6-only anchors: read this.** The nightly probe's success condition is
-> SEP-24 specifically, not "any transfer rail". An anchor advertising only
-> `TRANSFER_SERVER` fails this probe every night and accumulates a failure
-> streak; at `thresholdNights` (default 3, overridable with
-> `ANCHOR_DEGRADE_THRESHOLD`) it latches `degraded`. Cowrie is the live example:
-> its ledger entry currently reads
-> `lastError: "missing TRANSFER_SERVER_SEP0024 (SEP-24)"`. Onboarding accepts
-> SEP-6-only anchors for rate comparison, but until the probe's success condition
-> is widened they will not pass the nightly check. Say so explicitly in your
-> onboarding issue so a maintainer tracks it rather than reading your listing as
-> a live outage.
+> **Earlier behaviour.** Before the validator made the SEP-24 check conditional
+> on `seps`, every anchor had to advertise `TRANSFER_SERVER_SEP0024`, so
+> SEP-6-only anchors such as Cowrie failed nightly with
+> `missing TRANSFER_SERVER_SEP0024 (SEP-24)` and latched `degraded`. That no
+> longer applies.
 
 A `degraded` anchor is **hidden from corridor selectors and the rate engine**
 (`getAnchorsByCorridorId` in [`lib/stellar/anchors.ts`](../lib/stellar/anchors.ts))
@@ -3960,8 +3998,10 @@ means your quotes are being requested for an asset you are not advertising.
 `registry guard` job in CI) asserts that your `serviceDomain` **or** `homeDomain`
 appears in the committed survey snapshot's `transferCapableDomains`. If the
 public directory lists you under an issuer-only domain while your SEP endpoints
-live on a service subdomain the survey does not crawl, the entry needs an
-`ALLOWLIST` exception with a written reason — MoneyGram is the canonical case.
+live on a service subdomain the survey does not crawl (or the anchor sits outside
+the stellar.expert `anchor` tag), the entry needs an `ALLOWLIST` exception with a
+written reason — MoneyGram is the canonical case — until the multi-source survey
+snapshot includes them.
 
 ### 4. Reputation probes — how your score bootstraps
 
@@ -4017,17 +4057,20 @@ Once validated, your anchor is added to
 re-exported verbatim by `lib/stellar/anchors.ts`. The entry is an `Anchor`
 ([`types/index.ts`](../types/index.ts)):
 
-| Field           | Required       | Notes                                                                                                                                                      |
-| --------------- | -------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| `id`            | ✅             | Stable, lower-case. The key for the health ledger, the leaderboard, the SDF export and the on-chain oracle — changing it discards your reputation history. |
-| `name`          | ✅             | Display name in the rate table.                                                                                                                            |
-| `homeDomain`    | ✅             | Domain hosting `stellar.toml`. Plain public hostname only.                                                                                                 |
-| `serviceDomain` |                | Set when SEP endpoints live elsewhere; every probe and the runtime resolve `serviceDomain ?? homeDomain`.                                                  |
-| `corridors`     | ✅             | Corridor **ids** from `CORRIDORS`, e.g. `usdc-ngn` — never display names.                                                                                  |
-| `assetCode`     | ✅             | Asset sold through those corridors. `USDT` entries are ignored by the live rate path unless `NEXT_PUBLIC_USDT_ENABLED` is set.                             |
-| `assetIssuer`   | ✅             | Issuer account, or the `USDC_ISSUER` constant (the validator resolves that reference from `NEXT_PUBLIC_USDC_ISSUER`).                                      |
-| `seps`          | ✅ in practice | Declared capabilities. See the warning below.                                                                                                              |
-| `metadata`      |                | Operator regions / KYC model / fee model. Defined on the type, but not written inline today — see the flat-entry constraint below.                         |
+| Field                 | Required       | Notes                                                                                                                                                                                                 |
+| --------------------- | -------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `id`                  | ✅             | Stable, lower-case. The key for the health ledger, the leaderboard, the SDF export and the on-chain oracle — changing it discards your reputation history.                                            |
+| `name`                | ✅             | Display name in the rate table.                                                                                                                                                                       |
+| `homeDomain`          | ✅             | Domain hosting `stellar.toml`. Plain public hostname only.                                                                                                                                            |
+| `serviceDomain`       |                | Set when SEP endpoints live elsewhere; every probe and the runtime resolve `serviceDomain ?? homeDomain`.                                                                                             |
+| `corridors`           | ✅             | Corridor **ids** from `CORRIDORS`, e.g. `usdc-ngn` — never display names.                                                                                                                             |
+| `assetCode`           | ✅             | Primary asset (used for issuer validation and fixtures); each corridor's own asset comes from `CORRIDORS`. `USDT` entries are ignored by the live rate path unless `NEXT_PUBLIC_USDT_ENABLED` is set. |
+| `assetIssuer`         | ✅             | Issuer account, or the `USDC_ISSUER` constant (the validator resolves that reference from `NEXT_PUBLIC_USDC_ISSUER`).                                                                                 |
+| `seps`                | ✅ in practice | Declared capabilities. See the warning below.                                                                                                                                                         |
+| `unverifiedCorridors` |                | Subset of `corridors` whose payout currency has not been confirmed on any live `/info` response; still routable, but flagged to users.                                                                |
+| `sep31Corridors`      |                | Corridors this anchor serves ONLY as a SEP-31 receiving anchor. Tracked for the record, never routed (SEP-31 needs a bilateral sending-anchor agreement). Must NOT also appear in `corridors`.        |
+| `depositEnabled`      |                | `false` when the anchor's own `/info` deposit map is empty/disabled for its asset; default (`undefined`) means enabled.                                                                               |
+| `metadata`            |                | Operator regions / KYC model / fee model. Defined on the type, but not written inline today — see the flat-entry constraint below.                                                                    |
 
 > **`seps` is not optional in practice.** `transferCapable()` is
 > `anchor.seps?.some(sep => ROUTABLE_SEPS.includes(sep)) ?? false`. An entry with
@@ -4047,8 +4090,23 @@ re-exported verbatim by `lib/stellar/anchors.ts`. The entry is an `Anchor`
 > fine — they use `[ ]`. Keep each field on its own line as a quoted literal;
 > `assetIssuer: USDC_ISSUER` is the one bare identifier both parsers handle.
 
-Corridor ids must already exist in `CORRIDORS`. `usdc-zar` and `usdc-xof` are
-v1.1 corridors: they stay hidden until `NEXT_PUBLIC_V11_CORRIDORS=on` **and** an
+### Corridors
+
+Corridors define the source asset and destination fiat pair. Each corridor is registered in `CORRIDORS` in [`constants/anchors.ts`](../constants/anchors.ts):
+
+- **ID convention**: `<asset>-<fiat>` in lower-case (e.g. `usdc-ngn`, `ngnt-ngn`, `arst-ars`, `brl-brl`, `ars-ars`, `pen-pen`).
+- **Required fields**:
+  - `id`: Corridor identifier (e.g. `'arst-ars'`).
+  - `from`: On-chain asset code (e.g. `'ARST'`).
+  - `fromIssuer`: Issuer G-address of the on-chain asset sold on this corridor (`null` only for native XLM).
+  - `fromPeg`: ISO 4217 code of the currency the on-chain asset is pegged to (e.g. `'USD'` for USDC, `'BRL'` for the nTokens BRL token, `'ARS'` for ARST).
+  - `to`: Destination fiat currency code (e.g. `'NGN'`, `'ARS'`).
+  - `countryCode`: ISO 3166-1 alpha-2 country code (e.g. `'NG'`, `'AR'`).
+  - `countryName`: Display country name (e.g. `'Nigeria'`, `'Argentina'`).
+- **One corridor per (code, issuer) pair**: If multiple issuers exist for the same asset code, each distinct (code, issuer) combination represents a separate corridor.
+- Corridors must already exist in `CORRIDORS` before an anchor can list them in its `corridors` array.
+
+`usdc-zar` and `usdc-xof` are v1.1 corridors: they stay hidden until `NEXT_PUBLIC_V11_CORRIDORS=on` **and** an
 anchor serves them. Issuer-only domains (no transfer rail) are not listed as
 off-ramp anchors.
 
@@ -4056,8 +4114,10 @@ Match the existing entries' comment style, which records what was verified and
 when:
 
 ```ts
-// ngnc.online: NGN fiat corridor — SEP-24 withdraw enabled.
-// Verified 2026-06-29. TOML: TRANSFER_SERVER_SEP0024 present. /info: withdraw.USDC.enabled = true.
+// ngnc.online: NGN fiat corridor — SEP-24 deposit/withdraw enabled for the NGNC token.
+// Verified 2026-09-23. TOML: TRANSFER_SERVER_SEP0024 present.
+// /info: deposit [NGNC] (min 20,000), withdraw [NGNC] (min 10,000).
+// Serves the ngnc-ngn corridor for Nigeria.
 ```
 
 Surveyed-and-rejected domains get the same treatment as a comment in place of an
@@ -4088,9 +4148,12 @@ SEP-6 anchors are acceptable for onboarding when they advertise a valid
   [`lib/stellar/server-rates.ts`](../lib/stellar/server-rates.ts): live FX × the
   SEP-6 `/info` fee), and they carry an **Indicative** badge in the comparison UI.
 - Programmatic execution still depends on the broader SEP-6 + SEP-12 flow being
-  available in the app.
-- The nightly probe still requires `TRANSFER_SERVER_SEP0024` — see the callout in
-  [What the probes require](#1-nightly-toml-validator--decides-whether-you-stay-visible).
+  available in the app; SEP-6 execution in the UI is currently a placeholder
+  ([`components/offramp/ExecuteDrawer.tsx`](../components/offramp/ExecuteDrawer.tsx),
+  "SEP-6 form flow — coming soon").
+- The nightly probe requires `TRANSFER_SERVER_SEP0024` only when the registry
+  entry's `seps` includes `sep24`, so a SEP-6-only anchor passes it without
+  advertising SEP-24 — see [What the probes require](#1-nightly-toml-validator--decides-whether-you-stay-visible).
 - Anchors supporting both SEP-6 and SEP-24 should be documented in the SEP
   compliance matrix so maintainers can tell the execution path apart. Where both
   are present, the SEP-24 hosted flow is preferred for execution.
@@ -4135,7 +4198,7 @@ own SEP flow.
 - [ ] `stellar.toml` live at `https://{serviceDomain ?? homeDomain}/.well-known/stellar.toml` and parses cleanly (`curl` + `jq`).
 - [ ] It answers **HTTP 200 in under 15 s** — the nightly probe's timeout.
 - [ ] SEP-1 (`[[CURRENCIES]]` + `SIGNING_KEY`) + SEP-10 (`WEB_AUTH_ENDPOINT`) + a transfer rail advertised.
-- [ ] `TRANSFER_SERVER_SEP0024` present, or the SEP-6-only caveat noted in the onboarding issue.
+- [ ] `TRANSFER_SERVER_SEP0024` present if `seps` includes `sep24`; otherwise `TRANSFER_SERVER` present.
 - [ ] `[[CURRENCIES]]` advertises your registered `assetCode` under your registered `assetIssuer` — no look-alike.
 - [ ] Every SEP claimed in `seps` is backed by its toml key, and at least one of `sep6` / `sep24` / `sep31` is claimed.
 - [ ] `serviceDomain` supplied whenever SEP endpoints are not on the home domain.
@@ -4197,8 +4260,8 @@ existing signals into a self-describing JSON document:
   [`lib/stellar/anchors.ts`](../lib/stellar/anchors.ts)) — this already covers
   TOML-reachability integrity and auto-clears once an anchor recovers.
 - **Uptime and average latency**, derived from `uptime`-kind probe samples in
-  the reputation store (`lib/reputation/probe.ts`), once the probe pipeline
-  from #785/#786 is publishing real samples.
+  the reputation store (`lib/reputation/probe.ts`), as probe samples
+  accumulate.
 - **Per-corridor quote-latency percentiles** (p50/p95), derived from
   `quote`-kind probe samples the same way.
 
@@ -4264,10 +4327,10 @@ omitted.
       "corridors": ["usdc-ngn"],
       "health": {
         "status": "healthy",
-        "lastStatus": "fail",
-        "lastCheckedAt": "2026-08-26T04:57:02.450Z",
-        "lastError": "missing TRANSFER_SERVER_SEP0024 (SEP-24)",
-        "consecutiveFailures": 2,
+        "lastStatus": "ok",
+        "lastCheckedAt": "2026-09-26T09:22:48.592Z",
+        "lastError": null,
+        "consecutiveFailures": 0,
         "uptime": 0.997,
         "avgLatencyMs": 184,
         "quoteLatencyByCorridor": {}
@@ -4278,37 +4341,21 @@ omitted.
 ```
 
 Cowrie is a deliberate example rather than a tidy one — it is what the registry
-and the committed ledger actually say today, and it shows three of the
-derivations above at once:
+and the committed ledger actually say today, and it shows the derivations above:
 
-- `status: "healthy"` beside `lastStatus: "fail"` — two failures, below the
-  three-night `thresholdNights`, so the debounce has not latched `degraded` yet.
-- The `lastError` is the SEP-6-only case: Cowrie advertises `TRANSFER_SERVER`
-  but no `TRANSFER_SERVER_SEP0024`, and the nightly validator's success
-  condition is SEP-24 specifically. See
-  [`docs/ANCHOR_ONBOARDING.md`](ANCHOR_ONBOARDING.md#what-the-probes-require).
+- `status: "healthy"` tracks `degraded: false` alongside `lastStatus: "ok"` and
+  `consecutiveFailures: 0`.
 - `quoteLatencyByCorridor` is empty because Cowrie advertises no
   `ANCHOR_QUOTE_SERVER`, so the SEP-38 quote probe has nothing to call. Absence
   here means "no quote server", not "slow".
 
-### Known drift: the `note` field's doc path
+## Known limitation: probe-derived fields
 
-The `note` string in every export, and the module comments in
-[`lib/reputation/sdfExport.ts`](../lib/reputation/sdfExport.ts) and
-[`app/api/reputation/sdf-export/route.ts`](../app/api/reputation/sdf-export/route.ts),
-point readers at `docs/anchor-directory-contribution.md`. This file is
-`docs/ANCHOR_DIRECTORY_CONTRIBUTION.md`, so that path resolves nowhere — and
-because it ships inside the payload, a recipient of the export follows it too.
-Worth correcting alongside the next change to that module.
-
-## Known limitation: depends on #785
-
-Until [#785](https://github.com/ezedike-evan/stellar-intel/issues/785) (the
-publisher that writes probe-derived data on-chain) lands, uptime and
-quote-latency fields will mostly read `null`/empty for anchors with no
-accumulated probe samples yet — the export degrades honestly rather than
-fabricating a number. Health `status` still reflects the nightly validator's
-ledger regardless, since that pipeline is already live.
+While the probe pipeline runs, uptime and quote-latency fields stay
+`null`/empty for anchors without accumulated probe samples — the export
+degrades honestly rather than fabricating a number. Health `status` still
+reflects the nightly validator's ledger regardless, since that pipeline is
+already live.
 
 ## How to actually contribute this today
 

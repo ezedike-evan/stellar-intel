@@ -12,7 +12,7 @@ export const runtime = 'nodejs';
  * GET /api/reputation/sdf-export — candidate export for SDF's Anchor
  * Directory (#796). SDF has no published ingestion API, so this is a
  * self-describing JSON shape suitable for manual submission today; see
- * docs/anchor-directory-contribution.md.
+ * docs/ANCHOR_DIRECTORY_CONTRIBUTION.md.
  */
 export async function GET(request: NextRequest): Promise<NextResponse> {
   return withRequestLogger(request, 'api.reputation.sdf-export', async (logger) => {

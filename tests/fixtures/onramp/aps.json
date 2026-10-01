@@ -1,0 +1,37 @@
+{
+  "_comment": "Live SEP-24 GET /info deposit capture (#1299), captured against https://ramp.aps.money/gollum/api/v1/sep0024 for the APS Ramp USDC anchor onboarded from the census. The deposit map advertises USDC only; the payout currencies (BRL, EUR, CLP) come from the SDF directory, which is why the corridors are flagged unverified in constants/anchors.ts.",
+  "capturedAt": "2026-09-27T16:28:00.000Z",
+  "anchorId": "aps",
+  "homeDomain": "ramp.aps.money",
+  "registeredAssetCode": "USDC",
+  "transferServerSep0024": "https://ramp.aps.money/gollum/api/v1/sep0024",
+  "reachable": true,
+  "supportsDeposit": true,
+  "info": {
+    "deposit": {
+      "USDC": {
+        "enabled": true,
+        "min_amount": 9.34,
+        "max_amount": 669.61,
+        "fee_fixed": 0.25,
+        "fee_percent": 4.5
+      }
+    },
+    "withdraw": {
+      "USDC": {
+        "enabled": true,
+        "min_amount": 32.33,
+        "max_amount": 681.81,
+        "fee_fixed": 5,
+        "fee_percent": 1
+      }
+    },
+    "features": {
+      "account_creation": true,
+      "claimable_balances": false
+    },
+    "fee": {
+      "enabled": true
+    }
+  }
+}

@@ -1,0 +1,10 @@
+{
+  "_comment": "Hand-captured 2026-09-23 against PeraHub's own advertised endpoints. There is no /info to capture: its stellar.toml (https://stellar.perahub.com.ph/.well-known/stellar.toml) advertises exactly one transfer server, DIRECT_PAYMENT_SERVER = https://stellar.perahub.com.ph/sep31, alongside WEB_AUTH_ENDPOINT and a SEP-12 KYC server — no TRANSFER_SERVER (SEP-6) and no TRANSFER_SERVER_SEP0024 (SEP-24), so the anchor exposes no deposit rail to capture. Recorded the same way the sibling fixtures are: as a dated observation of what the anchor does and does not advertise, not a live value.",
+  "capturedAt": "2026-09-23T00:00:00.000Z",
+  "anchorId": "perahub",
+  "homeDomain": "stellar.perahub.com.ph",
+  "registeredAssetCode": "USDC",
+  "reachable": true,
+  "supportsDeposit": false,
+  "reason": "SEP-31 receive-only anchor; it advertises no SEP-6/SEP-24 deposit rail."
+}

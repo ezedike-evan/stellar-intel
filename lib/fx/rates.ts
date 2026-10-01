@@ -1,4 +1,4 @@
-// ─── Reference FX rates (USD → fiat) ─────────────────────────────────────────
+// ─── Reference FX rates (USD → fiat & Cross-currency) ───────────────────────
 //
 // Free, key-less reference rates from open.er-api.com. Used only for *indicative*
 // off-ramp estimates: the firm rate a user receives is always confirmed by the
@@ -61,4 +61,41 @@ export async function getUsdFxRate(currencyCode: string): Promise<number> {
     throw new Error(`No reference FX rate available for USD→${currencyCode}`);
   }
   return rate;
+}
+
+/**
+ * Returns the reference FX rate from `from` currency to `to` currency.
+ *
+ * - **Identity case**: When `from === to` (case-insensitive), returns `1` immediately
+ *   without performing any network call or reading the cache.
+ * - **USD base**: When `from === 'USD'`, returns the USD reference rate for `to`.
+ * - **Cross rate**: For non-USD pairs (e.g. EUR → NGN), calculates the cross rate via USD
+ *   as `(USD→to) / (USD→from)` using the same cached reference table.
+ *
+ * @throws {Error} When either leg is not quoted by the reference provider ("No reference FX rate available for FROM→TO").
+ */
+export async function getFxRate(from: string, to: string): Promise<number> {
+  const fromUpper = from.toUpperCase();
+  const toUpper = to.toUpperCase();
+
+  if (fromUpper === toUpper) {
+    return 1;
+  }
+
+  const rates = await loadRates();
+  const fromRate = fromUpper === 'USD' ? 1 : rates[fromUpper];
+  const toRate = toUpper === 'USD' ? 1 : rates[toUpper];
+
+  if (
+    typeof fromRate !== 'number' ||
+    !Number.isFinite(fromRate) ||
+    fromRate <= 0 ||
+    typeof toRate !== 'number' ||
+    !Number.isFinite(toRate) ||
+    toRate <= 0
+  ) {
+    throw new Error(`No reference FX rate available for ${fromUpper}→${toUpper}`);
+  }
+
+  return toRate / fromRate;
 }

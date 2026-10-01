@@ -36,6 +36,13 @@ const SCHEMA_SQL = `
     headers         TEXT   NOT NULL DEFAULT '{}',
     expires_at      BIGINT NOT NULL
   );
+
+  CREATE TABLE IF NOT EXISTS intent_nonces (
+    public_key TEXT   NOT NULL,
+    nonce      TEXT   NOT NULL,
+    expires_at BIGINT NOT NULL,
+    PRIMARY KEY (public_key, nonce)
+  );
 `;
 
 let schemaReady: Promise<void> | null = null;
@@ -214,4 +221,43 @@ export async function pruneSharedIdempotent(now: number): Promise<void> {
   if (!hasSharedBackend()) return;
   await ensureSchema();
   await getSqlExecutor().query(`DELETE FROM idempotency_keys WHERE expires_at <= $1`, [now]);
+}
+
+// ─── Intent replay nonces ──────────────────────────────────────────────────────
+
+/**
+ * Claims `nonce` for `publicKey` until `expiresAt`, returning false when it is
+ * already held (a replay).
+ *
+ * Same expired-only overwrite as `acquireSharedLock`: a live nonce is never
+ * reclaimed, but one whose deadline has passed can be, so the key space does
+ * not fill up with dead rows between prunes.
+ */
+export async function claimSharedIntentNonce(
+  publicKey: string,
+  nonce: string,
+  expiresAt: number,
+  now: number
+): Promise<boolean | null> {
+  if (!hasSharedBackend()) return null;
+
+  await ensureSchema();
+  const { rows } = await getSqlExecutor().query(
+    `INSERT INTO intent_nonces (public_key, nonce, expires_at)
+          VALUES ($1, $2, $3)
+     ON CONFLICT (public_key, nonce)
+     DO UPDATE SET expires_at = $3
+           WHERE intent_nonces.expires_at <= $4
+       RETURNING nonce`,
+    [publicKey, nonce, expiresAt, now]
+  );
+
+  return rows.length > 0;
+}
+
+/** Drops nonces whose deadline has passed. Safe to call opportunistically. */
+export async function pruneSharedIntentNonces(now: number): Promise<void> {
+  if (!hasSharedBackend()) return;
+  await ensureSchema();
+  await getSqlExecutor().query(`DELETE FROM intent_nonces WHERE expires_at <= $1`, [now]);
 }

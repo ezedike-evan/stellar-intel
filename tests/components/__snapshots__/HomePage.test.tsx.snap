@@ -44,7 +44,7 @@ exports[`HomePage > matches snapshot 1`] = `
         class="text-secondary-text measure mt-6 text-base sm:text-lg"
       >
         A directory records what an anchor declares about itself, and stays correct until that anchor's deployment changes without the listing changing with it. This is the other half: 
-        six
+        eight
          registered off-ramp anchors, probed on a clock, with the scoring method published and small samples labelled as small.
       </p>
       <div
@@ -159,7 +159,7 @@ exports[`HomePage > matches snapshot 1`] = `
           id="registry-heading"
         >
           The 
-          six
+          eight
         </h2>
         <p
           class="text-fg-muted font-mono text-xs tracking-wide"

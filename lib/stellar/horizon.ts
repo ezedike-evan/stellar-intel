@@ -46,7 +46,7 @@ export interface BuildWithdrawPaymentParams {
 }
 
 /**
- * Builds an unsigned USDC payment transaction destined for the anchor.
+ * Builds an unsigned corridor-asset payment transaction destined for the anchor.
  * Applies the memo from the SEP-24 transaction record.
  * Caps the fee at 10,000 stroops.
  */
@@ -56,7 +56,7 @@ export async function buildWithdrawPayment(
   const { sourcePublicKey, anchorAccount, amount, memo, memoType, assetCode, assetIssuer } = params;
 
   const account = await fetchAccount(sourcePublicKey);
-  const asset = new Asset(assetCode, assetIssuer);
+  const asset = assetIssuer ? new Asset(assetCode, assetIssuer) : Asset.native();
 
   let recommendedFee = parseInt(BASE_FEE, 10);
   try {

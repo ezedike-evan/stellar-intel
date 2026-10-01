@@ -24,10 +24,14 @@ describe('corridors tool', () => {
     for (const corridor of listCorridors()) {
       const source = VISIBLE_CORRIDORS.find((c) => c.id === corridor.id);
       expect(source).toBeDefined();
-      expect(corridor.displayName).toBe(`${source!.countryName} (${source!.to})`);
+      expect(corridor.displayName).toBe(`${source!.countryName} (${source!.from} → ${source!.to})`);
+      expect(corridor.displayName).toContain('→');
       expect(corridor.from).toBe(source!.from);
+      expect(corridor.fromIssuer).toBe(source!.fromIssuer);
+      expect(corridor.fromPeg).toBe(source!.fromPeg);
       expect(corridor.to).toBe(source!.to);
       expect(corridor.countryCode).toBe(source!.countryCode);
+      expect(corridor.countryName).toBe(source!.countryName);
     }
   });
 

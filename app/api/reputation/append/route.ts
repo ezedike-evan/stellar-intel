@@ -5,6 +5,8 @@ import { AppendOutcomeInputSchema, toOutcomeLogRow } from '@/lib/reputation/sche
 import { verifyIntentSignature } from '@/lib/intent/verify';
 import type { ApiError } from '@/types';
 import { enforceRateLimit } from '@/lib/api/response';
+import { emitWebhookEvent } from '@/lib/webhooks/emit';
+import type { OutcomeLogRow } from '@/types/reputation';
 
 export const runtime = 'nodejs';
 
@@ -25,6 +27,40 @@ export const runtime = 'nodejs';
 //   the stored row is never rewritten, even by a byte-identical retry, so a
 //   repeat POST cannot change an outcome or reset its reconcile/publish state.
 // - 201 with `attested: true` otherwise; the row stores `publicKey` as its signer.
+//
+// Webhooks fire only on the 201 path. Payloads are built field by field from
+// the stored row, never spread, so `signerAccount` and `signature` cannot leak.
+
+function emitOutcomeEvents(row: OutcomeLogRow): void {
+  const { intentHash, anchorId, corridor, outcome } = row;
+
+  emitWebhookEvent('reputation.event_written', {
+    intentHash,
+    anchorId,
+    corridor,
+    outcome,
+    createdAt: row.createdAt,
+  });
+
+  switch (outcome) {
+    case 'completed':
+      emitWebhookEvent('intent.settled', {
+        intentHash,
+        anchorId,
+        corridor,
+        quotedAmount: row.quotedAmount,
+        stellarTransactionId: row.stellarTransactionId,
+      });
+      break;
+    case 'error':
+    case 'expired':
+    case 'refunded':
+      emitWebhookEvent('intent.failed', { intentHash, anchorId, corridor, outcome });
+      break;
+    case 'partial':
+      break;
+  }
+}
 
 function hasAttestationFields(body: unknown): boolean {
   if (body === null || typeof body !== 'object') return false;
@@ -92,6 +128,7 @@ export async function POST(request: NextRequest): Promise<NextResponse> {
       outcome: row.outcome,
       attested: true,
     });
+    emitOutcomeEvents(row);
     return NextResponse.json(
       { ok: true, intentHash: row.intentHash, attested: true },
       { status: 201 }

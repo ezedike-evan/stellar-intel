@@ -19,6 +19,11 @@
       "tomlHttp": 200,
       "anchorQuoteServer": null
     },
+    "latamex": {
+      "homeDomain": "pubnet-sep.latamex.com",
+      "tomlHttp": 200,
+      "anchorQuoteServer": null
+    },
     "ngnc": {
       "homeDomain": "ngnc.online",
       "tomlHttp": 200,
@@ -39,6 +44,36 @@
         "stellar:BRL:GDVKY2GU2DRXWTBEYJJWSFXIGBZV6AZNBVVSUHEPZI54LIS6BA7DVVSP",
         "iso4217:BRL"
       ]
+    },
+    "aps": {
+      "homeDomain": "ramp.aps.money",
+      "tomlHttp": 200,
+      "anchorQuoteServer": null
+    },
+    "bitnovo": {
+      "homeDomain": "stellar.bitnovo.com",
+      "tomlHttp": 200,
+      "anchorQuoteServer": null
+    },
+    "perahub": {
+      "homeDomain": "stellar.perahub.com.ph",
+      "tomlHttp": 200,
+      "anchorQuoteServer": null
+    },
+    "clpx": {
+      "homeDomain": "kbtrading.org",
+      "tomlHttp": 200,
+      "anchorQuoteServer": null
+    },
+    "sofizpay": {
+      "homeDomain": "sofizpay.com",
+      "tomlHttp": 200,
+      "anchorQuoteServer": null
+    },
+    "finclusive": {
+      "homeDomain": "finclusive.com",
+      "tomlHttp": 200,
+      "anchorQuoteServer": null
     }
   }
 }

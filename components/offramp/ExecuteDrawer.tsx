@@ -2,7 +2,7 @@
 import { useEffect, useRef, useState, type TouchEvent as ReactTouchEvent } from 'react';
 import { authenticate, NetworkMismatchError } from '@/lib/stellar/sep10';
 import { initiateWithdraw, getWithdrawTransactionRecord } from '@/lib/stellar/sep24';
-import { getResolvedAnchorById } from '@/lib/stellar/anchors';
+import { getCorridorAsset, getResolvedAnchorById, sep38AssetId } from '@/lib/stellar/anchors';
 import { buildWithdrawPayment, signAndSubmitPayment } from '@/lib/stellar/horizon';
 import {
   assertSep38Capable,
@@ -108,6 +108,7 @@ function ExecuteDrawerContent({
   const [kycOrigin, setKycOrigin] = useState<string | null>(null);
   const [showConfirmDialog, setShowConfirmDialog] = useState(false);
   const [showConsent, setShowConsent] = useState(false);
+  const asset = rate ? getCorridorAsset(rate.corridorId) : null;
 
   // The firm SEP-38 quote locked in for this execution, when the anchor
   // supports one — drives the expiry countdown shown in the summary panel.
@@ -314,7 +315,7 @@ function ExecuteDrawerContent({
         setStep('quoting');
         const buyAssetCode = rate.corridorId.split('-')[1]?.toUpperCase();
         const quote = await postSep38Quote(quoteServer, auth.jwt, {
-          sell_asset: `stellar:${anchor.assetCode}:${anchor.assetIssuer}`,
+          sell_asset: sep38AssetId(asset!),
           buy_asset: `iso4217:${buyAssetCode}`,
           sell_amount: amount,
           context: 'sep24',
@@ -332,8 +333,8 @@ function ExecuteDrawerContent({
       const withdrawResp = await initiateWithdraw(
         anchor,
         {
-          assetCode: anchor.assetCode,
-          assetIssuer: anchor.assetIssuer,
+          assetCode: asset!.code,
+          assetIssuer: asset!.issuer ?? '',
           amount,
           account: publicKey,
           jwt: auth.jwt,
@@ -380,8 +381,8 @@ function ExecuteDrawerContent({
         amount,
         memo: record.memo,
         memoType: record.memoType,
-        assetCode: anchor.assetCode,
-        assetIssuer: anchor.assetIssuer,
+        assetCode: asset!.code,
+        assetIssuer: asset!.issuer ?? '',
       });
 
       // Step 6 — Sign and submit
@@ -580,11 +581,15 @@ function ExecuteDrawerContent({
               <dl className="space-y-2 text-sm">
                 <div className="flex justify-between">
                   <dt className="text-fg-muted">You send</dt>
-                  <dd className="font-medium text-primary-text">{amount} USDC</dd>
+                  <dd className="font-medium text-primary-text">
+                    {amount} {asset?.code}
+                  </dd>
                 </div>
                 <div className="flex justify-between">
                   <dt className="text-fg-muted">Fee</dt>
-                  <dd className="text-secondary-text">{rate.fee} USDC</dd>
+                  <dd className="text-secondary-text">
+                    {rate.fee} {asset?.code}
+                  </dd>
                 </div>
                 <div className="flex justify-between border-t border-border pt-2">
                   <dt className="font-medium text-secondary-text">You receive</dt>

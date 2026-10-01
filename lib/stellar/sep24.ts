@@ -359,6 +359,11 @@ export async function fetchAnchorFee(
   return { fee: String(fee), anchorDomain: params.anchorDomain, exchangeRate };
 }
 
+function getCorridorAsset(corridorId: string) {
+  const corridor = getCorridorById(corridorId);
+  return { code: corridor.from, issuer: corridor.fromIssuer };
+}
+
 /**
  * Fetches fees from all anchors serving the given corridor in parallel.
  * Uses Promise.allSettled so a single anchor failure does not block others.
@@ -369,14 +374,15 @@ export async function fetchAllAnchorFees(
 ): Promise<PromiseSettledResult<AnchorRate>[]> {
   const anchors = getAnchorsByCorridorId(corridorId);
   const corridor = getCorridorById(corridorId);
+  const asset = getCorridorAsset(corridorId);
 
   return Promise.allSettled(
     anchors.map(async (anchor): Promise<AnchorRate> => {
       const { fee, exchangeRate } = await fetchAnchorFee({
         anchorDomain: anchor.homeDomain,
         operation: 'withdraw',
-        assetCode: anchor.assetCode,
-        assetIssuer: anchor.assetIssuer,
+        assetCode: asset.code,
+        assetIssuer: asset.issuer ?? '',
         amount,
         type: 'bank_account',
       });
@@ -450,6 +456,7 @@ export async function solicitAnchorQuotes(
 ): Promise<PromiseSettledResult<AnchorRate>[]> {
   const anchors = getAnchorsByCorridorId(corridorId);
   const corridor = getCorridorById(corridorId);
+  const asset = getCorridorAsset(corridorId);
 
   // Fan out: one Promise per anchor, each racing against its own deadline.
   const racedPromises = anchors.map((anchor): Promise<AnchorRate> => {
@@ -457,8 +464,8 @@ export async function solicitAnchorQuotes(
       const { fee, exchangeRate } = await fetchAnchorFee({
         anchorDomain: anchor.homeDomain,
         operation: 'withdraw',
-        assetCode: anchor.assetCode,
-        assetIssuer: anchor.assetIssuer,
+        assetCode: asset.code,
+        assetIssuer: asset.issuer ?? '',
         amount,
         type: 'bank_account',
       });

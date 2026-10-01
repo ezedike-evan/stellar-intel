@@ -10,16 +10,21 @@ import {
   type ReputationStore,
 } from '@/lib/reputation/store';
 import { SqliteReputationStore } from '@/lib/reputation/sqlite';
+import { _setWebhookEmitter } from '@/lib/webhooks/emit';
 
 let store: ReputationStore;
+let emitted: Array<{ kind: string; payload: Record<string, unknown> }>;
 
 beforeEach(() => {
   clearRateLimitStore();
   store = new InMemoryReputationStore();
   _setReputationStore(store);
+  emitted = [];
+  _setWebhookEmitter((kind, payload) => emitted.push({ kind, payload }));
 });
 
 afterEach(async () => {
+  _setWebhookEmitter(null);
   vi.restoreAllMocks();
   vi.unstubAllGlobals();
   await store.close();
@@ -190,12 +195,111 @@ describe.each([
     expect(rows[0]?.quotedAmount).toBe('100');
   });
 
+  it('emits no webhook for a 409 duplicate', async () => {
+    expect((await appendPOST(req(signed()))).status).toBe(201);
+    emitted = [];
+
+    expect((await appendPOST(req(signed()))).status).toBe(409);
+    expect((await appendPOST(req(signed({ outcome: 'error' })))).status).toBe(409);
+    expect(emitted).toEqual([]);
+  });
+
   it('a second signer cannot take over an existing row', async () => {
     await appendPOST(req(signed()));
     const other = Keypair.random();
     expect((await appendPOST(req(signed({ outcome: 'error' }, other)))).status).toBe(409);
     const [row] = await store.query({});
     expect(row?.signerAccount).toBe(sender.publicKey());
+  });
+});
+
+describe('POST /api/reputation/append — webhooks (#1341)', () => {
+  it('emits reputation.event_written then intent.settled for a completed row', async () => {
+    expect((await appendPOST(req(signed()))).status).toBe(201);
+    const [row] = await store.query({});
+
+    expect(emitted).toEqual([
+      {
+        kind: 'reputation.event_written',
+        payload: {
+          intentHash: HASH,
+          anchorId: 'cowrie',
+          corridor: 'usdc-ngn',
+          outcome: 'completed',
+          createdAt: row?.createdAt,
+        },
+      },
+      {
+        kind: 'intent.settled',
+        payload: {
+          intentHash: HASH,
+          anchorId: 'cowrie',
+          corridor: 'usdc-ngn',
+          quotedAmount: '100',
+          stellarTransactionId: STELLAR_TX,
+        },
+      },
+    ]);
+  });
+
+  it('keeps stellarTransactionId as null on intent.settled when it was not sent', async () => {
+    expect((await appendPOST(req(signed({ stellarTransactionId: undefined })))).status).toBe(201);
+
+    const settled = emitted.find((e) => e.kind === 'intent.settled');
+    expect(settled?.payload).toHaveProperty('stellarTransactionId', null);
+  });
+
+  it.each(['error', 'expired', 'refunded'] as const)(
+    'emits event_written then intent.failed for an %s row',
+    async (outcome) => {
+      expect((await appendPOST(req(signed({ outcome })))).status).toBe(201);
+
+      expect(emitted.map((e) => e.kind)).toEqual(['reputation.event_written', 'intent.failed']);
+      expect(emitted[1]?.payload).toEqual({
+        intentHash: HASH,
+        anchorId: 'cowrie',
+        corridor: 'usdc-ngn',
+        outcome,
+      });
+    }
+  );
+
+  it('emits only event_written for a partial row', async () => {
+    expect((await appendPOST(req(signed({ outcome: 'partial' })))).status).toBe(201);
+
+    expect(emitted.map((e) => e.kind)).toEqual(['reputation.event_written']);
+  });
+
+  it('never puts signerAccount or signature in a payload', async () => {
+    await appendPOST(req(signed()));
+    await appendPOST(req(signed({ intentHash: 'c'.repeat(64), outcome: 'error' })));
+
+    expect(emitted.length).toBeGreaterThan(0);
+    for (const { payload } of emitted) {
+      expect(payload).not.toHaveProperty('signerAccount');
+      expect(payload).not.toHaveProperty('signature');
+      expect(payload).not.toHaveProperty('publicKey');
+    }
+  });
+
+  it('emits nothing for an unsigned request (401)', async () => {
+    expect((await appendPOST(req(outcome()))).status).toBe(401);
+    expect(emitted).toEqual([]);
+  });
+
+  it('emits nothing for a bad signature (401)', async () => {
+    const body = {
+      ...outcome(),
+      publicKey: sender.publicKey(),
+      signature: signRaw(HASH, Keypair.random()),
+    };
+    expect((await appendPOST(req(body))).status).toBe(401);
+    expect(emitted).toEqual([]);
+  });
+
+  it('emits nothing for an invalid body (400)', async () => {
+    expect((await appendPOST(req(signed({ anchorId: 'not-an-anchor' })))).status).toBe(400);
+    expect(emitted).toEqual([]);
   });
 });
 

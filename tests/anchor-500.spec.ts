@@ -32,10 +32,15 @@ vi.mock('@/lib/stellar/sep24', async () => {
   };
 });
 
-vi.mock('@/lib/stellar/anchors', () => ({
-  getAnchorById: vi.fn(),
-  getResolvedAnchorById: vi.fn(),
-}));
+vi.mock('@/lib/stellar/anchors', async () => {
+  const actual =
+    await vi.importActual<typeof import('@/lib/stellar/anchors')>('@/lib/stellar/anchors');
+  return {
+    ...actual,
+    getAnchorById: vi.fn(),
+    getResolvedAnchorById: vi.fn(),
+  };
+});
 
 vi.mock('@/lib/stellar/horizon', () => ({
   buildWithdrawPayment: vi.fn(),

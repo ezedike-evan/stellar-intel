@@ -5,6 +5,7 @@ import { GET } from '@/app/api/v1/health/route';
 import { rateLimitHeaders, clearIdempotencyStore } from '@/lib/api/v1';
 import { API_VERSION } from '@/lib/api/response';
 import { clearRateLimitStore } from '@/lib/api/rate-limit';
+import { _setWebhookEmitter } from '@/lib/webhooks/emit';
 
 const VALID_INTENT = {
   type: 'offramp',
@@ -120,5 +121,66 @@ describe('GET /api/v1/health (#805)', () => {
     const body = (await res.json()) as { status: string; version: string };
     expect(body.status).toBe('ok');
     expect(body.version).toBe('v1');
+  });
+});
+
+describe('POST /api/v1/intent/offramp — intent.created webhook (#1340)', () => {
+  let emitted: Array<{ kind: string; payload: Record<string, unknown> }>;
+
+  beforeEach(() => {
+    emitted = [];
+    _setWebhookEmitter((kind, payload) => emitted.push({ kind, payload }));
+  });
+
+  afterEach(() => {
+    _setWebhookEmitter(null);
+  });
+
+  it('emits exactly one intent.created on success, without sender, recipient or unsignedTx', async () => {
+    const res = await POST(postV1(VALID_INTENT));
+    expect(res.status).toBe(200);
+    const data = await res.json();
+
+    expect(emitted).toEqual([
+      {
+        kind: 'intent.created',
+        payload: {
+          corridorId: data.route.corridorId,
+          anchorId: data.route.anchorId,
+          quoteId: data.quoteId,
+          amount: '100',
+          sourceAsset: 'USDC',
+          destinationAsset: 'NGN',
+        },
+      },
+    ]);
+    expect(emitted[0]?.payload).not.toHaveProperty('recipient');
+    expect(emitted[0]?.payload).not.toHaveProperty('sender');
+    expect(emitted[0]?.payload).not.toHaveProperty('unsignedTx');
+  });
+
+  it('emits nothing on a 400', async () => {
+    const res = await POST(postV1({ ...VALID_INTENT, amount: '-1' }));
+    expect(res.status).toBe(400);
+    expect(emitted).toEqual([]);
+  });
+
+  it('emits nothing on NO_ROUTE', async () => {
+    vi.stubEnv('ANCHOR_PAYMENT_ACCOUNTS', JSON.stringify({}));
+
+    const res = await POST(postV1(VALID_INTENT));
+    expect((await res.json()).error.code).toBe('no_route');
+    expect(emitted).toEqual([]);
+  });
+
+  it('emits nothing on an idempotent replay', async () => {
+    const headers = { 'Idempotency-Key': 'v1-webhook-key-1' };
+
+    expect((await POST(postV1(VALID_INTENT, headers))).status).toBe(200);
+    expect(emitted).toHaveLength(1);
+
+    const replay = await POST(postV1(VALID_INTENT, headers));
+    expect(replay.headers.get('Idempotency-Replayed')).toBe('true');
+    expect(emitted).toHaveLength(1);
   });
 });

@@ -5,13 +5,17 @@ import type { Anchor, Corridor } from '@/types';
 // usdc-zar was flagged off until zeam.money (#465) started serving it.
 const FLAGGED_OFF_CORRIDORS = {
   'usdc-xof': 'v1.1 target corridor, gated behind v11Corridors until an anchor serves it.',
-  // usdc-eur was flagged off until mykobo.co (#639) started serving it, and is
-  // flagged off again: mykobo was delisted 2026-09-06 when stellar.mykobo.co,
-  // the host its own TOML advertises for both SEP-6 and SEP-24, stopped
-  // resolving. No other anchor serves EUR.
-  'usdc-eur': 'Orphaned again by the mykobo delisting; no anchor serves EUR.',
   'usdc-ars': 'Orphaned when anclap was corrected to its own tokens 2026-09-23.',
   'usdc-pen': 'Orphaned when anclap was corrected to its own tokens 2026-09-23.',
+  // perahub (#1303) serves usdc-php over SEP-31 only, and SEP-31 is never routed:
+  // it needs a bilateral sending-anchor agreement. The corridor stays defined so the
+  // lane is in the record, but it must not be treated as covered by registry `corridors`.
+  'usdc-php': 'SEP-31-only (perahub); tracked, not routable',
+  // kbtrading (#1304) serves clpx-clp over SEP-31 only: its SEP-6/SEP-24 rails
+  // take CLPX in but pay BTCLN (Lightning) out, and withdraw.CLPX is advertised
+  // disabled. The corridor stays defined so the lane is in the record, but it
+  // must not count as covered by registry `corridors`.
+  'clpx-clp': 'SEP-31-only (clpx); tracked, not routable',
 } as const satisfies Record<string, string>;
 
 function anchorIdsByCorridor(anchors: readonly Anchor[]): Map<string, string[]> {

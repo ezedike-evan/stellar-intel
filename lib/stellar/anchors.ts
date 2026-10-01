@@ -126,6 +126,40 @@ export function validateAnchorAssetIssuer(
   };
 }
 
+/**
+ * Validates the issuer of every distinct on-chain asset an anchor serves, not just
+ * its primary `assetCode`/`assetIssuer`. A multi-asset anchor (e.g. Latamex: ARST,
+ * BRLT, USDC) could otherwise advertise an impostor issuer for a secondary asset
+ * unnoticed.
+ *
+ * Returns one validation per distinct `(corridor.from, corridor.fromIssuer)` across
+ * `anchor.corridors`, in first-seen order. Native corridors (`fromIssuer === null`)
+ * and corridor ids missing from `corridors` are skipped. `corridors` defaults to the
+ * registry and is injectable for tests.
+ */
+export function validateCorridorAssetIssuers(
+  anchor: Pick<Anchor, 'id' | 'corridors'>,
+  currencies: Sep1TomlData['CURRENCIES'],
+  corridors: Corridor[] = CORRIDORS
+): AnchorIssuerValidation[] {
+  const seen = new Set<string>();
+  const results: AnchorIssuerValidation[] = [];
+  for (const corridorId of anchor.corridors) {
+    const corridor = corridors.find((c) => c.id === corridorId);
+    if (!corridor || corridor.fromIssuer === null) continue;
+    const key = `${corridor.from}:${corridor.fromIssuer}`;
+    if (seen.has(key)) continue;
+    seen.add(key);
+    results.push(
+      validateAnchorAssetIssuer(
+        { id: anchor.id, assetCode: corridor.from, assetIssuer: corridor.fromIssuer },
+        currencies
+      )
+    );
+  }
+  return results;
+}
+
 // ─── Lookup helpers ───────────────────────────────────────────────────────────
 
 /**
@@ -206,6 +240,14 @@ export function getAnchorsByCorridorId(corridorId: string): Anchor[] {
 }
 
 /**
+ * Returns all deposit-capable anchors that serve the given corridor.
+ * Filters `getAnchorsByCorridorId` to anchors whose `depositEnabled` is not explicitly false.
+ */
+export function getDepositCapableAnchors(corridorId: string): Anchor[] {
+  return getAnchorsByCorridorId(corridorId).filter((a) => a.depositEnabled !== false);
+}
+
+/**
  * Resolves SEP-1 details for every known, non-degraded anchor that serves the
  * corridor. Failed anchors are omitted so callers can continue with the live subset.
  * For each anchor, uses serviceDomain if available, otherwise falls back to homeDomain.
@@ -230,11 +272,20 @@ export async function discoverAnchorsForCorridor(corridorId: string): Promise<Re
       // different issuer is settling an impostor asset. We surface it loudly rather
       // than drop it — the registry's canonical issuer still governs downstream
       // SEP-38 identifiers, so the warning is for operators/CI to act on.
-      const issuerCheck = validateAnchorAssetIssuer(anchor, sep1.CURRENCIES);
-      if (issuerCheck.status === 'mismatch') {
+      // The corridor being discovered decides which asset is checked (an anchor may
+      // serve several), not the anchor's primary asset.
+      const corridor = CORRIDORS.find((c) => c.id === corridorId);
+      const issuerCheck =
+        corridor && corridor.fromIssuer !== null
+          ? validateAnchorAssetIssuer(
+              { id: anchor.id, assetCode: corridor.from, assetIssuer: corridor.fromIssuer },
+              sep1.CURRENCIES
+            )
+          : null;
+      if (issuerCheck?.status === 'mismatch') {
         // eslint-disable-next-line no-console
         console.warn(
-          `[anchors] ${anchor.id} advertises a look-alike ${anchor.assetCode} issuer ` +
+          `[anchors] ${anchor.id} advertises a look-alike ${issuerCheck.assetCode} issuer ` +
             `(${issuerCheck.advertisedIssuer}); expected ${issuerCheck.expectedIssuer}`
         );
       }
@@ -272,6 +323,47 @@ export function getCorridorById(id: string): Corridor {
  */
 export function isValidCorridorId(id: string): boolean {
   return CORRIDORS.some((c) => c.id === id);
+}
+
+// ─── Corridor assets (#ANC002) ────────────────────────────────────────────────
+
+/**
+ * The Stellar asset a corridor carries on its source side, plus the fiat
+ * currency it is pegged to. `issuer` is null for native XLM, so callers can
+ * derive SEP-38 identifiers once instead of re-implementing the native special
+ * case downstream.
+ */
+export interface CorridorAsset {
+  /** Stellar asset code, e.g. 'USDC'. */
+  code: string;
+  /** Issuing account; null for native XLM. */
+  issuer: string | null;
+  /** Fiat currency the asset is pegged to, e.g. 'USD' for USDC. */
+  peg: string;
+}
+
+/**
+ * Returns the asset a corridor carries on its source side — code, issuer, and
+ * fiat peg — resolved from the corridor registry.
+ * Throws the same "Unknown corridor" error as {@link getCorridorById} for an
+ * unknown corridor ID.
+ */
+export function getCorridorAsset(corridorId: string): CorridorAsset {
+  const corridor = getCorridorById(corridorId);
+  return {
+    code: corridor.from,
+    issuer: corridor.fromIssuer,
+    peg: corridor.fromPeg,
+  };
+}
+
+/**
+ * Formats an asset as its SEP-38 identifier: `stellar:native` when the issuer
+ * is null (native XLM), otherwise `` `stellar:${code}:${issuer}` ``.
+ */
+export function sep38AssetId(asset: Pick<CorridorAsset, 'code' | 'issuer'>): string {
+  if (asset.issuer === null) return 'stellar:native';
+  return `stellar:${asset.code}:${asset.issuer}`;
 }
 
 /**

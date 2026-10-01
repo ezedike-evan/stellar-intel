@@ -1,12 +1,16 @@
 import type { McpServer } from '@modelcontextprotocol/sdk/server/mcp.js';
 import { z } from 'zod';
-import { prepareIntent, OfframpToolError } from '@/lib/mcp/offramp';
+import { prepareIntent, OfframpToolError, PrepareOutputSchema } from '@/lib/mcp/offramp';
+import { McpToolError, fromOfframpError, upstreamTimeout } from '@/lib/mcp/errors';
 
 export const PREPARE_TOOL_NAME = 'intel.offramp.prepare';
 
 const inputShape = {
   type: z.literal('offramp').describe('Intent type — must be "offramp"'),
-  sourceAsset: z.string().min(1).describe('Source asset code, e.g. USDC'),
+  sourceAsset: z
+    .string()
+    .min(1)
+    .describe('On-chain source asset code as listed by intel.corridors (e.g. USDC, ARST, NGNT)'),
   destinationAsset: z.string().min(1).describe('Destination fiat code, e.g. NGN'),
   amount: z.string().describe('Decimal amount of the source asset'),
   sender: z.string().describe('Stellar public key of the off-ramping account'),
@@ -19,11 +23,10 @@ export function registerPrepareTool(server: McpServer): void {
     {
       title: 'Prepare off-ramp intent',
       description:
-        'Stellar Intel abstracts anchors, not chains: this prepares an unsigned intent envelope (intent + ' +
-        'hash) and unsigned Stellar transaction for exiting a Stellar asset to fiat via a trusted SEP-24/38 ' +
-        'anchor, for the agent to sign. If the task is moving value across chains (pay/bridge), use ROZO ' +
-        'instead — see docs/AGENT_POSITIONING.md.',
+        'Returns an unsigned intent envelope (intent + hash) and an unsigned Stellar transaction for agent signing.',
       inputSchema: inputShape,
+      outputSchema: PrepareOutputSchema,
+      annotations: { readOnlyHint: true },
     },
     async (args) => {
       try {
@@ -33,15 +36,18 @@ export function registerPrepareTool(server: McpServer): void {
           structuredContent: result,
         };
       } catch (err) {
-        const message =
+        const toolErr =
           err instanceof OfframpToolError
-            ? `${err.code}: ${err.message}`
-            : err instanceof Error
-              ? err.message
-              : 'Unknown error';
+            ? fromOfframpError(err)
+            : err instanceof McpToolError
+              ? err
+              : upstreamTimeout(
+                  err instanceof Error ? err.message : 'Unknown error',
+                  'UNKNOWN_ERROR'
+                );
         return {
           isError: true,
-          content: [{ type: 'text', text: message }],
+          content: [{ type: 'text', text: `${toolErr.code}: ${toolErr.message}` }],
         };
       }
     }

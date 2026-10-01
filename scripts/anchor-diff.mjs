@@ -51,15 +51,40 @@ export function diffDomainList(before, after) {
 }
 
 /**
- * @param {{ transferCapableDomains?: string[], issuerOnlyDomains?: string[], unreachableDomains?: string[] }} before
- * @param {{ transferCapableDomains?: string[], issuerOnlyDomains?: string[], unreachableDomains?: string[] }} after
+ * @typedef {{
+ *   transferCapableDomains?: string[],
+ *   issuerOnlyDomains?: string[],
+ *   unreachableDomains?: string[],
+ *   tiers?: { routable?: string[], healthOnly?: string[], listed?: string[], excluded?: string[] },
+ * }} Snapshot
+ */
+
+/**
+ * @param {Snapshot} before
+ * @param {Snapshot} after
  */
 export function diffSnapshots(before, after) {
-  return {
-    transferCapable: diffDomainList(before.transferCapableDomains, after.transferCapableDomains),
-    issuerOnly: diffDomainList(before.issuerOnlyDomains, after.issuerOnlyDomains),
-    unreachable: diffDomainList(before.unreachableDomains, after.unreachableDomains),
-  };
+  const diff = {};
+
+  // Survey tiers (#1320). Only diffed when BOTH snapshots carry `tiers` — a
+  // committed snapshot that predates #1319 has none, and inventing empty tiers
+  // for it would report every current tier member as "new". `excluded` is
+  // intentionally left out: an impersonation entry appearing or disappearing is
+  // not a fleet-capability change worth a diff section.
+  if (before.tiers && after.tiers) {
+    diff.routable = diffDomainList(before.tiers.routable, after.tiers.routable);
+    diff.healthOnly = diffDomainList(before.tiers.healthOnly, after.tiers.healthOnly);
+    diff.listed = diffDomainList(before.tiers.listed, after.tiers.listed);
+  }
+
+  diff.transferCapable = diffDomainList(
+    before.transferCapableDomains,
+    after.transferCapableDomains
+  );
+  diff.issuerOnly = diffDomainList(before.issuerOnlyDomains, after.issuerOnlyDomains);
+  diff.unreachable = diffDomainList(before.unreachableDomains, after.unreachableDomains);
+
+  return diff;
 }
 
 /**
@@ -82,13 +107,18 @@ function section(title, { added, removed }) {
  */
 export function formatDiff(diff) {
   if (!hasChanges(diff)) return 'No fleet changes since the last committed snapshot.';
-  return [
+  const sections = [];
+  // Tier sections lead, but only when the diff carries them (both snapshots had
+  // `tiers`). A pre-tiers snapshot skips them without a placeholder.
+  if (diff.routable) sections.push(section('Routable', diff.routable));
+  if (diff.healthOnly) sections.push(section('Health-only', diff.healthOnly));
+  if (diff.listed) sections.push(section('Listed', diff.listed));
+  sections.push(
     section('Transfer-capable (SEP-6 / SEP-24)', diff.transferCapable),
     section('Issuer-only', diff.issuerOnly),
-    section('Unreachable', diff.unreachable),
-  ]
-    .filter(Boolean)
-    .join('\n\n');
+    section('Unreachable', diff.unreachable)
+  );
+  return sections.filter(Boolean).join('\n\n');
 }
 
 async function main() {

@@ -1,5 +1,5 @@
 import { StdioServerTransport } from '@modelcontextprotocol/sdk/server/stdio.js';
-import { createServer } from '../server.js';
+import { createServer } from '../server';
 
 /**
  * Runs the MCP server over the stdio transport (the default), for local

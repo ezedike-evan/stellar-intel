@@ -2,7 +2,9 @@ import type { NextRequest, NextResponse } from 'next/server';
 import { withV1 } from '@/lib/api/v1';
 import { IntentSchema, createOfframpIntent } from '@/lib/intent/offramp';
 import { verifyOptionalIntentAttestation } from '@/lib/intent/verify';
+import { registerIntentReplay } from '@/lib/intent/replay';
 import type { Intent } from '@/lib/intent/hash';
+import { emitWebhookEvent } from '@/lib/webhooks/emit';
 
 export const runtime = 'nodejs';
 
@@ -42,10 +44,37 @@ export async function POST(request: NextRequest): Promise<NextResponse> {
         );
       }
 
+      if (attestation.attested) {
+        const { nonce, deadline } = intent as { nonce?: string; deadline?: string };
+        if (!nonce || !deadline) {
+          return ctx.error('validation_error', 'signed intents require nonce and deadline', 400);
+        }
+
+        const replay = await registerIntentReplay({
+          publicKey: (body as { publicKey: string }).publicKey,
+          nonce,
+          deadline,
+        });
+        if (!replay.ok) {
+          return ctx.error(replay.code, replay.message, replay.status);
+        }
+      }
+
       const result = await createOfframpIntent(intent);
       if (!result.ok) {
         return ctx.error(result.code.toLowerCase(), result.message, result.status);
       }
+
+      // Field by field, never a spread: the intent carries sender and recipient.
+      // withV1 answers a replay from the cache before this handler runs.
+      emitWebhookEvent('intent.created', {
+        corridorId: result.response.route.corridorId,
+        anchorId: result.response.route.anchorId,
+        quoteId: result.response.quoteId,
+        amount: intent.amount,
+        sourceAsset: intent.sourceAsset,
+        destinationAsset: intent.destinationAsset,
+      });
 
       return { status: 200, body: result.response };
     }

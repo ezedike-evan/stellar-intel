@@ -1,6 +1,6 @@
 import { describe, it, expect } from 'vitest';
 import { readFileSync, readdirSync, statSync } from 'fs';
-import { join } from 'path';
+import { join } from 'path/posix';
 
 // #733 — every public route must be rate-limited, and stay that way.
 //

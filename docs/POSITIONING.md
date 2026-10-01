@@ -161,7 +161,9 @@ Three things this section deliberately does not say:
    for it. Judging it by a monitor's refresh rate would be judging it against a
    purpose it never claimed.
 2. **Not "we are more complete."** This project tracks a **small registered
-   set** — currently six anchors — against a directory that lists many more.
+   set** — currently ten anchors, two of which are never routed on their
+   SEP-31-only lanes (PeraHub, and KB Trading's CLPX→CLP lane) — against a
+   directory that lists many more.
    On coverage the directory wins outright.
 3. **Not "reserve attestation is a gap we fill."** It is not implemented here
    either. It is noted as pending on SDF's side because

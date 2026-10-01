@@ -62,4 +62,36 @@ describe('useWalletBalance', () => {
     await waitFor(() => expect(result.current.isLoading).toBe(false));
     expect(result.current.balance).toBeNull();
   });
+
+  it('reads the balance of the requested asset instead of USDC', async () => {
+    vi.mocked(fetchAccount).mockResolvedValue({
+      balances: [
+        {
+          asset_type: 'credit_alphanum4',
+          asset_code: USDC_ASSET.code,
+          asset_issuer: USDC_ASSET.issuer,
+          balance: '243.5000000',
+        },
+        {
+          asset_type: 'credit_alphanum4',
+          asset_code: 'ARS',
+          asset_issuer: 'GCYE7C77EB5AWAA25R5XMWNI2EDOKTTFTTPZKM2SR5DI4B4WFD52DARS',
+          balance: '1000.0000000',
+        },
+      ],
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    } as any);
+
+    const { result } = renderHook(
+      () =>
+        useWalletBalance('GABC123', {
+          code: 'ARS',
+          issuer: 'GCYE7C77EB5AWAA25R5XMWNI2EDOKTTFTTPZKM2SR5DI4B4WFD52DARS',
+        }),
+      { wrapper }
+    );
+
+    await waitFor(() => expect(result.current.isLoading).toBe(false));
+    expect(result.current.balance).toBe(1000);
+  });
 });

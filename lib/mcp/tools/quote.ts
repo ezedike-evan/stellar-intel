@@ -1,11 +1,15 @@
 import type { McpServer } from '@modelcontextprotocol/sdk/server/mcp.js';
 import { z } from 'zod';
-import { getQuote, OfframpToolError } from '@/lib/mcp/offramp';
+import { getQuote, OfframpToolError, QuoteOutputSchema } from '@/lib/mcp/offramp';
+import { McpToolError, fromOfframpError, upstreamTimeout } from '@/lib/mcp/errors';
 
 export const QUOTE_TOOL_NAME = 'intel.offramp.quote';
 
 const inputShape = {
-  from: z.string().min(1).describe('Source asset code, e.g. USDC'),
+  from: z
+    .string()
+    .min(1)
+    .describe('On-chain source asset code as listed by intel.corridors (e.g. USDC, ARST, NGNT)'),
   to: z.string().min(1).describe('Destination fiat currency code, e.g. NGN'),
   amount: z.string().describe('Decimal amount of the source asset to off-ramp'),
 };
@@ -16,11 +20,10 @@ export function registerQuoteTool(server: McpServer): void {
     {
       title: 'Off-ramp quote',
       description:
-        'Stellar Intel abstracts anchors, not chains: this returns the best net-received fiat exit ' +
-        'quote for a Stellar asset + corridor, scored across trusted SEP-24/38 anchors (anchor, quoteId, ' +
-        'netReceived, expiresAt). If the task is moving value across chains (pay/bridge), use ROZO instead — ' +
-        'see docs/AGENT_POSITIONING.md.',
+        'Returns the live net-received quote for a corridor + amount (anchor, quoteId, netReceived, expiresAt).',
       inputSchema: inputShape,
+      outputSchema: QuoteOutputSchema,
+      annotations: { readOnlyHint: true },
     },
     async (args) => {
       try {
@@ -30,15 +33,18 @@ export function registerQuoteTool(server: McpServer): void {
           structuredContent: quote,
         };
       } catch (err) {
-        const message =
+        const toolErr =
           err instanceof OfframpToolError
-            ? `${err.code}: ${err.message}`
-            : err instanceof Error
-              ? err.message
-              : 'Unknown error';
+            ? fromOfframpError(err)
+            : err instanceof McpToolError
+              ? err
+              : upstreamTimeout(
+                  err instanceof Error ? err.message : 'Unknown error',
+                  'UNKNOWN_ERROR'
+                );
         return {
           isError: true,
-          content: [{ type: 'text', text: message }],
+          content: [{ type: 'text', text: `${toolErr.code}: ${toolErr.message}` }],
         };
       }
     }

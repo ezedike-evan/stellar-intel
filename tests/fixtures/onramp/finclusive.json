@@ -1,0 +1,17 @@
+{
+  "_comment": "Live SEP-24 GET /info deposit capture (#1302), captured by hand against the anchor's own advertised transfer server the same way tests/fixtures/sep38/capability-capture.json was. Census 2026-09-23: deposit/withdraw asset pairs [XLM, USDC] enabled on both rails with zero fees; /info shows no withdraw types, so the USD fiat leg is only evidenced by the SDF directory. Only the registered asset (USDC) is kept here. (Re-check 2026-09-29: the transfer endpoint timed out from here, so this capture transcribes the census values.)",
+  "capturedAt": "2026-09-23T00:00:00.000Z",
+  "anchorId": "finclusive",
+  "homeDomain": "finclusive.com",
+  "registeredAssetCode": "USDC",
+  "transferServerSep0024": "https://api.finclusive.com/stellar/transfer",
+  "reachable": true,
+  "supportsDeposit": true,
+  "info": {
+    "deposit": {
+      "USDC": {
+        "enabled": true
+      }
+    }
+  }
+}

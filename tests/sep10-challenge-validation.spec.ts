@@ -5,7 +5,7 @@
  * by the SDK, and the negative cases assert Freighter was never asked to sign.
  */
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
-import { Keypair, Memo, Networks, Operation } from '@stellar/stellar-sdk';
+import { Keypair, Memo, Networks, Operation, WebAuth } from '@stellar/stellar-sdk';
 import {
   authenticate,
   fetchSep10Challenge,
@@ -36,6 +36,37 @@ const WEB_AUTH_DOMAIN = 'auth.anchor.example.com';
 const server = Keypair.random();
 const client = Keypair.random();
 const attacker = Keypair.random();
+const clientSigningKey = Keypair.random();
+const CLIENT_DOMAIN = 'wallet.example.com';
+
+function clientDomainChallenge(value: string): string {
+  return WebAuth.buildChallengeTx(
+    server,
+    client.publicKey(),
+    HOME_DOMAIN,
+    300,
+    Networks.PUBLIC,
+    WEB_AUTH_DOMAIN,
+    null,
+    value,
+    clientSigningKey.publicKey()
+  );
+}
+
+function validateWithClientDomain(xdr: string, clientDomain?: string) {
+  return validateSep10Challenge(
+    xdr,
+    Networks.PUBLIC,
+    {
+      serverSigningKey: server.publicKey(),
+      homeDomains: HOME_DOMAIN,
+      webAuthEndpoint: WEB_AUTH_ENDPOINT,
+      clientAccountId: client.publicKey(),
+      ...(clientDomain !== undefined ? { clientDomain } : {}),
+    },
+    HOME_DOMAIN
+  );
+}
 
 function makeJwt(expSeconds: number): string {
   const b64 = (s: string) => btoa(s).replace(/=+$/, '').replace(/\+/g, '-').replace(/\//g, '_');
@@ -125,6 +156,15 @@ afterEach(() => {
 });
 
 describe('SEP-10 challenge validation — accepts', () => {
+  it('accepts the requested client_domain without regard to case', () => {
+    expect(
+      validateWithClientDomain(clientDomainChallenge('Wallet.Example.Com'), CLIENT_DOMAIN)
+    ).toBeDefined();
+  });
+
+  it('keeps accepting client_domain operations when none was requested', () => {
+    expect(validateWithClientDomain(clientDomainChallenge('other.example.com'))).toBeDefined();
+  });
   it('signs a spec-conformant challenge and exchanges it for a JWT', async () => {
     const xdr = valid();
     const fetchMock = stubAnchor(xdr);
@@ -168,6 +208,41 @@ describe('SEP-10 challenge validation — accepts', () => {
 });
 
 describe('SEP-10 challenge validation — rejects', () => {
+  it('rejects a missing requested client_domain', () => {
+    expect(() => validateWithClientDomain(valid(), CLIENT_DOMAIN)).toThrowError(
+      expect.objectContaining({ reason: 'INVALID_CHALLENGE' })
+    );
+  });
+
+  it('rejects a client_domain with the wrong value', () => {
+    expect(() =>
+      validateWithClientDomain(clientDomainChallenge('other.example.com'), CLIENT_DOMAIN)
+    ).toThrowError(expect.objectContaining({ reason: 'INVALID_CHALLENGE' }));
+  });
+
+  it('rejects two client_domain operations when one was requested', () => {
+    const xdr = buildCustomChallenge({
+      signer: server,
+      clientAccountId: client.publicKey(),
+      homeDomain: HOME_DOMAIN,
+      webAuthDomain: WEB_AUTH_DOMAIN,
+      appendOps: [
+        Operation.manageData({
+          name: 'client_domain',
+          value: CLIENT_DOMAIN,
+          source: clientSigningKey.publicKey(),
+        }),
+        Operation.manageData({
+          name: 'client_domain',
+          value: CLIENT_DOMAIN,
+          source: clientSigningKey.publicKey(),
+        }),
+      ],
+    });
+    expect(() => validateWithClientDomain(xdr, CLIENT_DOMAIN)).toThrowError(
+      expect.objectContaining({ reason: 'INVALID_CHALLENGE' })
+    );
+  });
   it('rejects a non-zero sequence number', async () => {
     stubAnchor(
       buildCustomChallenge({

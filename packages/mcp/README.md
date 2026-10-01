@@ -95,9 +95,52 @@ mirrored path is a side effect of `rootDir` spanning the repo root.
 
 ## Install
 
+> **Not yet published to npm.** Use the hosted endpoint or run from the
+> repository (below).
+
 ```bash
 npm install @stellarintel/mcp
 ```
+
+### Hosted endpoint
+
+The deployed app serves an MCP server directly, so a client needs a URL and
+nothing else — no clone, no npm install, no local process:
+
+```
+https://stellar-intel.vercel.app/api/mcp
+```
+
+```json
+{
+  "mcpServers": {
+    "stellar-intel": {
+      "type": "http",
+      "url": "https://stellar-intel.vercel.app/api/mcp"
+    }
+  }
+}
+```
+
+It serves the same eight tools, prompts and resources as this package — the
+server is built from one shared implementation in `lib/mcp`. See
+[`docs/MCP.md`](https://github.com/ezedike-evan/stellar-intel/blob/main/docs/MCP.md#hosted-endpoint-nothing-to-install)
+for the tool list.
+
+### From the repository
+
+Run the full tool set from a checkout with `tsx`, no build step needed:
+
+```bash
+git clone https://github.com/ezedike-evan/stellar-intel.git
+cd stellar-intel
+npm install
+npx tsx packages/mcp/src/index.ts   # stdio; add --transport http for HTTP
+```
+
+See
+[`docs/MCP.md`](https://github.com/ezedike-evan/stellar-intel/blob/main/docs/MCP.md#running-it-yourself)
+for the HTTP flags and client config.
 
 ## Usage
 
@@ -142,4 +185,4 @@ Full API reference, quickstart guides, and integration docs are available in the
 
 ## Related
 
-- [`@stellarintel/publisher`](https://www.npmjs.com/package/@stellarintel/publisher) — off-chain publisher for the reputation oracle this server will eventually expose.
+- [`packages/publisher`](https://github.com/ezedike-evan/stellar-intel/tree/main/packages/publisher) — off-chain publisher for the reputation oracle this server exposes through `intel.anchor.reputation`.

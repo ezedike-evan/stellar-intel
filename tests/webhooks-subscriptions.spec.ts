@@ -84,6 +84,21 @@ describe('POST /api/webhooks/subscriptions', () => {
     expect(res.status).toBe(400);
   });
 
+  it('returns 400 for an http (non-https) URL', async () => {
+    const res = await POST(postReq({ url: 'http://example.com/hook', events: ['intent.created'] }));
+    expect(res.status).toBe(400);
+  });
+
+  it('returns 400 for a localhost URL', async () => {
+    const res = await POST(postReq({ url: 'https://localhost/hook', events: ['intent.created'] }));
+    expect(res.status).toBe(400);
+  });
+
+  it('returns 400 for a private-network URL', async () => {
+    const res = await POST(postReq({ url: 'https://10.0.0.5/hook', events: ['intent.created'] }));
+    expect(res.status).toBe(400);
+  });
+
   it('accepts multiple event kinds', async () => {
     const res = await POST(
       postReq({

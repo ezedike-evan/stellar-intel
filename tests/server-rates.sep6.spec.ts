@@ -21,7 +21,12 @@ vi.mock('@/lib/stellar/sep38', () => ({
   getSep38Price: vi.fn(),
 }));
 vi.mock('@/lib/stellar/sep24', () => ({ getSep24Info: vi.fn() }));
-vi.mock('@/lib/stellar/sep6', () => ({ getSep6Info: vi.fn() }));
+vi.mock('@/lib/stellar/sep6', async (importActual) => {
+  const actual = await importActual<typeof import('@/lib/stellar/sep6')>();
+  // Keep the real Sep6AssetDisabledError: server-rates' withdraw-exchange
+  // retry (#1296) decides via instanceof, which a mocked class would break.
+  return { ...actual, getSep6Info: vi.fn() };
+});
 vi.mock('@/lib/fx/rates', () => ({ getUsdFxRate: vi.fn() }));
 
 import { fetchCorridorRates } from '@/lib/stellar/server-rates';
@@ -111,5 +116,30 @@ describe('fetchCorridorRates — SEP-6 Tier-3 fallback', () => {
     expect(result.rates).toHaveLength(0);
     const err = result.errors.find((e) => e.anchorId === 'cowrie');
     expect(err?.reason).not.toContain('SEP-6');
+  });
+});
+
+describe('fetchCorridorRates — withdraw-exchange fallback (#1296)', () => {
+  it('still yields a sep6-fee rate when the anchor offers USDC only via withdraw-exchange', async () => {
+    const { Sep6AssetDisabledError } = await import('@/lib/stellar/sep6');
+    // Latamex shape: plain `withdraw` disables USDC, `withdraw-exchange`
+    // carries it. The first (plain) call throws; the retry with
+    // `{ exchange: true }` succeeds.
+    vi.mocked(getSep6Info).mockImplementation(async (server, asset, opts) => {
+      if (opts?.exchange) {
+        return { enabled: true, feeFixed: 1, feePercent: 0, min: 10, max: 10000, fields: {} };
+      }
+      throw new Sep6AssetDisabledError(asset, server);
+    });
+
+    const result = await fetchCorridorRates('usdc-ngn', '100');
+
+    expect(result.rates).toHaveLength(1);
+    expect(result.rates[0]?.source).toBe('sep6-fee');
+    // Both calls happened: plain first, exchange retry second.
+    expect(vi.mocked(getSep6Info)).toHaveBeenCalledWith(sep6Toml.TRANSFER_SERVER, 'USDC');
+    expect(vi.mocked(getSep6Info)).toHaveBeenCalledWith(sep6Toml.TRANSFER_SERVER, 'USDC', {
+      exchange: true,
+    });
   });
 });

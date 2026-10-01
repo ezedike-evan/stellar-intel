@@ -91,6 +91,7 @@ const {
   getQuote,
   prepareIntent,
   executeIntent,
+  buildUnsignedOfframpTx,
   QuoteOutputSchema,
   PrepareOutputSchema,
   ExecuteOutputSchema,
@@ -204,6 +205,33 @@ describe('intel.offramp.prepare (#136)', () => {
     expect(tx.signatures.length).toBe(0);
   });
 
+  it('uses the canonical BRL corridor issuer in the prepared payment', async () => {
+    const NTOKENS_ACCOUNT = Keypair.random().publicKey();
+    vi.stubEnv('ANCHOR_PAYMENT_ACCOUNTS', JSON.stringify({ ntokens: NTOKENS_ACCOUNT }));
+
+    const result = await prepareIntent({
+      type: 'offramp',
+      sourceAsset: 'BRL',
+      destinationAsset: 'BRL',
+      amount: '100',
+      sender: Keypair.random().publicKey(),
+      recipient: 'recipient-123',
+    });
+
+    const tx = TransactionBuilder.fromXDR(result.unsignedTx, Networks.PUBLIC);
+    const payment = tx.operations[0] as {
+      destination?: string;
+      asset?: { code?: string; issuer?: string; isNative?: () => boolean };
+    };
+
+    expect(payment.destination).toBe(NTOKENS_ACCOUNT);
+    expect(payment.asset).toMatchObject({
+      code: 'BRL',
+      issuer: 'GDVKY2GU2DRXWTBEYJJWSFXIGBZV6AZNBVVSUHEPZI54LIS6BA7DVVSP',
+    });
+    expect(payment.asset?.isNative?.()).toBe(false);
+  });
+
   it('throws NO_ROUTE for an unsupported corridor', async () => {
     await expect(prepareIntent({ ...validIntent, destinationAsset: 'ZZZ' })).rejects.toBeInstanceOf(
       OfframpToolError
@@ -267,6 +295,127 @@ describe('intel.execute (#819)', () => {
       anchorId: 'cowrie',
     });
     expect(submitTransaction).toHaveBeenCalledTimes(1);
+  });
+
+  it('verifies and submits a correctly signed BRL corridor intent', async () => {
+    const kp = Keypair.random();
+    const NTOKENS_ACCOUNT = Keypair.random().publicKey();
+    vi.stubEnv('ANCHOR_PAYMENT_ACCOUNTS', JSON.stringify({ ntokens: NTOKENS_ACCOUNT }));
+
+    const intent = {
+      type: 'offramp' as const,
+      sourceAsset: 'BRL',
+      destinationAsset: 'BRL',
+      amount: '100',
+      sender: kp.publicKey(),
+      recipient: 'recipient-123',
+    };
+
+    const { unsignedEnvelope, unsignedTx } = await prepareIntent(intent);
+    const signature = Buffer.from(
+      kp.sign(Buffer.from(unsignedEnvelope.intentHash, 'utf8'))
+    ).toString('base64');
+    const tx = TransactionBuilder.fromXDR(unsignedTx, Networks.PUBLIC);
+    tx.sign(kp);
+
+    submitTransaction.mockResolvedValueOnce({
+      hash: 'b'.repeat(64),
+      ledger: 67890,
+      successful: true,
+      envelope_xdr: '',
+      result_xdr: '',
+      result_meta_xdr: '',
+      paging_token: '',
+    });
+
+    const result = await executeIntent({ unsignedEnvelope, signature, signedTx: tx.toXDR() });
+    expect(result).toMatchObject({
+      status: 'submitted',
+      corridorId: 'brl-brl',
+      anchorId: 'ntokens',
+    });
+    expect(submitTransaction).toHaveBeenCalledTimes(1);
+  });
+
+  it('throws TX_MISMATCH when the BRL asset issuer is tampered with', async () => {
+    const kp = Keypair.random();
+    const NTOKENS_ACCOUNT = Keypair.random().publicKey();
+    const NTOKENS_BRL_ISSUER = 'GDVKY2GU2DRXWTBEYJJWSFXIGBZV6AZNBVVSUHEPZI54LIS6BA7DVVSP';
+    vi.stubEnv('ANCHOR_PAYMENT_ACCOUNTS', JSON.stringify({ ntokens: NTOKENS_ACCOUNT }));
+
+    const intent = {
+      type: 'offramp' as const,
+      sourceAsset: 'BRL',
+      destinationAsset: 'BRL',
+      amount: '100',
+      sender: kp.publicKey(),
+      recipient: 'recipient-123',
+    };
+
+    const { unsignedEnvelope, unsignedTx } = await prepareIntent(intent);
+    const signature = Buffer.from(
+      kp.sign(Buffer.from(unsignedEnvelope.intentHash, 'utf8'))
+    ).toString('base64');
+
+    const tx = TransactionBuilder.fromXDR(unsignedTx, Networks.PUBLIC);
+    const originalOperation = tx.operations[0];
+    expect(originalOperation).toBeDefined();
+    expect(originalOperation?.type).toBe('payment');
+
+    if (!originalOperation || originalOperation.type !== 'payment') {
+      throw new Error('Expected a payment operation');
+    }
+
+    const originalAsset = originalOperation.asset;
+    expect(originalAsset.getCode()).toBe('BRL');
+    expect(originalAsset.getIssuer()).toBe(NTOKENS_BRL_ISSUER);
+
+    const tamperedIssuer = Keypair.random().publicKey();
+    expect(tamperedIssuer).not.toBe(NTOKENS_BRL_ISSUER);
+
+    const tamperedUnsignedTx = await buildUnsignedOfframpTx(
+      kp.publicKey(),
+      NTOKENS_ACCOUNT,
+      intent.amount,
+      'BRL',
+      tamperedIssuer,
+      unsignedEnvelope.intentHash
+    );
+    const tamperedTx = TransactionBuilder.fromXDR(tamperedUnsignedTx, Networks.PUBLIC);
+
+    const tamperedOperation = tamperedTx.operations[0];
+    expect(tamperedOperation).toBeDefined();
+    expect(tamperedOperation?.type).toBe('payment');
+
+    if (!tamperedOperation || tamperedOperation.type !== 'payment') {
+      throw new Error('Expected a payment operation');
+    }
+
+    const tamperedAsset = tamperedOperation.asset;
+    expect(tamperedAsset.getCode()).toBe('BRL');
+    expect(tamperedAsset.getIssuer()).toBe(tamperedIssuer);
+    expect(tamperedAsset.getIssuer()).not.toBe(NTOKENS_BRL_ISSUER);
+
+    tamperedTx.sign(kp);
+
+    await expect(
+      executeIntent({ unsignedEnvelope, signature, signedTx: tamperedTx.toXDR() })
+    ).rejects.toMatchObject({ code: 'TX_MISMATCH' });
+    expect(submitTransaction).not.toHaveBeenCalled();
+  });
+
+  it('builds a native asset payment when the corridor uses a null issuer', async () => {
+    const txXdr = await buildUnsignedOfframpTx(
+      Keypair.random().publicKey(),
+      Keypair.random().publicKey(),
+      '10',
+      'XLM',
+      null,
+      'f'.repeat(64)
+    );
+    const tx = TransactionBuilder.fromXDR(txXdr, Networks.PUBLIC);
+    const payment = tx.operations[0] as { asset?: { isNative?: () => boolean } };
+    expect(payment.asset?.isNative?.()).toBe(true);
   });
 
   it('throws INTENT_HASH_MISMATCH when the hash does not match the intent', async () => {

@@ -22,6 +22,8 @@ import {
 import { Skeleton } from '@/components/ui/Skeleton';
 import { QuotePill } from '@/components/ui/QuotePill';
 import { AnchorLogo } from '@/components/ui/AnchorLogo';
+import { Badge } from '@/components/ui/Badge';
+import { Tooltip } from '@/components/ui/Tooltip';
 import { CopyButton } from '@/components/ui/CopyButton';
 import { Sparkline } from '@/components/ui/Sparkline';
 import { useRateHistory, describeRateTrend } from '@/hooks/useRateHistory';
@@ -324,6 +326,19 @@ export function RateTable({
                         >
                           {rate.anchorName}
                         </Link>
+                        {rate.unverifiedPayout && (
+                          <Tooltip
+                            content={
+                              <span>
+                                This anchor&apos;s payout in {currency} has not been confirmed on
+                                its live API. Confirm the amount in the anchor&apos;s flow before
+                                sending.
+                              </span>
+                            }
+                          >
+                            <Badge variant="warning">Unverified payout</Badge>
+                          </Tooltip>
+                        )}
                         {isBest && (
                           <>
                             <span className="rounded-full bg-accent-subtle px-2 py-0.5 text-xs font-medium text-accent">

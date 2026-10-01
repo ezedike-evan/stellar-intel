@@ -231,6 +231,15 @@
             "type": "string",
             "minLength": 1,
             "description": "Destination address for the payout"
+          },
+          "nonce": {
+            "type": "string",
+            "pattern": "^[0-9a-f]{32}$/i",
+            "description": "128-bit random hex, required for replay protection when the intent is signed"
+          },
+          "deadline": {
+            "type": "string",
+            "description": "RFC 3339 datetime after which the intent must not execute; required when the intent is signed"
           }
         },
         "required": [
@@ -331,6 +340,9 @@
           },
           "quoteId": {
             "type": "string"
+          },
+          "unverifiedPayout": {
+            "type": "boolean"
           }
         },
         "required": [
@@ -1455,6 +1467,90 @@
           },
           "400": {
             "description": "Validation error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/sep10/client-domain": {
+      "post": {
+        "summary": "Co-sign a SEP-10 client_domain challenge",
+        "description": "Adds the server-held `client_domain` signature to a verified SEP-10 challenge so an anchor can attribute the session to us. The challenge is re-validated in full against the anchor’s published SIGNING_KEY (mainnet, sequence 0, anchor-signed, manage_data only, timebounds ≤ 24h) and must carry exactly one `client_domain` operation naming our domain and sourced by our signing key. This route is not a general-purpose signing oracle.",
+        "tags": [
+          "SEP-10"
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "properties": {
+                  "transaction": {
+                    "type": "string",
+                    "description": "Base64 SEP-10 challenge XDR from the anchor"
+                  },
+                  "homeDomain": {
+                    "type": "string",
+                    "description": "Home or service domain of a registered anchor the challenge is from"
+                  }
+                },
+                "required": [
+                  "transaction",
+                  "homeDomain"
+                ]
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Challenge co-signed",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "transaction": {
+                      "type": "string",
+                      "description": "The challenge XDR with our client_domain signature"
+                    }
+                  },
+                  "required": [
+                    "transaction"
+                  ]
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Invalid request, unregistered anchor, or challenge failed validation",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiError"
+                }
+              }
+            }
+          },
+          "429": {
+            "description": "Rate limited",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiError"
+                }
+              }
+            }
+          },
+          "503": {
+            "description": "Server client_domain signing is not configured",
             "content": {
               "application/json": {
                 "schema": {

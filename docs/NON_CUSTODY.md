@@ -35,6 +35,16 @@ client-facing env schema ever declares a variable that looks like one.
 `packages/publisher`'s own signing key (`PUBLISHER_SECRET`, below) is the one
 named exemption.
 
+One API route produces a signature: `POST /api/sep10/client-domain` co-signs the
+`client_domain` operation of a SEP-10 challenge with the server's own
+`client_domain` key (`CLIENT_DOMAIN_SIGNING_SECRET`). This is not custody: the
+key is never a user's, and the envelope is a sequence-0 authentication challenge
+that can never be submitted to the ledger, so no funds can move. The route
+re-runs full SEP-10 validation and signs only when the challenge carries exactly
+one `client_domain` operation naming our domain and sourced by our key, so it can
+never act as a general-purpose signing oracle. It is the single named exemption
+in the "no API route handler signs a transaction" guard.
+
 ## What we do hold
 
 - Public, non-sensitive data: anchor outcomes (fill rate, slippage, settle latency)

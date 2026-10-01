@@ -10,6 +10,7 @@ import {
   probeAllAnchorQuotes,
   probeAllAnchorIssuers,
   probeAllAnchorIntegrity,
+  probeAllAnchorSep31,
 } from '@/lib/reputation/probe';
 
 const LOCK_KEY = 'reputation-refresh';
@@ -26,9 +27,10 @@ interface ProbeSweepCounts {
   quote: number;
   issuerMismatch: number;
   tomlIntegrity: number;
+  sep31Info: number;
 }
 
-// Runs every registered anchor through all four probe dimensions (Issue
+// Runs every registered anchor through all five probe dimensions (Issue
 // #D007) and persists every sample straight into the durable health ledger
 // via `DurableProbeStore`, so a probe run survives past this invocation
 // instead of only existing in memory.
@@ -38,15 +40,18 @@ async function runProbeSweep(): Promise<ProbeSweepCounts> {
   const quoteSink = new DurableProbeStore(store, 'quote');
   const issuerSink = new DurableProbeStore(store, 'issuer-mismatch');
   const integritySink = new DurableProbeStore(store, 'toml-integrity');
+  const sep31Sink = new DurableProbeStore(store, 'sep31-info');
 
-  const [uptimeSamples, quoteSamples, issuerSamples, integritySamples] = await Promise.all([
-    probeAllAnchors(uptimeSink),
-    probeAllAnchorQuotes(quoteSink),
-    probeAllAnchorIssuers(issuerSink),
-    probeAllAnchorIntegrity(integritySink),
-  ]);
+  const [uptimeSamples, quoteSamples, issuerSamples, integritySamples, sep31Samples] =
+    await Promise.all([
+      probeAllAnchors(uptimeSink),
+      probeAllAnchorQuotes(quoteSink),
+      probeAllAnchorIssuers(issuerSink),
+      probeAllAnchorIntegrity(integritySink),
+      probeAllAnchorSep31(sep31Sink),
+    ]);
 
-  const sinks = [uptimeSink, quoteSink, issuerSink, integritySink];
+  const sinks = [uptimeSink, quoteSink, issuerSink, integritySink, sep31Sink];
   await Promise.all(sinks.map((sink) => sink.drain()));
 
   return {
@@ -54,6 +59,7 @@ async function runProbeSweep(): Promise<ProbeSweepCounts> {
     quote: quoteSamples.length,
     issuerMismatch: issuerSamples.length,
     tomlIntegrity: integritySamples.length,
+    sep31Info: sep31Samples.length,
     // Counted rather than assumed: `DurableProbeStore.record()` swallows a
     // rejected write, so sample counts above say what was *probed*, not what
     // reached the ledger. Issue #906 was invisible for exactly that reason.

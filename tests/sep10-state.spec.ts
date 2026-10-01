@@ -1,6 +1,6 @@
 // @vitest-environment node
 import { describe, it, expect, vi, beforeEach } from 'vitest';
-import { Networks, TransactionBuilder, Keypair } from '@stellar/stellar-sdk';
+import { Networks, TransactionBuilder, Keypair, WebAuth } from '@stellar/stellar-sdk';
 import {
   fetchSep10Challenge,
   validateSep10Challenge,
@@ -100,6 +100,39 @@ describe('SEP-10 state machine — challenge fetch', () => {
     expect(capturedUrl).toContain(`account=${encodeURIComponent(PUBLIC_KEY)}`);
     expect(capturedUrl).toContain(`home_domain=${encodeURIComponent(HOME_DOMAIN)}`);
     expect(capturedMethod).toBe('GET');
+    expect(new URL(capturedUrl).searchParams.has('client_domain')).toBe(false);
+  });
+
+  it('requests client_domain only when supplied and validates the returned operation', async () => {
+    const clientDomain = 'wallet.example.com';
+    const clientSigningKey = Keypair.random();
+    const xdr = WebAuth.buildChallengeTx(
+      SERVER,
+      PUBLIC_KEY,
+      HOME_DOMAIN,
+      300,
+      Networks.PUBLIC,
+      new URL(WEB_AUTH_ENDPOINT).host,
+      null,
+      clientDomain,
+      clientSigningKey.publicKey()
+    );
+    let capturedUrl = '';
+    vi.stubGlobal(
+      'fetch',
+      vi.fn(async (url: string) => {
+        capturedUrl = url;
+        return {
+          ok: true,
+          json: async () => ({ transaction: xdr, network_passphrase: Networks.PUBLIC }),
+        };
+      })
+    );
+
+    await fetchSep10Challenge(WEB_AUTH_ENDPOINT, PUBLIC_KEY, HOME_DOMAIN, SIGNING_KEY, [], {
+      clientDomain,
+    });
+    expect(new URL(capturedUrl).searchParams.get('client_domain')).toBe(clientDomain);
   });
 
   it('returns a Sep10Challenge with parsed transaction', async () => {

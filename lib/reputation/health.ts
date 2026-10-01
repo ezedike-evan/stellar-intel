@@ -39,12 +39,18 @@ import {
 /** The four probe signals, named as the product speaks about them. */
 export type HealthSignalKey = 'uptime' | 'quoteAvailability' | 'issuerMatch' | 'tomlIntegrity';
 
-/** Maps a stored `ProbeKind` to the signal it reports. */
-export const SIGNAL_BY_PROBE_KIND: Record<ProbeKind, HealthSignalKey> = {
+/**
+ * Maps a stored `ProbeKind` to the signal it reports, or `null` for a kind
+ * that is tracked in the ledger but must never move the health score.
+ * `sep31-info` is `null`: we do not route SEP-31, so its reachability says
+ * nothing about whether the anchor is healthy to use today.
+ */
+export const SIGNAL_BY_PROBE_KIND: Record<ProbeKind, HealthSignalKey | null> = {
   uptime: 'uptime',
   quote: 'quoteAvailability',
   'issuer-mismatch': 'issuerMatch',
   'toml-integrity': 'tomlIntegrity',
+  'sep31-info': null,
 };
 
 /**
@@ -240,6 +246,10 @@ export function computeAnchorHealth(
 
   for (const [kind, allKindRows] of byKind) {
     const key = SIGNAL_BY_PROBE_KIND[kind];
+    // A kind with no signal (currently only `sep31-info`) is tracked in the
+    // ledger but must never move a health signal or the score — see the
+    // doc comment on SIGNAL_BY_PROBE_KIND.
+    if (key === null) continue;
 
     // Rows that could not reach a verdict about the anchor are counted and
     // reported, but never scored. See VERDICT_FAILURES.

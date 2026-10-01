@@ -77,13 +77,19 @@ export const PROBE_FAILURE_TYPES = [
 ] as const;
 export type ProbeFailureType = (typeof PROBE_FAILURE_TYPES)[number];
 
-export const PROBE_KINDS = ['uptime', 'quote', 'issuer-mismatch', 'toml-integrity'] as const;
+export const PROBE_KINDS = [
+  'uptime',
+  'quote',
+  'issuer-mismatch',
+  'toml-integrity',
+  'sep31-info',
+] as const;
 export type ProbeKind = (typeof PROBE_KINDS)[number];
 
 export interface ProbeLedgerRow {
   /** Anchor home domain that was probed. */
   domain: string;
-  /** Which check this row represents: stellar.toml reachability, a SEP-38 quote round-trip, an issuer-mismatch comparison, or a toml-integrity validation. */
+  /** Which check this row represents: stellar.toml reachability, a SEP-38 quote round-trip, an issuer-mismatch comparison, a toml-integrity validation, or a SEP-31 receive-capability check. */
   kind: ProbeKind;
   /** Corridor ID (e.g. 'usdc-ngn') for `quote` rows; null for `uptime`/`issuer-mismatch`/`toml-integrity` rows. */
   corridor: string | null;

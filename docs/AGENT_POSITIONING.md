@@ -50,8 +50,8 @@ with no install required.
 
 - [docs/MCP.md](MCP.md) — MCP server tool list, carries the same framing.
 - [`app/api/mcp/route.ts`](../app/api/mcp/route.ts) — hosted Streamable HTTP endpoint serving the same tool set.
-- [`scripts/mcp/tools/quote.ts`](../scripts/mcp/tools/quote.ts) and
-  [`scripts/mcp/tools/prepare.ts`](../scripts/mcp/tools/prepare.ts) — the
+- [`lib/mcp/tools/quote.ts`](../lib/mcp/tools/quote.ts) and
+  [`lib/mcp/tools/prepare.ts`](../lib/mcp/tools/prepare.ts) — the
   `intel.offramp.quote` / `intel.offramp.prepare` tool descriptions state the
   anchor/fiat-exit scope inline, for agents that only see the tool
   descriptions and never read this file.

@@ -7,7 +7,7 @@ import { randomUUID } from 'node:crypto';
 import { StreamableHTTPServerTransport } from '@modelcontextprotocol/sdk/server/streamableHttp.js';
 import { isInitializeRequest } from '@modelcontextprotocol/sdk/types.js';
 import type { Transport } from '@modelcontextprotocol/sdk/shared/transport.js';
-import { createServer } from '../server.js';
+import { createServer } from '../server';
 
 export interface StreamableHttpOptions {
   host?: string;

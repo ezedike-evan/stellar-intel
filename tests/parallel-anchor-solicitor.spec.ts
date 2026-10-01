@@ -315,6 +315,35 @@ describe('solicitAnchorQuotes — concurrency and deadline', () => {
     expect(err.deadlineMs).toBe(CUSTOM_DEADLINE);
   });
 
+  it('requests the corridor asset, not the anchor primary asset', async () => {
+    vi.spyOn(anchorsModule, 'getCorridorById').mockReturnValue({
+      id: 'usdc-ngn',
+      from: 'CORRIDOR_ASSET',
+      fromIssuer: 'CORRIDOR_ISSUER',
+      fromPeg: 'USD',
+      to: 'NGN',
+      countryCode: 'NG',
+      countryName: 'Nigeria',
+    });
+
+    const fetchMock = buildFetchMock({
+      'fast.example.com': { delayMs: 50, fee: '2', exchangeRate: 1580 },
+    });
+    vi.stubGlobal('fetch', fetchMock);
+
+    vi.spyOn(anchorsModule, 'getAnchorsByCorridorId').mockReturnValue([MOCK_ANCHORS_3[0]!]);
+
+    const resultPromise = solicitAnchorQuotes('100', 'usdc-ngn');
+    await vi.runAllTimersAsync();
+    await resultPromise;
+
+    const urls = fetchMock.mock.calls.map((call) => call[0] as string);
+    const feeUrl = urls.find((u) => u.includes('/fee'));
+
+    expect(feeUrl).toContain('asset_code=CORRIDOR_ASSET');
+    expect(feeUrl).toContain('asset_issuer=CORRIDOR_ISSUER');
+  });
+
   it('SOLICITOR_DEADLINE_MS is exported and equals 2000', () => {
     expect(SOLICITOR_DEADLINE_MS).toBe(2_000);
   });

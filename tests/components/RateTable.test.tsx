@@ -161,6 +161,34 @@ describe('RateTable', () => {
     });
   });
 
+  it('shows an "Unverified payout" badge when the selected corridor payout is unverified', async () => {
+    const unverified: RateComparison = {
+      ...mockRates,
+      rates: [
+        { ...makeRate('cowrie', 154840), unverifiedPayout: true },
+        makeRate('flutterwave', 153260),
+      ],
+    };
+
+    render(
+      <RateTable rates={unverified} isLoading={false} error={undefined} onSelectAnchor={vi.fn()} />
+    );
+
+    const trigger = screen.getByText('Unverified payout').parentElement as HTMLElement;
+    fireEvent.mouseEnter(trigger);
+
+    expect(screen.getByRole('tooltip')).toHaveTextContent(
+      "This anchor's payout in NGN has not been confirmed on its live API. Confirm the amount in the anchor's flow before sending."
+    );
+  });
+
+  it('does not show an "Unverified payout" badge when the payout is verified', () => {
+    render(
+      <RateTable rates={mockRates} isLoading={false} error={undefined} onSelectAnchor={vi.fn()} />
+    );
+    expect(screen.queryByText('Unverified payout')).not.toBeInTheDocument();
+  });
+
   it('the best rate row includes the "Best Rate" badge', () => {
     render(
       <RateTable rates={mockRates} isLoading={false} error={undefined} onSelectAnchor={vi.fn()} />

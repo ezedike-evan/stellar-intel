@@ -5,7 +5,7 @@
  * or submission schema for third-party health data — its "Attestation of
  * Reserves" section has read "coming soon" since the directory's 2023 relaunch,
  * and listings are otherwise maintained by contacting each anchor's team
- * directly (see docs/anchor-directory-contribution.md for the research trail).
+ * directly (see docs/ANCHOR_DIRECTORY_CONTRIBUTION.md for the research trail).
  *
  * Until SDF opens a channel, this module turns our existing health signals
  * (the nightly validator's `constants/anchor-health.json` ledger, plus uptime
@@ -146,7 +146,7 @@ export function buildSdfAnchorDirectoryExport(
     note:
       'SDF has not published an Anchor Directory ingestion API — this is a candidate ' +
       'export shape for manual submission, not an SDF-endorsed schema. See ' +
-      'docs/anchor-directory-contribution.md.',
+      'docs/ANCHOR_DIRECTORY_CONTRIBUTION.md.',
     anchors: entries,
   };
 }

@@ -19,12 +19,13 @@ From your `stellar.toml` at `https://{domain}/.well-known/stellar.toml`:
 - **SEP-10** — `WEB_AUTH_ENDPOINT` present (web authentication).
 - A transfer rail (one of):
   - **SEP-24** — `TRANSFER_SERVER_SEP0024` (interactive hosted withdraw). The
-    default, fully supported execution path today, and the only rail the nightly
-    probe accepts — see [What the probes require](#what-the-probes-require).
+    default, fully supported execution path today. Required by the nightly probe
+    only when your registry entry's `seps` includes `sep24` — see
+    [What the probes require](#what-the-probes-require).
   - **SEP-6** — `TRANSFER_SERVER` (programmatic withdraw). **Accepted** for
-    onboarding and rate comparison when it is the only transfer rail advertised,
-    subject to the caveats below; full SEP-6 + SEP-12 execution is rolling out —
-    see [`docs/SEP_COMPLIANCE.md`](SEP_COMPLIANCE.md).
+    onboarding and rate comparison, subject to the caveats below; full SEP-6 +
+    SEP-12 execution is rolling out — see [`docs/SEP_COMPLIANCE.md`](SEP_COMPLIANCE.md).
+    A SEP-6-only anchor must advertise `TRANSFER_SERVER`.
   - **SEP-31** — `DIRECT_PAYMENT_SERVER`. Detected as a transfer capability;
     there is no SEP-31 flow in the app today.
 - **SEP-38** — `ANCHOR_QUOTE_SERVER` for firm quotes. Optional today; required
@@ -70,19 +71,18 @@ with `npm run validate:anchors`. For each registered anchor it fetches
   alphabetic TLD. Ports, paths, IP literals, `localhost` and userinfo are
   rejected before the fetch is made;
 - **HTTP 200 within 15 seconds**, following redirects;
-- a line-anchored **`TRANSFER_SERVER_SEP0024 =`** in the body.
+- a line-anchored **`TRANSFER_SERVER_SEP0024 =`** in the body, but only when your
+  registry entry's `seps` includes `sep24`. `probeDomain` does not check for
+  SEP-24 otherwise, so a SEP-6-only anchor passes on the 200 alone. It must still
+  advertise **`TRANSFER_SERVER`**, which backs its `sep6` claim and is enforced
+  in CI rather than nightly (see the SEP-to-key table in
+  [What we validate](#what-we-validate)).
 
-> **SEP-6-only anchors: read this.** The nightly probe's success condition is
-> SEP-24 specifically, not "any transfer rail". An anchor advertising only
-> `TRANSFER_SERVER` fails this probe every night and accumulates a failure
-> streak; at `thresholdNights` (default 3, overridable with
-> `ANCHOR_DEGRADE_THRESHOLD`) it latches `degraded`. Cowrie is the live example:
-> its ledger entry currently reads
-> `lastError: "missing TRANSFER_SERVER_SEP0024 (SEP-24)"`. Onboarding accepts
-> SEP-6-only anchors for rate comparison, but until the probe's success condition
-> is widened they will not pass the nightly check. Say so explicitly in your
-> onboarding issue so a maintainer tracks it rather than reading your listing as
-> a live outage.
+> **Earlier behaviour.** Before the validator made the SEP-24 check conditional
+> on `seps`, every anchor had to advertise `TRANSFER_SERVER_SEP0024`, so
+> SEP-6-only anchors such as Cowrie failed nightly with
+> `missing TRANSFER_SERVER_SEP0024 (SEP-24)` and latched `degraded`. That no
+> longer applies.
 
 A `degraded` anchor is **hidden from corridor selectors and the rate engine**
 (`getAnchorsByCorridorId` in [`lib/stellar/anchors.ts`](../lib/stellar/anchors.ts))
@@ -116,8 +116,10 @@ means your quotes are being requested for an asset you are not advertising.
 `registry guard` job in CI) asserts that your `serviceDomain` **or** `homeDomain`
 appears in the committed survey snapshot's `transferCapableDomains`. If the
 public directory lists you under an issuer-only domain while your SEP endpoints
-live on a service subdomain the survey does not crawl, the entry needs an
-`ALLOWLIST` exception with a written reason — MoneyGram is the canonical case.
+live on a service subdomain the survey does not crawl (or the anchor sits outside
+the stellar.expert `anchor` tag), the entry needs an `ALLOWLIST` exception with a
+written reason — MoneyGram is the canonical case — until the multi-source survey
+snapshot includes them.
 
 ### 4. Reputation probes — how your score bootstraps
 
@@ -173,17 +175,20 @@ Once validated, your anchor is added to
 re-exported verbatim by `lib/stellar/anchors.ts`. The entry is an `Anchor`
 ([`types/index.ts`](../types/index.ts)):
 
-| Field           | Required       | Notes                                                                                                                                                      |
-| --------------- | -------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| `id`            | ✅             | Stable, lower-case. The key for the health ledger, the leaderboard, the SDF export and the on-chain oracle — changing it discards your reputation history. |
-| `name`          | ✅             | Display name in the rate table.                                                                                                                            |
-| `homeDomain`    | ✅             | Domain hosting `stellar.toml`. Plain public hostname only.                                                                                                 |
-| `serviceDomain` |                | Set when SEP endpoints live elsewhere; every probe and the runtime resolve `serviceDomain ?? homeDomain`.                                                  |
-| `corridors`     | ✅             | Corridor **ids** from `CORRIDORS`, e.g. `usdc-ngn` — never display names.                                                                                  |
-| `assetCode`     | ✅             | Asset sold through those corridors. `USDT` entries are ignored by the live rate path unless `NEXT_PUBLIC_USDT_ENABLED` is set.                             |
-| `assetIssuer`   | ✅             | Issuer account, or the `USDC_ISSUER` constant (the validator resolves that reference from `NEXT_PUBLIC_USDC_ISSUER`).                                      |
-| `seps`          | ✅ in practice | Declared capabilities. See the warning below.                                                                                                              |
-| `metadata`      |                | Operator regions / KYC model / fee model. Defined on the type, but not written inline today — see the flat-entry constraint below.                         |
+| Field                 | Required       | Notes                                                                                                                                                                                                 |
+| --------------------- | -------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `id`                  | ✅             | Stable, lower-case. The key for the health ledger, the leaderboard, the SDF export and the on-chain oracle — changing it discards your reputation history.                                            |
+| `name`                | ✅             | Display name in the rate table.                                                                                                                                                                       |
+| `homeDomain`          | ✅             | Domain hosting `stellar.toml`. Plain public hostname only.                                                                                                                                            |
+| `serviceDomain`       |                | Set when SEP endpoints live elsewhere; every probe and the runtime resolve `serviceDomain ?? homeDomain`.                                                                                             |
+| `corridors`           | ✅             | Corridor **ids** from `CORRIDORS`, e.g. `usdc-ngn` — never display names.                                                                                                                             |
+| `assetCode`           | ✅             | Primary asset (used for issuer validation and fixtures); each corridor's own asset comes from `CORRIDORS`. `USDT` entries are ignored by the live rate path unless `NEXT_PUBLIC_USDT_ENABLED` is set. |
+| `assetIssuer`         | ✅             | Issuer account, or the `USDC_ISSUER` constant (the validator resolves that reference from `NEXT_PUBLIC_USDC_ISSUER`).                                                                                 |
+| `seps`                | ✅ in practice | Declared capabilities. See the warning below.                                                                                                                                                         |
+| `unverifiedCorridors` |                | Subset of `corridors` whose payout currency has not been confirmed on any live `/info` response; still routable, but flagged to users.                                                                |
+| `sep31Corridors`      |                | Corridors this anchor serves ONLY as a SEP-31 receiving anchor. Tracked for the record, never routed (SEP-31 needs a bilateral sending-anchor agreement). Must NOT also appear in `corridors`.        |
+| `depositEnabled`      |                | `false` when the anchor's own `/info` deposit map is empty/disabled for its asset; default (`undefined`) means enabled.                                                                               |
+| `metadata`            |                | Operator regions / KYC model / fee model. Defined on the type, but not written inline today — see the flat-entry constraint below.                                                                    |
 
 > **`seps` is not optional in practice.** `transferCapable()` is
 > `anchor.seps?.some(sep => ROUTABLE_SEPS.includes(sep)) ?? false`. An entry with
@@ -203,8 +208,23 @@ re-exported verbatim by `lib/stellar/anchors.ts`. The entry is an `Anchor`
 > fine — they use `[ ]`. Keep each field on its own line as a quoted literal;
 > `assetIssuer: USDC_ISSUER` is the one bare identifier both parsers handle.
 
-Corridor ids must already exist in `CORRIDORS`. `usdc-zar` and `usdc-xof` are
-v1.1 corridors: they stay hidden until `NEXT_PUBLIC_V11_CORRIDORS=on` **and** an
+### Corridors
+
+Corridors define the source asset and destination fiat pair. Each corridor is registered in `CORRIDORS` in [`constants/anchors.ts`](../constants/anchors.ts):
+
+- **ID convention**: `<asset>-<fiat>` in lower-case (e.g. `usdc-ngn`, `ngnt-ngn`, `arst-ars`, `brl-brl`, `ars-ars`, `pen-pen`).
+- **Required fields**:
+  - `id`: Corridor identifier (e.g. `'arst-ars'`).
+  - `from`: On-chain asset code (e.g. `'ARST'`).
+  - `fromIssuer`: Issuer G-address of the on-chain asset sold on this corridor (`null` only for native XLM).
+  - `fromPeg`: ISO 4217 code of the currency the on-chain asset is pegged to (e.g. `'USD'` for USDC, `'BRL'` for the nTokens BRL token, `'ARS'` for ARST).
+  - `to`: Destination fiat currency code (e.g. `'NGN'`, `'ARS'`).
+  - `countryCode`: ISO 3166-1 alpha-2 country code (e.g. `'NG'`, `'AR'`).
+  - `countryName`: Display country name (e.g. `'Nigeria'`, `'Argentina'`).
+- **One corridor per (code, issuer) pair**: If multiple issuers exist for the same asset code, each distinct (code, issuer) combination represents a separate corridor.
+- Corridors must already exist in `CORRIDORS` before an anchor can list them in its `corridors` array.
+
+`usdc-zar` and `usdc-xof` are v1.1 corridors: they stay hidden until `NEXT_PUBLIC_V11_CORRIDORS=on` **and** an
 anchor serves them. Issuer-only domains (no transfer rail) are not listed as
 off-ramp anchors.
 
@@ -212,8 +232,10 @@ Match the existing entries' comment style, which records what was verified and
 when:
 
 ```ts
-// ngnc.online: NGN fiat corridor — SEP-24 withdraw enabled.
-// Verified 2026-06-29. TOML: TRANSFER_SERVER_SEP0024 present. /info: withdraw.USDC.enabled = true.
+// ngnc.online: NGN fiat corridor — SEP-24 deposit/withdraw enabled for the NGNC token.
+// Verified 2026-09-23. TOML: TRANSFER_SERVER_SEP0024 present.
+// /info: deposit [NGNC] (min 20,000), withdraw [NGNC] (min 10,000).
+// Serves the ngnc-ngn corridor for Nigeria.
 ```
 
 Surveyed-and-rejected domains get the same treatment as a comment in place of an
@@ -244,9 +266,12 @@ SEP-6 anchors are acceptable for onboarding when they advertise a valid
   [`lib/stellar/server-rates.ts`](../lib/stellar/server-rates.ts): live FX × the
   SEP-6 `/info` fee), and they carry an **Indicative** badge in the comparison UI.
 - Programmatic execution still depends on the broader SEP-6 + SEP-12 flow being
-  available in the app.
-- The nightly probe still requires `TRANSFER_SERVER_SEP0024` — see the callout in
-  [What the probes require](#1-nightly-toml-validator--decides-whether-you-stay-visible).
+  available in the app; SEP-6 execution in the UI is currently a placeholder
+  ([`components/offramp/ExecuteDrawer.tsx`](../components/offramp/ExecuteDrawer.tsx),
+  "SEP-6 form flow — coming soon").
+- The nightly probe requires `TRANSFER_SERVER_SEP0024` only when the registry
+  entry's `seps` includes `sep24`, so a SEP-6-only anchor passes it without
+  advertising SEP-24 — see [What the probes require](#1-nightly-toml-validator--decides-whether-you-stay-visible).
 - Anchors supporting both SEP-6 and SEP-24 should be documented in the SEP
   compliance matrix so maintainers can tell the execution path apart. Where both
   are present, the SEP-24 hosted flow is preferred for execution.
@@ -291,7 +316,7 @@ own SEP flow.
 - [ ] `stellar.toml` live at `https://{serviceDomain ?? homeDomain}/.well-known/stellar.toml` and parses cleanly (`curl` + `jq`).
 - [ ] It answers **HTTP 200 in under 15 s** — the nightly probe's timeout.
 - [ ] SEP-1 (`[[CURRENCIES]]` + `SIGNING_KEY`) + SEP-10 (`WEB_AUTH_ENDPOINT`) + a transfer rail advertised.
-- [ ] `TRANSFER_SERVER_SEP0024` present, or the SEP-6-only caveat noted in the onboarding issue.
+- [ ] `TRANSFER_SERVER_SEP0024` present if `seps` includes `sep24`; otherwise `TRANSFER_SERVER` present.
 - [ ] `[[CURRENCIES]]` advertises your registered `assetCode` under your registered `assetIssuer` — no look-alike.
 - [ ] Every SEP claimed in `seps` is backed by its toml key, and at least one of `sep6` / `sep24` / `sep31` is claimed.
 - [ ] `serviceDomain` supplied whenever SEP endpoints are not on the home domain.

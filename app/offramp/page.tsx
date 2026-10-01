@@ -13,6 +13,7 @@ import {
 } from '@/lib/session';
 import { WalletButton } from '@/components/ui/WalletButton';
 import { AmountInput } from '@/components/ui/AmountInput';
+import { AssetSelector } from '@/components/ui/AssetSelector';
 import { CorridorSelector } from '@/components/ui/CorridorSelector';
 import { RateTable } from '@/components/offramp/RateTable';
 import { RateTableHeader } from '@/components/offramp/RateTableHeader';
@@ -27,6 +28,7 @@ import { useWithdrawStatus, type OutcomeAppendContext } from '@/hooks/useWithdra
 import { useWalletBalance } from '@/hooks/useWalletBalance';
 import { amountBucket, FUNNEL_EVENTS, trackFunnelEvent } from '@/lib/analytics';
 import { VISIBLE_CORRIDORS } from '@/constants/anchors';
+import { getCorridorAsset, getCorridorById } from '@/lib/stellar/anchors';
 import { signIntent } from '@/lib/intent/sign';
 import type { Intent } from '@/lib/intent/hash';
 import type { AnchorRate } from '@/types';
@@ -83,7 +85,14 @@ function OfframpContent() {
     useAnchorRates(corridorId, amount);
   const { secondsRemaining, elapsedSeconds, prefersReducedMotion, progress, totalSeconds } =
     useCountdown(RATES_REFRESH_INTERVAL_MS, lastFetchedAt);
-  const { balance, isLoading: isBalanceLoading } = useWalletBalance(publicKey);
+  // The asset is derived from the corridor so `?corridor=` stays the only URL
+  // state and existing links keep working.
+  const selectedAsset = getCorridorAsset(corridorId).code;
+  const selectedCorridor = getCorridorById(corridorId);
+  const { balance, isLoading: isBalanceLoading } = useWalletBalance(publicKey, {
+    code: selectedCorridor.from,
+    issuer: selectedCorridor.fromIssuer,
+  });
   const withdrawStatus = useWithdrawStatus(
     trackingTransferServer,
     trackingTransactionId,
@@ -127,6 +136,20 @@ function OfframpContent() {
       });
     },
     [corridorId, amount, setCorridorId]
+  );
+
+  const handleAssetChange = useCallback(
+    (nextAsset: string) => {
+      if (nextAsset === selectedAsset) return;
+      const next = VISIBLE_CORRIDORS.find((c) => c.from === nextAsset);
+      if (!next) return;
+      setCorridorId(next.id);
+      trackFunnelEvent(FUNNEL_EVENTS.corridorSelected, {
+        corridor: next.id,
+        amount_bucket: amountBucket(amount),
+      });
+    },
+    [selectedAsset, amount, setCorridorId]
   );
 
   const handleSelectAnchor = useCallback((rate: AnchorRate) => {
@@ -223,7 +246,8 @@ function OfframpContent() {
     rateTableRef.current?.scrollIntoView({ behavior: 'smooth', block: 'start' });
   }, []);
 
-  // Keyboard shortcuts: K focuses the corridor selector, R refreshes rates.
+  // Keyboard shortcuts: A focuses the asset selector, K focuses the
+  // corridor selector, R refreshes rates.
   // Inactive while typing in a form control or while ExecuteDrawer is open.
   useEffect(() => {
     function handleKeyDown(event: KeyboardEvent) {
@@ -236,7 +260,10 @@ function OfframpContent() {
         (['INPUT', 'TEXTAREA', 'SELECT'].includes(target.tagName) || target.isContentEditable);
       if (isEditable) return;
 
-      if (event.key === 'k' || event.key === 'K') {
+      if (event.key === 'a' || event.key === 'A') {
+        event.preventDefault();
+        document.getElementById('asset-select')?.focus();
+      } else if (event.key === 'k' || event.key === 'K') {
         event.preventDefault();
         document.getElementById('corridor-select')?.focus();
       } else if (event.key === 'r' || event.key === 'R') {
@@ -258,7 +285,7 @@ function OfframpContent() {
         <div>
           <h1 className="text-2xl font-bold text-primary-text">Off-ramp Comparator</h1>
           <p className="mt-1 text-sm text-fg-muted">
-            Compare USDC withdrawal rates across Stellar anchors in real time
+            Compare {selectedAsset} withdrawal rates across Stellar anchors in real time
           </p>
         </div>
         <WalletButton />
@@ -266,14 +293,24 @@ function OfframpContent() {
 
       <DisclaimerBanner />
 
-      <div className="grid grid-cols-1 gap-4 rounded-xl border border-border bg-bg-sunken p-4 /50 sm:grid-cols-2">
-        <CorridorSelector value={corridorId} onChange={handleCorridorChange} />
+      <div className="grid grid-cols-1 gap-4 rounded-xl border border-border bg-bg-sunken p-4 /50 sm:grid-cols-3">
+        <AssetSelector
+          value={selectedAsset}
+          onChange={handleAssetChange}
+          corridors={VISIBLE_CORRIDORS}
+        />
+        <CorridorSelector
+          value={corridorId}
+          onChange={handleCorridorChange}
+          assetCode={selectedAsset}
+        />
         <AmountInput
           value={amount}
           onChange={setAmount}
           balance={balance}
           isBalanceLoading={isBalanceLoading}
           corridorId={corridorId}
+          assetCode={selectedAsset}
         />
       </div>
 

@@ -29,11 +29,13 @@ interface AmountInputProps {
   value: string;
   onChange: (value: string) => void;
   disabled?: boolean;
-  /** Connected wallet's USDC balance (null = no trustline / not connected). */
+  /** Connected wallet's balance in the selected asset (null = no trustline / not connected). */
   balance?: number | null;
   isBalanceLoading?: boolean;
   /** Selects corridor-specific "typical amount" chips when defined; falls back to defaults otherwise. */
   corridorId?: string;
+  /** Source asset code the amount is denominated in. Defaults to USDC. */
+  assetCode?: string;
 }
 
 export function AmountInput({
@@ -43,6 +45,7 @@ export function AmountInput({
   balance,
   isBalanceLoading,
   corridorId,
+  assetCode = 'USDC',
 }: AmountInputProps) {
   const [raw, setRaw] = useState(value);
   const [error, setError] = useState<string | null>(null);
@@ -114,7 +117,7 @@ export function AmountInput({
         htmlFor="amount-input"
         className="mb-1.5 block text-sm font-medium text-secondary-text"
       >
-        Amount (USDC)
+        Amount ({assetCode})
       </label>
       <div className="relative">
         <input
@@ -147,12 +150,12 @@ export function AmountInput({
               Max
             </button>
           )}
-          USDC
+          {assetCode}
         </span>
       </div>
       {!isBalanceLoading && balance != null && (
         <p className="mt-1 text-xs text-fg-muted">
-          Balance: {balance.toLocaleString(undefined, { maximumFractionDigits: 2 })} USDC
+          Balance: {balance.toLocaleString(undefined, { maximumFractionDigits: 2 })} {assetCode}
         </p>
       )}
       <div className="mt-2 flex gap-2">
@@ -178,7 +181,7 @@ export function AmountInput({
         </p>
       ) : (
         <p id="amount-hint" className="mt-1 text-xs text-fg-muted">
-          Enter the amount of USDC to off-ramp
+          Enter the amount of {assetCode} to off-ramp
         </p>
       )}
     </div>

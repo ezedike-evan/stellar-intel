@@ -36,10 +36,11 @@ vi.mock('@/lib/stellar/sep38', async () => {
   };
 });
 
-vi.mock('@/lib/stellar/anchors', () => ({
-  getAnchorById: vi.fn(),
-  getResolvedAnchorById: vi.fn(),
-}));
+vi.mock('@/lib/stellar/anchors', async () => {
+  const actual =
+    await vi.importActual<typeof import('@/lib/stellar/anchors')>('@/lib/stellar/anchors');
+  return { ...actual, getAnchorById: vi.fn(), getResolvedAnchorById: vi.fn() };
+});
 
 vi.mock('@/lib/stellar/horizon', () => ({
   buildWithdrawPayment: vi.fn(),
@@ -267,6 +268,60 @@ describe('ExecuteDrawer', () => {
 
     expect(mockBuildWithdrawPayment).toHaveBeenCalled();
     expect(mockSignAndSubmitPayment).toHaveBeenCalled();
+  });
+
+  it('executes with the selected non-USDC corridor asset', async () => {
+    const brlRate = { ...RATE, corridorId: 'brl-brl' };
+    mockGetResolvedAnchorById.mockResolvedValue(SEP38_ANCHOR);
+    mockPostSep38Quote.mockResolvedValue(FIRM_QUOTE);
+
+    render(
+      <ExecuteDrawer
+        rate={brlRate}
+        amount="100"
+        publicKey={PUBLIC_KEY}
+        onClose={vi.fn()}
+        onExecuteStarted={vi.fn()}
+      />
+    );
+
+    expect(screen.getByText('100 BRL')).toBeInTheDocument();
+    expect(screen.getByText('2 BRL')).toBeInTheDocument();
+    fireEvent.click(screen.getByText('Start Off-ramp'));
+
+    await waitFor(() => expect(screen.getByTestId('kyc-iframe-mock')).toBeInTheDocument());
+    expect(mockPostSep38Quote).toHaveBeenCalledWith(
+      'https://quotes.cowrie.exchange',
+      AUTH.jwt,
+      expect.objectContaining({
+        sell_asset: 'stellar:BRL:GDVKY2GU2DRXWTBEYJJWSFXIGBZV6AZNBVVSUHEPZI54LIS6BA7DVVSP',
+      })
+    );
+
+    act(() => {
+      window.dispatchEvent(
+        new MessageEvent('message', {
+          data: { type: 'stellar_transaction_created', transaction_id: 'txn-brl' },
+          origin: 'https://anchor.example',
+        })
+      );
+    });
+
+    await waitFor(() => expect(mockSignAndSubmitPayment).toHaveBeenCalled());
+    expect(mockInitiateWithdraw).toHaveBeenCalledWith(
+      SEP38_ANCHOR,
+      expect.objectContaining({
+        assetCode: 'BRL',
+        assetIssuer: 'GDVKY2GU2DRXWTBEYJJWSFXIGBZV6AZNBVVSUHEPZI54LIS6BA7DVVSP',
+      }),
+      expect.anything()
+    );
+    expect(mockBuildWithdrawPayment).toHaveBeenCalledWith(
+      expect.objectContaining({
+        assetCode: 'BRL',
+        assetIssuer: 'GDVKY2GU2DRXWTBEYJJWSFXIGBZV6AZNBVVSUHEPZI54LIS6BA7DVVSP',
+      })
+    );
   });
 
   it('shows the error message and a Retry button for an unclassified (retryable) failure', async () => {

@@ -11,6 +11,7 @@ interface ApiSnapshotResponse {
   corridors: Array<{
     corridorId: string;
     from: string;
+    fromIssuer: string | null;
     to: string;
     countryCode: string;
     countryName: string;

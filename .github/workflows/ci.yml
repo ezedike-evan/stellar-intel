@@ -48,6 +48,9 @@ jobs:
       - name: TypeScript
         run: npm run typecheck
 
+      - name: TypeScript (MCP package)
+        run: npx tsc -p packages/mcp --noEmit
+
       # public/openapi.json is generated from lib/api/openapi.ts but committed,
       # so without this gate the two drift silently and the published spec stops
       # describing the API (#918).

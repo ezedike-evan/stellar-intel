@@ -4,7 +4,7 @@ import { getAnchorsByCorridorId, getCorridorById } from './anchors';
 import { resolveAnchor } from './sep1';
 import { assertSep38Capable, getSep38Price } from './sep38';
 import { getSep24Info } from './sep24';
-import { getSep6Info } from './sep6';
+import { getSep6Info, Sep6AssetDisabledError } from './sep6';
 import { getUsdFxRate } from '@/lib/fx/rates';
 import { SepError, TimeoutError } from './errors';
 import { fetchReputationScores } from '@/lib/reputation/scores';
@@ -269,9 +269,18 @@ async function sep6IndicativeRate(
 ): Promise<AnchorRate> {
   const transferServer = toml.TRANSFER_SERVER!;
 
+  // Plain `withdraw` first; when the anchor disables USDC there but offers it
+  // via `withdraw-exchange` (Latamex's ARS/BRL corridors, #1296), retry once
+  // against that map. Fee semantics are the same either way, so the rate
+  // stays `source: 'sep6-fee'` — still indicative, not a firm quote.
   const [config, fxRate] = await Promise.all([
     withTimeout(
-      getSep6Info(transferServer, USDC_ASSET.code),
+      getSep6Info(transferServer, USDC_ASSET.code).catch((err) => {
+        if (err instanceof Sep6AssetDisabledError) {
+          return getSep6Info(transferServer, USDC_ASSET.code, { exchange: true });
+        }
+        throw err;
+      }),
       SEP6_INFO_TIMEOUT_MS,
       `${anchor.name} SEP-6 /info`
     ),
@@ -435,6 +444,7 @@ async function quoteAnchorOnCorridor(
   }
 
   const reasons: string[] = [];
+  const isUnverifiedPayout = anchor.unverifiedCorridors?.includes(corridorId) ?? false;
 
   // Tier 1 — firm SEP-38 quote: the anchor's own live price. Preferred when
   // the anchor advertises a quote server.
@@ -472,6 +482,7 @@ async function quoteAnchorOnCorridor(
       totalReceived: buyAmount,
       source: 'sep38',
       updatedAt: new Date(),
+      ...(isUnverifiedPayout ? { unverifiedPayout: true as const } : {}),
     });
     return;
   } catch (err) {
@@ -482,7 +493,11 @@ async function quoteAnchorOnCorridor(
   // published SEP-24 withdraw fee. Differentiated per anchor by their fees;
   // the firm rate is confirmed by the anchor at execution time.
   try {
-    rates.push(await indicativeRate(anchor, toml, corridor.to, corridorId, amount, sellAmount));
+    const rate = await indicativeRate(anchor, toml, corridor.to, corridorId, amount, sellAmount);
+    if (isUnverifiedPayout) {
+      rate.unverifiedPayout = true;
+    }
+    rates.push(rate);
     return;
   } catch (err) {
     reasons.push(`Indicative: ${err instanceof Error ? err.message : String(err)}`);
@@ -493,9 +508,18 @@ async function quoteAnchorOnCorridor(
   // SEP-38 or SEP-24 (e.g. Cowrie on usdc-ngn).
   if (hasSep6(toml)) {
     try {
-      rates.push(
-        await sep6IndicativeRate(anchor, toml, corridor.to, corridorId, amount, sellAmount)
+      const rate = await sep6IndicativeRate(
+        anchor,
+        toml,
+        corridor.to,
+        corridorId,
+        amount,
+        sellAmount
       );
+      if (isUnverifiedPayout) {
+        rate.unverifiedPayout = true;
+      }
+      rates.push(rate);
       return;
     } catch (err) {
       reasons.push(`SEP-6: ${err instanceof Error ? err.message : String(err)}`);

@@ -1,0 +1,21 @@
+{
+  "_comment": "Live SEP-24 GET /info deposit capture (#1095, #1297), captured against https://transfer-server.zetl.network showing enabled ARST deposit matching the registered asset. Only the deposit.ARST block is kept.",
+  "capturedAt": "2026-09-30T00:00:00.000Z",
+  "anchorId": "latamex",
+  "homeDomain": "pubnet-sep.latamex.com",
+  "registeredAssetCode": "ARST",
+  "transferServerSep0024": "https://transfer-server.zetl.network",
+  "reachable": true,
+  "supportsDeposit": true,
+  "info": {
+    "deposit": {
+      "ARST": {
+        "enabled": true,
+        "fee_fixed": 0,
+        "fee_percent": 0,
+        "min_amount": "5000",
+        "max_amount": 250000
+      }
+    }
+  }
+}
