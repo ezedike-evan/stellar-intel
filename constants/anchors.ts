@@ -78,11 +78,13 @@ export const ANCHORS: Anchor[] = [
   // GCHQ3F2BF5P74DMDNOOGHT5DUCKC773AW5DTOFINC26W4KGYFPYDPRSO (anchor_asset BRL).
   // /info: deposit and withdraw [ARST, BRLT] enabled; plain USDC deposit/withdraw disabled;
   // USDC only via deposit-exchange / withdraw-exchange. No SEP-38.
+  // The usdc-ars and usdc-brl corridors are SEP-6 withdraw-exchange (USDC in, ARS/BRL out):
+  // rates are indicative (sep6-fee), never a firm SEP-38 quote.
   {
     id: 'latamex',
     name: 'Latamex',
     homeDomain: 'pubnet-sep.latamex.com',
-    corridors: ['arst-ars', 'brlt-brl'],
+    corridors: ['arst-ars', 'brlt-brl', 'usdc-ars', 'usdc-brl'],
     assetCode: 'ARST',
     assetIssuer: 'GCSAZVWXZKWS4XS223M5F54H2B6XPIIXZZGP7KEAIU6YSL5HDRGCI3DG',
     seps: ['sep6', 'sep10', 'sep24'],
@@ -544,8 +546,8 @@ export const CORRIDORS: Corridor[] = [
 export const V11_CORRIDOR_IDS: ReadonlySet<string> = new Set([
   'usdc-zar',
   'usdc-xof',
-  // usdc-ars and usdc-pen: orphaned when anclap was corrected to its own tokens 2026-09-23
-  'usdc-ars',
+  // usdc-pen: orphaned when anclap was corrected to its own tokens 2026-09-23
+  // (usdc-ars is served again by latamex via SEP-6 withdraw-exchange)
   'usdc-pen',
 ]);
 

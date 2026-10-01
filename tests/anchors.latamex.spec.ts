@@ -1,5 +1,11 @@
 import { describe, it, expect } from 'vitest';
-import { ANCHORS, CORRIDORS, ANCHOR_HOME_DOMAINS } from '@/constants/anchors';
+import {
+  ANCHORS,
+  CORRIDORS,
+  ANCHOR_HOME_DOMAINS,
+  V11_CORRIDOR_IDS,
+  VISIBLE_CORRIDORS,
+} from '@/constants/anchors';
 
 const ARST_ISSUER = 'GCSAZVWXZKWS4XS223M5F54H2B6XPIIXZZGP7KEAIU6YSL5HDRGCI3DG';
 const BRLT_ISSUER = 'GCHQ3F2BF5P74DMDNOOGHT5DUCKC773AW5DTOFINC26W4KGYFPYDPRSO';
@@ -58,5 +64,16 @@ describe('Latamex (Settle Network) onboarding', () => {
     expect(corridor?.fromPeg).toBe('BRL');
     expect(corridor?.to).toBe('BRL');
     expect(corridor?.countryCode).toBe('BR');
+  });
+
+  it('serves the usdc-ars and usdc-brl corridors via SEP-6 withdraw-exchange', () => {
+    expect(latamex?.corridors).toEqual(['arst-ars', 'brlt-brl', 'usdc-ars', 'usdc-brl']);
+    expect(CORRIDORS.find((c) => c.id === 'usdc-ars')?.to).toBe('ARS');
+    expect(CORRIDORS.find((c) => c.id === 'usdc-brl')?.to).toBe('BRL');
+  });
+
+  it('makes usdc-ars visible now that latamex serves it', () => {
+    expect(V11_CORRIDOR_IDS.has('usdc-ars')).toBe(false);
+    expect(VISIBLE_CORRIDORS.some((c) => c.id === 'usdc-ars')).toBe(true);
   });
 });

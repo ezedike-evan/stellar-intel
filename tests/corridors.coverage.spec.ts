@@ -2,10 +2,10 @@ import { describe, expect, it } from 'vitest';
 import { ANCHORS, CORRIDORS, VISIBLE_CORRIDORS } from '@/constants/anchors';
 import type { Anchor, Corridor } from '@/types';
 
-// usdc-zar was flagged off until zeam.money (#465) started serving it.
+// usdc-zar was flagged off until zeam.money (#465) started serving it; usdc-ars until
+// latamex (#1298) started serving it via SEP-6 withdraw-exchange.
 const FLAGGED_OFF_CORRIDORS = {
   'usdc-xof': 'v1.1 target corridor, gated behind v11Corridors until an anchor serves it.',
-  'usdc-ars': 'Orphaned when anclap was corrected to its own tokens 2026-09-23.',
   'usdc-pen': 'Orphaned when anclap was corrected to its own tokens 2026-09-23.',
   // perahub (#1303) serves usdc-php over SEP-31 only, and SEP-31 is never routed:
   // it needs a bilateral sending-anchor agreement. The corridor stays defined so the
