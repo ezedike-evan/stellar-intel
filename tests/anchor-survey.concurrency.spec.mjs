@@ -78,7 +78,9 @@ describe('classify', () => {
       )
     );
 
-    expect(await classify('a.example')).toEqual({
+    // Every rail's /info answers with the same TOML body here; it is not JSON,
+    // so each rail is recorded as a failed /info without breaking the flags.
+    expect(await classify('a.example')).toMatchObject({
       domain: 'a.example',
       reachable: true,
       sep6: true,
@@ -122,7 +124,8 @@ describe('classify', () => {
     await vi.advanceTimersByTimeAsync(1);
     const result = await pending;
 
-    expect(fetch).toHaveBeenCalledTimes(2);
+    // One failed DNS attempt, the TOML fetch, then the SEP-6 /info probe.
+    expect(fetch).toHaveBeenCalledTimes(3);
     expect(result).toMatchObject({ domain: 'r.example', reachable: true, sep6: true });
   });
 
