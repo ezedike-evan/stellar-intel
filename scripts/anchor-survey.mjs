@@ -407,6 +407,35 @@ export function summarizeSep38Info(json) {
   return { assets };
 }
 
+// Fixed, well-formed Stellar public key used only as the `account` query
+// parameter for SEP-10 liveness probes. It is unfunded, holds nothing, and its
+// secret was never stored: nothing is ever signed with it.
+export const PROBE_ACCOUNT = 'GBGE3HRVH4LGSNZXVLEBITOCQZFWHCGRUM2DY6GHZCHQQEXLCOFP2BWD';
+
+// SEP-10 liveness must mirror how wallets call the endpoint: always with
+// `?account=`. MoneyGram's https://stellar.moneygram.com/stellaradapterservice/auth
+// answers a bare GET with HTTP 500 but a GET with `?account=` with HTTP 400
+// (census 2026-09-23), so a bare probe would mark the busiest anchor on the
+// network as down. Any status < 500 means the service is up.
+export async function checkSep10Liveness(url, { fetchImpl = fetch } = {}) {
+  const probeUrl = `${url}${url.includes('?') ? '&' : '?'}account=${PROBE_ACCOUNT}`;
+  const ctrl = new AbortController();
+  const timer = setTimeout(() => ctrl.abort(), PER_ANCHOR_TIMEOUT_MS);
+  try {
+    const res = await fetchImpl(probeUrl, {
+      redirect: 'follow',
+      signal: ctrl.signal,
+      headers: { 'User-Agent': 'stellar-intel-anchor-survey/1.0' },
+    });
+    return { url, status: res.status, alive: res.status < 500 };
+  } catch (err) {
+    const error = `${err?.name ?? 'Error'}${err?.cause?.code ? `:${err.cause.code}` : ''}`;
+    return { url, status: null, alive: false, error };
+  } finally {
+    clearTimeout(timer);
+  }
+}
+
 /**
  * Fetch + classify a single domain's stellar.toml. Retries once.
  *
@@ -446,7 +475,7 @@ export async function classify(domain) {
         currencies: parseCurrencies(toml),
         rails: {},
       };
-      if (isImpersonation(domain, Object.values(parseTomlEndpoints(toml)))) {
+      if (isImpersonation(domain, Object.values(endpoints))) {
         result.excluded = 'impersonation';
       }
       const railJobs = [];
@@ -493,6 +522,7 @@ export async function classify(domain) {
       for (const [rail, summary] of await Promise.all(railJobs)) {
         result.rails[rail] = summary;
       }
+      if (endpoints.sep10) result.sep10 = await checkSep10Liveness(endpoints.sep10);
       return result;
     } catch (err) {
       last = `${err?.name ?? 'Error'}${err?.cause?.code ? `:${err.cause.code}` : ''}`;
