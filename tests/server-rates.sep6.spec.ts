@@ -162,6 +162,7 @@ describe('fetchCorridorRates — Latamex usdc-ars via withdraw-exchange (#1298)'
       TRANSFER_SERVER: 'https://transfer-server.zetl.network',
     } as unknown as Sep1TomlData);
     vi.mocked(getUsdFxRate).mockResolvedValue(1000);
+    vi.mocked(getFxRate).mockResolvedValue(1000);
     // Mocked /info: plain `withdraw` has no USDC, `withdraw-exchange.USDC` does.
     vi.mocked(getSep6Info).mockImplementation(async (server, asset, opts) => {
       if (opts?.exchange) {
