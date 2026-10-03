@@ -1,0 +1,22 @@
+{
+  "id": "nafuloo",
+  "name": "Nafuloo",
+  "kind": "issuer",
+  "domains": ["nafuloo.com"],
+  "orgUrl": "https://nafuloo.com",
+  "verifiedAt": "2026-09-23",
+  "assets": [
+    {
+      "code": "NAFU",
+      "issuer": "GBHA4FGPHX7KURMP7CZU7SQ2UOAGTAQ22SCHPK5P5XCQHZXCSVXQJFYB",
+      "anchorAssetType": null,
+      "anchorAsset": null
+    },
+    {
+      "code": "NFIUM",
+      "issuer": "GD76B36XOOH432PICDIVEOD4RU7TEFJ5DZVA2C5MW5LKTSCARK45V3DB",
+      "anchorAssetType": null,
+      "anchorAsset": null
+    }
+  ]
+}

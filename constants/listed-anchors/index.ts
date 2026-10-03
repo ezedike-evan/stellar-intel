@@ -10,7 +10,8 @@ import type { ListedAnchor } from '@/types';
 import { parseListedAnchors } from '@/lib/stellar/listed-anchor-schema';
 
 import meshMzar from './mesh-mzar.json';
+import nafuloo from './nafuloo.json';
 
-const RAW: unknown[] = [meshMzar];
+const RAW: unknown[] = [meshMzar, nafuloo];
 
 export const LISTED_ANCHORS: readonly ListedAnchor[] = parseListedAnchors(RAW);

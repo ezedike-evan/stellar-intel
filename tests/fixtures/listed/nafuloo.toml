@@ -1,0 +1,12 @@
+# Source: https://nafuloo.com/.well-known/stellar.toml (fetched 2026-09-30)
+[DOCUMENTATION]
+ORG_NAME = "No one person or group owns or controls Nafuloo, and anyone can participate."
+ORG_URL = "https://nafuloo.com"
+
+[[CURRENCIES]]
+code = "NAFU"
+issuer = "GBHA4FGPHX7KURMP7CZU7SQ2UOAGTAQ22SCHPK5P5XCQHZXCSVXQJFYB"
+
+[[CURRENCIES]]
+code = "NFIUM"
+issuer = "GD76B36XOOH432PICDIVEOD4RU7TEFJ5DZVA2C5MW5LKTSCARK45V3DB"
