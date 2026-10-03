@@ -35,6 +35,7 @@
 //   - "Transfer-capable" != "fiat off-ramp we care about": some hits are crypto
 //     anchors or DEX gateways with no fiat corridor.
 
+import { readFileSync, writeFileSync } from 'node:fs';
 import { readFile, writeFile } from 'node:fs/promises';
 import { resolve } from 'node:path';
 import { fileURLToPath, pathToFileURL } from 'node:url';
@@ -43,6 +44,7 @@ import { fetchTopAssetDomains } from './lib/asset-seeds.mjs';
 import { fetchSdfAnchorDirectoryDomains } from './lib/sdf-directory.mjs';
 import { HOSTNAME_RE, parseAnchors } from './validate-anchors.mjs';
 import { isImpersonation } from './lib/impersonation.mjs';
+import { extractAnchorsArray, parseAnchors, ANCHORS_PATH } from './check-registry.mjs';
 
 // Kept as the JSON `source` field for older readers that expect one source URL.
 const DIRECTORY_URL = 'https://api.stellar.expert/explorer/public/directory?limit=200';
@@ -113,6 +115,71 @@ const sleep = (ms) => new Promise((resolve) => setTimeout(resolve, ms));
 // directory pull, and the file is rewritten with the union so a domain the
 // directory later drops is not lost from the fleet's memory (#1323).
 const censusPath = flagValue('--census');
+
+// --census-out <path>: write the tiered anchor census (one row per surveyed
+// domain, see buildCensus) that GET /api/v1/anchors/census serves (#1322).
+// Distinct from --census, which is only the persistent domain roster.
+const censusOutPath = flagValue('--census-out');
+
+const TIER_ORDER = { routable: 0, 'health-only': 1, listed: 2 };
+
+/**
+ * Build the committed anchor census — one row per non-excluded survey result
+ * (tiered by tierOf), sorted by tier then domain — from the full survey `results` array and the
+ * registered anchors from constants/anchors.ts. Pure: takes whatever shape
+ * `results` rows already carry (asset lists, sources) rather than fetching
+ * anything itself, so it is trivially unit-testable against fixtures.
+ *
+ * @param {Array<Record<string, unknown>>} results
+ * @param {Array<{ id: string; homeDomain?: string; serviceDomain?: string }>} registryAnchors
+ * @param {string | null} generatedAt
+ */
+export function buildCensus(results, registryAnchors, generatedAt) {
+  const registryByDomain = new Map();
+  for (const anchor of registryAnchors ?? []) {
+    for (const domain of [anchor.homeDomain, anchor.serviceDomain]) {
+      if (domain) registryByDomain.set(domain.toLowerCase(), anchor.id);
+    }
+  }
+
+  const counts = { routable: 0, healthOnly: 0, listed: 0, excluded: 0 };
+  const rows = [];
+
+  for (const result of results) {
+    const tier = tierOf(result);
+    if (tier === 'excluded') {
+      counts.excluded += 1;
+      continue;
+    }
+    if (tier === 'routable') counts.routable += 1;
+    else if (tier === 'health-only') counts.healthOnly += 1;
+    else counts.listed += 1;
+
+    rows.push({
+      domain: result.domain,
+      tier,
+      seps: {
+        sep6: Boolean(result.sep6),
+        sep24: Boolean(result.sep24),
+        sep31: Boolean(result.sep31),
+        sep38: Boolean(result.sep38),
+        sep10: Boolean(result.sep10),
+      },
+      withdrawAssets: result.withdrawAssets ?? [],
+      depositAssets: result.depositAssets ?? [],
+      receiveAssets: result.receiveAssets ?? [],
+      sources: result.sources ?? [],
+      registeredAnchorId: registryByDomain.get(result.domain.toLowerCase()) ?? null,
+      checkedAt: result.checkedAt ?? generatedAt,
+    });
+  }
+
+  rows.sort((a, b) => TIER_ORDER[a.tier] - TIER_ORDER[b.tier] || a.domain.localeCompare(b.domain));
+
+  const sources = [...new Set(rows.flatMap((r) => r.sources))].sort();
+
+  return { generatedAt, sources, counts, rows };
+}
 
 // Notes carried into the recheck ledger for domains that map to a known anchor
 // or are otherwise worth a second look. Keyed by directory domain.
@@ -548,6 +615,13 @@ async function main() {
   const only24 = live.filter((r) => r.sep24 && !r.sep6);
   const transferCapable = live.filter((r) => (r.sep6 || r.sep24) && !r.excluded);
   const issuerOnly = live.filter((r) => !r.sep6 && !r.sep24);
+  const generatedAt = new Date().toISOString();
+
+  if (censusOutPath) {
+    const registryAnchors = parseAnchors(extractAnchorsArray(readFileSync(ANCHORS_PATH, 'utf-8')));
+    const census = buildCensus(results, registryAnchors, generatedAt);
+    writeFileSync(censusOutPath, JSON.stringify(census, null, 2) + '\n');
+  }
 
   // Fleet tiers (#1319). Every result is tagged in place, then grouped into
   // domain lists so downstream consumers (the diff, the re-crawl) can track
@@ -571,7 +645,7 @@ async function main() {
     console.log(
       JSON.stringify(
         {
-          generatedAt: new Date().toISOString(),
+          generatedAt,
           // Legacy single-source field for older readers; `sources` lists what ran.
           source: DIRECTORY_URL,
           sources: usedSources,

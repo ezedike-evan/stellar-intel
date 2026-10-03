@@ -747,6 +747,139 @@
           "commit",
           "ledger"
         ]
+      },
+      "AnchorCensusRow": {
+        "type": "object",
+        "properties": {
+          "domain": {
+            "type": "string"
+          },
+          "tier": {
+            "type": "string",
+            "enum": [
+              "routable",
+              "health-only",
+              "listed"
+            ]
+          },
+          "seps": {
+            "type": "object",
+            "properties": {
+              "sep6": {
+                "type": "boolean"
+              },
+              "sep24": {
+                "type": "boolean"
+              },
+              "sep31": {
+                "type": "boolean"
+              },
+              "sep38": {
+                "type": "boolean"
+              },
+              "sep10": {
+                "type": "boolean"
+              }
+            },
+            "required": [
+              "sep6",
+              "sep24",
+              "sep31",
+              "sep38",
+              "sep10"
+            ]
+          },
+          "withdrawAssets": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            }
+          },
+          "depositAssets": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            }
+          },
+          "receiveAssets": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            }
+          },
+          "sources": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            }
+          },
+          "registeredAnchorId": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "description": "Matching constants/anchors.ts id, matched on home or service domain"
+          },
+          "checkedAt": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "domain",
+          "tier",
+          "seps",
+          "withdrawAssets",
+          "depositAssets",
+          "receiveAssets",
+          "sources",
+          "registeredAnchorId",
+          "checkedAt"
+        ]
+      },
+      "AnchorCensusResponse": {
+        "type": "object",
+        "properties": {
+          "generatedAt": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "counts": {
+            "type": "object",
+            "properties": {
+              "routable": {
+                "type": "number"
+              },
+              "healthOnly": {
+                "type": "number"
+              },
+              "listed": {
+                "type": "number"
+              },
+              "excluded": {
+                "type": "number"
+              }
+            },
+            "required": [
+              "routable",
+              "healthOnly",
+              "listed",
+              "excluded"
+            ]
+          },
+          "rows": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/AnchorCensusRow"
+            }
+          }
+        },
+        "required": [
+          "generatedAt",
+          "counts",
+          "rows"
+        ]
       }
     },
     "parameters": {}
@@ -2651,6 +2784,64 @@
           },
           "502": {
             "description": "The ledger history could not be read",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/anchors/census": {
+      "get": {
+        "summary": "Get the anchor census",
+        "description": "Serves the committed anchor census (constants/anchor-census-rows.json), covering every surveyed anchor — routable, health-only, or merely listed — not only the anchors registered for routing. Optionally filtered to a single tier.",
+        "tags": [
+          "Anchors"
+        ],
+        "parameters": [
+          {
+            "schema": {
+              "type": "string",
+              "enum": [
+                "routable",
+                "health-only",
+                "listed"
+              ],
+              "description": "Restrict the response to one tier. Omit for every row."
+            },
+            "required": false,
+            "description": "Restrict the response to one tier. Omit for every row.",
+            "name": "tier",
+            "in": "query"
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "The anchor census, optionally filtered by tier",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/AnchorCensusResponse"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Invalid `tier` value",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiError"
+                }
+              }
+            }
+          },
+          "429": {
+            "description": "Rate limited",
             "content": {
               "application/json": {
                 "schema": {

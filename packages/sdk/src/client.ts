@@ -5,6 +5,7 @@ import {
   isApiErrorBody,
 } from './errors.js';
 import type {
+  AnchorCensusResponse,
   AnchorHealth,
   AnchorHealthLedgerArtifact,
   CorridorVolumeSavings,
@@ -164,6 +165,20 @@ export class StellarIntelClient {
     return this.request<AnchorHealthLedgerArtifact>({
       method: 'GET',
       path: `/api/v1/anchor-health/ledger${query}`,
+    });
+  }
+
+  /**
+   * Every surveyed anchor — routable, health-only, or merely listed — not only
+   * the anchors registered for routing. Pass `tier` to filter to one bucket.
+   */
+  async getAnchorCensus(
+    tier?: 'routable' | 'health-only' | 'listed'
+  ): Promise<AnchorCensusResponse> {
+    const query = tier ? `?tier=${encodeURIComponent(tier)}` : '';
+    return this.request<AnchorCensusResponse>({
+      method: 'GET',
+      path: `/api/v1/anchors/census${query}`,
     });
   }
 

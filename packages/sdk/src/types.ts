@@ -108,6 +108,37 @@ export interface AnchorHealthLedgerArtifact {
   };
 }
 
+/** One row of the anchor census, as published by `GET /api/v1/anchors/census`. */
+export interface AnchorCensusRow {
+  domain: string;
+  tier: 'routable' | 'health-only' | 'listed';
+  seps: {
+    sep6: boolean;
+    sep24: boolean;
+    sep31: boolean;
+    sep38: boolean;
+    sep10: boolean;
+  };
+  withdrawAssets: string[];
+  depositAssets: string[];
+  receiveAssets: string[];
+  sources: string[];
+  registeredAnchorId: string | null;
+  checkedAt: string;
+}
+
+/** Every surveyed anchor, optionally filtered to one tier. */
+export interface AnchorCensusResponse {
+  generatedAt: string | null;
+  counts: {
+    routable: number;
+    healthOnly: number;
+    listed: number;
+    excluded: number;
+  };
+  rows: AnchorCensusRow[];
+}
+
 /**
  * Every endpoint this SDK calls, as `METHOD path`.
  *
@@ -119,6 +150,7 @@ export const OPERATIONS = {
   submitOfframpIntent: 'POST /api/v1/intent/offramp',
   getAnchorHealth: 'GET /api/v1/anchors/{id}/health',
   getAnchorHealthLedger: 'GET /api/v1/anchor-health/ledger',
+  getAnchorCensus: 'GET /api/v1/anchors/census',
   getCorridorVolumeSavings: 'GET /api/v1/corridors/{corridor}/volume-savings',
   getHealth: 'GET /api/v1/health',
   getVolumeSavings: 'GET /api/v1/corridors/{corridor}/volume-savings',

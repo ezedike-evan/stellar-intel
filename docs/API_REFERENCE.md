@@ -31,6 +31,7 @@ the hardening contract (see `lib/api/v1.ts`):
   - [`POST /api/admin/disputes`](#post-apiadmindisputes)
 - **Anchors**
   - [`GET /api/v1/anchor-health/ledger`](#get-apiv1anchor-healthledger)
+  - [`GET /api/v1/anchors/census`](#get-apiv1anchorscensus)
   - [`GET /api/v1/anchors/{id}/health`](#get-apiv1anchorsidhealth)
 - **Intent**
   - [`POST /api/intent`](#post-apiintent)
@@ -138,6 +139,28 @@ Publishes the nightly anchor health ledger as a dated artifact. Without `date`, 
 | `404` | No ledger exists on or before the requested date | `application/json` | `ApiError` |
 | `429` | Rate limited | `application/json` | `ApiError` |
 | `502` | The ledger history could not be read | `application/json` | `ApiError` |
+
+---
+
+### `GET /api/v1/anchors/census`
+
+**Summary:** Get the anchor census  
+
+Serves the committed anchor census (constants/anchor-census-rows.json), covering every surveyed anchor — routable, health-only, or merely listed — not only the anchors registered for routing. Optionally filtered to a single tier.
+
+#### Parameters
+
+| Name | In | Type | Required | Description |
+| :--- | :--- | :--- | :--- | :--- |
+| `tier` | `query` | `"routable" | "health-only" | "listed"` | No | Restrict the response to one tier. Omit for every row. |
+
+#### Responses
+
+| Status | Description | Content-Type | Schema |
+| :--- | :--- | :--- | :--- |
+| `200` | The anchor census, optionally filtered by tier | `application/json` | `AnchorCensusResponse` |
+| `400` | Invalid `tier` value | `application/json` | `ApiError` |
+| `429` | Rate limited | `application/json` | `ApiError` |
 
 ---
 
