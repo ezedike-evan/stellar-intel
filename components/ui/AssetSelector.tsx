@@ -14,7 +14,11 @@ interface AssetSelectorProps {
  * seen order. The off-ramp page passes VISIBLE_CORRIDORS and switches to the
  * first visible corridor of the newly picked asset.
  */
-export function AssetSelector({ value, onChange, corridors = VISIBLE_CORRIDORS }: AssetSelectorProps) {
+export function AssetSelector({
+  value,
+  onChange,
+  corridors = VISIBLE_CORRIDORS,
+}: AssetSelectorProps) {
   const assetCodes = [...new Set(corridors.map((c) => c.from))];
 
   return (
