@@ -78,4 +78,4 @@ independently, so that is flagged in `constants/anchors.ts` rather than resolved
 
 ## Fleet survey
 
-`scripts/anchor-survey.mjs` classifies the broader directory (stellar.expert `anchor` tag) by SEP support. Latest documented snapshot: 92 directory-tagged → 41 reachable toml → 11 transfer-capable / 30 issuer-only; 51 unreachable. See [`maintainer.md`](../maintainer.md) §11.
+`scripts/anchor-survey.mjs` builds its candidate set from every source — the anchor registry, the full stellar.expert directory (no `anchor` tag required), the home domains of top stellar.expert assets and the SDF Anchor Directory — then classifies each domain by SEP support. Latest documented snapshot: 92 directory-tagged → 41 reachable toml → 11 transfer-capable / 30 issuer-only; 51 unreachable. See [`maintainer.md`](../maintainer.md) §11.

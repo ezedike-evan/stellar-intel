@@ -1,9 +1,11 @@
 #!/usr/bin/env node
 // Anchor fleet survey — reproducible classification of Stellar anchors by SEP support.
 //
-// Pulls every account tagged `anchor` from the stellar.expert public directory,
-// fetches each domain's `stellar.toml`, and classifies it by the same keys the
-// runtime uses in lib/stellar/server-rates.ts:
+// Builds a candidate domain set from EVERY source (the registry in
+// constants/anchors.ts, the full stellar.expert directory, top stellar.expert
+// asset home domains and the SDF Anchor Directory), fetches each domain's
+// `stellar.toml`, and classifies it by the same keys the runtime uses in
+// lib/stellar/server-rates.ts:
 //
 //   TRANSFER_SERVER          -> SEP-6  (programmatic deposit/withdraw)
 //   TRANSFER_SERVER_SEP0024  -> SEP-24 (interactive hosted deposit/withdraw)
@@ -19,6 +21,8 @@
 //   node scripts/anchor-survey.mjs --json     # machine-readable JSON
 //   node scripts/anchor-survey.mjs --json > anchors.json
 //   node scripts/anchor-survey.mjs --recheck  # Markdown tables for docs/ANCHOR_FLEET_RECHECK.md
+//   node scripts/anchor-survey.mjs --sources registry,sdf-anchor-directory
+//                                             # limit candidate sources (default: all)
 //   node scripts/anchor-survey.mjs --concurrency 8   # parallel lookups (default 12, clamped 1-32)
 //   ANCHOR_SURVEY_CONCURRENCY=8 node scripts/anchor-survey.mjs   # same, via env (flag wins)
 //
@@ -32,12 +36,23 @@
 //     anchors or DEX gateways with no fiat corridor.
 
 import { readFile, writeFile } from 'node:fs/promises';
-import { pathToFileURL } from 'node:url';
-import { fetchDirectoryCandidates } from './lib/directory.mjs';
+import { resolve } from 'node:path';
+import { fileURLToPath, pathToFileURL } from 'node:url';
+import { fetchDirectoryAll } from './lib/directory.mjs';
+import { fetchTopAssetDomains } from './lib/asset-seeds.mjs';
+import { fetchSdfAnchorDirectoryDomains } from './lib/sdf-directory.mjs';
+import { HOSTNAME_RE, parseAnchors, parseCurrencies } from './validate-anchors.mjs';
 import { isImpersonation } from './lib/impersonation.mjs';
-import { parseCurrencies } from './validate-anchors.mjs';
 
-const DIRECTORY_URL = 'https://api.stellar.expert/explorer/public/directory?tag[]=anchor&limit=200';
+// Kept as the JSON `source` field for older readers that expect one source URL.
+const DIRECTORY_URL = 'https://api.stellar.expert/explorer/public/directory?limit=200';
+// File URL under plain Node; module runners like Vitest serve modules over
+// http://, so fall back to the repo root (every caller runs from there).
+const REGISTRY_URL = new URL('../constants/anchors.ts', import.meta.url);
+const REGISTRY_PATH =
+  REGISTRY_URL.protocol === 'file:'
+    ? fileURLToPath(REGISTRY_URL)
+    : resolve(process.cwd(), 'constants/anchors.ts');
 const PER_ANCHOR_TIMEOUT_MS = 12_000;
 // The system resolver starts failing above ~12 concurrent lookups (2026-09-23
 // census), which shows up as false "DNS does not resolve" rows.
@@ -248,16 +263,125 @@ async function writeCensus(path, domains) {
   await writeFile(path, `${JSON.stringify(body, null, 2)}\n`);
 }
 
+/** Every candidate source, in the order they are consulted. */
+export const SURVEY_SOURCES = [
+  'registry',
+  'stellar.expert-directory',
+  'stellar.expert-assets',
+  'sdf-anchor-directory',
+];
+
+// Sources that hit the network. When every selected remote source fails the
+// survey has no external data left and exits 1; `registry` is a local file.
+const REMOTE_SOURCES = new Set([
+  'stellar.expert-directory',
+  'stellar.expert-assets',
+  'sdf-anchor-directory',
+]);
+
 /**
- * Pull the anchor-tagged directory and return the distinct domains, merged with
- * any domains carried in the census roster.
- * @param {string[]} censusDomains
+ * Every registered anchor's home and service domains from constants/anchors.ts.
+ * `parseAnchors` returns `domain = serviceDomain || homeDomain`, so both raw
+ * hosts are read off the same block.
  */
-async function fetchAnchorDomains(censusDomains = []) {
-  const candidates = await fetchDirectoryCandidates();
-  const domains = new Set(candidates.map((candidate) => candidate.domain));
-  for (const domain of censusDomains) domains.add(domain);
-  return [...domains].sort();
+async function fetchRegistryDomains() {
+  const source = await readFile(REGISTRY_PATH, 'utf8');
+  const rows = [];
+  for (const anchor of parseAnchors(source)) {
+    for (const raw of [anchor.homeDomain, anchor.serviceDomain]) {
+      if (raw) rows.push({ domain: raw, sources: ['registry'] });
+    }
+  }
+  return rows;
+}
+
+const SOURCE_FETCHERS = {
+  registry: fetchRegistryDomains,
+  'stellar.expert-directory': async () =>
+    (await fetchDirectoryAll()).map((row) => ({
+      domain: row.domain,
+      sources: ['stellar.expert-directory'],
+    })),
+  'stellar.expert-assets': () => fetchTopAssetDomains(),
+  'sdf-anchor-directory': () => fetchSdfAnchorDirectoryDomains(),
+};
+
+/**
+ * Build the merged survey candidate set from the requested sources.
+ *
+ * Domains are lower-cased, validated against the registry validator's
+ * `HOSTNAME_RE` (so `localhost`, bare IPs and the like are dropped) and merged
+ * by domain, unioning `sources`. A source that throws is warned about and
+ * skipped; if every selected REMOTE source fails this throws, so `main` exits 1.
+ *
+ * @param {{ sources?: string[] | string }} [opts] limits which of
+ *   `SURVEY_SOURCES` run (default: all). Unknown names are warned about and
+ *   ignored; an empty selection throws.
+ * @returns {Promise<{
+ *   candidates: { domain: string, sources: string[] }[],
+ *   sources: string[],
+ *   failed: string[],
+ * }>} `sources` are the ones that succeeded, `failed` the ones that threw.
+ */
+export async function collectCandidates({ sources } = {}) {
+  const requested =
+    sources == null
+      ? [...SURVEY_SOURCES]
+      : (typeof sources === 'string' ? sources.split(',') : sources)
+          .map((name) => name.trim())
+          .filter(Boolean);
+  const unknown = requested.filter((name) => !SURVEY_SOURCES.includes(name));
+  if (unknown.length > 0) {
+    console.warn(`collectCandidates: unknown source(s) ignored: ${unknown.join(', ')}`);
+  }
+  const selected = SURVEY_SOURCES.filter((name) => requested.includes(name));
+  if (selected.length === 0) {
+    throw new Error(
+      `collectCandidates: no valid sources selected (known: ${SURVEY_SOURCES.join(', ')})`
+    );
+  }
+
+  const used = [];
+  const failed = [];
+  /** @type {Map<string, Set<string>>} */
+  const byDomain = new Map();
+
+  for (const name of selected) {
+    let rows;
+    try {
+      rows = await SOURCE_FETCHERS[name]();
+    } catch (err) {
+      console.warn(`collectCandidates: source ${name} failed: ${err?.message ?? err}`);
+      failed.push(name);
+      continue;
+    }
+    used.push(name);
+
+    for (const row of rows ?? []) {
+      if (!row?.domain) continue;
+      const domain = row.domain.toLowerCase();
+      if (!HOSTNAME_RE.test(domain)) continue;
+      let entry = byDomain.get(domain);
+      if (!entry) {
+        entry = new Set();
+        byDomain.set(domain, entry);
+      }
+      entry.add(name);
+      for (const extra of row.sources ?? []) {
+        if (extra && extra !== name) entry.add(extra);
+      }
+    }
+  }
+
+  const remoteSelected = selected.filter((name) => REMOTE_SOURCES.has(name));
+  if (remoteSelected.length > 0 && remoteSelected.every((name) => failed.includes(name))) {
+    throw new Error(`all remote candidate sources failed: ${remoteSelected.join(', ')}`);
+  }
+
+  const candidates = [...byDomain.entries()]
+    .map(([domain, set]) => ({ domain, sources: [...set] }))
+    .sort((a, b) => a.domain.localeCompare(b.domain));
+  return { candidates, sources: used, failed };
 }
 
 /** Single fetch attempt; throws on network/TLS failure, returns null on non-200. */
@@ -551,8 +675,19 @@ async function main() {
   const asRecheck = process.argv.includes('--recheck');
   const concurrency = parseConcurrency(process.argv.slice(2), process.env);
   const censusDomains = censusPath ? await readCensus(censusPath) : [];
-  const domains = await fetchAnchorDomains(censusDomains);
+  const { candidates, sources: usedSources } = await collectCandidates({
+    sources: flagValue('--sources'),
+  });
+  const sourcesByDomain = new Map(
+    candidates.map((candidate) => [candidate.domain, candidate.sources])
+  );
+  // The persistent census roster is merged in on top of the collected sources.
+  for (const domain of censusDomains) {
+    if (!sourcesByDomain.has(domain)) sourcesByDomain.set(domain, ['census']);
+  }
+  const domains = [...sourcesByDomain.keys()].sort();
   const results = await mapLimit(domains, concurrency, classify);
+  for (const result of results) result.sources = sourcesByDomain.get(result.domain) ?? [];
 
   // Persist the surveyed roster back to the census so it accumulates over time.
   if (censusPath) await writeCensus(censusPath, domains);
@@ -590,7 +725,9 @@ async function main() {
       JSON.stringify(
         {
           generatedAt: new Date().toISOString(),
+          // Legacy single-source field for older readers; `sources` lists what ran.
           source: DIRECTORY_URL,
+          sources: usedSources,
           totals: {
             tagged: domains.length,
             reachable: live.length,
@@ -626,8 +763,8 @@ async function main() {
 
   const line = (label, n) => console.log(`  ${label.padEnd(28)}${n}`);
   console.log(`Stellar anchor fleet survey — ${new Date().toISOString()}`);
-  console.log(`Source: ${DIRECTORY_URL}\n`);
-  line('directory-tagged domains:', domains.length);
+  console.log(`Sources: ${usedSources.join(', ')}\n`);
+  line('candidate domains:', domains.length);
   line('stellar.toml reachable:', live.length);
   line('unreachable / no toml:', dead.length);
   console.log('\nFleet tiers:');
