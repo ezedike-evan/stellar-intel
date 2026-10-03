@@ -8,7 +8,7 @@ test.describe('Anchor detail page', () => {
     await expect(page.getByTestId('anchor-score')).toBeVisible();
     await expect(page.getByTestId('anchor-history-chart')).toBeVisible();
     await expect(page.getByTestId('anchor-corridors')).toBeVisible();
-    await expect(page.getByTestId('anchor-corridors').getByText(/USDC\/NGN/i)).toBeVisible();
+    await expect(page.getByTestId('anchor-corridors').getByText(/NGNT\/NGN/i)).toBeVisible();
 
     const oracleLink = page.getByTestId('anchor-oracle-link');
     const oracleEmpty = page.getByText(/No oracle transaction yet\./i);

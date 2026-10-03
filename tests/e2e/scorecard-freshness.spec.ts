@@ -29,7 +29,7 @@ async function appendCompletedOutcome(request: APIRequestContext, anchorId: stri
     data: {
       intentHash,
       anchorId,
-      corridor: 'usdc-ngn',
+      corridor: 'ngnt-ngn',
       quotedRate: '1580',
       deliveredRate: '1580',
       quotedAmount: '100',

@@ -32,7 +32,7 @@ test.describe('[#104] keyboard-only navigation', () => {
   // ── CorridorSelector ────────────────────────────────────────────────────────
 
   test('Tab reaches CorridorSelector and ArrowDown changes corridor', async ({ page }) => {
-    const select = page.locator('select').first();
+    const select = page.locator('#corridor-select');
 
     let reached = false;
     for (let i = 0; i < 12; i++) {
@@ -50,7 +50,7 @@ test.describe('[#104] keyboard-only navigation', () => {
     await page.keyboard.press('ArrowDown');
     const after = await select.inputValue();
     // Value must be a valid corridor id and may have changed
-    expect(after).toMatch(/^usdc-/);
+    expect(after).toMatch(/^[a-z0-9]+-[a-z]{3}$/);
     // Different corridor selected (or wrapped around — either is valid)
     void before; // suppress unused warning; change may or may not occur on single press
   });
