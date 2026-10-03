@@ -71,4 +71,4 @@ ANCHOR_QUOTE_SERVER="https://cowrie.exchange/sep38"
   })
 );
 
-server.listen({ onUnhandledRequest: 'bypass' });
+server.listen({ onUnhandledFrame: 'bypass' });

@@ -38,7 +38,7 @@ import { getUsdFxRate, getFxRate } from '@/lib/fx/rates';
 
 const server = setupServer(...cowrieHandlers);
 
-beforeAll(() => server.listen({ onUnhandledRequest: 'error' }));
+beforeAll(() => server.listen({ onUnhandledFrame: 'error' }));
 afterEach(() => {
   server.resetHandlers();
   vi.clearAllMocks();

@@ -9,7 +9,7 @@
  *
  * Both sides of the handler's I/O are pinned here:
  *   - outbound RPC → MSW, backed by responses recorded off testnet (see
- *     `tests/msw/oracle.ts` for fixture provenance). `onUnhandledRequest:
+ *     `tests/msw/oracle.ts` for fixture provenance). `onUnhandledFrame:
  *     'error'` fails the test on any request that is not stubbed, so a new
  *     network dependency cannot slip back in unnoticed.
  *   - the reputation store → an in-memory store seeded with a fixed outcome
@@ -36,7 +36,7 @@ import {
 
 const server = setupServer(...oracleHandlers);
 
-beforeAll(() => server.listen({ onUnhandledRequest: 'error' }));
+beforeAll(() => server.listen({ onUnhandledFrame: 'error' }));
 afterEach(() => {
   server.resetHandlers();
   resetOracleRequests();
