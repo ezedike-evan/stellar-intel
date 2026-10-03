@@ -52,6 +52,17 @@ updates:
       # by hand once typescript-eslint widens the peer range.
       - dependency-name: 'typescript'
         update-types: ['version-update:semver-major']
+      # vitest 5 and msw 3 need a test migration (jest-dom typings, msw's
+      # onUnhandledRequest -> onUnhandledFrame, stricter unhandled-request
+      # handling in the leaderboard and Cowrie specs, the ExecuteDrawer Escape
+      # test). Grouped into `tooling`, they hold the other updates hostage. Bump
+      # them by hand in a dedicated PR.
+      - dependency-name: 'vitest'
+        update-types: ['version-update:semver-major']
+      - dependency-name: '@vitest/*'
+        update-types: ['version-update:semver-major']
+      - dependency-name: 'msw'
+        update-types: ['version-update:semver-major']
 
   - package-ecosystem: 'github-actions'
     directory: '/'
