@@ -36,7 +36,7 @@ const USER_AGENT = 'stellar-intel-validate-anchors/1.0';
 // A strict public-hostname shape: dot-separated labels with an alphabetic TLD.
 // Rejects IPs, `localhost`, ports, userinfo (`@`) and paths — so a malformed
 // registry entry can't steer the probe at an internal/unexpected host.
-const HOSTNAME_RE = /^([a-z0-9]([a-z0-9-]{0,61}[a-z0-9])?\.)+[a-z]{2,63}$/i;
+export const HOSTNAME_RE = /^([a-z0-9]([a-z0-9-]{0,61}[a-z0-9])?\.)+[a-z]{2,63}$/i;
 
 const ROOT = new URL('../', import.meta.url);
 const ANCHORS_SOURCE = new URL('constants/anchors.ts', ROOT);
@@ -46,6 +46,8 @@ const LEDGER_PATH = new URL('constants/anchor-health.json', ROOT);
  * @typedef {Object} AnchorRef
  * @property {string} id
  * @property {string} domain
+ * @property {string} [homeDomain] Raw `homeDomain` from the registry block, when present.
+ * @property {string} [serviceDomain] Raw `serviceDomain` from the registry block, when present.
  * @property {boolean} requiresSep24 Whether `seps` in constants/anchors.ts lists
  *   'sep24' — only anchors that actually register SEP-24 are expected to
  *   advertise TRANSFER_SERVER_SEP0024 (#1121: cowrie is SEP-6/SEP-10-only and
@@ -134,6 +136,9 @@ export function parseAnchors(source) {
 
     /** @type {AnchorRef} */
     const ref = { id, domain, requiresSep24 };
+    // Keep the raw registry hosts so the survey can read BOTH off the same block.
+    if (home) ref.homeDomain = home;
+    if (service) ref.serviceDomain = service;
     const assetCode = block.match(/assetCode:\s*['"]([^'"]+)['"]/)?.[1];
     if (assetCode) ref.assetCode = assetCode;
     if (sepsMatch !== undefined) {
