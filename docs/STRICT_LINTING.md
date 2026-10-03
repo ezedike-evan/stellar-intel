@@ -71,7 +71,7 @@ Declared in `eslint.config.mjs`. Notable non-defaults:
 - `@typescript-eslint/no-explicit-any`: **error**. `any` defeats the point
   of TypeScript; use `unknown` at system boundaries and narrow.
 - `no-console`: **warn** (which CI treats as error under `--max-warnings 0`).
-  Use `lib/telemetry` / structured logs, not raw `console.log`.
+  Use `lib/logger` / structured logs, not raw `console.log`.
 - `no-unused-vars`: **error**. Unused imports and dead bindings are pure
   cost.
 - Next.js `core-web-vitals`: performance rules around `<Image>`, `<Link>`,
@@ -98,16 +98,19 @@ chore(deps): bump @stellar/stellar-sdk to 14.7.0
 Accepted types: `feat`, `fix`, `docs`, `style`, `refactor`, `perf`, `test`,
 `build`, `ci`, `chore`, `revert`.
 
-Scopes map to module labels — keep them aligned with
-[`.github/labels.yml`](../.github/labels.yml). Empty scope is allowed for
-repo-wide changes (`chore: reshuffle root`).
+Scopes are validated by commitlint against a fixed enum (see
+`commitlint.config.mjs`). They identify the codebase module touched by the
+change; they are not GitHub labels. Empty scope is allowed for repo-wide
+changes (`chore: reshuffle root`).
 
 ### Pre-commit hooks
 
 `.husky/pre-commit` runs `lint-staged` against the staged files only, so
 the hook stays under ~2 seconds on a typical change. `.husky/commit-msg`
-runs `commitlint`. Neither hook runs the full typecheck — that is CI's
-job, not the contributor's.
+runs `commitlint`. `.husky/pre-push` runs format check, lint, typecheck,
+and tests — mirroring CI — so typecheck failures are caught before push.
+Only the fast pre-commit path skips typecheck; it is left to pre-push
+and CI.
 
 Hooks are installed via `npm install` (the `prepare` script). If they do
 not fire, rerun `npm install` or `npx husky install`.
@@ -124,8 +127,8 @@ Repo settings → **Branches → main**:
   - `check (node 20)`
   - `check (node 22)`
   - `build (node 20)`
-  - `codeql-analysis`
-  - `pr-title`
+  - `Analyze (javascript)` (CodeQL)
+  - `lint-pr-title`
   - `commitlint`
   - `dependency-review`
 - Require branches to be **up to date** before merging.
