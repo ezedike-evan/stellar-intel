@@ -53,7 +53,7 @@ Nobody publishes the answers. An anchor's `stellar.toml` says what it supports;
 it does not say whether that was true this morning. Stellar Intel answers the
 third question directly and the first two as the data allows.
 
-1. **The record.** Seven registered anchors, probed every five minutes across
+1. **The record.** Six registered anchors, probed every five minutes across
    four signals — uptime, quote availability, issuer mismatch, TOML integrity.
    Samples accumulate; the scoring method is published in
    [`docs/ANCHOR_REPUTATION.md`](docs/ANCHOR_REPUTATION.md), and small samples
@@ -70,8 +70,8 @@ Non-custodial by construction: every leg is signed by the user, the anchor
 takes custody under SEP-24, Stellar enforces atomicity. We never touch funds.
 
 **One honest caveat, because it changes what (2) means today.** Firm SEP-38
-quotes are scarce on the live network: as of 2026-08-05, one of the seven
-registered anchors advertises a quote server at all, and it does not quote the
+quotes are scarce on the live network: as of 2026-08-05, one of the then-seven
+registered anchors (six today, after MyKobo's delisting on 2026-09-06) advertises a quote server at all, and it does not quote the
 corridor it is registered for. Ranking across firm quotes is a capability that
 becomes real as anchors adopt SEP-38, not one that is real today. The evidence,
 and what is measured in the meantime, is in
