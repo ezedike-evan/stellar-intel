@@ -70,7 +70,7 @@ const STRUCTURED_DATA = {
  *
  * `FeatureGrid` was a three-column icon-plus-paragraph explainer whose second
  * step read "We pull live SEP-38 quotes from every integrated anchor" — a claim
- * docs/POSITIONING.md retires by name, since one of seven anchors advertises a
+ * docs/POSITIONING.md retires by name, since one of the registered anchors advertises a
  * quote server at all. It is replaced by a plain numbered sequence with copy
  * that survives contact with the network.
  */
