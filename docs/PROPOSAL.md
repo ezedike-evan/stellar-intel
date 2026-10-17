@@ -106,7 +106,7 @@ neither substitutes for the other. The worked comparison is in
 
 ### 3.1 The observation record
 
-Seven registered anchors, probed every five minutes across four signals:
+Six registered anchors, probed every five minutes across four signals:
 **uptime, quote availability, issuer mismatch, TOML integrity**. Samples land in
 a durable store, age out on a retention policy, and roll up into a per-anchor
 score by a **published method** — [`ANCHOR_REPUTATION.md`](ANCHOR_REPUTATION.md),
@@ -153,7 +153,7 @@ posture entirely; this one inherits §3.2's.
 
 ## 4. What is actually true today
 
-- **Seven registered anchors**, probed every five minutes across four signals.
+- **Six registered anchors (MyKobo was delisted 2026-09-06)**, probed every five minutes across four signals.
 - **A published scoring methodology**, with small samples labelled as small.
 - **A non-custodial execution path**: every leg user-signed, anchor custody
   under SEP-24, no funds held at any point.
@@ -175,7 +175,7 @@ narrowing is to stop making them. The full evidence is in
 [`POSITIONING.md`](POSITIONING.md).
 
 1. **"Live SEP-38 quotes across every integrated anchor."** On 2026-08-05, **one
-   of seven** registered anchors advertises `ANCHOR_QUOTE_SERVER` at all — and
+   of seven (six today)** registered anchors advertises `ANCHOR_QUOTE_SERVER` at all — and
    that one does not quote the corridor it is registered for. Ranking across
    firm quotes is not something that can be done today, because the quotes do
    not exist. It becomes true as anchors adopt SEP-38, and not before.
