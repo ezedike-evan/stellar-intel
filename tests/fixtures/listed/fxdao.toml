@@ -1,0 +1,48 @@
+# Source: https://assets.fxdao.io/.well-known/stellar.toml (fetched 2026-10-18)
+[DOCUMENTATION]
+ORG_NAME = "FxDAO LLC"
+ORG_URL = "https://fxdao.io"
+
+[[CURRENCIES]]
+code = "USDx"
+issuer = "GAVH5ZWACAY2PHPUG4FL3LHHJIYIHOFPSIUGM2KHK25CJWXHAV6QKDMN"
+anchor_asset_type = "fiat"
+anchor_asset = "USD"
+
+[[CURRENCIES]]
+code = "EURx"
+issuer = "GAVH5ZWACAY2PHPUG4FL3LHHJIYIHOFPSIUGM2KHK25CJWXHAV6QKDMN"
+anchor_asset_type = "fiat"
+anchor_asset = "EUR"
+
+[[CURRENCIES]]
+code = "GBPx"
+issuer = "GAVH5ZWACAY2PHPUG4FL3LHHJIYIHOFPSIUGM2KHK25CJWXHAV6QKDMN"
+anchor_asset_type = "fiat"
+anchor_asset = "GBP"
+
+[[CURRENCIES]]
+code = "FXG"
+issuer = "GAVH5ZWACAY2PHPUG4FL3LHHJIYIHOFPSIUGM2KHK25CJWXHAV6QKDMN"
+
+[[CURRENCIES]]
+code = "USDx"
+issuer = "GBBTSBSV55VUI6KQ32JARRR65HV7AJNOEZR7P5HLNT2EZIXHVDPDA5JW"
+anchor_asset_type = "fiat"
+anchor_asset = "USD"
+
+[[CURRENCIES]]
+code = "EURx"
+issuer = "GBBTSBSV55VUI6KQ32JARRR65HV7AJNOEZR7P5HLNT2EZIXHVDPDA5JW"
+anchor_asset_type = "fiat"
+anchor_asset = "EUR"
+
+[[CURRENCIES]]
+code = "GBPx"
+issuer = "GBBTSBSV55VUI6KQ32JARRR65HV7AJNOEZR7P5HLNT2EZIXHVDPDA5JW"
+anchor_asset_type = "fiat"
+anchor_asset = "GBP"
+
+[[CURRENCIES]]
+code = "FXG"
+issuer = "GBBTSBSV55VUI6KQ32JARRR65HV7AJNOEZR7P5HLNT2EZIXHVDPDA5JW"

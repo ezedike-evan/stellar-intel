@@ -9,6 +9,7 @@
 import type { ListedAnchor } from '@/types';
 import { parseListedAnchors } from '@/lib/stellar/listed-anchor-schema';
 
+import fxdao from './fxdao.json';
 import gratz from './gratz.json';
 import ixinium from './ixinium.json';
 import luxPayband from './lux-payband.json';
@@ -21,6 +22,7 @@ import nafuloo from './nafuloo.json';
 import valtorum from './valtorum.json';
 
 const RAW: unknown[] = [
+  fxdao,
   gratz,
   ixinium,
   luxPayband,
