@@ -1,0 +1,93 @@
+{
+  "deposit": {
+    "ETH": {
+      "enabled": true,
+      "min_amount": 0.005,
+      "max_amount": 50.0,
+      "fee_fixed": 0.0,
+      "fee_percent": 0.0
+    },
+    "BTC": {
+      "enabled": true,
+      "min_amount": 0.0005,
+      "max_amount": 5.0,
+      "fee_fixed": 0.0,
+      "fee_percent": 0.0
+    },
+    "yETH": {
+      "enabled": true,
+      "min_amount": 0.005,
+      "max_amount": 100.0,
+      "fee_fixed": 0.0,
+      "fee_percent": 0.0
+    },
+    "yUSDC": {
+      "enabled": true,
+      "min_amount": 10.0,
+      "max_amount": 100000.0,
+      "fee_fixed": 0.0,
+      "fee_percent": 0.0
+    },
+    "yXLM": {
+      "enabled": true,
+      "min_amount": 20.0,
+      "max_amount": 500000.0,
+      "fee_fixed": 0.0,
+      "fee_percent": 0.0
+    },
+    "yBTC": {
+      "enabled": true,
+      "min_amount": 0.0005,
+      "max_amount": 5.0,
+      "fee_fixed": 0.0,
+      "fee_percent": 0.0
+    }
+  },
+  "withdraw": {
+    "ETH": {
+      "enabled": true,
+      "min_amount": 0.005,
+      "max_amount": 20.0,
+      "fee_fixed": 0.0001,
+      "fee_percent": 0.0
+    },
+    "BTC": {
+      "enabled": false
+    },
+    "yETH": {
+      "enabled": true,
+      "min_amount": 0.005,
+      "max_amount": 20.0,
+      "fee_fixed": 0.0001,
+      "fee_percent": 0.0
+    },
+    "yUSDC": {
+      "enabled": true,
+      "min_amount": 50.0,
+      "max_amount": 20000.0,
+      "fee_fixed": 0.0,
+      "fee_percent": 0.0
+    },
+    "yXLM": {
+      "enabled": true,
+      "min_amount": 20.0,
+      "max_amount": 100000.0,
+      "fee_fixed": 0.5,
+      "fee_percent": 0.0
+    },
+    "yBTC": {
+      "enabled": true,
+      "min_amount": 0.005,
+      "max_amount": 1.0,
+      "fee_fixed": 0.0001,
+      "fee_percent": 0.0
+    }
+  },
+  "fee": {
+    "enabled": true
+  },
+  "features": {
+    "account_creation": false,
+    "claimable_balances": false
+  }
+}
