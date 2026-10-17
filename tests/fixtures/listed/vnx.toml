@@ -1,0 +1,10 @@
+# Source: https://vnx.io/.well-known/stellar.toml (fetched 2026-10-18)
+[DOCUMENTATION]
+ORG_NAME = "VNX Global Ltd."
+ORG_URL = "https://vnx.io"
+
+[[CURRENCIES]]
+code = "VCHF"
+issuer = "GDXLSLCOPPHTWOQXLLKSVN4VN3G67WD2ENU7UMVAROEYVJLSPSEWXIZN"
+anchor_asset_type = "fiat"
+anchor_asset = "CHF"
