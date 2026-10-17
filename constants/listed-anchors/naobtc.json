@@ -1,0 +1,25 @@
+{
+  "id": "naobtc",
+  "name": "NaoBTC",
+  "kind": "crypto-rails",
+  "domains": ["naobtc.com"],
+  "orgUrl": null,
+  "verifiedAt": "2026-09-23",
+  "cryptoRails": [
+    {
+      "sep": "sep6",
+      "transferServer": "https://www.naobtc.com/api",
+      "depositAssets": ["BTC", "XEL"],
+      "withdrawAssets": ["BTC", "XEL"],
+      "withdrawTypes": ["crypto"]
+    }
+  ],
+  "assets": [
+    {
+      "code": "BTC",
+      "issuer": "GATEMHCCKCY67ZUCKTROYN24ZYT5GK4EQZ65JJLDHKHRUZI3EUEKMTCH",
+      "anchorAssetType": "crypto",
+      "anchorAsset": "BTC"
+    }
+  ]
+}
