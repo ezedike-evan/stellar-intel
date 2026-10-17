@@ -4,20 +4,20 @@
   "kind": "crypto-rails",
   "domains": ["ultracapital.xyz", "ultrastellar.com"],
   "orgUrl": "https://ultracapital.xyz/",
-  "verifiedAt": "2026-09-23",
+  "verifiedAt": "2026-10-17",
   "cryptoRails": [
     {
       "sep": "sep6",
       "transferServer": "https://ultracapital.xyz/sep6",
       "depositAssets": ["ETH", "BTC"],
-      "withdrawAssets": [],
-      "withdrawTypes": []
+      "withdrawAssets": ["ETH"],
+      "withdrawTypes": ["crypto"]
     },
     {
       "sep": "sep24",
       "transferServer": "https://ultracapital.xyz/sep24",
       "depositAssets": ["yETH", "yXLM", "ETH", "yBTC", "yUSDC", "BTC"],
-      "withdrawAssets": ["yETH"],
+      "withdrawAssets": ["ETH", "yETH", "yUSDC", "yXLM", "yBTC"],
       "withdrawTypes": []
     }
   ],
