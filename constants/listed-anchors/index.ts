@@ -11,6 +11,7 @@ import { parseListedAnchors } from '@/lib/stellar/listed-anchor-schema';
 
 import gratz from './gratz.json';
 import ixinium from './ixinium.json';
+import luxPayband from './lux-payband.json';
 import mauAccounts from './mau-accounts.json';
 import meshMzar from './mesh-mzar.json';
 import mirrasets from './mirrasets.json';
@@ -21,6 +22,7 @@ import nafuloo from './nafuloo.json';
 const RAW: unknown[] = [
   gratz,
   ixinium,
+  luxPayband,
   mauAccounts,
   meshMzar,
   mirrasets,
