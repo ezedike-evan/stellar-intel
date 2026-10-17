@@ -50,6 +50,10 @@ export default defineConfig({
           environment: 'happy-dom',
           setupFiles: ['./tests/setup.ts'],
           globals: true,
+          // Vitest 4: vi.restoreAllMocks() does not undo vi.stubGlobal().
+          // Enabling unstubGlobals ensures global stubs set during a test or beforeEach
+          // are automatically cleared before the next test, preventing global leaks.
+          unstubGlobals: true,
           // Bound every test/hook so an unmocked network call or stray
           // open handle fails fast instead of hanging the whole suite (and CI)
           // forever.  teardownTimeout is set at the top level (NonProjectOptions).

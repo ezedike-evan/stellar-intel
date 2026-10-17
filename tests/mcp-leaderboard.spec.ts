@@ -15,7 +15,6 @@ import type { LeaderboardResponse, LeaderboardEntry } from '@/app/api/reputation
 // ─── Mock global fetch ────────────────────────────────────────────────────────
 
 const fetchMock = vi.fn();
-vi.stubGlobal('fetch', fetchMock);
 
 // ─── Fixtures ─────────────────────────────────────────────────────────────────
 
@@ -62,6 +61,7 @@ function mockFetchError(status: number, text = 'Internal Server Error'): void {
 
 beforeEach(() => {
   vi.clearAllMocks();
+  vi.stubGlobal('fetch', fetchMock);
 });
 
 // ─── fetchLeaderboard ─────────────────────────────────────────────────────────
