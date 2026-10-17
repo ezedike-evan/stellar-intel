@@ -17,6 +17,7 @@ import mirrasets from './mirrasets.json';
 import mobius from './mobius.json';
 import moneygramMgusd from './moneygram-mgusd.json';
 import nafuloo from './nafuloo.json';
+import naobtc from './naobtc.json';
 
 const RAW: unknown[] = [
   gratz,
@@ -27,6 +28,7 @@ const RAW: unknown[] = [
   mobius,
   moneygramMgusd,
   nafuloo,
+  naobtc,
 ];
 
 export const LISTED_ANCHORS: readonly ListedAnchor[] = parseListedAnchors(RAW);

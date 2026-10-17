@@ -1,0 +1,33 @@
+{
+  "deposit": {
+    "BTC": {
+      "enabled": true
+    },
+    "XEL": {
+      "enabled": true
+    }
+  },
+  "withdraw": {
+    "BTC": {
+      "enabled": true,
+      "types": {
+        "crypto": {}
+      }
+    },
+    "XEL": {
+      "enabled": true,
+      "types": {
+        "crypto": {}
+      }
+    }
+  },
+  "fee": {
+    "enabled": false
+  },
+  "transactions": {
+    "enabled": true
+  },
+  "transaction": {
+    "enabled": true
+  }
+}
