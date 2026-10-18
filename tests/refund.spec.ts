@@ -1,6 +1,6 @@
-import { describe, it, expect, vi, beforeEach } from 'vitest';
+import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
 import { renderHook, waitFor } from '@testing-library/react';
-import { render, screen } from '@testing-library/react';
+import { render, screen, within } from '@testing-library/react';
 import { createElement } from 'react';
 import { SWRConfig } from 'swr';
 import { useWithdrawStatus } from '@/hooks/useWithdrawStatus';
@@ -41,6 +41,10 @@ function mockFetch(overrides: Record<string, unknown> = {}) {
 
 beforeEach(() => {
   vi.restoreAllMocks();
+});
+
+afterEach(() => {
+  vi.useRealTimers();
 });
 
 // ── Hook-level tests ────────────────────────────────────────────────────────
@@ -85,6 +89,7 @@ describe('useWithdrawStatus — anchor refund state progression', () => {
   });
 
   it('stops polling once refunded terminal state is reached', async () => {
+    vi.useFakeTimers({ shouldAdvanceTime: true });
     const fetchSpy = vi.fn(async () => ({
       ok: true,
       json: async () => ({
@@ -104,7 +109,7 @@ describe('useWithdrawStatus — anchor refund state progression', () => {
     });
     await waitFor(() => expect(result.current.status).toBe('refunded'));
     const callsAfterTerminal = fetchSpy.mock.calls.length;
-    await new Promise((r) => setTimeout(r, 100));
+    await vi.advanceTimersByTimeAsync(31_000);
     expect(fetchSpy.mock.calls.length).toBe(callsAfterTerminal);
   });
 });
@@ -145,7 +150,9 @@ describe('StatusTracker — refund card rendering', () => {
 
   it('renders refund fee correctly', () => {
     render(createElement(StatusTracker, baseProps));
-    expect(screen.getByText((content) => content.includes('2.5'))).toBeTruthy();
+    const refundCard = within(screen.getByText('Refund Details').closest('section, div')!);
+    expect(refundCard.getByText('Refund Fee')).toBeTruthy();
+    expect(refundCard.getByText('2.5 USDC')).toBeTruthy();
   });
 
   it('does not render completion celebration banner when refunded', () => {

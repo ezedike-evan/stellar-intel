@@ -53,9 +53,8 @@ describe('anchor-health tool', () => {
     });
 
     // moneygram homeDomain is stellar.moneygram.com
-    const result = await fetchAnchorHealth('stellar.moneygram.com');
+    await fetchAnchorHealth('stellar.moneygram.com');
 
-    expect(result.anchorId).toBe('cowrie'); // mock returns cowrie here but it proves resolving hit the right fetch
     expect(mockFetch).toHaveBeenCalledWith(
       'http://localhost:3000/api/v1/anchors/moneygram/health',
       expect.any(Object)

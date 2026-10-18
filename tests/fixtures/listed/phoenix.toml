@@ -1,0 +1,8 @@
+# Source: https://app.phoenix-hub.io/.well-known/stellar.toml (fetched 2026-10-17)
+[DOCUMENTATION]
+ORG_NAME = "Phoenix Protocol Group"
+ORG_URL = "https://phoenix-hub.io"
+
+[[CURRENCIES]]
+code = "PHO"
+issuer = "GAX5TXB5RYJNLBUR477PEXM4X75APK2PGMTN6KEFQSESGWFXEAKFSXJO"
