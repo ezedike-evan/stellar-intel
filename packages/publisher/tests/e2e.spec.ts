@@ -1,3 +1,4 @@
+/** @vitest-environment node */
 /**
  * Publisher end-to-end against testnet (issue #355).
  *
@@ -6,10 +7,11 @@
  * complete under 30s and be idempotent (a second tick must not duplicate the
  * on-chain entry).
  *
- * This is an opt-in integration test. It runs only when a testnet environment
- * is fully provisioned; otherwise the suite is skipped, so it never touches the
- * network during ordinary `npm test`. Provide:
+ * This is an opt-in integration test. It runs only when PUBLISHER_E2E=1 and a
+ * testnet environment is fully provisioned; otherwise the suite is skipped, so
+ * it never touches the network during ordinary `npm test`. Provide:
  *
+ *   PUBLISHER_E2E                  set to "1" to opt in
  *   PUBLISHER_RPC_URL              Soroban RPC endpoint (testnet)
  *   PUBLISHER_CONTRACT_ID          deployed reputation contract id
  *   PUBLISHER_SECRET_KEY           funded source/publisher secret (S...)
@@ -36,7 +38,8 @@ const REQUIRED_ENV = [
   'CRON_SECRET',
 ] as const;
 
-const READY = REQUIRED_ENV.every((key) => Boolean(process.env[key]));
+const READY =
+  process.env.PUBLISHER_E2E === '1' && REQUIRED_ENV.every((key) => Boolean(process.env[key]));
 
 interface Config {
   rpcUrl: string;

@@ -11,6 +11,7 @@ import { parseListedAnchors } from '@/lib/stellar/listed-anchor-schema';
 
 import gratz from './gratz.json';
 import ixinium from './ixinium.json';
+import luxPayband from './lux-payband.json';
 import mauAccounts from './mau-accounts.json';
 import meshMzar from './mesh-mzar.json';
 import mirrasets from './mirrasets.json';
@@ -18,10 +19,13 @@ import mobius from './mobius.json';
 import moneygramMgusd from './moneygram-mgusd.json';
 import nafuloo from './nafuloo.json';
 import naobtc from './naobtc.json';
+import phoenix from './phoenix.json';
+import valtorum from './valtorum.json';
 
 const RAW: unknown[] = [
   gratz,
   ixinium,
+  luxPayband,
   mauAccounts,
   meshMzar,
   mirrasets,
@@ -29,6 +33,8 @@ const RAW: unknown[] = [
   moneygramMgusd,
   nafuloo,
   naobtc,
+  phoenix,
+  valtorum,
 ];
 
 export const LISTED_ANCHORS: readonly ListedAnchor[] = parseListedAnchors(RAW);

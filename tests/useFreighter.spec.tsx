@@ -1,5 +1,5 @@
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
-import { render, renderHook, waitFor } from '@testing-library/react';
+import { render, renderHook, waitFor, act } from '@testing-library/react';
 import { useFreighter } from '@/hooks/useFreighter';
 import type { FreighterState } from '@/types';
 
@@ -341,14 +341,49 @@ describe('useFreighter — error handling', () => {
   });
 
   it('does not update state after unmount', async () => {
-    mockFreighterInstalled(true, 'PUBLIC');
+    let resolveIsConnected!: (value: { isConnected: boolean; error: null }) => void;
+    const isConnectedPromise = new Promise<{ isConnected: boolean; error: null }>((resolve) => {
+      resolveIsConnected = resolve;
+    });
 
-    const { result, unmount } = renderHook(() => useFreighter(), { wrapper });
+    mockFreighterApi.isConnected.mockReturnValue(isConnectedPromise);
+    mockFreighterApi.getAddress.mockResolvedValue({
+      publicKey: 'GBRPYHIL2CI3WHZDTOOQFC6EB4KJJGUJEANS3D57CCOD5JIHVYXKOM77',
+      error: null,
+    });
+    mockFreighterApi.getNetwork.mockResolvedValue({
+      network: 'PUBLIC',
+      error: null,
+    });
 
-    unmount();
+    const consoleErrorSpy = vi.spyOn(console, 'error').mockImplementation(() => {});
 
-    // Should not throw errors about state updates on unmounted component
-    expect(result.current).toBeDefined();
+    try {
+      const { unmount } = renderHook(() => useFreighter(), { wrapper });
+
+      unmount();
+
+      // Resolve the deferred Freighter call only after unmount
+      await act(async () => {
+        resolveIsConnected({ isConnected: true, error: null });
+        await isConnectedPromise;
+      });
+
+      const unmountedWarningCalls = consoleErrorSpy.mock.calls.filter((args) =>
+        args.some(
+          (arg) =>
+            typeof arg === 'string' &&
+            (arg.includes('unmounted component') ||
+              arg.includes('not wrapped in act') ||
+              arg.includes("Can't perform a React state update on an unmounted component"))
+        )
+      );
+
+      expect(unmountedWarningCalls).toHaveLength(0);
+      expect(consoleErrorSpy).not.toHaveBeenCalled();
+    } finally {
+      consoleErrorSpy.mockRestore();
+    }
   });
 
   it('maintains initial state until API resolves', () => {
