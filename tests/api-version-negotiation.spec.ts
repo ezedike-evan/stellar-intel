@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import { readFileSync, existsSync } from 'node:fs';
+import { readFileSync } from 'node:fs';
 import { join } from 'node:path';
 import { NextRequest, NextResponse } from 'next/server';
 import { withRequestLogger } from '@/lib/logger';
@@ -249,16 +249,11 @@ describe('docs/VERSIONING.md matches the enforced support window (#874)', () => 
     expect(versioningDoc).toContain('The stated window is not yet what the code enforces');
   });
 
-  it('does not claim a deprecation header that no code emits', () => {
-    // If someone implements Sunset/Warning, this fails and the "Not yet
-    // implemented" callout should come out of the doc in the same PR.
-    const emitsSunset =
-      existsSync(join(process.cwd(), 'lib/api/deprecation.ts')) ||
-      existsSync(join(process.cwd(), 'app/api/status/route.ts'));
-
-    if (!emitsSunset) {
-      expect(versioningDoc).toContain('Not yet implemented');
-    }
+  it('documents the deprecation headers the code emits', () => {
+    expect(versioningDoc).toContain('lib/api/deprecation.ts');
+    expect(typeof computeDeprecationHeaders).toBe('function');
+    expect(versioningDoc).toContain('Sunset');
+    expect(versioningDoc).toContain('Warning: 299');
   });
 
   it('contains the current API_VERSION string', () => {

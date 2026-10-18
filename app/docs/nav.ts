@@ -11,7 +11,7 @@
  * sidebar entry.
  */
 
-import { BookOpen, Shield, Code, Zap, Puzzle, Globe } from 'lucide-react';
+import { BookOpen, Shield, Code, Zap, Puzzle, Globe, CreditCard } from 'lucide-react';
 import type { LucideIcon } from 'lucide-react';
 
 export interface DocsRoute {
@@ -47,6 +47,7 @@ export const DOCS_SECTIONS: DocsSection[] = [
       { href: '/docs/webhooks', label: 'Webhooks', icon: Puzzle },
       { href: '/docs/sdks', label: 'SDKs & Libraries', icon: Code },
       { href: '/docs/mcp', label: 'MCP Tool Docs', icon: Code },
+      { href: '/docs/onramp', label: 'On-ramp', icon: CreditCard },
     ],
   },
 ];

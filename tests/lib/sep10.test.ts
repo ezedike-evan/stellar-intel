@@ -7,6 +7,7 @@ import {
   authenticate,
   validateSep10Challenge,
   NetworkMismatchError,
+  Sep10AuthError,
 } from '@/lib/stellar/sep10';
 import type { Sep10Challenge } from '@/lib/stellar/sep10';
 import { buildValidChallenge } from '../fixtures/sep10-challenge';
@@ -184,6 +185,21 @@ describe('submitChallenge', () => {
     );
 
     await expect(submitChallenge(WEB_AUTH_ENDPOINT, SIGNED_XDR)).rejects.toThrow(/"token"/);
+  });
+
+  it('throws Sep10AuthError when the exchange endpoint returns an HTTP error', async () => {
+    vi.stubGlobal(
+      'fetch',
+      vi.fn(async () => ({
+        ok: false,
+        status: 401,
+        json: async () => ({ error: 'invalid signature' }),
+      }))
+    );
+
+    await expect(submitChallenge(WEB_AUTH_ENDPOINT, SIGNED_XDR)).rejects.toBeInstanceOf(
+      Sep10AuthError
+    );
   });
 });
 

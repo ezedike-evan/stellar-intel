@@ -83,6 +83,8 @@ describe('per-anchor latency', () => {
 describe('client timing helper', () => {
   afterEach(() => {
     vi.restoreAllMocks();
+    vi.unstubAllEnvs();
+    vi.unstubAllGlobals();
   });
 
   it('measures elapsed quote-fetch latency', () => {
@@ -95,6 +97,10 @@ describe('client timing helper', () => {
   });
 
   it('measures tx submit latency around an async op and returns its result', async () => {
+    vi.stubEnv('NODE_ENV', 'production');
+    const fetchMock = vi.fn().mockResolvedValue(new Response(null));
+    vi.stubGlobal('fetch', fetchMock);
+
     let clock = 5_000;
     vi.spyOn(performance, 'now').mockImplementation(() => clock);
 
@@ -104,5 +110,12 @@ describe('client timing helper', () => {
     });
 
     expect(result).toBe('tx-hash');
+    expect(fetchMock).toHaveBeenCalledTimes(1);
+    const [url, init] = fetchMock.mock.calls[0] as [string, RequestInit];
+    expect(url).toBe('/api/metrics');
+    expect(JSON.parse(init.body as string)).toEqual({
+      name: 'tx_submit_latency',
+      durationMs: 420,
+    });
   });
 });
