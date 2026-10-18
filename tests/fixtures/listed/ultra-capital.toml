@@ -1,0 +1,40 @@
+# Source: https://ultracapital.xyz/.well-known/stellar.toml (fetched 2026-10-17)
+[DOCUMENTATION]
+ORG_NAME = "Ultra Capital LLC"
+ORG_URL = "https://ultracapital.xyz/"
+
+[[CURRENCIES]]
+code = "yUSDC"
+issuer = "GDGTVWSM4MGS4T7Z6W4RPWOCHE2I6RDFCIFZGS3DOA63LWQTRNZNTTFF"
+anchor_asset_type = "crypto"
+anchor_asset = "USDC"
+
+[[CURRENCIES]]
+code = "yXLM"
+issuer = "GARDNV3Q7YGT4AKSDF25LT32YSCCW4EV22Y2TV3I2PU2MMXJTEDL5T55"
+anchor_asset_type = "crypto"
+anchor_asset = "XLM"
+
+[[CURRENCIES]]
+code = "yETH"
+issuer = "GDYQNEF2UWTK4L6HITMT53MZ6F5QWO3Q4UVE6SCGC4OMEQIZQQDERQFD"
+anchor_asset_type = "crypto"
+anchor_asset = "ETH"
+
+[[CURRENCIES]]
+code = "yBTC"
+issuer = "GBUVRNH4RW4VLHP4C5MOF46RRIRZLAVHYGX45MVSTKA2F6TMR7E7L6NW"
+anchor_asset_type = "crypto"
+anchor_asset = "BTC"
+
+[[CURRENCIES]]
+code = "ETH"
+issuer = "GBFXOHVAS43OIWNIO7XLRJAHT3BICFEIKOJLZVXNT572MISM4CMGSOCC"
+anchor_asset_type = "crypto"
+anchor_asset = "ETH"
+
+[[CURRENCIES]]
+code = "BTC"
+issuer = "GDPJALI4AZKUU2W426U5WKMAT6CN3AJRPIIRYR2YM54TL2GDWO5O2MZM"
+anchor_asset_type = "crypto"
+anchor_asset = "BTC"

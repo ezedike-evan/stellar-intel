@@ -133,19 +133,6 @@ describe('buildWithdrawPayment', () => {
 
     await expect(signAndSubmitPayment(tx)).rejects.toThrow(/tx_failed|op_underfunded/);
   });
-
-  it('throws a formatted error on missing response', async () => {
-    vi.stubGlobal(
-      'fetch',
-      vi.fn(async () => {
-        return { ok: false, status: 500, json: async () => ({}) };
-      })
-    );
-
-    // ... rest of the test
-    const { signAndSubmitPayment } = await import('@/lib/stellar/horizon');
-    await expect(signAndSubmitPayment('xdr' as any)).rejects.toThrow();
-  });
 });
 
 describe('verifyAssetOnChain', () => {

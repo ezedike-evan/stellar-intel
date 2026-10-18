@@ -34,6 +34,10 @@ const CARD_DETAIL: Record<string, { title: string; description: string }> = {
     title: 'MCP Tool Docs',
     description: 'Use Stellar Intel through AI agents via the MCP server.',
   },
+  '/docs/onramp': {
+    title: 'On-ramp Integration Guide',
+    description: 'Integrate fiat-to-crypto deposits with quotes, intents, and anchor handoffs.',
+  },
 };
 
 // Derived from the shared route list, so a new /docs page cannot appear in the

@@ -1,0 +1,62 @@
+{
+  "id": "ultra-capital",
+  "name": "Ultra Capital",
+  "kind": "crypto-rails",
+  "domains": ["ultracapital.xyz", "ultrastellar.com"],
+  "orgUrl": "https://ultracapital.xyz/",
+  "verifiedAt": "2026-10-17",
+  "cryptoRails": [
+    {
+      "sep": "sep6",
+      "transferServer": "https://ultracapital.xyz/sep6",
+      "depositAssets": ["ETH", "BTC"],
+      "withdrawAssets": ["ETH"],
+      "withdrawTypes": ["crypto"]
+    },
+    {
+      "sep": "sep24",
+      "transferServer": "https://ultracapital.xyz/sep24",
+      "depositAssets": ["yETH", "yXLM", "ETH", "yBTC", "yUSDC", "BTC"],
+      "withdrawAssets": ["ETH", "yETH", "yUSDC", "yXLM", "yBTC"],
+      "withdrawTypes": []
+    }
+  ],
+  "assets": [
+    {
+      "code": "yUSDC",
+      "issuer": "GDGTVWSM4MGS4T7Z6W4RPWOCHE2I6RDFCIFZGS3DOA63LWQTRNZNTTFF",
+      "anchorAssetType": "crypto",
+      "anchorAsset": "USDC"
+    },
+    {
+      "code": "yXLM",
+      "issuer": "GARDNV3Q7YGT4AKSDF25LT32YSCCW4EV22Y2TV3I2PU2MMXJTEDL5T55",
+      "anchorAssetType": "crypto",
+      "anchorAsset": "XLM"
+    },
+    {
+      "code": "yETH",
+      "issuer": "GDYQNEF2UWTK4L6HITMT53MZ6F5QWO3Q4UVE6SCGC4OMEQIZQQDERQFD",
+      "anchorAssetType": "crypto",
+      "anchorAsset": "ETH"
+    },
+    {
+      "code": "yBTC",
+      "issuer": "GBUVRNH4RW4VLHP4C5MOF46RRIRZLAVHYGX45MVSTKA2F6TMR7E7L6NW",
+      "anchorAssetType": "crypto",
+      "anchorAsset": "BTC"
+    },
+    {
+      "code": "ETH",
+      "issuer": "GBFXOHVAS43OIWNIO7XLRJAHT3BICFEIKOJLZVXNT572MISM4CMGSOCC",
+      "anchorAssetType": "crypto",
+      "anchorAsset": "ETH"
+    },
+    {
+      "code": "BTC",
+      "issuer": "GDPJALI4AZKUU2W426U5WKMAT6CN3AJRPIIRYR2YM54TL2GDWO5O2MZM",
+      "anchorAssetType": "crypto",
+      "anchorAsset": "BTC"
+    }
+  ]
+}

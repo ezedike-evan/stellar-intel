@@ -63,15 +63,17 @@ the live anchors with `npx tsx scripts/probe-sep38.mts`, and the capture is comm
 
 **Verdict: USDC→NGN firm quotes are unavailable. Not from any registered anchor.**
 
-| Anchor    | `stellar.toml` | `ANCHOR_QUOTE_SERVER`                 | Serves `usdc-ngn` |
-| --------- | -------------- | ------------------------------------- | ----------------- |
-| moneygram | 200            | —                                     | yes (SEP-24)      |
-| cowrie    | 200            | —                                     | yes (SEP-6)       |
-| ngnc      | 200            | —                                     | yes (SEP-24)      |
-| anclap    | 200            | —                                     | no                |
-| mykobo    | 200            | —                                     | no                |
-| ntokens   | 200            | —                                     | no                |
-| **zeam**  | 200            | **`https://anchor.zeam.money/sep38`** | no                |
+The table below is a snapshot captured on 2026-08-04, committed at `tests/fixtures/sep38/capability-capture.json`.
+
+| Anchor                       | `stellar.toml` | `ANCHOR_QUOTE_SERVER`                 | Serves `usdc-ngn` |
+| ---------------------------- | -------------- | ------------------------------------- | ----------------- |
+| moneygram                    | 200            | —                                     | yes (SEP-24)      |
+| cowrie                       | 200            | —                                     | yes (SEP-6)       |
+| ngnc                         | 200            | —                                     | yes (SEP-24)      |
+| anclap                       | 200            | —                                     | no                |
+| mykobo (delisted 2026-09-06) | 200            | —                                     | no                |
+| ntokens                      | 200            | —                                     | no                |
+| **zeam**                     | 200            | **`https://anchor.zeam.money/sep38`** | no                |
 
 All three NGN anchors are reachable and serve a transfer rail. None advertises a quote server,
 so a firm quote for this corridor is not merely unimplemented on our side — it does not exist to
