@@ -1,0 +1,10 @@
+# Source: https://blackridgetrust.com/.well-known/stellar.toml (fetched 2026-10-18)
+[DOCUMENTATION]
+ORG_NAME = "Black Ridge Trust"
+ORG_URL = "https://blackridgetrust.com"
+
+[[CURRENCIES]]
+code = "BLACKRIDGE"
+issuer = "GA2B6E5FKKPUHA2SL436DXBOHFSQTXAWNWJ7EJS3N4EMPQA65YUBLACK"
+anchor_asset_type = "fiat"
+anchor_asset = "USD"
