@@ -195,63 +195,65 @@ describe('rates refresh — SWR interval respects visibility', () => {
 // ─── Near-expiry watcher — visibility ────────────────────────────────────────
 
 describe('rates refresh — near-expiry watcher respects visibility', () => {
-  it(
-    'does not poll while the tab is hidden',
-    async () => {
-      // Quote is stale — 4 s validity left (below REFRESH_THRESHOLD_MS)
-      const staleUpdatedAt = new Date(
-        Date.now() - (QUOTE_VALIDITY_MS - REFRESH_THRESHOLD_MS + 1_000)
-      );
+  it('does not poll while the tab is hidden', async () => {
+    vi.useFakeTimers();
+    // Quote is stale — 4 s validity left (below REFRESH_THRESHOLD_MS)
+    const staleUpdatedAt = new Date(
+      Date.now() - (QUOTE_VALIDITY_MS - REFRESH_THRESHOLD_MS + 1_000)
+    );
 
-      resolveWith(staleUpdatedAt);
-      const { result } = renderHook(() => useAnchorRates('usdc-ngn', '100'), {
-        wrapper: watcherWrapper,
-      });
-      await waitFor(() => expect(result.current.rates).toBeDefined());
+    resolveWith(staleUpdatedAt);
+    const { result } = renderHook(() => useAnchorRates('usdc-ngn', '100'), {
+      wrapper: watcherWrapper,
+    });
+    await flushMicrotasks();
+    expect(result.current.rates).toBeDefined();
 
-      // Hide the tab, then watch for any watcher-triggered refresh
-      await dispatchVisibilityChange(true);
-      ratesMock.mockClear();
+    // Hide the tab, then watch for any watcher-triggered refresh
+    await dispatchVisibilityChange(true);
+    ratesMock.mockClear();
 
-      // Wait 3 poll cycles — watcher must not fire while hidden
-      await new Promise((resolve) => setTimeout(resolve, EXPIRY_POLL_INTERVAL_MS * 3 + 100));
+    // Wait 3 poll cycles — watcher must not fire while hidden
+    await act(async () => {
+      await vi.advanceTimersByTimeAsync(EXPIRY_POLL_INTERVAL_MS * 3 + 100);
+    });
 
-      expect(ratesMock).not.toHaveBeenCalled();
-    },
-    EXPIRY_POLL_INTERVAL_MS * 7
-  );
+    expect(ratesMock).not.toHaveBeenCalled();
+  });
 
-  it(
-    'resumes polling and triggers a refresh when tab becomes visible again',
-    async () => {
-      const staleUpdatedAt = new Date(
-        Date.now() - (QUOTE_VALIDITY_MS - REFRESH_THRESHOLD_MS + 1_000)
-      );
+  it('resumes polling and triggers a refresh when tab becomes visible again', async () => {
+    vi.useFakeTimers();
+    const staleUpdatedAt = new Date(
+      Date.now() - (QUOTE_VALIDITY_MS - REFRESH_THRESHOLD_MS + 1_000)
+    );
 
-      resolveWith(staleUpdatedAt);
-      const { result } = renderHook(() => useAnchorRates('usdc-ngn', '100'), {
-        wrapper: watcherWrapper,
-      });
-      await waitFor(() => expect(result.current.rates).toBeDefined());
+    resolveWith(staleUpdatedAt);
+    const { result } = renderHook(() => useAnchorRates('usdc-ngn', '100'), {
+      wrapper: watcherWrapper,
+    });
+    await flushMicrotasks();
+    expect(result.current.rates).toBeDefined();
 
-      // Hide: confirm no poll fires
-      await dispatchVisibilityChange(true);
-      ratesMock.mockClear();
-      await new Promise((resolve) => setTimeout(resolve, EXPIRY_POLL_INTERVAL_MS * 2 + 100));
-      expect(ratesMock).not.toHaveBeenCalled();
+    // Hide: confirm no poll fires
+    await dispatchVisibilityChange(true);
+    ratesMock.mockClear();
+    await act(async () => {
+      await vi.advanceTimersByTimeAsync(EXPIRY_POLL_INTERVAL_MS * 2 + 100);
+    });
+    expect(ratesMock).not.toHaveBeenCalled();
 
-      // Restore visibility — watcher resumes and triggers a refresh. Fresh data
-      // from this point settles the quote so the watcher quiesces.
-      ratesMock.mockClear();
-      resolveWith(new Date());
-      await dispatchVisibilityChange(false);
+    // Restore visibility — watcher resumes and triggers a refresh. Fresh data
+    // from this point settles the quote so the watcher quiesces.
+    ratesMock.mockClear();
+    resolveWith(new Date());
+    await dispatchVisibilityChange(false);
 
-      await waitFor(() => expect(ratesMock).toHaveBeenCalled(), {
-        timeout: EXPIRY_POLL_INTERVAL_MS * 3 + 500,
-      });
-    },
-    EXPIRY_POLL_INTERVAL_MS * 10
-  );
+    await act(async () => {
+      await vi.advanceTimersByTimeAsync(EXPIRY_POLL_INTERVAL_MS);
+    });
+
+    expect(ratesMock).toHaveBeenCalled();
+  });
 
   it(
     'watcher interval is torn down when tab is hidden (clearInterval called)',
