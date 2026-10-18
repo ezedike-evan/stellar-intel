@@ -92,86 +92,58 @@ describe('signIntent — error paths', () => {
     const api = await getApi();
     vi.mocked(api.signMessage).mockResolvedValue({ error: 'Unknown error' } as never);
 
-    await expect(signIntent(INTENT)).rejects.toThrow(IntentSignError);
-
-    try {
-      await signIntent(INTENT);
-    } catch (err) {
-      expect(err).toBeInstanceOf(IntentSignError);
-      if (err instanceof IntentSignError) {
-        expect(err.code).toBe('SIGN_FAILED');
-      }
-    }
+    const signing = signIntent(INTENT);
+    await expect(signing).rejects.toMatchObject({ name: 'IntentSignError', code: 'SIGN_FAILED' });
+    await expect(signing).rejects.toBeInstanceOf(IntentSignError);
   });
 
   it('throws IntentSignError with SIGN_REJECTED when error message contains "reject"', async () => {
     const api = await getApi();
     vi.mocked(api.signMessage).mockResolvedValue({ error: 'User rejected the request' } as never);
 
-    try {
-      await signIntent(INTENT);
-    } catch (err) {
-      expect(err).toBeInstanceOf(IntentSignError);
-      if (err instanceof IntentSignError) {
-        expect(err.code).toBe('SIGN_REJECTED');
-      }
-    }
+    const signing = signIntent(INTENT);
+    await expect(signing).rejects.toMatchObject({ name: 'IntentSignError', code: 'SIGN_REJECTED' });
+    await expect(signing).rejects.toBeInstanceOf(IntentSignError);
   });
 
   it('throws IntentSignError with SIGN_FAILED when signMessage rejects', async () => {
     const api = await getApi();
     vi.mocked(api.signMessage).mockRejectedValue(new Error('Extension error'));
 
-    try {
-      await signIntent(INTENT);
-    } catch (err) {
-      expect(err).toBeInstanceOf(IntentSignError);
-      if (err instanceof IntentSignError) {
-        expect(err.code).toBe('SIGN_FAILED');
-      }
-    }
+    const signing = signIntent(INTENT);
+    await expect(signing).rejects.toMatchObject({ name: 'IntentSignError', code: 'SIGN_FAILED' });
+    await expect(signing).rejects.toBeInstanceOf(IntentSignError);
   });
 
   it('throws IntentSignError with FREIGHTER_UNAVAILABLE when getAddress returns no key', async () => {
     const api = await getApi();
     vi.mocked(api.getAddress).mockResolvedValue({} as never);
 
-    try {
-      await signIntent(INTENT);
-    } catch (err) {
-      expect(err).toBeInstanceOf(IntentSignError);
-      if (err instanceof IntentSignError) {
-        expect(err.code).toBe('FREIGHTER_UNAVAILABLE');
-      }
-    }
+    const signing = signIntent(INTENT);
+    await expect(signing).rejects.toMatchObject({
+      name: 'IntentSignError',
+      code: 'FREIGHTER_UNAVAILABLE',
+    });
+    await expect(signing).rejects.toBeInstanceOf(IntentSignError);
   });
 
   it('throws IntentSignError with SIGN_FAILED when signature is empty string', async () => {
     const api = await getApi();
     vi.mocked(api.signMessage).mockResolvedValue({ signedMessage: '' } as never);
 
-    try {
-      await signIntent(INTENT);
-    } catch (err) {
-      expect(err).toBeInstanceOf(IntentSignError);
-      if (err instanceof IntentSignError) {
-        expect(err.code).toBe('SIGN_FAILED');
-      }
-    }
+    const signing = signIntent(INTENT);
+    await expect(signing).rejects.toMatchObject({ name: 'IntentSignError', code: 'SIGN_FAILED' });
+    await expect(signing).rejects.toBeInstanceOf(IntentSignError);
   });
 
   it('IntentSignError has a descriptive message', async () => {
     const api = await getApi();
     vi.mocked(api.signMessage).mockResolvedValue({ error: 'Signing timed out' } as never);
 
-    try {
-      await signIntent(INTENT);
-    } catch (err) {
-      expect(err).toBeInstanceOf(IntentSignError);
-      if (err instanceof IntentSignError) {
-        expect(err.message.length).toBeGreaterThan(0);
-      }
-    }
+    const signing = signIntent(INTENT);
+    await expect(signing).rejects.toMatchObject({ name: 'IntentSignError', code: 'SIGN_FAILED' });
+    await expect(signing).rejects.toBeInstanceOf(IntentSignError);
+    await expect(signing).rejects.toThrow(/\S/);
   });
 });
 

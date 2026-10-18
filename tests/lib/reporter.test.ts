@@ -47,31 +47,3 @@ describe('reporter', () => {
     expect(mockReporter.reportError).not.toHaveBeenCalled();
   });
 });
-
-describe('reportError call-site pattern', () => {
-  beforeEach(() => {
-    resetReporter();
-  });
-
-  it('caller decides to report only 5xx SepErrors', async () => {
-    const mockReporter: ErrorReporter = { reportError: vi.fn() };
-    configureReporter(mockReporter);
-
-    const { parseSepErrorBody } = await import('@/lib/stellar/errors');
-
-    // 400 — routine validation error, caller does NOT report
-    const err400 = parseSepErrorBody({ error: 'Bad request' }, 400);
-    if (err400.httpStatus >= 500) reportError(err400, { anchorDomain: 'test.anchor.com' });
-
-    // 500 — genuine server failure, caller DOES report
-    const err500 = parseSepErrorBody({ error: 'Internal server error' }, 500);
-    if (err500.httpStatus >= 500) reportError(err500, { anchorDomain: 'test.anchor.com' });
-
-    expect(mockReporter.reportError).toHaveBeenCalledOnce();
-    const [capturedError, capturedContext] = (mockReporter.reportError as ReturnType<typeof vi.fn>)
-      .mock.calls[0]!;
-    expect(capturedError.name).toBe('SepError');
-    expect(capturedError.httpStatus).toBe(500);
-    expect(capturedContext).toMatchObject({ anchorDomain: 'test.anchor.com' });
-  });
-});

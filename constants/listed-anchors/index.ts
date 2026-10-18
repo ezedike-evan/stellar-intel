@@ -9,6 +9,7 @@
 import type { ListedAnchor } from '@/types';
 import { parseListedAnchors } from '@/lib/stellar/listed-anchor-schema';
 
+import apsTokens from './aps-tokens.json';
 import gmoTrust from './gmo-trust.json';
 import gratz from './gratz.json';
 import ixinium from './ixinium.json';
@@ -19,9 +20,13 @@ import mirrasets from './mirrasets.json';
 import mobius from './mobius.json';
 import moneygramMgusd from './moneygram-mgusd.json';
 import nafuloo from './nafuloo.json';
+import naobtc from './naobtc.json';
+import phoenix from './phoenix.json';
+import stronghold from './stronghold.json';
 import valtorum from './valtorum.json';
 
 const RAW: unknown[] = [
+  apsTokens,
   gmoTrust,
   gratz,
   ixinium,
@@ -32,6 +37,9 @@ const RAW: unknown[] = [
   mobius,
   moneygramMgusd,
   nafuloo,
+  naobtc,
+  phoenix,
+  stronghold,
   valtorum,
 ];
 
