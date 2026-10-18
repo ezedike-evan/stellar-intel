@@ -193,6 +193,28 @@ describe('useFreighter — connect', () => {
       expect(result.current.error).toBeNull();
     });
   });
+
+  it('connect() calls requestAccess and updates state', async () => {
+    mockFreighterInstalled(false);
+    const testKey = 'GBRPYHIL2CI3WHZDTOOQFC6EB4KJJGUJEANS3D57CCOD5JIHVYXKOM77';
+    mockFreighterApi.requestAccess.mockResolvedValue({ address: testKey });
+    mockFreighterApi.getAddress.mockResolvedValue({ address: testKey, error: null });
+    mockFreighterApi.getNetwork.mockResolvedValue({ network: 'PUBLIC', error: null });
+
+    const { result } = renderHook(() => useFreighter(), { wrapper });
+
+    await waitFor(() => {
+      expect(result.current.isInstalled).toBe(true);
+    });
+
+    await act(async () => {
+      await result.current.connect();
+    });
+
+    expect(mockFreighterApi.requestAccess).toHaveBeenCalled();
+    expect(result.current.publicKey).toBe(testKey);
+    expect(result.current.isConnected).toBe(true);
+  });
 });
 
 // ─── Lifecycle 3: Disconnect ──────────────────────────────────────────────────
@@ -276,6 +298,17 @@ describe('useFreighter — network-change', () => {
     await waitFor(() => {
       expect(result.current.isConnected).toBe(true);
       expect(result.current.network).toBe('TESTNET');
+    });
+  });
+
+  it('sets error when network is not PUBLIC', async () => {
+    mockFreighterInstalled(true, 'TESTNET');
+
+    const { result } = renderHook(() => useFreighter(), { wrapper });
+
+    await waitFor(() => {
+      expect(result.current.isConnected).toBe(true);
+      expect(result.current.error).toBe('Please switch Freighter to Mainnet');
     });
   });
 
