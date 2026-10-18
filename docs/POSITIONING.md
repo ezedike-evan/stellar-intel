@@ -50,7 +50,7 @@ They are listed rather than quietly deleted, because the point of narrowing is
 to stop making them.
 
 1. **"Live SEP-38 quotes across every integrated anchor."** On 2026-08-05,
-   **one of the then-seven registered anchors (six today) advertises `ANCHOR_QUOTE_SERVER` at all**,
+   **one of the then-seven registered anchors advertises `ANCHOR_QUOTE_SERVER` at all**,
    and that one does not quote the corridor it is registered for. Comparing
    firm quotes across anchors is not a thing that can be done today, because
    the quotes do not exist. The worked evidence is in the Anchor Directory
@@ -69,7 +69,7 @@ of the data.
 
 ### What is actually true today
 
-- Six registered anchors (MyKobo was delisted 2026-09-06), probed every five minutes across four signals:
+- Thirteen registered anchors, probed every five minutes across four signals:
   uptime, quote availability, issuer mismatch, TOML integrity.
 - A published methodology for turning those samples into a score, with small
   samples labelled as small.
