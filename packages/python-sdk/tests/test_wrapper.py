@@ -45,7 +45,7 @@ def test_submit_offramp_intent_success(httpx_mock):
     assert result.route.anchor_id == "cowrie"
 
 
-def test_reuses_the_same_idempotency_key_across_retries(httpx_mock):
+def test_reuses_the_same_idempotency_key_across_retries(httpx_mock, no_sleep):
     # First attempt: a transient 503. Second attempt: success.
     httpx_mock.add_response(method="POST", url=f"{BASE_URL}/api/intent/offramp", status_code=503, json={
         "code": "UPSTREAM_UNAVAILABLE",
@@ -62,6 +62,7 @@ def test_reuses_the_same_idempotency_key_across_retries(httpx_mock):
     assert len(requests) == 2
     keys = [req.headers.get("idempotency-key") for req in requests]
     assert keys == ["fixed-key", "fixed-key"]
+    assert no_sleep == [0.5]  # one backoff, for attempt 0
 
 
 def test_generates_a_fresh_idempotency_key_by_default(httpx_mock):
@@ -76,7 +77,7 @@ def test_generates_a_fresh_idempotency_key_by_default(httpx_mock):
     assert len(key) == 36
 
 
-def test_raises_after_exhausting_retries_on_persistent_5xx(httpx_mock):
+def test_raises_after_exhausting_retries_on_persistent_5xx(httpx_mock, no_sleep):
     for _ in range(3):
         httpx_mock.add_response(method="POST", url=f"{BASE_URL}/api/intent/offramp", status_code=500, json={
             "code": "TX_BUILD_FAILED",
@@ -90,6 +91,8 @@ def test_raises_after_exhausting_retries_on_persistent_5xx(httpx_mock):
     assert exc_info.value.code == "TX_BUILD_FAILED"
     assert exc_info.value.status_code == 500
     assert len(httpx_mock.get_requests()) == 3  # initial attempt + 2 retries
+    # 2**attempt * 0.5 for attempts 0 and 1; no sleep after the last attempt.
+    assert no_sleep == [0.5, 1.0]
 
 
 def test_does_not_retry_a_validation_error(httpx_mock):
@@ -106,10 +109,7 @@ def test_does_not_retry_a_validation_error(httpx_mock):
     assert len(httpx_mock.get_requests()) == 1  # 400s are not retried
 
 
-def test_retries_a_429_and_honors_retry_after_header(monkeypatch, httpx_mock):
-    sleep_calls = []
-    monkeypatch.setattr("stellarintel.wrapper.time.sleep", lambda seconds: sleep_calls.append(seconds))
-
+def test_retries_a_429_and_honors_retry_after_header(httpx_mock, no_sleep):
     httpx_mock.add_response(
         method="POST",
         url=f"{BASE_URL}/api/intent/offramp",
@@ -123,4 +123,4 @@ def test_retries_a_429_and_honors_retry_after_header(monkeypatch, httpx_mock):
         result = client.submit_offramp_intent(INTENT)
 
     assert result.quote_id == SUCCESS_BODY["quoteId"]
-    assert sleep_calls == [7.0]
+    assert no_sleep == [7.0]
