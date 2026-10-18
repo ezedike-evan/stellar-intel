@@ -1,0 +1,23 @@
+{
+  "id": "gmo-trust",
+  "name": "GMO-Z.com Trust Company",
+  "kind": "issuer",
+  "domains": ["stablecoin.z.com"],
+  "orgUrl": "https://stablecoin.z.com",
+  "verifiedAt": "2026-09-23",
+  "note": "Issuance of GYEN and ZUSD has been wound down per the toml desc (redemption period running).",
+  "assets": [
+    {
+      "code": "GYEN",
+      "issuer": "GDF6VOEGRWLOZ64PQQGKD2IYWA22RLT37GJKS2EJXZHT2VLAGWLC5TOB",
+      "anchorAssetType": "fiat",
+      "anchorAsset": "JPY"
+    },
+    {
+      "code": "ZUSD",
+      "issuer": "GDF6VOEGRWLOZ64PQQGKD2IYWA22RLT37GJKS2EJXZHT2VLAGWLC5TOB",
+      "anchorAssetType": "fiat",
+      "anchorAsset": "USD"
+    }
+  ]
+}

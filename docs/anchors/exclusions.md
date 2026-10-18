@@ -1,6 +1,6 @@
 # Issuer-only anchors (excluded from corridors)
 
-**Last reviewed:** 2026-08-26
+**Last reviewed:** 2026-10-17
 
 Some domains in the [stellar.expert anchor directory](https://api.stellar.expert/explorer/public/directory?tag[]=anchor&limit=200)
 advertise a Stellar asset or issuer but publish **no transfer rails** — neither a
@@ -19,11 +19,12 @@ the specific asset(s) each domain issues live in its own `stellar.toml`
 
 Generated from `node scripts/anchor-survey.mjs --json`, captured in
 [`scripts/anchor-survey.snapshot.json`](../../scripts/anchor-survey.snapshot.json)
-(snapshot `2026-06-25`): **92** directory-tagged domains → **32** reachable →
-**23** issuer-only (and 9 transfer-capable). Refresh monthly with the survey and
-update this list alongside `maintainer.md` §11.
+(snapshot `2026-10-01`): **95** directory-tagged domains → **36** reachable →
+**26** issuer-only (and 10 transfer-capable). Refresh monthly with the survey;
+see the [snapshot](../../scripts/anchor-survey.snapshot.json) and
+[anchor recrawl workflow](../../.github/workflows/anchor-recrawl.yml).
 
-## Issuer-only domains (23)
+## Issuer-only domains (26)
 
 |   # | Domain                | Reason                                                                   |
 | --: | --------------------- | ------------------------------------------------------------------------ |
@@ -33,23 +34,28 @@ update this list alongside `maintainer.md` §11.
 |   4 | `aqua.network`        | No transfer rails (SEP-6/SEP-24) — issuer-only                           |
 |   5 | `bitbondsto.com`      | No transfer rails (SEP-6/SEP-24) — issuer-only                           |
 |   6 | `centre.io`           | No transfer rails (SEP-6/SEP-24) — issuer-only                           |
-|   7 | `cryptotari.io`       | No transfer rails (SEP-6/SEP-24) — issuer-only                           |
-|   8 | `heir.io`             | No transfer rails (SEP-6/SEP-24) — issuer-only                           |
-|   9 | `mgusd.moneygram.com` | Issuer domain only — live SEP-24 service runs at `stellar.moneygram.com` |
-|  10 | `mobius.network`      | No transfer rails (SEP-6/SEP-24) — issuer-only                           |
-|  11 | `nafuloo.com`         | No transfer rails (SEP-6/SEP-24) — issuer-only                           |
-|  12 | `papayabot.com`       | No transfer rails (SEP-6/SEP-24) — issuer-only                           |
-|  13 | `pedity.com`          | No transfer rails (SEP-6/SEP-24) — issuer-only                           |
-|  14 | `pr.network`          | No transfer rails (SEP-6/SEP-24) — issuer-only                           |
-|  15 | `ripplefox.com`       | No transfer rails (SEP-6/SEP-24) — issuer-only                           |
-|  16 | `stronghold.co`       | No transfer rails (SEP-6/SEP-24) — issuer-only                           |
-|  17 | `tempocrypto.com`     | No transfer rails (SEP-6/SEP-24) — issuer-only                           |
-|  18 | `thefutbolcoin.io`    | No transfer rails (SEP-6/SEP-24) — issuer-only                           |
-|  19 | `traxalt.com`         | No transfer rails (SEP-6/SEP-24) — issuer-only                           |
-|  20 | `www.anchorusd.com`   | No transfer rails (SEP-6/SEP-24) — issuer-only                           |
-|  21 | `www.factrpay.io`     | No transfer rails (SEP-6/SEP-24) — issuer-only                           |
-|  22 | `ximcoin.com`         | No transfer rails (SEP-6/SEP-24) — issuer-only                           |
-|  23 | `xirkle.com`          | No transfer rails (SEP-6/SEP-24) — issuer-only                           |
+|   7 | `decaf.so`            | No transfer rails (SEP-6/SEP-24) — issuer-only                           |
+|   8 | `funtracker.site`     | No transfer rails (SEP-6/SEP-24) — issuer-only                           |
+|   9 | `gratz.io`            | No transfer rails (SEP-6/SEP-24) — issuer-only                           |
+|  10 | `heir.io`             | No transfer rails (SEP-6/SEP-24) — issuer-only                           |
+|  11 | `ixinium.io`          | No transfer rails (SEP-6/SEP-24) — issuer-only                           |
+|  12 | `luxpayband.io`       | No transfer rails (SEP-6/SEP-24) — issuer-only                           |
+|  13 | `mgusd.moneygram.com` | Issuer domain only — live SEP-24 service runs at `stellar.moneygram.com` |
+|  14 | `mobius.network`      | No transfer rails (SEP-6/SEP-24) — issuer-only                           |
+|  15 | `nafuloo.com`         | No transfer rails (SEP-6/SEP-24) — issuer-only                           |
+|  16 | `papayabot.com`       | No transfer rails (SEP-6/SEP-24) — issuer-only                           |
+|  17 | `pedity.com`          | No transfer rails (SEP-6/SEP-24) — issuer-only                           |
+|  18 | `pr.network`          | No transfer rails (SEP-6/SEP-24) — issuer-only                           |
+|  19 | `ripplefox.com`       | No transfer rails (SEP-6/SEP-24) — issuer-only                           |
+|  20 | `stronghold.co`       | No transfer rails (SEP-6/SEP-24) — issuer-only                           |
+|  21 | `tempocrypto.com`     | No transfer rails (SEP-6/SEP-24) — issuer-only                           |
+|  22 | `traxalt.com`         | No transfer rails (SEP-6/SEP-24) — issuer-only                           |
+|  23 | `vnx.io`              | No transfer rails (SEP-6/SEP-24) — issuer-only                           |
+|  24 | `www.anchorusd.com`   | No transfer rails (SEP-6/SEP-24) — issuer-only                           |
+|  25 | `ximcoin.com`         | No transfer rails (SEP-6/SEP-24) — issuer-only                           |
+|  26 | `xirkle.com`          | No transfer rails (SEP-6/SEP-24) — issuer-only                           |
+
+_Note: `www.factrpay.io` was classified under `unreachableDomains` in the 2026-10-01 survey snapshot._
 
 > An anchor leaves this list only when its `stellar.toml` starts advertising a
 > usable `TRANSFER_SERVER` (SEP-6) or `TRANSFER_SERVER_SEP0024` (SEP-24); rerun
@@ -90,4 +96,18 @@ Domains excluded for reasons other than missing transfer rails.
   a corridor. Same disposition as `naobtc.com` and `stellarport.io` above:
   transfer rail present, fiat rail absent. Exclusion is permanent unless the
   operator adds a verifiable fiat corridor and re-submits via
+  [`docs/ANCHOR_ONBOARDING.md`](../ANCHOR_ONBOARDING.md).
+
+### mykobo.co
+
+- **Domain:** mykobo.co
+- **Triaged:** 2026-09-06
+- **Status:** Delisted
+- **Reason:** MyKobo was delisted on 2026-09-06. While its `stellar.toml` serves
+  HTTP 200, the transfer servers (`TRANSFER_SERVER` and `TRANSFER_SERVER_SEP0024`)
+  live on `stellar.mykobo.co`, and that host has no A or AAAA record, so every
+  SEP-6 and SEP-24 call fails to connect. Because MyKobo was the EUR anchor
+  (EURC issuer `GAQRF3UGHBT6JYQZ7YSUYCIYWAF4T2SAA5237Q5LIQYJOHHFAWDXZ7NM`),
+  `usdc-eur` no longer has a registered anchor. MyKobo returns when it
+  publishes a transfer server that resolves, through the onboarding flow in
   [`docs/ANCHOR_ONBOARDING.md`](../ANCHOR_ONBOARDING.md).

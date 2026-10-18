@@ -1,0 +1,64 @@
+{
+  "deposit": {
+    "ETH": {
+      "enabled": true,
+      "authentication_required": true,
+      "min_amount": 0.005,
+      "max_amount": 50.0,
+      "fields": {
+        "amount": {
+          "description": "ETH amount for deposit",
+          "optional": false
+        }
+      }
+    },
+    "BTC": {
+      "enabled": true,
+      "authentication_required": true,
+      "min_amount": 0.0005,
+      "max_amount": 5.0,
+      "fields": {}
+    }
+  },
+  "withdraw": {
+    "ETH": {
+      "enabled": true,
+      "authentication_required": true,
+      "min_amount": 0.005,
+      "max_amount": 20.0,
+      "types": {
+        "crypto": {
+          "fields": {
+            "amount": {
+              "description": "ETH amount for withdraw",
+              "optional": false
+            },
+            "dest": {
+              "description": "Address where we will send ETH",
+              "optional": false
+            }
+          }
+        }
+      }
+    },
+    "BTC": {
+      "enabled": false
+    }
+  },
+  "fee": {
+    "enabled": true,
+    "authentication_required": true
+  },
+  "transactions": {
+    "enabled": true,
+    "authentication_required": true
+  },
+  "transaction": {
+    "enabled": true,
+    "authentication_required": true
+  },
+  "features": {
+    "account_creation": true,
+    "claimable_balances": true
+  }
+}

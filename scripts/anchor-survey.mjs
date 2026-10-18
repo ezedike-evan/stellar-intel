@@ -12,9 +12,8 @@
 //   ANCHOR_QUOTE_SERVER      -> SEP-38 (firm-quote RFQ)
 //   DIRECT_PAYMENT_SERVER    -> SEP-31 (cross-border payments)
 //
-// This is the script behind the "Anchor Fleet Status" section of maintainer.md.
-// Re-run it to refresh the 41/11/30/51 snapshot and surface anchors that have
-// since come online.
+// This script produces the anchor fleet survey snapshot.
+// Re-run it to refresh the snapshot and surface anchors that have since come online.
 //
 // Usage:
 //   node scripts/anchor-survey.mjs            # human summary
@@ -26,7 +25,7 @@
 //   node scripts/anchor-survey.mjs --concurrency 8   # parallel lookups (default 12, clamped 1-32)
 //   ANCHOR_SURVEY_CONCURRENCY=8 node scripts/anchor-survey.mjs   # same, via env (flag wins)
 //
-// Notes / caveats (see also docs + maintainer.md):
+// Notes / caveats (see also the anchor documentation):
 //   - The directory is NOT comprehensive (Stellar is permissionless). It also
 //     lists anchors by their issuer/home domain, which is often distinct from the
 //     service subdomain that actually hosts SEP endpoints (e.g. MoneyGram is listed
@@ -44,7 +43,11 @@ import { fetchTopAssetDomains } from './lib/asset-seeds.mjs';
 import { fetchSdfAnchorDirectoryDomains } from './lib/sdf-directory.mjs';
 import { HOSTNAME_RE, parseAnchors, parseCurrencies } from './validate-anchors.mjs';
 import { isImpersonation } from './lib/impersonation.mjs';
-import { extractAnchorsArray, parseAnchors, ANCHORS_PATH } from './check-registry.mjs';
+import {
+  extractAnchorsArray,
+  parseAnchors as parseRegistryAnchors,
+  ANCHORS_PATH,
+} from './check-registry.mjs';
 
 // Kept as the JSON `source` field for older readers that expect one source URL.
 const DIRECTORY_URL = 'https://api.stellar.expert/explorer/public/directory?limit=200';
@@ -771,7 +774,9 @@ async function main() {
   const generatedAt = new Date().toISOString();
 
   if (censusOutPath) {
-    const registryAnchors = parseAnchors(extractAnchorsArray(readFileSync(ANCHORS_PATH, 'utf-8')));
+    const registryAnchors = parseRegistryAnchors(
+      extractAnchorsArray(readFileSync(ANCHORS_PATH, 'utf-8'))
+    );
     const census = buildCensus(results, registryAnchors, generatedAt);
     writeFileSync(censusOutPath, JSON.stringify(census, null, 2) + '\n');
   }

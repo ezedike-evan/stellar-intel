@@ -1,0 +1,22 @@
+{
+  "id": "audd",
+  "name": "AUDD (AUDC Pty Ltd)",
+  "kind": "issuer",
+  "domains": ["audd.digital"],
+  "orgUrl": "https://www.audd.digital",
+  "verifiedAt": "2026-09-23",
+  "assets": [
+    {
+      "code": "AUDD",
+      "issuer": "GDC7X2MXTYSAKUUGAIQ7J7RPEIM7GXSAIWFYWWH4GLNFECQVJJLB2EEU",
+      "anchorAssetType": "fiat",
+      "anchorAsset": "AUD"
+    },
+    {
+      "code": "NZDSC",
+      "issuer": "GCUIIJ6J6KIOOYOICVFOEVH6XRY3WX4NUZDYGPUCJQZM6R3OFJE2QGY2",
+      "anchorAssetType": "fiat",
+      "anchorAsset": "NZD"
+    }
+  ]
+}

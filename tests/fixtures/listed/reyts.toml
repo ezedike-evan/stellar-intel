@@ -1,0 +1,10 @@
+# Source: https://reyts.com/.well-known/stellar.toml (fetched 2026-10-17)
+[DOCUMENTATION]
+ORG_NAME = "Reyts"
+ORG_URL = "https://reyts.com"
+
+[[CURRENCIES]]
+code = "RCAD"
+issuer = "GBENR77GICO2Y3TOD5V6BQSVXMS7TKVP3CWLLBDQYU2OVQM6RWZGPNKQ"
+anchor_asset_type = "fiat"
+anchor_asset = "CAD"
