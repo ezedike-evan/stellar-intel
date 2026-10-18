@@ -8,10 +8,10 @@ body:
   - type: markdown
     attributes:
       value: |
-        Thanks for reporting a bug. The two bugs that sank the first grant
-        submission (`#001` Cowrie `exchangeRate = 0`, `#002` `StatusTracker`
-        never mounts) would have been caught sooner with a good bug report.
-        Please fill in every section — "I don't know" is a valid answer.
+        Thanks for reporting a bug. Critical regressions (`#001` Cowrie
+        `exchangeRate = 0`, `#002` `StatusTracker` never mounts) would have
+        been caught sooner with a good bug report. Please fill in every
+        section — "I don't know" is a valid answer.
 
         Before you submit, please search existing issues:
         <https://github.com/Ezedike-Evan/stellar-intel/issues?q=is%3Aissue>

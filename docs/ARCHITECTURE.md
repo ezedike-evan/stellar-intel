@@ -2,14 +2,14 @@
 
 > How the pieces fit together. This document is the map a new contributor
 > reads before opening a PR, the reviewer consults before approving one, and
-> the grant committee reads to understand what is actually being built.
+> the reference contributors and integrators read to understand what is actually built.
 >
 > Scope: the intent router, the reputation write path, the Soroban oracle,
 > the MCP/agent surface, and the SEP-10/24/38 flow. Where something ships
 > today it is marked ✅; where it is planned it is marked 🛠️ and the
 > milestone wave is named.
 
-**Last reviewed:** 2026-08-28
+**Last reviewed:** 2026-10-18
 
 ---
 
