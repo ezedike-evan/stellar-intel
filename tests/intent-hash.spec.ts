@@ -61,6 +61,20 @@ describe('canonicalJson', () => {
     const metaKeys = Object.keys(parsed['meta'] as Record<string, unknown>);
     expect(metaKeys).toEqual([...metaKeys].sort());
   });
+
+  it('matches the worked example in docs/CANONICAL_JSON.md', () => {
+    const workedExample: Intent = {
+      type: 'offramp',
+      sourceAsset: 'USDC',
+      destinationAsset: 'NGN',
+      amount: '100',
+      sender: 'GABCDEFGHIJKLMNOPQRSTUVWXYZ012345678901234567890123456789',
+      recipient: 'NGN-BANK-ACCOUNT-123',
+    };
+    const expectedCanonical =
+      '{"amount":"100","destinationAsset":"NGN","recipient":"NGN-BANK-ACCOUNT-123","sender":"GABCDEFGHIJKLMNOPQRSTUVWXYZ012345678901234567890123456789","sourceAsset":"USDC","type":"offramp"}';
+    expect(canonicalJson(workedExample)).toBe(expectedCanonical);
+  });
 });
 
 // ─── hashIntent ───────────────────────────────────────────────────────────────
