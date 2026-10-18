@@ -26,7 +26,6 @@ const EXEMPT: Record<string, string> = {
   'app/api/reputation/reconcile/route.ts': 'Cron-only, bearer-gated on CRON_SECRET.',
   'app/api/reputation/reconcile-volume-savings/route.ts': 'Cron-only, bearer-gated on CRON_SECRET.',
   'app/api/reputation/refresh/route.ts': 'Cron-only, bearer-gated on CRON_SECRET.',
-  'app/api/graphql/route.ts': 'Limited inside the yoga handler.',
 };
 
 describe('rate-limit coverage (#733)', () => {
