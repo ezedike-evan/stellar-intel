@@ -415,7 +415,7 @@ sequenceDiagram
 
 The oracle is a single Soroban contract (`contracts/reputation/`) with a small,
 admin-gated surface. It is **implemented and unit-tested on testnet**
-(`contracts/reputation/tests/basic.rs`); mainnet deployment and 2-of-3 multisig
+(`contracts/reputation/tests/basic.rs`); mainnet deployment and an M-of-N Stellar multisig account (target threshold in docs/GOVERNANCE.md)
 admin are v2 gates. The authoritative interface is
 [`docs/ORACLE_SPEC.md`](ORACLE_SPEC.md); the storage/interface below are the
 target design.
@@ -457,43 +457,67 @@ erDiagram
 
 ### Interface
 
-```rust
-// contracts/reputation/src/lib.rs — implemented surface (see docs/ORACLE_SPEC.md)
-impl ReputationContract {
-    pub fn submit_outcome(/* … outcome fields … */) -> Result<(), Error>; // publisher-gated
-}
-// src/anchors.rs
-pub fn list(env: &Env) -> Vec<String>;
-pub fn register(env: &Env, anchor_id: String) -> Result<(), Error>;       // admin
-// src/admin.rs
-pub fn set_admin(env: &Env, admin: &Address) -> Result<(), Error>;
-pub fn get_admin(env: &Env) -> Option<Address>;
-// Planned (v2): read_aggregate, dispute, 2-of-3 multisig add/remove_publisher.
-```
+See [`docs/ORACLE_SPEC.md`](ORACLE_SPEC.md) for full function signatures, arguments, and return types. Entrypoints grouped by role from `contracts/reputation/src/lib.rs`:
+
+- **Public reads & lifecycle**:
+  - `bump(env: Env)` — top up contract instance TTL
+  - `contract_version(env: Env) -> u32` — live contract version
+  - `list_anchors(env: Env) -> Vec<String>` — registered anchors
+  - `list_publishers(env: Env) -> Vec<Address>` — authorized publisher keys
+  - `get_corridor_aggregate(env: Env, anchor_id: String, corridor: String) -> (u32, u32, u64)` (and `get_corridor_aggregate_v2`)
+  - `get_score_for_corridor(env: Env, anchor_id: String, corridor: String) -> (i128, i128, u64, u32)` (and `get_score_for_corridor_v2`)
+  - `get_corridor_rate(env: Env, corridor: String) -> Option<CorridorRate>` — latest published rate
+  - `get_volume_savings(env: Env, corridor: String) -> Option<VolumeSavings>` — cumulative volume and savings
+  - `recent_outcomes(env: Env, anchor_id: String, n: u32) -> Vec<(String, u64, bool)>`
+
+- **Publisher-only writes**:
+  - `submit_outcome(env: Env, publisher: Address, anchor_id: String, corridor: String, outcome_hash: String, settle_seconds: u64, success: bool) -> Result<(), Error>`
+  - `set_corridor_metrics(env: Env, publisher: Address, anchor_id: String, corridor: String, fill_rate_bps: i128, slippage_bps: i128, settle_seconds_p50: u64, n: u32) -> Result<(), Error>`
+  - `publish_corridor_rate(env: Env, publisher: Address, corridor: String, rate: i128, decimals: u32) -> Result<(), Error>`
+  - `add_volume_savings(env: Env, publisher: Address, corridor: String, volume_delta: i128, savings_delta: i128) -> Result<(), Error>`
+
+- **Operational Admin**:
+  - `admin(env: Env) -> Option<Address>`
+  - `propose_admin(env: Env, caller: Address, candidate: Address) -> Result<(), Error>`
+  - `accept_admin(env: Env, candidate: Address) -> Result<(), Error>`
+  - `cancel_admin_proposal(env: Env, caller: Address) -> Result<(), Error>`
+  - `pending_admin(env: Env) -> Option<Address>`
+  - `register_anchor(env: Env, caller: Address, anchor_id: String) -> Result<(), Error>`
+  - `add_publisher(env: Env, caller: Address, publisher: Address) -> Result<(), Error>`
+  - `revoke_publisher(env: Env, caller: Address, publisher: Address) -> Result<(), Error>`
+  - `reset_corridor_aggregate(env: Env, caller: Address, anchor_id: String, corridor: String) -> Result<(), Error>`
+  - `reset_volume_savings(env: Env, caller: Address, corridor: String) -> Result<(), Error>`
+  - `migrate_corridor_v2(env: Env, caller: Address, anchor_id: String, corridor: String) -> Result<(), Error>`
+  - `migrate_all_v2(env: Env, caller: Address) -> Result<(), Error>`
+
+- **Upgrade Admin**:
+  - `upgrade_admin(env: Env) -> Option<Address>`
+  - `propose_upgrade_admin(env: Env, caller: Address, candidate: Address) -> Result<(), Error>`
+  - `accept_upgrade_admin(env: Env, candidate: Address) -> Result<(), Error>`
+  - `cancel_upgrade_proposal(env: Env, caller: Address) -> Result<(), Error>`
+  - `pending_upgrade_admin(env: Env) -> Option<Address>`
+  - `upgrade(env: Env, new_wasm_hash: BytesN<32>)`
 
 ### Upgrade policy
 
-- **Admin** — a 2-of-3 multisig held by the maintainer and two community
-  signers (onboarded pre-v2 release). The admin can enable/disable publishers;
+- **Admin** — an M-of-N Stellar multisig account (target threshold in docs/GOVERNANCE.md). The admin can enable/disable publishers;
   it cannot rewrite outcomes.
-- **Upgradability** — the contract is upgradable via a Soroban
-  `UpdateCurrentContract` operation, gated by the admin multisig, with a
-  mandatory 7-day on-chain time-lock on every upgrade proposal.
+- **Upgradability** — `upgrade(new_wasm_hash)` is gated by a separate upgrade admin (rotatable via `propose_upgrade_admin`/`accept_upgrade_admin`); there is **no** time-lock today (a 7-day on-chain time-lock is not implemented).
 - **Publisher whitelist** — starts at one (Stellar Intel's publisher). Over
   time, third-party publishers onboard; governance lives in
   `docs/ORACLE_SPEC.md`.
 
 ### Consumer ergonomics
 
-Two client libraries ship alongside the contract:
+Client libraries and examples ship alongside the contract:
 
 - [`crates/stellar-intel-reputation/`](../crates/stellar-intel-reputation/) —
   Rust consumer for other Soroban contracts (`read_aggregate`/`corridor_score`/
   `corridor_aggregate` helpers, typed structs). Publish-ready (`publish = true`,
   full crates.io metadata); the actual `cargo publish` awaits a maintainer
   adding a `CARGO_REGISTRY_TOKEN` secret (`.github/workflows/publish-rust-sdk.yml`).
-- `packages/sdk/oracle.ts` — TypeScript consumer for off-chain readers
-  (wallets, rival aggregators, dashboards). _(planned)_
+- `lib/oracle/read.ts` and `examples/consumer-contract/read-oracle.mjs` — TypeScript/JavaScript
+  read helpers and simulation examples for off-chain consumers (wallets, aggregators, dashboards).
 
 ---
 
