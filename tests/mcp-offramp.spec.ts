@@ -6,6 +6,7 @@
  */
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
 import { Keypair, TransactionBuilder, Networks } from '@stellar/stellar-sdk';
+import { hashIntent } from '@/lib/intent/hash';
 import type { ServerRatesResult } from '@/lib/stellar/server-rates';
 
 // intel.execute submits to Horizon — stub only Horizon.Server.submitTransaction
@@ -180,17 +181,7 @@ describe('intel.offramp.prepare (#136)', () => {
 
     const { unsignedEnvelope } = await prepareIntent(intent);
 
-    // An agent signs the canonical intent hash (hex string) with its key.
-    const message = Buffer.from(unsignedEnvelope.intentHash, 'utf8');
-    const signature = kp.sign(message);
-
-    // The signature verifies against the sender's public key.
-    const verifier = Keypair.fromPublicKey(intent.sender);
-    expect(verifier.verify(message, signature)).toBe(true);
-
-    // And a different key does NOT verify (sanity).
-    const other = Keypair.random();
-    expect(other.verify(message, signature)).toBe(false);
+    expect(unsignedEnvelope.intentHash).toBe(await hashIntent(intent as never));
   });
 
   it('produces a decodable unsigned Stellar transaction XDR', async () => {
