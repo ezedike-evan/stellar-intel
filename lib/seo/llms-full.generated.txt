@@ -245,9 +245,9 @@ flowchart LR
 
   subgraph Control["Control plane — Next.js on Vercel"]
     UI["Web UI\n/app/offramp"]
-    MCP["MCP server\n@stellarintel/mcp 🛠️ v4"]
+    MCP["MCP server\n@stellarintel/mcp ✅ v4"]
     API["/api/* route handlers\nrates, quotes, intents, scores"]
-    Router["Intent router\nlib/router 🛠️ v1.2"]
+    Router["Intent router\nlib/router ✅ v1.2"]
   end
 
   subgraph Execution["Execution plane"]
@@ -256,7 +256,7 @@ flowchart LR
   end
 
   subgraph Observation["Observation plane"]
-    Publisher["Publisher worker\nlib/publisher 🛠️ v2"]
+    Publisher["Publisher worker\npackages/publisher ✅ v2"]
     Oracle["Soroban oracle\ncontract 🛠️ v2"]
     Consumers["3rd-party consumers\n(wallets, indexers, rivals)"]
   end
@@ -284,32 +284,32 @@ writes to Soroban — never to move user funds.
 
 ## 2. Component inventory & repo layout
 
-| Module                      | Role                                                                                        | Path                                   | Status                  |
-| --------------------------- | ------------------------------------------------------------------------------------------- | -------------------------------------- | ----------------------- |
-| **Offramp page**            | The end-user surface. Corridor select → rate table → execute drawer → status tracker.       | `app/offramp/page.tsx`                 | ✅                      |
-| **RateTable**               | Sortable list of live anchor quotes for the selected corridor.                              | `components/offramp/RateTable.tsx`     | ✅                      |
-| **ExecuteDrawer**           | 6-step SEP-10/24 off-ramp: `authenticating → initiating → kyc → building → signing → done`. | `components/offramp/ExecuteDrawer.tsx` | ✅                      |
-| **StatusTracker**           | Polls `/transaction?id=...` and renders the SEP-24 state machine.                           | `components/offramp/StatusTracker.tsx` | ✅                      |
-| **Anchor registry**         | Typed list of anchors + corridors + assets. Single source of truth.                         | `lib/stellar/anchors.ts`               | ✅                      |
-| **SEP-1 resolver**          | `stellar.toml` discovery, TRANSFER_SERVER_SEP0024 + WEB_AUTH_ENDPOINT extraction.           | `lib/stellar/sep1.ts`                  | ✅                      |
-| **SEP-10 client**           | Challenge fetch, verification, Freighter sign, JWT exchange. Network pinned to mainnet.     | `lib/stellar/sep10.ts`                 | ✅                      |
-| **SEP-24 client**           | `/fee`, `/transactions/withdraw/interactive`, `/transaction` wrappers. 10s timeout.         | `lib/stellar/sep24.ts`                 | ✅                      |
-| **Horizon helper**          | Build + sign + submit the user's withdrawal payment on the Stellar ledger.                  | `lib/stellar/horizon.ts`               | ✅                      |
-| **Freighter hook**          | Wallet connection state + account + network.                                                | `hooks/useFreighter.ts`                | ✅                      |
-| **Rates hook**              | SWR-powered parallel rate aggregation across all anchors on a corridor.                     | `hooks/useAnchorRates.ts`              | ✅                      |
-| **Status hook**             | SWR polling loop keyed by `[transferServer, transactionId, jwt]`.                           | `hooks/useWithdrawStatus.ts`           | ✅                      |
-| **SEP-38 client**           | Firm-quote RFQ against anchors; supersedes the `/fee` + stored-rate approach.               | `lib/stellar/sep38.ts`                 | ✅                      |
-| **Intent canonicalizer**    | Deterministic JSON → hash → sign.                                                           | `lib/intent/`                          | ✅                      |
-| **Intent router (solver)**  | Scores candidate anchors by net landed value; returns a single-anchor or split plan.        | `lib/router/`                          | ✅                      |
-| **Reputation store**        | Outcome storage + composite scoring (SQLite dev / Postgres prod).                           | `lib/reputation/`                      | ✅                      |
-| **Publisher worker**        | Signs outcome tuples and invokes the Soroban contract.                                      | `lib/publisher/`                       | 🛠️ v2                   |
-| **Soroban oracle contract** | On-chain reputation storage + read helpers.                                                 | `contracts/reputation/`                | ✅ testnet · 🛠️ mainnet |
-| **MCP server**              | Exposes router + oracle as MCP tools.                                                       | `packages/mcp/`                        | ✅ basic                |
-| **SDK**                     | Typed client for the API + MCP.                                                             | `packages/sdk/`                        | 🛠️ v4                   |
+| Module                      | Role                                                                                                             | Path                                   | Status                  |
+| --------------------------- | ---------------------------------------------------------------------------------------------------------------- | -------------------------------------- | ----------------------- |
+| **Offramp page**            | The end-user surface. Corridor select → rate table → execute drawer → status tracker.                            | `app/offramp/page.tsx`                 | ✅                      |
+| **RateTable**               | Sortable list of live anchor quotes for the selected corridor.                                                   | `components/offramp/RateTable.tsx`     | ✅                      |
+| **ExecuteDrawer**           | 6-step SEP-10/24 off-ramp: `authenticating → initiating → kyc → building → signing → done`.                      | `components/offramp/ExecuteDrawer.tsx` | ✅                      |
+| **StatusTracker**           | Polls `/transaction?id=...` and renders the SEP-24 state machine.                                                | `components/offramp/StatusTracker.tsx` | ✅                      |
+| **Anchor registry**         | Typed list of anchors + corridors + assets. Single source of truth.                                              | `lib/stellar/anchors.ts`               | ✅                      |
+| **SEP-1 resolver**          | `stellar.toml` discovery, TRANSFER_SERVER_SEP0024 + WEB_AUTH_ENDPOINT extraction.                                | `lib/stellar/sep1.ts`                  | ✅                      |
+| **SEP-10 client**           | Challenge fetch, verification, Freighter sign, JWT exchange. Network pinned to mainnet.                          | `lib/stellar/sep10.ts`                 | ✅                      |
+| **SEP-24 client**           | `/fee`, `/transactions/withdraw/interactive`, `/transaction` wrappers. 10s timeout.                              | `lib/stellar/sep24.ts`                 | ✅                      |
+| **Horizon helper**          | Build + sign + submit the user's withdrawal payment on the Stellar ledger.                                       | `lib/stellar/horizon.ts`               | ✅                      |
+| **Freighter hook**          | Wallet connection state + account + network.                                                                     | `hooks/useFreighter.ts`                | ✅                      |
+| **Rates hook**              | SWR-powered parallel rate aggregation across all anchors on a corridor.                                          | `hooks/useAnchorRates.ts`              | ✅                      |
+| **Status hook**             | SWR polling loop keyed by `[transferServer, transactionId, jwt]`.                                                | `hooks/useWithdrawStatus.ts`           | ✅                      |
+| **SEP-38 client**           | Firm-quote RFQ against anchors; supersedes the `/fee` + stored-rate approach.                                    | `lib/stellar/sep38.ts`                 | ✅                      |
+| **Intent canonicalizer**    | Deterministic JSON → hash → sign.                                                                                | `lib/intent/`                          | ✅                      |
+| **Intent router (solver)**  | Scores candidate anchors by net landed value; returns a single-anchor or split plan.                             | `lib/router/`                          | ✅                      |
+| **Reputation store**        | Outcome storage + composite scoring (SQLite dev / Postgres prod).                                                | `lib/reputation/`                      | ✅                      |
+| **Publisher worker**        | Signs outcome tuples and invokes the Soroban contract. Scheduler entry point: `app/api/publisher/tick/route.ts`. | `packages/publisher/`                  | ✅ testnet              |
+| **Soroban oracle contract** | On-chain reputation storage + read helpers.                                                                      | `contracts/reputation/`                | ✅ testnet · 🛠️ mainnet |
+| **MCP server**              | Exposes router + oracle as MCP tools.                                                                            | `packages/mcp/`                        | ✅ basic                |
+| **SDK**                     | Typed client for the API + MCP.                                                                                  | `packages/sdk/`                        | ✅ built, unpublished   |
 
 > All module paths are namespaced — no runtime concern spans two modules in
 > opposite directions. `lib/stellar/*` has no dependencies on `lib/router/*`
-> or `lib/publisher/*`; `components/*` only imports from `lib/*` and `hooks/*`.
+> or `packages/publisher/*`; `components/*` only imports from `lib/*` and `hooks/*`.
 
 ---
 
@@ -495,7 +495,7 @@ Terminal states (`completed`, `refunded`, `error`) stop the SWR poll. Non-
 terminal states poll on a 5-second cadence with exponential backoff on
 consecutive failures (hardening lands with v1.1).
 
-### 4.5 SEP-38 — firm quote RFQ 🛠️ v1.1
+### 4.5 SEP-38 — firm quote RFQ ✅ v1.1
 
 Today's rate aggregation uses SEP-24 `/fee` + a cached exchange rate, which is
 correct enough for comparison but not firm. v1.1 replaces this with SEP-38:
@@ -514,7 +514,7 @@ quote to compare the delivered amount against).
 
 ---
 
-## 5. Intent router internals 🛠️ v1.2
+## 5. Intent router internals ✅ v1.2
 
 The router takes a draft intent and returns a **plan**: one or more anchors,
 each with a quoted amount, ranked so that the top result maximizes expected
@@ -560,7 +560,7 @@ resolution.
 
 ---
 
-## 6. Reputation write path 🛠️ v2
+## 6. Reputation write path ✅ testnet
 
 Every terminal intent (completed, refunded, or error) produces an **outcome
 tuple** the publisher writes to the Soroban oracle.
@@ -693,7 +693,7 @@ Two client libraries ship alongside the contract:
 
 ---
 
-## 8. MCP / agent surface 🛠️ v4
+## 8. MCP / agent surface ✅ v4
 
 The MCP server (`packages/mcp/`) is a thin adapter: its tools are 1:1 with the
 HTTP API, typed with the same schemas. An agent can discover, quote, execute,
@@ -787,16 +787,16 @@ stellar-intel/
 │       ├── sep10.ts               # ✅ challenge → sign → JWT
 │       ├── sep24.ts               # ✅ /fee, /interactive, /transaction
 │       ├── sep38.ts               # ✅ firm-quote RFQ (SEP-38)
-│       ├── sep6.ts                # 🛠️ programmatic withdraw (SEP-6) — in progress
+│       ├── sep6.ts                # ✅ quotes; execution form pending (ExecuteDrawer "coming soon")
 │       └── horizon.ts             # ✅ build + submit payment
 ├── lib/intent/                    # ✅ schema, hash/canonicalize, sign, replay
 ├── lib/router/                    # ✅ solver (solve.ts)
 ├── lib/reputation/                # ✅ store (SQLite/Postgres), composite, bands, disputes
-├── lib/publisher/                 # 🛠️ v2 outcome publisher
+├── packages/publisher/            # ✅ testnet outcome publisher (tick: app/api/publisher/tick/route.ts)
 ├── contracts/reputation/          # ✅ testnet · 🛠️ mainnet — Soroban reputation oracle
 ├── packages/
 │   ├── mcp/                       # ✅ basic MCP server (@stellarintel/mcp)
-│   └── sdk/                       # 🛠️ v4 typed client
+│   └── sdk/                       # ✅ built, unpublished typed client
 ├── types/index.ts                 # ✅ Anchor, Corridor, AnchorRate, WithdrawStatus, …
 ├── tests/                         # ✅ vitest — anchors, SEP-1, SEP-10, status
 ├── docs/

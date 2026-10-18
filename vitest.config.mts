@@ -60,11 +60,7 @@ export default defineConfig({
           testTimeout: 15000,
           hookTimeout: 15000,
           // Exclude Playwright specs, worktree checkouts, and live-anchor tests.
-          exclude: [
-            ...configDefaults.exclude,
-            'tests/e2e/**',
-            '**/.claude/worktrees/**',
-          ],
+          exclude: [...configDefaults.exclude, 'tests/e2e/**', '**/.claude/worktrees/**'],
           // Exclude tests explicitly tagged as live-anchor; those belong to the
           // `live-anchors` project below.
           includeTaskLocation: true,
@@ -73,6 +69,10 @@ export default defineConfig({
             // thousands of lines and was pushing the suite past CI timeouts
             // (looked like a hang).
             LOG_LEVEL: 'silent',
+            // The unit suite must never talk to a real database. Blanking
+            // DATABASE_URL prevents specs from inheriting an ambient Postgres
+            // connection string from the developer's shell or .env.local.
+            DATABASE_URL: '',
             NEXT_PUBLIC_STELLAR_NETWORK: 'mainnet',
             NEXT_PUBLIC_HORIZON_URL: 'https://horizon.stellar.org',
             NEXT_PUBLIC_USDC_ISSUER: 'GA5ZSEJYB37JRC5AVCIA5MOP4RHTM335X2KGX3IHOJAPP5RE34K4KZVN',
@@ -101,11 +101,7 @@ export default defineConfig({
           testTimeout: 60000,
           hookTimeout: 30000,
           include: ['tests/**/*.{spec,test}.{ts,mts,mjs,tsx}'],
-          exclude: [
-            ...configDefaults.exclude,
-            'tests/e2e/**',
-            '**/.claude/worktrees/**',
-          ],
+          exclude: [...configDefaults.exclude, 'tests/e2e/**', '**/.claude/worktrees/**'],
           // Only run tests carrying the live-anchor tag.
           // Tests without the tag are collected but immediately skipped.
           includeTaskLocation: true,

@@ -1,0 +1,46 @@
+{
+  "id": "lux-payband",
+  "name": "LUX Payband",
+  "kind": "issuer",
+  "domains": ["luxpayband.io"],
+  "orgUrl": "https://luxpayband.io",
+  "verifiedAt": "2026-09-23",
+  "assets": [
+    {
+      "code": "PYBC",
+      "issuer": "GBVB43NLVIP2USHXSKI7QQCZKZU2Z6U6A5PAHMIW7LLNVMQJTOX2BZI5",
+      "anchorAssetType": null,
+      "anchorAsset": null
+    },
+    {
+      "code": "USDP",
+      "issuer": "GDTEQF6YGCKLIBD37RJZE5GTL3ZY6CBQIKH7COAW654SYEBE6XJJOLOW",
+      "anchorAssetType": null,
+      "anchorAsset": null
+    },
+    {
+      "code": "POINTS",
+      "issuer": "GDARCVAHFMA7GCCULAPCRAV7VXSFFMNOP3X6ZONDJU4SCJULZ6IJ77QD",
+      "anchorAssetType": null,
+      "anchorAsset": null
+    },
+    {
+      "code": "FOOD",
+      "issuer": "GBYYKQYUY2XWVMM4VFCBJJVCCQC3QJ3BCLV4276DWHY4BQ7V5AB4U5VA",
+      "anchorAssetType": null,
+      "anchorAsset": null
+    },
+    {
+      "code": "DRINKS",
+      "issuer": "GDTEQF6YGCKLIBD37RJZE5GTL3ZY6CBQIKH7COAW654SYEBE6XJJOLOW",
+      "anchorAssetType": null,
+      "anchorAsset": null
+    },
+    {
+      "code": "TICKETS",
+      "issuer": "GDIU57QSVCGU7MTRC53RUWAADKIE75GFNG27C26URMU7CKHNXOQ5RDME",
+      "anchorAssetType": null,
+      "anchorAsset": null
+    }
+  ]
+}

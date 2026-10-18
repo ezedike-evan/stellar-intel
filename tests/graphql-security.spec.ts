@@ -1,11 +1,10 @@
-import { describe, expect, it } from 'vitest';
-import { buildSchema, parse, validate, NoSchemaIntrospectionCustomRule } from 'graphql';
+import { afterEach, describe, expect, it, vi } from 'vitest';
+import { buildSchema, parse, validate } from 'graphql';
 import { typeDefs } from '@/lib/graphql/typeDefs';
-import { maxDepthRule, maxFieldCountRule } from '@/lib/graphql/security';
+import { graphqlValidationRules, maxDepthRule, maxFieldCountRule } from '@/lib/graphql/security';
 
-// Build the schema from the SDL with the same `graphql` instance `validate`
-// comes from — the yoga-built schema in lib/graphql/schema.ts is created with
-// yoga's bundled graphql and cannot be validated across module realms.
+// The schema is built with `buildSchema(typeDefs)` so that `validate` uses the
+// same graphql instance.
 const schema = buildSchema(typeDefs);
 
 describe('graphql depth limit', () => {
@@ -33,9 +32,21 @@ describe('graphql field-count limit', () => {
 });
 
 describe('graphql introspection rule', () => {
-  it('blocks __schema introspection when the rule is active', () => {
+  afterEach(() => {
+    vi.unstubAllEnvs();
+  });
+
+  it('blocks __schema introspection in production', () => {
+    vi.stubEnv('NODE_ENV', 'production');
     const doc = parse(`{ __schema { types { name } } }`);
-    const errors = validate(schema, doc, [NoSchemaIntrospectionCustomRule]);
+    const errors = validate(schema, doc, graphqlValidationRules());
     expect(errors.length).toBeGreaterThan(0);
+  });
+
+  it('allows __schema introspection in development', () => {
+    vi.stubEnv('NODE_ENV', 'development');
+    const doc = parse(`{ __schema { types { name } } }`);
+    const errors = validate(schema, doc, graphqlValidationRules());
+    expect(errors).toHaveLength(0);
   });
 });
