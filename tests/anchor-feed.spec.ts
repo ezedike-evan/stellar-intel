@@ -14,7 +14,7 @@ const MOCK_LEDGER: AnchorHealthLedger = {
       lastStatus: 'ok',
       lastError: null,
     },
-    mykobo: {
+    anclap: {
       consecutiveFailures: 3,
       degraded: true,
       lastCheckedAt: '2026-08-30T12:00:00.000Z',
@@ -33,7 +33,7 @@ describe('Anchor Status RSS Feed (#1070)', () => {
     expect(degradedItem).toBeDefined();
     expect(degradedItem?.title).toContain('[DEGRADED]');
     expect(degradedItem?.description).toContain('TypeError:ENOTFOUND');
-    expect(degradedItem?.guid).toContain('mykobo');
+    expect(degradedItem?.guid).toContain('anclap');
 
     const operationalItem = items.find((i) => i.category === 'Operational');
     expect(operationalItem).toBeDefined();
