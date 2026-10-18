@@ -26,19 +26,6 @@ describe('WalletError hierarchy', () => {
       expect(error.name).toBe(name);
     });
   }
-
-  it('UserRejectedError is instanceof UserRejectedError', () => {
-    expect(new UserRejectedError()).toBeInstanceOf(UserRejectedError);
-  });
-  it('NetworkError is instanceof NetworkError', () => {
-    expect(new NetworkError('x')).toBeInstanceOf(NetworkError);
-  });
-  it('ConnectionError is instanceof ConnectionError', () => {
-    expect(new ConnectionError('x')).toBeInstanceOf(ConnectionError);
-  });
-  it('UnknownWalletError is instanceof UnknownWalletError', () => {
-    expect(new UnknownWalletError('x')).toBeInstanceOf(UnknownWalletError);
-  });
 });
 
 // ─── SepError — separate hierarchy ───────────────────────────────────────────
@@ -88,6 +75,41 @@ const sepCases: Array<{
     code: 'HTTP_400',
   },
   {
+    label: 'JSON API with a code field',
+    body: { error: 'Invalid asset code', code: 'INVALID_ASSET' },
+    httpStatus: 400,
+    messageContains: 'Invalid asset code',
+    code: 'INVALID_ASSET',
+  },
+  {
+    label: 'nested { error: { message, code } }',
+    body: { error: { message: 'Rate limit exceeded', code: 'RATE_LIMIT' } },
+    httpStatus: 429,
+    messageContains: 'Rate limit exceeded',
+    code: 'RATE_LIMIT',
+  },
+  {
+    label: 'plain string',
+    body: 'Unauthorized',
+    httpStatus: 401,
+    messageContains: 'Unauthorized',
+    code: 'HTTP_401',
+  },
+  {
+    label: 'empty object',
+    body: {},
+    httpStatus: 500,
+    messageContains: 'SEP error: HTTP 500',
+    code: 'HTTP_500',
+  },
+  {
+    label: 'number body (malformed)',
+    body: 42,
+    httpStatus: 503,
+    messageContains: 'SEP error: HTTP 503',
+    code: 'HTTP_503',
+  },
+  {
     label: 'whitespace-only string',
     body: '   ',
     httpStatus: 400,
@@ -125,13 +147,7 @@ describe('parseSepErrorBody — failure mode classification', () => {
       expect(err.message).toContain(messageContains);
       expect(err.code).toBe(code);
       expect(err.httpStatus).toBe(httpStatus);
+      expect(err.raw).toBe(body);
     });
   }
-});
-
-// ─── Completeness checklist ───────────────────────────────────────────────────
-
-it('covers all known WalletError subclasses', () => {
-  const covered = ['UserRejectedError', 'NetworkError', 'ConnectionError', 'UnknownWalletError'];
-  expect(covered).toHaveLength(4);
 });

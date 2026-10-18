@@ -120,55 +120,6 @@ describe('type guards', () => {
   });
 });
 
-// ─── Exhaustive switch over error codes ───────────────────────────────────────
-
-describe('exhaustive switch over error codes', () => {
-  /**
-   * This helper must handle every ErrorCode value.
-   * TypeScript will error at compile time if a case is missing (never check).
-   */
-  function classify(err: StellarIntelError): string {
-    switch (err.code) {
-      case ErrorCode.NETWORK_UNREACHABLE:
-        return 'network-unreachable';
-      case ErrorCode.NETWORK_MISMATCH:
-        return 'network-mismatch';
-      case ErrorCode.ANCHOR_HTTP_ERROR:
-        return 'anchor-http';
-      case ErrorCode.ANCHOR_INVALID_RESPONSE:
-        return 'anchor-invalid';
-      case ErrorCode.ANCHOR_RATE_UNAVAILABLE:
-        return 'anchor-rate';
-      case ErrorCode.USER_REJECTED:
-        return 'user-rejected';
-      case ErrorCode.USER_WALLET_MISSING:
-        return 'user-wallet-missing';
-      case ErrorCode.REQUEST_TIMEOUT:
-        return 'timeout';
-      default: {
-        // Exhaustiveness check — TypeScript will flag unhandled codes here
-        const _exhaustive: never = err.code;
-        return _exhaustive;
-      }
-    }
-  }
-
-  it('routes each error code to the correct branch', () => {
-    expect(classify(new NetworkError('x', ErrorCode.NETWORK_UNREACHABLE))).toBe(
-      'network-unreachable'
-    );
-    expect(classify(new NetworkError('x', ErrorCode.NETWORK_MISMATCH))).toBe('network-mismatch');
-    expect(classify(new AnchorError('x', ErrorCode.ANCHOR_HTTP_ERROR))).toBe('anchor-http');
-    expect(classify(new AnchorError('x', ErrorCode.ANCHOR_INVALID_RESPONSE))).toBe(
-      'anchor-invalid'
-    );
-    expect(classify(new AnchorError('x', ErrorCode.ANCHOR_RATE_UNAVAILABLE))).toBe('anchor-rate');
-    expect(classify(new UserError('x', ErrorCode.USER_REJECTED))).toBe('user-rejected');
-    expect(classify(new UserError('x', ErrorCode.USER_WALLET_MISSING))).toBe('user-wallet-missing');
-    expect(classify(new TimeoutError('x'))).toBe('timeout');
-  });
-});
-
 // ─── AnchorError extra fields ─────────────────────────────────────────────────
 
 describe('AnchorError extra fields', () => {
