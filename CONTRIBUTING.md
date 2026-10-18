@@ -134,7 +134,9 @@ docs: update environment variable reference
 refactor: extract anchor TOML resolution into lib/sep1.ts
 ```
 
-Types: `feat`, `fix`, `docs`, `refactor`, `test`, `chore`, `ci`.
+Types: `feat`, `fix`, `docs`, `style`, `refactor`, `perf`, `test`, `build`, `ci`, `chore`, `revert`.
+
+Scopes: `offramp`, `onramp`, `anchors`, `intent`, `router`, `reputation`, `oracle`, `mcp`, `sdk`, `sdk-ts`, `sdk-py`, `sdk-rs`, `contracts`, `api`, `ui`, `brand`, `sep1`, `sep6`, `sep10`, `sep24`, `sep38`, `freighter`, `telemetry`, `ops`, `deps`, `release`. An unknown scope will fail the commit via the husky hook and the CI commitlint check. An empty scope (`docs: …`) is allowed for repo-wide or cross-cutting changes. The commit header length is capped at 100 characters. See `commitlint.config.mjs` as the source of truth.
 
 ### Documentation
 
