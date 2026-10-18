@@ -146,19 +146,23 @@ describe('STATUS_MAP — compile-time checks', () => {
     // If a new WithdrawStatusValue is added without a corresponding entry,
     // TypeScript will fail to compile.
     const _assertType: Record<WithdrawStatusValue, WithdrawStatus> = STATUS_MAP;
-    expect(_assertType).toBeDefined();
   });
 
   it('ensures no unmapped raw statuses can slip through', () => {
-    // Verify that all properties in STATUS_MAP are used and correct
-    const statusValues: WithdrawStatusValue[] = Object.keys(STATUS_MAP) as WithdrawStatusValue[];
-    const canonicalValues: WithdrawStatus[] = Object.values(STATUS_MAP);
+    const allowedStatuses: WithdrawStatus[] = [
+      'pending_user_action',
+      'pending_anchor',
+      'pending_stellar',
+      'pending_external',
+      'completed',
+      'no_market',
+      'refunded',
+      'expired',
+      'error',
+    ];
 
-    // All statuses should map to valid canonical values
-    statusValues.forEach((raw) => {
-      const canonical = STATUS_MAP[raw];
-      expect(canonical).toBeDefined();
-      expect(canonicalValues).toContain(canonical);
-    });
+    for (const status of Object.values(STATUS_MAP)) {
+      expect(allowedStatuses).toContain(status);
+    }
   });
 });

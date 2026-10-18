@@ -9,9 +9,10 @@ a domain back toward a real listing.
 
 This is the durable companion to the
 [`scripts/anchor-survey.mjs`](../scripts/anchor-survey.mjs) crawl and the
-["Anchor Fleet Status" section of `maintainer.md`](../maintainer.md). It exists
-so that an unreachable domain is never silently dropped: every entry below
-carries a `last checked` date and is owned by the monthly recheck.
+[`scripts/anchor-survey.snapshot.json`](../scripts/anchor-survey.snapshot.json)
+and the [monthly anchor recrawl workflow](../.github/workflows/anchor-recrawl.yml).
+It exists so that an unreachable domain is never silently dropped: every
+entry below carries a `last checked` date and is owned by the monthly recheck.
 
 > **Resolves the #499 tracking obligation.** The lists below are generated
 > from the survey, not hand-curated — see [Regenerating this list](#regenerating-this-list).

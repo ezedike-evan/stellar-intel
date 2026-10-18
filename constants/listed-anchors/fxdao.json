@@ -1,0 +1,58 @@
+{
+  "id": "fxdao",
+  "name": "FxDAO",
+  "kind": "issuer",
+  "domains": ["assets.fxdao.io"],
+  "orgUrl": "https://fxdao.io",
+  "verifiedAt": "2026-09-23",
+  "assets": [
+    {
+      "code": "USDx",
+      "issuer": "GAVH5ZWACAY2PHPUG4FL3LHHJIYIHOFPSIUGM2KHK25CJWXHAV6QKDMN",
+      "anchorAssetType": "fiat",
+      "anchorAsset": "USD"
+    },
+    {
+      "code": "EURx",
+      "issuer": "GAVH5ZWACAY2PHPUG4FL3LHHJIYIHOFPSIUGM2KHK25CJWXHAV6QKDMN",
+      "anchorAssetType": "fiat",
+      "anchorAsset": "EUR"
+    },
+    {
+      "code": "GBPx",
+      "issuer": "GAVH5ZWACAY2PHPUG4FL3LHHJIYIHOFPSIUGM2KHK25CJWXHAV6QKDMN",
+      "anchorAssetType": "fiat",
+      "anchorAsset": "GBP"
+    },
+    {
+      "code": "FXG",
+      "issuer": "GAVH5ZWACAY2PHPUG4FL3LHHJIYIHOFPSIUGM2KHK25CJWXHAV6QKDMN",
+      "anchorAssetType": null,
+      "anchorAsset": null
+    },
+    {
+      "code": "USDx",
+      "issuer": "GBBTSBSV55VUI6KQ32JARRR65HV7AJNOEZR7P5HLNT2EZIXHVDPDA5JW",
+      "anchorAssetType": "fiat",
+      "anchorAsset": "USD"
+    },
+    {
+      "code": "EURx",
+      "issuer": "GBBTSBSV55VUI6KQ32JARRR65HV7AJNOEZR7P5HLNT2EZIXHVDPDA5JW",
+      "anchorAssetType": "fiat",
+      "anchorAsset": "EUR"
+    },
+    {
+      "code": "GBPx",
+      "issuer": "GBBTSBSV55VUI6KQ32JARRR65HV7AJNOEZR7P5HLNT2EZIXHVDPDA5JW",
+      "anchorAssetType": "fiat",
+      "anchorAsset": "GBP"
+    },
+    {
+      "code": "FXG",
+      "issuer": "GBBTSBSV55VUI6KQ32JARRR65HV7AJNOEZR7P5HLNT2EZIXHVDPDA5JW",
+      "anchorAssetType": null,
+      "anchorAsset": null
+    }
+  ]
+}

@@ -1,0 +1,82 @@
+# Source: https://aps.money/.well-known/stellar.toml (fetched 2026-10-17)
+[DOCUMENTATION]
+ORG_NAME = "Advanced Payment Solutions Ltd."
+ORG_URL = "https://www.aps.money"
+
+[[CURRENCIES]]
+code = "APSBRLM"
+issuer = "GB7OUO5NY5WQKXJJ7PFFZEJOKN4BA7IOEN3Z6SWAY26LGTREJJYZH2ZT"
+anchor_asset_type = "fiat"
+anchor_asset = "BRL"
+
+[[CURRENCIES]]
+code = "APSCLPM"
+issuer = "GB7OUO5NY5WQKXJJ7PFFZEJOKN4BA7IOEN3Z6SWAY26LGTREJJYZH2ZT"
+anchor_asset_type = "fiat"
+anchor_asset = "CLP"
+
+[[CURRENCIES]]
+code = "APSEURM"
+issuer = "GB7OUO5NY5WQKXJJ7PFFZEJOKN4BA7IOEN3Z6SWAY26LGTREJJYZH2ZT"
+anchor_asset_type = "fiat"
+anchor_asset = "EUR"
+
+[[CURRENCIES]]
+code = "APSIDRM"
+issuer = "GB7OUO5NY5WQKXJJ7PFFZEJOKN4BA7IOEN3Z6SWAY26LGTREJJYZH2ZT"
+anchor_asset_type = "fiat"
+anchor_asset = "IDR"
+
+[[CURRENCIES]]
+code = "APSINRM"
+issuer = "GB7OUO5NY5WQKXJJ7PFFZEJOKN4BA7IOEN3Z6SWAY26LGTREJJYZH2ZT"
+anchor_asset_type = "fiat"
+anchor_asset = "INR"
+
+[[CURRENCIES]]
+code = "APSKZTM"
+issuer = "GB7OUO5NY5WQKXJJ7PFFZEJOKN4BA7IOEN3Z6SWAY26LGTREJJYZH2ZT"
+anchor_asset_type = "fiat"
+anchor_asset = "KZT"
+
+[[CURRENCIES]]
+code = "APSMYRM"
+issuer = "GB7OUO5NY5WQKXJJ7PFFZEJOKN4BA7IOEN3Z6SWAY26LGTREJJYZH2ZT"
+anchor_asset_type = "fiat"
+anchor_asset = "MYR"
+
+[[CURRENCIES]]
+code = "APSPENM"
+issuer = "GB7OUO5NY5WQKXJJ7PFFZEJOKN4BA7IOEN3Z6SWAY26LGTREJJYZH2ZT"
+anchor_asset_type = "fiat"
+anchor_asset = "PEN"
+
+[[CURRENCIES]]
+code = "APSRUBM"
+issuer = "GB7OUO5NY5WQKXJJ7PFFZEJOKN4BA7IOEN3Z6SWAY26LGTREJJYZH2ZT"
+anchor_asset_type = "fiat"
+anchor_asset = "RUB"
+
+[[CURRENCIES]]
+code = "APSTHBM"
+issuer = "GB7OUO5NY5WQKXJJ7PFFZEJOKN4BA7IOEN3Z6SWAY26LGTREJJYZH2ZT"
+anchor_asset_type = "fiat"
+anchor_asset = "THB"
+
+[[CURRENCIES]]
+code = "APSUAHM"
+issuer = "GB7OUO5NY5WQKXJJ7PFFZEJOKN4BA7IOEN3Z6SWAY26LGTREJJYZH2ZT"
+anchor_asset_type = "fiat"
+anchor_asset = "UAH"
+
+[[CURRENCIES]]
+code = "APSUSDM"
+issuer = "GB7OUO5NY5WQKXJJ7PFFZEJOKN4BA7IOEN3Z6SWAY26LGTREJJYZH2ZT"
+anchor_asset_type = "fiat"
+anchor_asset = "USD"
+
+[[CURRENCIES]]
+code = "APSVNDM"
+issuer = "GB7OUO5NY5WQKXJJ7PFFZEJOKN4BA7IOEN3Z6SWAY26LGTREJJYZH2ZT"
+anchor_asset_type = "fiat"
+anchor_asset = "VND"

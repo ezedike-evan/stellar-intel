@@ -25,8 +25,7 @@ Ticket ranges point back to numbered issues in the
 > TS read SDK (#201), Python consumer (#203/#821); v2.0 leaderboard/history/composite/dispute
 > (#157–#159, #166). Marked in-flight (`[-]`): `@stellarintel/sdk` + `/mcp` (built, unpublished —
 > npm 404), multisig admin (two-step rotation shipped, 2-of-3 pending), decentralization (#875).
-> GraphQL is on `main` but the live endpoint currently 500s. The open security /
-> production-readiness / S-tier program lives in [`maintainer.md`](../maintainer.md).
+> GraphQL is on `main` but the live endpoint currently 500s.
 >
 > **Reconciliation, 2026-08-28.** Waves reconciled against the milestone list
 > (#1076). Three v1 milestones that had shipped without ever appearing here are
@@ -223,7 +222,7 @@ instrumented.
 
 **I. SEP-38 discovery + quote fetching** (`#071–#085`)
 
-- [ ] `lib/stellar/sep38.ts` — `INFO`, `PRICES`, `PRICE`, `QUOTE`
+- [x] `lib/stellar/sep38.ts` — `INFO`, `PRICES`, `PRICE`, `QUOTE`
 - [ ] `POST /sep38/quote` firm-quote client
 - [ ] `quote_id` threaded into `/transactions/withdraw/interactive`
 - [ ] Expiry countdown surfaced in `RateTable`
@@ -273,36 +272,36 @@ instrumented.
 
 **N. Intent schema + API** (`#111–#120`)
 
-- [ ] `#111` `types/intent.ts` — `Intent`, `SignedIntent`, `Plan`, `Outcome`
-- [ ] `lib/intent/canonical.ts` — deterministic JSON canonicalization
-- [ ] `lib/intent/hash.ts` — sha-256 over canonical JSON
-- [ ] `lib/intent/sign.ts` — ed25519 signing via Freighter
-- [ ] `app/api/intent/offramp/route.ts` — submit signed intent
-- [ ] `docs/CANONICAL_JSON.md` + `docs/INTENT_API.md`
+- [x] `#111` `types/intent.ts` — `Intent`, `SignedIntent`, `Plan`, `Outcome`
+- [x] `lib/intent/canonical.ts` — deterministic JSON canonicalization (implemented as `canonicalJson` in `lib/intent/hash.ts`)
+- [x] `lib/intent/hash.ts` — sha-256 over canonical JSON
+- [x] `lib/intent/sign.ts` — ed25519 signing via Freighter
+- [x] `app/api/intent/offramp/route.ts` — submit signed intent
+- [x] `docs/CANONICAL_JSON.md` + `docs/INTENT_API.md`
 
 **O. Single-anchor intent router** (`#121–#127`)
 
-- [ ] `lib/router/score.ts` — net-landed-value scoring
-- [ ] `lib/router/select.ts` — single-anchor pick (deterministic)
-- [ ] `lib/router/plan.ts` — produces `Plan` from a draft intent
+- [x] `lib/router/score.ts` — net-landed-value scoring (implemented as the `scored` strategy in `lib/router/solve.ts`)
+- [x] `lib/router/select.ts` — single-anchor pick (deterministic) (implemented as the `first-match` strategy in `lib/router/solve.ts`)
+- [x] `lib/router/plan.ts` — produces `Plan` from a draft intent (implemented as `lib/router/solve.ts`, which emits `Plan`/`PlanLeg`)
 - [ ] Feature flag `INTENT_FLOW` (default off) for the page to call the router
 - [ ] Drawer re-points at the router output instead of `RateTable` row click
 
 **P. Reputation write path seed** (`#128–#134`)
 
 - [ ] `#128` `ReputationStore` interface (pluggable — SQLite dev, Postgres prod)
-- [ ] `app/api/outcomes/route.ts` — accept outcome tuples, verify signatures
-- [ ] `lib/publisher/queue.ts` — durable outcome queue (SQLite-backed dev)
-- [ ] `lib/publisher/sign.ts` — publisher ed25519 signing (dev key only)
+- [x] `app/api/outcomes/route.ts` — accept outcome tuples, verify signatures (implemented as `app/api/reputation/append/route.ts`)
+- [x] `lib/publisher/queue.ts` — durable outcome queue (SQLite-backed dev) (implemented as `packages/publisher` batching, `packages/publisher/src/batch.ts`)
+- [x] `lib/publisher/sign.ts` — publisher ed25519 signing (dev key only) (implemented as `packages/publisher` signing, `packages/publisher/src/batch.ts`)
 - [ ] Outcome schema + migration scripts
 - [ ] Feature flag `REPUTATION_WRITE` (default off)
 
 **Q. MCP server stub seed** (`#135–#138`)
 
-- [ ] `packages/mcp/` scaffold (npm package, `claude mcp add`–installable)
+- [x] `packages/mcp/` scaffold (npm package, `claude mcp add`–installable)
 - [ ] `list_corridors` + `list_anchors_for_corridor` tools (read-only)
 - [ ] `quote_corridor` tool backed by `/api/rates`
-- [ ] `docs/MCP.md` install + tutorial
+- [x] `docs/MCP.md` install + tutorial
 
 **R. Soroban reputation contract skeleton** (`#139–#140`)
 
@@ -323,14 +322,14 @@ instrumented.
 > Tickets: `#141–#150`. Observability, feature flags, v1 sign-off suite,
 > final assets.
 
-- [ ] `#141` Structured logger (`lib/logger.ts`) with correlation IDs via `AsyncLocalStorage`
+- [x] `#141` Structured logger (`lib/logger.ts`) with correlation IDs via `AsyncLocalStorage`
 - [ ] `#142` Client-side quote + submit latency metrics
 - [ ] `#143` Success / error rate counters exposed via `/api/metrics`
 - [ ] `#144` Per-anchor latency histogram
-- [ ] `#145` `lib/version.ts` with build metadata in footer
+- [x] `#145` `lib/version.ts` with build metadata in footer
 - [ ] `#146` Feature flag module for all v1.2 seeds
 - [ ] `#147` Env validation at Next.js boot (fails fast on missing vars)
-- [ ] `#148` `npm run test:release` — full v1 sign-off suite
+- [x] `#148` `npm run test:release` — full v1 sign-off suite (present in `package.json`)
 - [ ] `#149` "Open in MCP" header badge when a local MCP is detected
 - [ ] `#150` Favicon + app icon final assets
 
@@ -465,7 +464,7 @@ milestone](#v2-scope-with-no-milestone) — real decomposition, unscheduled.
 - [ ] `#152` Scorecard integrated into `RateTable` row expansion
 - [ ] `#153` Scorecard detail modal on click
 - [ ] `#154` Historical timeline chart per anchor
-- [ ] `#155` Public leaderboard page at `/anchors`
+- [x] `#155` Public leaderboard page at `/anchors` (`app/anchors/page.tsx`)
 - [ ] `#156` Per-corridor leaderboard view (`/anchors?corridor=usdc-ngn`)
 - [x] `#157` `GET /api/reputation/leaderboard?corridor` endpoint
 - [x] `#158` `GET /api/reputation/:anchor/history?window` endpoint
@@ -614,7 +613,7 @@ rather than as gates that are pending.
 > Tickets: `#231–#250`. Bootstrap the dataset before organic volume
 > arrives. Expose it publicly. Document it loudly.
 
-- [ ] `#231` `GET /v1/public/scores` (anchor, corridor) → score
+- [x] `#231` `GET /v1/public/scores` (anchor, corridor) → score (`app/v1/public/scores/route.ts`)
 - [ ] `#232` `GET /v1/public/outcomes` paginated feed
 - [ ] `#233` Rate limits + API-key tier (free / paid)
 - [x] `#234` OpenAPI spec generated to `public/openapi.json` (15 endpoints, 15 schemas)
@@ -685,7 +684,7 @@ the distribution wave.
 
 - [-] **`@stellarintel/sdk` on npm** — typed TS client for the HTTP API +
   MCP; React hooks; three reference integrations. `packages/sdk` built
-  (#981); **not yet published (npm 404) — see `maintainer.md` Phase 0**
+  (#981); **not yet published (npm 404) — publishing is a maintainer step**
 - [-] **`@stellarintel/mcp` on npm** — GA MCP server, versioned, with a
   signed CHANGELOG. `packages/mcp` built; not yet published
 - [ ] **Embeddable widget** — `<StellarIntelWidget />` React component +
@@ -767,8 +766,7 @@ decomposed into the child issues below.
       API rather than replacing it
       ([#870](https://github.com/ezedike-evan/stellar-intel/issues/870)).
       `app/api/graphql/route.ts` + `lib/graphql/*`. **Prod caveat: the live
-      endpoint currently 500s (durable store unconfigured) — see
-      `maintainer.md` Phase 0.**
+      endpoint currently 500s (durable store unconfigured).**
 - [x] **Developer portal + interactive docs** — browsable API reference
       generated from `public/openapi.json`, an interactive console against
       a sandboxed environment, and SDK quickstarts in one place
@@ -868,9 +866,9 @@ document supersedes._
 These do not belong to a single wave — they run in parallel and every
 wave advances them.
 
-**Docs** — the ten load-bearing doc files listed in
-[`maintainer.md § 3`](../maintainer.md) are updated alongside the code
-that changes their subject. A wave does not ship with out-of-date docs.
+**Docs** — the docs under `docs/` that describe the changed subject are
+updated alongside the code that changes it. A wave does not ship with
+out-of-date docs.
 Analytics documentation lives in [`docs/ANALYTICS.md`](ANALYTICS.md).
 
 **Observability** — every wave extends the metric surface. v1.3 seeds

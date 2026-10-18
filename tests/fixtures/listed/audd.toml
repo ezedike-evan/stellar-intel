@@ -1,0 +1,16 @@
+# Source: https://audd.digital/.well-known/stellar.toml (fetched 2026-10-18)
+[DOCUMENTATION]
+ORG_NAME = "AUDC PTY LTD"
+ORG_URL = "https://www.audd.digital"
+
+[[CURRENCIES]]
+code = "AUDD"
+issuer = "GDC7X2MXTYSAKUUGAIQ7J7RPEIM7GXSAIWFYWWH4GLNFECQVJJLB2EEU"
+anchor_asset_type = "fiat"
+anchor_asset = "AUD"
+
+[[CURRENCIES]]
+code = "NZDSC"
+issuer = "GCUIIJ6J6KIOOYOICVFOEVH6XRY3WX4NUZDYGPUCJQZM6R3OFJE2QGY2"
+anchor_asset_type = "fiat"
+anchor_asset = "NZD"

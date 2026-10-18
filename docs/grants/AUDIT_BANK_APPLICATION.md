@@ -76,14 +76,24 @@ compromised operational key cannot replace the code.
 
 **Two known weaknesses we would like assessed, not defended:**
 
-- **`init` is one-shot and there is no rotation path.** Once the upgrade admin
-  is bound it can never be changed. A lost key means the contract can never be
-  upgraded again; a compromised key cannot be revoked. Tracked as
-  [#963](https://github.com/ezedike-evan/stellar-intel/issues/963).
-- **On the currently deployed testnet contract, `init_upgrade` was never
-  called.** `contract_version()` returns `0` and `upgrade_admin` is unset, so
-  `apply` would panic. The deployed bytecode also predates the current source.
-  The deployment will be refreshed before any audit engagement begins.
+- **Upgrade-admin rotation is new and deserves adversarial eyes.** The
+  original one-shot binding — a lost key could never be replaced — was
+  closed by
+  [#963](https://github.com/ezedike-evan/stellar-intel/issues/963): the
+  upgrade admin now rotates through a two-step handoff
+  (`propose_upgrade_admin` → `accept_upgrade_admin`, cancellable with
+  `cancel_upgrade_proposal`, inspectable via `pending_upgrade_admin`). We
+  would like the auditor to assess that flow — proposal/acceptance
+  authorization, the cancellation window, and whether a stale proposal can
+  ever be accepted — rather than the absence it replaced.
+- **The currently deployed testnet contract predates the constructor-based
+  binding.** The former one-shot initialization entrypoints were replaced by
+  `__constructor(admin, upgrade_admin)` (see the doc comment above
+  `__constructor` in `contracts/reputation/src/lib.rs`), but the deployed
+  bytecode (`.deployments/testnet.json`, deployed 2026-07-09) is older than
+  that change, so its upgrade admin is unset and the only remedy is a fresh
+  deploy passing both authorities as constructor arguments. The deployment
+  will be refreshed before any audit engagement begins.
 
 ### 3.2 Two-step admin transfer
 
@@ -245,9 +255,9 @@ defines the path to additional reviewers, and
 ## 8. Pre-submission checklist
 
 - [ ] Confirm the Audit Bank's current intake channel and required format
-- [ ] Redeploy `contracts/reputation` to testnet from current `main` (the
-      deployed bytecode predates the source — §3.1)
-- [ ] Call `init_upgrade` so an upgrade path exists
+- [ ] Redeploy `contracts/reputation` to testnet from current `main` with
+      `__constructor(admin, upgrade_admin)` so both authorities are bound at
+      deploy (the deployed bytecode predates the source — §3.1)
 - [ ] Run `scripts/init-oracle-registry.ts` so the contract is not empty
 - [ ] Separate the operational admin from the upgrade admin (§3.2)
 - [ ] Update `.deployments/testnet.json`

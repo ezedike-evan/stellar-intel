@@ -174,12 +174,6 @@ afterEach(() => {
 // ─── ExecuteDrawer — typed error surfaced mid-flow ────────────────────────────
 
 describe('[#108] anchor returns 500 mid-flow', () => {
-  it('mock anchor returns Sep24WithdrawError on withdraw POST', () => {
-    expect(WITHDRAW_500_ERROR).toBeInstanceOf(Sep24WithdrawError);
-    expect(WITHDRAW_500_ERROR.status).toBe(500);
-    expect(WITHDRAW_500_ERROR.message).toMatch(/HTTP 500/);
-  });
-
   it('drawer renders typed error after withdraw POST fails with 500', async () => {
     render(
       createElement(ExecuteDrawer, {

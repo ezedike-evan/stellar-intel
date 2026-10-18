@@ -23,15 +23,8 @@ const IGNORED_DIRS = new Set([
  * Format: `${relFilePath}:${rawTarget}` or `${relFilePath}:${normalizedPath}`.
  */
 export const KNOWN_BROKEN = [
-  // DOC007 / DOC051: references to unmerged batch / maintainer docs
+  // DOC007 / DOC051: references to unmerged batch docs
   'docs/SEP_COMPLIANCE.md:../issues-batch-2.md',
-  'docs/SEP_COMPLIANCE.md:../maintainer.md',
-  'docs/ANCHOR_FLEET_RECHECK.md:../maintainer.md',
-  'docs/ROADMAP.md:../maintainer.md',
-  'docs/MAINTAINER_RUNBOOK.md:maintainer.md',
-  'docs/MAINTAINER_RUNBOOK.md:../maintainer.md',
-  'docs/CONTRIBUTING.md:maintainer.md',
-  'docs/CONTRIBUTING.md:../maintainer.md',
   // GitHub web-relative branch URL in PR template
   '.github/PULL_REQUEST_TEMPLATE.md:../blob/main/CONTRIBUTING.md#per-surface-checks',
   '.github/PULL_REQUEST_TEMPLATE.md:../blob/main/CONTRIBUTING.md',
