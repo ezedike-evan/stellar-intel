@@ -59,6 +59,30 @@ function mockFetchError(status: number, text = 'Internal Server Error'): void {
   } as unknown as Response);
 }
 
+async function callTool(args: Record<string, unknown> = {}) {
+  const { registerLeaderboardTool } = await import('@/packages/mcp/src/tools/leaderboard');
+  let capturedHandler!: (args: Record<string, unknown>) => Promise<{
+    isError?: boolean;
+    content: Array<{ type: string; text: string }>;
+    structuredContent?: unknown;
+  }>;
+  const mockServer = {
+    registerTool: (
+      _name: string,
+      _meta: unknown,
+      handler: (args: Record<string, unknown>) => Promise<{
+        isError?: boolean;
+        content: Array<{ type: string; text: string }>;
+        structuredContent?: unknown;
+      }>
+    ) => {
+      capturedHandler = handler;
+    },
+  };
+  registerLeaderboardTool(mockServer as never);
+  return await capturedHandler(args);
+}
+
 beforeEach(() => {
   vi.clearAllMocks();
   vi.stubGlobal('fetch', fetchMock);
@@ -160,61 +184,28 @@ describe('fetchLeaderboard', () => {
 
 describe('annotateEntries via tool handler', () => {
   it('marks an anchor with n > 0 as measured', async () => {
-    const { registerLeaderboardTool } = await import('@/packages/mcp/src/tools/leaderboard');
-
     const body = makeLeaderboardResponse({
       leaderboard: [makeEntry({ n: 50, composite: 0.75 })],
     });
     mockFetchOk(body);
 
-    let capturedResult: unknown;
-    const mockServer = {
-      registerTool: (
-        _name: string,
-        _meta: unknown,
-        handler: (args: Record<string, unknown>) => Promise<{ structuredContent: unknown }>
-      ) => {
-        void handler({}).then((r) => {
-          capturedResult = r.structuredContent;
-        });
-      },
-    };
+    const res = await callTool({});
 
-    registerLeaderboardTool(mockServer as never);
-    // Wait for the async handler
-    await new Promise((r) => setTimeout(r, 50));
-
-    const result = capturedResult as {
+    const result = res.structuredContent as {
       leaderboard: Array<{ measured: boolean; standing: string }>;
     };
     expect(result.leaderboard[0]?.measured).toBe(true);
   });
 
   it('marks an anchor with n = 0 as not measured', async () => {
-    const { registerLeaderboardTool } = await import('@/packages/mcp/src/tools/leaderboard');
-
     const body = makeLeaderboardResponse({
       leaderboard: [makeEntry({ n: 0, composite: 0 })],
     });
     mockFetchOk(body);
 
-    let capturedResult: unknown;
-    const mockServer = {
-      registerTool: (
-        _name: string,
-        _meta: unknown,
-        handler: (args: Record<string, unknown>) => Promise<{ structuredContent: unknown }>
-      ) => {
-        void handler({}).then((r) => {
-          capturedResult = r.structuredContent;
-        });
-      },
-    };
+    const res = await callTool({});
 
-    registerLeaderboardTool(mockServer as never);
-    await new Promise((r) => setTimeout(r, 50));
-
-    const result = capturedResult as {
+    const result = res.structuredContent as {
       leaderboard: Array<{ measured: boolean; standing: string }>;
     };
     expect(result.leaderboard[0]?.measured).toBe(false);
@@ -222,116 +213,52 @@ describe('annotateEntries via tool handler', () => {
   });
 
   it('labels a 0.85 composite score as "excellent"', async () => {
-    const { registerLeaderboardTool } = await import('@/packages/mcp/src/tools/leaderboard');
-
     const body = makeLeaderboardResponse({
       leaderboard: [makeEntry({ n: 100, composite: 0.85 })],
     });
     mockFetchOk(body);
 
-    let capturedResult: unknown;
-    const mockServer = {
-      registerTool: (
-        _name: string,
-        _meta: unknown,
-        handler: (args: Record<string, unknown>) => Promise<{ structuredContent: unknown }>
-      ) => {
-        void handler({}).then((r) => {
-          capturedResult = r.structuredContent;
-        });
-      },
-    };
+    const res = await callTool({});
 
-    registerLeaderboardTool(mockServer as never);
-    await new Promise((r) => setTimeout(r, 50));
-
-    const result = capturedResult as {
+    const result = res.structuredContent as {
       leaderboard: Array<{ standing: string }>;
     };
     expect(result.leaderboard[0]?.standing).toBe('excellent');
   });
 
   it('labels a 0.65 composite score as "good"', async () => {
-    const { registerLeaderboardTool } = await import('@/packages/mcp/src/tools/leaderboard');
-
     const body = makeLeaderboardResponse({
       leaderboard: [makeEntry({ n: 40, composite: 0.65 })],
     });
     mockFetchOk(body);
 
-    let capturedResult: unknown;
-    const mockServer = {
-      registerTool: (
-        _name: string,
-        _meta: unknown,
-        handler: (args: Record<string, unknown>) => Promise<{ structuredContent: unknown }>
-      ) => {
-        void handler({}).then((r) => {
-          capturedResult = r.structuredContent;
-        });
-      },
-    };
+    const res = await callTool({});
 
-    registerLeaderboardTool(mockServer as never);
-    await new Promise((r) => setTimeout(r, 50));
-
-    const result = capturedResult as { leaderboard: Array<{ standing: string }> };
+    const result = res.structuredContent as { leaderboard: Array<{ standing: string }> };
     expect(result.leaderboard[0]?.standing).toBe('good');
   });
 
   it('labels a 0.45 composite score as "fair"', async () => {
-    const { registerLeaderboardTool } = await import('@/packages/mcp/src/tools/leaderboard');
-
     const body = makeLeaderboardResponse({
       leaderboard: [makeEntry({ n: 20, composite: 0.45 })],
     });
     mockFetchOk(body);
 
-    let capturedResult: unknown;
-    const mockServer = {
-      registerTool: (
-        _name: string,
-        _meta: unknown,
-        handler: (args: Record<string, unknown>) => Promise<{ structuredContent: unknown }>
-      ) => {
-        void handler({}).then((r) => {
-          capturedResult = r.structuredContent;
-        });
-      },
-    };
+    const res = await callTool({});
 
-    registerLeaderboardTool(mockServer as never);
-    await new Promise((r) => setTimeout(r, 50));
-
-    const result = capturedResult as { leaderboard: Array<{ standing: string }> };
+    const result = res.structuredContent as { leaderboard: Array<{ standing: string }> };
     expect(result.leaderboard[0]?.standing).toBe('fair');
   });
 
   it('labels a 0.2 composite score as "poor"', async () => {
-    const { registerLeaderboardTool } = await import('@/packages/mcp/src/tools/leaderboard');
-
     const body = makeLeaderboardResponse({
       leaderboard: [makeEntry({ n: 10, composite: 0.2 })],
     });
     mockFetchOk(body);
 
-    let capturedResult: unknown;
-    const mockServer = {
-      registerTool: (
-        _name: string,
-        _meta: unknown,
-        handler: (args: Record<string, unknown>) => Promise<{ structuredContent: unknown }>
-      ) => {
-        void handler({}).then((r) => {
-          capturedResult = r.structuredContent;
-        });
-      },
-    };
+    const res = await callTool({});
 
-    registerLeaderboardTool(mockServer as never);
-    await new Promise((r) => setTimeout(r, 50));
-
-    const result = capturedResult as { leaderboard: Array<{ standing: string }> };
+    const result = res.structuredContent as { leaderboard: Array<{ standing: string }> };
     expect(result.leaderboard[0]?.standing).toBe('poor');
   });
 });
@@ -354,8 +281,6 @@ describe('registerLeaderboardTool', () => {
   });
 
   it('returns structured content with leaderboard, corridor, and generatedAt', async () => {
-    const { registerLeaderboardTool } = await import('@/packages/mcp/src/tools/leaderboard');
-
     const body = makeLeaderboardResponse({
       leaderboard: [
         makeEntry({ anchor_id: 'cowrie', composite: 0.9, n: 200 }),
@@ -366,26 +291,9 @@ describe('registerLeaderboardTool', () => {
     });
     mockFetchOk(body);
 
-    let capturedResult: unknown;
-    const mockServer = {
-      registerTool: (
-        _name: string,
-        _meta: unknown,
-        handler: (args: Record<string, unknown>) => Promise<{
-          structuredContent: unknown;
-          content: Array<{ type: string; text: string }>;
-        }>
-      ) => {
-        void handler({}).then((r) => {
-          capturedResult = r.structuredContent;
-        });
-      },
-    };
+    const res = await callTool({});
 
-    registerLeaderboardTool(mockServer as never);
-    await new Promise((r) => setTimeout(r, 50));
-
-    const result = capturedResult as {
+    const result = res.structuredContent as {
       corridor: string | null;
       generatedAt: string;
       leaderboard: Array<{ anchor_id: string }>;
@@ -398,97 +306,35 @@ describe('registerLeaderboardTool', () => {
   });
 
   it('passes the corridor arg to fetchLeaderboard', async () => {
-    const { registerLeaderboardTool } = await import('@/packages/mcp/src/tools/leaderboard');
-
     const body = makeLeaderboardResponse({ corridor: 'usdc-ngn' });
     mockFetchOk(body);
 
-    let capturedResult: unknown;
-    const mockServer = {
-      registerTool: (
-        _name: string,
-        _meta: unknown,
-        handler: (args: Record<string, unknown>) => Promise<{ structuredContent: unknown }>
-      ) => {
-        void handler({ corridor: 'usdc-ngn' }).then((r) => {
-          capturedResult = r.structuredContent;
-        });
-      },
-    };
-
-    registerLeaderboardTool(mockServer as never);
-    await new Promise((r) => setTimeout(r, 50));
+    const res = await callTool({ corridor: 'usdc-ngn' });
 
     // The URL called should include the corridor param
     const calledUrl = (fetchMock.mock.calls[0]?.[0] as string) ?? '';
     expect(calledUrl).toContain('corridor=usdc-ngn');
 
-    const result = capturedResult as { corridor: string | null };
+    const result = res.structuredContent as { corridor: string | null };
     expect(result.corridor).toBe('usdc-ngn');
   });
 
   it('returns isError: true and a text message when the API call fails', async () => {
-    const { registerLeaderboardTool } = await import('@/packages/mcp/src/tools/leaderboard');
-
     mockFetchError(503, 'Service Unavailable');
 
-    let capturedResponse: unknown;
-    const mockServer = {
-      registerTool: (
-        _name: string,
-        _meta: unknown,
-        handler: (args: Record<string, unknown>) => Promise<{
-          isError?: boolean;
-          content: Array<{ type: string; text: string }>;
-        }>
-      ) => {
-        void handler({}).then((r) => {
-          capturedResponse = r;
-        });
-      },
-    };
+    const resp = await callTool({});
 
-    registerLeaderboardTool(mockServer as never);
-    await new Promise((r) => setTimeout(r, 50));
-
-    const resp = capturedResponse as {
-      isError: boolean;
-      content: Array<{ type: string; text: string }>;
-    };
     expect(resp.isError).toBe(true);
     expect(resp.content[0]?.type).toBe('text');
     expect(resp.content[0]?.text).toMatch(/Leaderboard API error 503/);
   });
 
   it('content text is the JSON-stringified result', async () => {
-    const { registerLeaderboardTool } = await import('@/packages/mcp/src/tools/leaderboard');
-
     const body = makeLeaderboardResponse();
     mockFetchOk(body);
 
-    let capturedResponse: unknown;
-    const mockServer = {
-      registerTool: (
-        _name: string,
-        _meta: unknown,
-        handler: (args: Record<string, unknown>) => Promise<{
-          structuredContent: unknown;
-          content: Array<{ type: string; text: string }>;
-        }>
-      ) => {
-        void handler({}).then((r) => {
-          capturedResponse = r;
-        });
-      },
-    };
+    const resp = await callTool({});
 
-    registerLeaderboardTool(mockServer as never);
-    await new Promise((r) => setTimeout(r, 50));
-
-    const resp = capturedResponse as {
-      structuredContent: unknown;
-      content: Array<{ type: string; text: string }>;
-    };
     expect(resp.content[0]?.type).toBe('text');
     // The text must be parseable JSON matching structuredContent
     const parsed: unknown = JSON.parse(resp.content[0]?.text ?? '');
