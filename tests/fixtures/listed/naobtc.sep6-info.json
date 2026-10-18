@@ -1,33 +1,55 @@
 {
   "deposit": {
     "BTC": {
-      "enabled": true
+      "enabled": true,
+      "fee_fixed": 0,
+      "fee_percent": 0
     },
     "XEL": {
-      "enabled": true
+      "enabled": true,
+      "fee_fixed": 0,
+      "fee_percent": 0
     }
   },
   "withdraw": {
     "BTC": {
       "enabled": true,
+      "fee_fixed": 0.0001,
+      "fee_percent": 0.1,
+      "min_amount": 0.013,
       "types": {
-        "crypto": {}
+        "crypto": {
+          "fields": {
+            "asset_code": {
+              "description": "Code of the asset you want to withdraw"
+            },
+            "dest": {
+              "description": "destination | 目标地址"
+            }
+          }
+        }
       }
     },
     "XEL": {
       "enabled": true,
+      "fee_fixed": 0.1,
+      "fee_percent": 0.1,
+      "min_amount": 10,
       "types": {
-        "crypto": {}
+        "crypto": {
+          "fields": {
+            "asset_code": {
+              "description": "Code of the asset you want to withdraw"
+            },
+            "dest": {
+              "description": "destination | 目标地址"
+            }
+          }
+        }
       }
     }
   },
-  "fee": {
-    "enabled": false
-  },
   "transactions": {
-    "enabled": true
-  },
-  "transaction": {
-    "enabled": true
+    "enabled": false
   }
 }
