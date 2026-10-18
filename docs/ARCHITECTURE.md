@@ -505,31 +505,30 @@ and read reputation — with zero held keys.
 
 ### Tools
 
-| Tool                        | Input                                       | Output                 | Authority                                                   |
-| --------------------------- | ------------------------------------------- | ---------------------- | ----------------------------------------------------------- |
-| `list_corridors`            | —                                           | `Corridor[]`           | Read-only.                                                  |
-| `list_anchors_for_corridor` | `{ corridorId }`                            | `Anchor[]`             | Read-only.                                                  |
-| `quote_corridor`            | `{ corridorId, sellAmount, deliveryHint? }` | `Plan`                 | Read-only; RFQs live anchors.                               |
-| `build_intent`              | `{ plan, deadlineSeconds, preferences? }`   | `Intent` (unsigned)    | Read-only.                                                  |
-| `submit_signed_intent`      | `{ intent, signature }`                     | `{ transactionIds[] }` | Executes — requires user signature from the calling wallet. |
-| `read_reputation`           | `{ anchorId, corridorId }`                  | `Aggregate`            | Read-only.                                                  |
-| `read_outcome`              | `{ intentHash }`                            | `Outcome \| null`      | Read-only.                                                  |
-| `watch_transaction`         | `{ transactionId, transferServer, jwt }`    | Event stream           | Read-only.                                                  |
+| Tool                      | Purpose                                                                                                                                           | Hosted (`/api/mcp`) |
+| ------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------- | ------------------- |
+| `intel.offramp.quote`     | Returns the live net-received quote for a corridor + amount (anchor, quoteId, netReceived, expiresAt).                                            | ✓                   |
+| `intel.offramp.prepare`   | Returns an unsigned intent envelope (intent + hash) and an unsigned Stellar transaction for agent signing.                                        | ✓                   |
+| `intel.execute`           | Verifies an agent-signed intent + transaction against the prepared intent and submits it to Horizon.                                              | ✓                   |
+| `intel.anchor.reputation` | Returns 7/30/90-day rolling percentile scorecards for an anchor (fill rate, settlement latency, slippage).                                        | ✓                   |
+| `intel.anchor.health`     | Returns the current status, consecutive failure count, degraded flag, last check timestamp, last error message, and staleness flag for an anchor. | ✓                   |
+| `intel.probe.coverage`    | Reports whether probe history is trustworthy yet: fleetThresholdMet, daysUntilFleetThreshold, and per-anchor continuous days.                     | ✓                   |
+| `intel.leaderboard`       | Returns anchors ranked by composite reputation score (fill rate, settlement speed, slippage).                                                     | ✓                   |
+| `intel.corridors`         | Lists every corridor Stellar Intel currently surfaces, with its id, display name, source asset, destination fiat currency, country, and anchors.  | ✓                   |
 
 ### Agent-safety invariants
 
-1. **No signing in the MCP.** `submit_signed_intent` _requires_ a signature
+1. **No signing in the MCP.** `intel.execute` _requires_ a signature
    produced by the end-user's wallet. The server never holds a key capable of
    moving funds.
 2. **Scoped JWTs.** The MCP never caches an anchor JWT longer than a single
    intent's lifetime.
-3. **Auditable.** Every `submit_signed_intent` call logs `intent_hash +
+3. **Auditable.** Every `intel.execute` call logs `intent_hash +
 signature + caller` to an append-only local log for the user to review.
 4. **Rate-limited.** Per-caller and per-account quote caps prevent an agent
    from hammering anchors during a runaway loop.
 
-Install: `claude mcp add stellar-intel npx -y @stellarintel/mcp@latest`.
-See `docs/MCP.md` for the end-to-end tutorial and three worked examples.
+Connect to the hosted endpoint at `https://stellar-intel.vercel.app/api/mcp` (Streamable HTTP) or run the local dev server with `npx tsx scripts/mcp/server.ts` (stdio). See [`docs/MCP.md`](MCP.md) for the end-to-end tutorial and worked examples.
 
 ---
 
