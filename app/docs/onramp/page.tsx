@@ -17,6 +17,14 @@ export default function OnrampDocsPage() {
         </p>
       </div>
 
+      <div className="rounded-xl border border-border bg-bg-subtle p-5">
+        <p className="text-sm text-secondary-text">
+          <strong>Status: in development.</strong> The on-ramp endpoints and MCP tools described
+          below are not live yet. The request body follows the shipped on-ramp intent schema; the
+          response fields shown are the planned contract and may change before release.
+        </p>
+      </div>
+
       <section className="space-y-4">
         <h2 className="text-xl font-semibold text-primary-text">Overview</h2>
         <p className="text-secondary-text">
@@ -178,8 +186,8 @@ if (response.unsignedChangeTrustXdr) {
       <section className="space-y-4">
         <h2 className="text-xl font-semibold text-primary-text">AI Agent &amp; MCP Integration</h2>
         <p className="text-secondary-text">
-          Agents using the Model Context Protocol (MCP) server can leverage native on-ramp tools
-          without needing access to secret keys:
+          Planned: agents using the Model Context Protocol (MCP) server will get on-ramp tools that
+          work without access to secret keys:
         </p>
         <ul className="list-inside list-disc space-y-2 text-sm text-secondary-text">
           <li>
