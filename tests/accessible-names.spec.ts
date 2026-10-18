@@ -131,34 +131,34 @@ describe('images carry alt text', () => {
   });
 });
 
-describe('interactive elements have an accessible name', () => {
-  const INTERACTIVE = ['button', 'a', 'Link'] as const;
+const INTERACTIVE = ['button', 'a', 'Link'] as const;
 
-  /**
-   * Every control the scan actually parsed, so a walker that silently stops
-   * matching cannot turn this suite green by checking nothing.
-   */
+function scanControls(): { scanned: number; violations: string[] } {
   let scanned = 0;
-
-  it('no icon-only button or link is unlabelled', () => {
-    const violations: string[] = [];
-    for (const file of files) {
-      const source = readFileSync(file, 'utf8');
-      for (const tag of INTERACTIVE) {
-        for (const match of source.matchAll(new RegExp(`<${tag}[\\s/>]`, 'g'))) {
-          const open = openingTag(source, match.index + 1 + tag.length);
-          if (!open) continue;
-          scanned += 1;
-          if (NAMED_BY_PROP.test(open.attrs)) continue;
-          const inner = children(source, tag, open.attrs, open.end);
-          if (inner === null || textContent(inner) !== '') continue;
-          violations.push(
-            `${file}:${line(source, match.index)} — <${tag}> has no text content and no ` +
-              `aria-label, aria-labelledby or title`
-          );
-        }
+  const violations: string[] = [];
+  for (const file of files) {
+    const source = readFileSync(file, 'utf8');
+    for (const tag of INTERACTIVE) {
+      for (const match of source.matchAll(new RegExp(`<${tag}[\\s/>]`, 'g'))) {
+        const open = openingTag(source, match.index + 1 + tag.length);
+        if (!open) continue;
+        scanned += 1;
+        if (NAMED_BY_PROP.test(open.attrs)) continue;
+        const inner = children(source, tag, open.attrs, open.end);
+        if (inner === null || textContent(inner) !== '') continue;
+        violations.push(
+          `${file}:${line(source, match.index)} — <${tag}> has no text content and no ` +
+            `aria-label, aria-labelledby or title`
+        );
       }
     }
+  }
+  return { scanned, violations };
+}
+
+describe('interactive elements have an accessible name', () => {
+  it('no icon-only button or link is unlabelled', () => {
+    const { violations } = scanControls();
     expect(
       violations,
       `An icon is not a name. Give the control an aria-label, or put visually\n` +
@@ -167,6 +167,7 @@ describe('interactive elements have an accessible name', () => {
   });
 
   it('parsed a non-trivial number of controls', () => {
+    const { scanned } = scanControls();
     expect(scanned).toBeGreaterThan(100);
   });
 });
