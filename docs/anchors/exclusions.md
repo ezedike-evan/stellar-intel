@@ -1,6 +1,6 @@
 # Issuer-only anchors (excluded from corridors)
 
-**Last reviewed:** 2026-08-26
+**Last reviewed:** 2026-10-17
 
 Some domains in the [stellar.expert anchor directory](https://api.stellar.expert/explorer/public/directory?tag[]=anchor&limit=200)
 advertise a Stellar asset or issuer but publish **no transfer rails** — neither a
@@ -90,4 +90,18 @@ Domains excluded for reasons other than missing transfer rails.
   a corridor. Same disposition as `naobtc.com` and `stellarport.io` above:
   transfer rail present, fiat rail absent. Exclusion is permanent unless the
   operator adds a verifiable fiat corridor and re-submits via
+  [`docs/ANCHOR_ONBOARDING.md`](../ANCHOR_ONBOARDING.md).
+
+### mykobo.co
+
+- **Domain:** mykobo.co
+- **Triaged:** 2026-09-06
+- **Status:** Delisted
+- **Reason:** MyKobo was delisted on 2026-09-06. While its `stellar.toml` serves
+  HTTP 200, the transfer servers (`TRANSFER_SERVER` and `TRANSFER_SERVER_SEP0024`)
+  live on `stellar.mykobo.co`, and that host has no A or AAAA record, so every
+  SEP-6 and SEP-24 call fails to connect. Because MyKobo was the EUR anchor
+  (EURC issuer `GAQRF3UGHBT6JYQZ7YSUYCIYWAF4T2SAA5237Q5LIQYJOHHFAWDXZ7NM`),
+  `usdc-eur` no longer has a registered anchor. MyKobo returns when it
+  publishes a transfer server that resolves, through the onboarding flow in
   [`docs/ANCHOR_ONBOARDING.md`](../ANCHOR_ONBOARDING.md).

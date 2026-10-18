@@ -9,7 +9,10 @@
 import type { ListedAnchor } from '@/types';
 import { parseListedAnchors } from '@/lib/stellar/listed-anchor-schema';
 
+import apsTokens from './aps-tokens.json';
+import audd from './audd.json';
 import fxdao from './fxdao.json';
+import gmoTrust from './gmo-trust.json';
 import gratz from './gratz.json';
 import ixinium from './ixinium.json';
 import luxPayband from './lux-payband.json';
@@ -19,10 +22,18 @@ import mirrasets from './mirrasets.json';
 import mobius from './mobius.json';
 import moneygramMgusd from './moneygram-mgusd.json';
 import nafuloo from './nafuloo.json';
+import naobtc from './naobtc.json';
+import phoenix from './phoenix.json';
+import reyts from './reyts.json';
+import stronghold from './stronghold.json';
+import ultraCapital from './ultra-capital.json';
 import valtorum from './valtorum.json';
 
 const RAW: unknown[] = [
+  apsTokens,
+  audd,
   fxdao,
+  gmoTrust,
   gratz,
   ixinium,
   luxPayband,
@@ -32,6 +43,11 @@ const RAW: unknown[] = [
   mobius,
   moneygramMgusd,
   nafuloo,
+  naobtc,
+  phoenix,
+  reyts,
+  stronghold,
+  ultraCapital,
   valtorum,
 ];
 

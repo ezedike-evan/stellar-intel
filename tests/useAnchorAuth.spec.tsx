@@ -47,12 +47,13 @@ describe('useAnchorAuth', () => {
       expect(result.current.authenticate).toBeDefined();
     });
 
-    it('returns authenticate function immediately', () => {
-      const { result: result1 } = renderHook(() => useAnchorAuth(ANCHOR, PUBLIC_KEY));
-      const { result: result2 } = renderHook(() => useAnchorAuth(ANCHOR, PUBLIC_KEY));
+    it('returns authenticate function with stable identity across rerenders', () => {
+      const { result, rerender } = renderHook(() => useAnchorAuth(ANCHOR, PUBLIC_KEY));
+      const firstAuthenticate = result.current.authenticate;
 
-      expect(result1.current.authenticate).toBeDefined();
-      expect(result2.current.authenticate).toBeDefined();
+      rerender();
+
+      expect(result.current.authenticate).toBe(firstAuthenticate);
     });
   });
 

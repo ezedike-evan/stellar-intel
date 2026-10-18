@@ -1,0 +1,16 @@
+{
+  "id": "phoenix",
+  "name": "Phoenix Protocol",
+  "kind": "issuer",
+  "domains": ["app.phoenix-hub.io"],
+  "orgUrl": "https://phoenix-hub.io",
+  "verifiedAt": "2026-09-23",
+  "assets": [
+    {
+      "code": "PHO",
+      "issuer": "GAX5TXB5RYJNLBUR477PEXM4X75APK2PGMTN6KEFQSESGWFXEAKFSXJO",
+      "anchorAssetType": null,
+      "anchorAsset": null
+    }
+  ]
+}

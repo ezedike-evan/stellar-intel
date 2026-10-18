@@ -1,0 +1,16 @@
+# Source: https://stablecoin.z.com/.well-known/stellar.toml (fetched 2026-10-17)
+[DOCUMENTATION]
+ORG_NAME = "GMO-Z.com Trust Company, Inc."
+ORG_URL = "https://stablecoin.z.com"
+
+[[CURRENCIES]]
+code = "GYEN"
+issuer = "GDF6VOEGRWLOZ64PQQGKD2IYWA22RLT37GJKS2EJXZHT2VLAGWLC5TOB"
+anchor_asset_type = "fiat"
+anchor_asset = "JPY"
+
+[[CURRENCIES]]
+code = "ZUSD"
+issuer = "GDF6VOEGRWLOZ64PQQGKD2IYWA22RLT37GJKS2EJXZHT2VLAGWLC5TOB"
+anchor_asset_type = "fiat"
+anchor_asset = "USD"
