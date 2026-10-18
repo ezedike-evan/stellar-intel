@@ -110,7 +110,7 @@ Host did not complete a TLS connection within the 12 s timeout.
 |   9 | `citron.cash`         | 2026-06-25 | 2026-06-25   |                                                                                                    |
 |  10 | `citystatesm.com`     | 2026-06-25 | 2026-06-25   |                                                                                                    |
 |  11 | `clickpesa.com`       | 2026-06-25 | 2026-06-25   |                                                                                                    |
-|  12 | `cowrie.exchange`     | 2026-06-25 | 2026-06-25   | Listed anchor — SEP-6 + SEP-10 only (no SEP-24)                                                    |
+|  12 | `cowrie.exchange`     | 2026-06-25 | 2026-06-25   | Listed anchor — SEP-6 + SEP-10 + SEP-31 (no SEP-24)                                                |
 |  13 | `cryptomover.com`     | 2026-06-25 | 2026-06-25   |                                                                                                    |
 |  14 | `cryptotari.io`       | 2026-06-25 | 2026-06-25   |                                                                                                    |
 |  15 | `dead.apay.io`        | 2026-06-25 | 2026-06-25   | Legacy/retired subdomain                                                                           |
