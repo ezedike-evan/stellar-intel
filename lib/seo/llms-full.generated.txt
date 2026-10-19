@@ -284,28 +284,28 @@ writes to Soroban — never to move user funds.
 
 ## 2. Component inventory & repo layout
 
-| Module                      | Role                                                                                                             | Path                                                                | Status                  |
-| --------------------------- | ---------------------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------- | ----------------------- |
-| **Offramp page**            | The end-user surface. Corridor select → rate table → execute drawer → status tracker.                            | `app/offramp/page.tsx`                                              | ✅                      |
-| **RateTable**               | Sortable list of live anchor quotes for the selected corridor.                                                   | `components/offramp/RateTable.tsx`                                  | ✅                      |
+| Module                      | Role                                                                                                                           | Path                                                                | Status                  |
+| --------------------------- | ------------------------------------------------------------------------------------------------------------------------------ | ------------------------------------------------------------------- | ----------------------- |
+| **Offramp page**            | The end-user surface. Corridor select → rate table → execute drawer → status tracker.                                          | `app/offramp/page.tsx`                                              | ✅                      |
+| **RateTable**               | Sortable list of live anchor quotes for the selected corridor.                                                                 | `components/offramp/RateTable.tsx`                                  | ✅                      |
 | **ExecuteDrawer**           | Interactive off-ramp flow walking steps from idle to done (SEP-10 auth, SEP-38 quote, SEP-24/SEP-6 KYC, payment build & sign). | `components/offramp/ExecuteDrawer.tsx`                              | ✅                      |
-| **StatusTracker**           | Polls `/transaction?id=...` and renders the SEP-24 state machine.                                                | `components/offramp/StatusTracker.tsx`                              | ✅                      |
-| **Anchor registry**         | Typed list of anchors + corridors + assets. Single source of truth.                                              | `constants/anchors.ts` (data), `lib/stellar/anchors.ts` (accessors) | ✅                      |
-| **SEP-1 resolver**          | `stellar.toml` discovery, TRANSFER_SERVER_SEP0024 + WEB_AUTH_ENDPOINT extraction.                                | `lib/stellar/sep1.ts`                                               | ✅                      |
-| **SEP-10 client**           | Challenge fetch, verification, Freighter sign, JWT exchange. Network pinned to mainnet.                          | `lib/stellar/sep10.ts`                                              | ✅                      |
-| **SEP-24 client**           | `/fee`, `/transactions/withdraw/interactive`, `/transaction` wrappers. 10s timeout.                              | `lib/stellar/sep24.ts`                                              | ✅                      |
-| **Horizon helper**          | Build + sign + submit the user's withdrawal payment on the Stellar ledger.                                       | `lib/stellar/horizon.ts`                                            | ✅                      |
-| **Freighter hook**          | Wallet connection state + account + network.                                                                     | `hooks/useFreighter.ts`                                             | ✅                      |
-| **Rates hook**              | SWR-powered parallel rate aggregation across all anchors on a corridor.                                          | `hooks/useAnchorRates.ts`                                           | ✅                      |
-| **Status hook**             | SWR polling loop keyed by `[transferServer, transactionId, jwt]`.                                                | `hooks/useWithdrawStatus.ts`                                        | ✅                      |
-| **SEP-38 client**           | Firm-quote RFQ against anchors; supersedes the `/fee` + stored-rate approach.                                    | `lib/stellar/sep38.ts`                                              | ✅                      |
-| **Intent canonicalizer**    | Deterministic JSON → hash → sign.                                                                                | `lib/intent/`                                                       | ✅                      |
-| **Intent router (solver)**  | Scores candidate anchors by net landed value; returns a single-anchor or split plan.                             | `lib/router/`                                                       | ✅                      |
-| **Reputation store**        | Outcome storage + composite scoring (SQLite dev / Postgres prod).                                                | `lib/reputation/`                                                   | ✅                      |
-| **Publisher worker**        | Signs outcome tuples and invokes the Soroban contract. Scheduler entry point: `app/api/publisher/tick/route.ts`. | `packages/publisher/`                                               | ✅ testnet              |
-| **Soroban oracle contract** | On-chain reputation storage + read helpers.                                                                      | `contracts/reputation/`                                             | ✅ testnet · 🛠️ mainnet |
-| **MCP server**              | Exposes router + oracle as MCP tools.                                                                            | `packages/mcp/`                                                     | ✅ basic                |
-| **SDK**                     | Typed client for the API + MCP.                                                                                  | `packages/sdk/`                                                     | ✅ built, unpublished   |
+| **StatusTracker**           | Polls `/transaction?id=...` and renders the SEP-24 state machine.                                                              | `components/offramp/StatusTracker.tsx`                              | ✅                      |
+| **Anchor registry**         | Typed list of anchors + corridors + assets. Single source of truth.                                                            | `constants/anchors.ts` (data), `lib/stellar/anchors.ts` (accessors) | ✅                      |
+| **SEP-1 resolver**          | `stellar.toml` discovery, TRANSFER_SERVER_SEP0024 + WEB_AUTH_ENDPOINT extraction.                                              | `lib/stellar/sep1.ts`                                               | ✅                      |
+| **SEP-10 client**           | Challenge fetch, verification, Freighter sign, JWT exchange. Network pinned to mainnet.                                        | `lib/stellar/sep10.ts`                                              | ✅                      |
+| **SEP-24 client**           | `/fee`, `/transactions/withdraw/interactive`, `/transaction` wrappers. 10s timeout.                                            | `lib/stellar/sep24.ts`                                              | ✅                      |
+| **Horizon helper**          | Build + sign + submit the user's withdrawal payment on the Stellar ledger.                                                     | `lib/stellar/horizon.ts`                                            | ✅                      |
+| **Freighter hook**          | Wallet connection state + account + network.                                                                                   | `hooks/useFreighter.ts`                                             | ✅                      |
+| **Rates hook**              | SWR-powered parallel rate aggregation across all anchors on a corridor.                                                        | `hooks/useAnchorRates.ts`                                           | ✅                      |
+| **Status hook**             | SWR polling loop keyed by `[transferServer, transactionId, jwt]`.                                                              | `hooks/useWithdrawStatus.ts`                                        | ✅                      |
+| **SEP-38 client**           | Firm-quote RFQ against anchors; supersedes the `/fee` + stored-rate approach.                                                  | `lib/stellar/sep38.ts`                                              | ✅                      |
+| **Intent canonicalizer**    | Deterministic JSON → hash → sign.                                                                                              | `lib/intent/`                                                       | ✅                      |
+| **Intent router (solver)**  | Scores candidate anchors by net landed value; returns a single-anchor or split plan.                                           | `lib/router/`                                                       | ✅                      |
+| **Reputation store**        | Outcome storage + composite scoring (SQLite dev / Postgres prod).                                                              | `lib/reputation/`                                                   | ✅                      |
+| **Publisher worker**        | Signs outcome tuples and invokes the Soroban contract. Scheduler entry point: `app/api/publisher/tick/route.ts`.               | `packages/publisher/`                                               | ✅ testnet              |
+| **Soroban oracle contract** | On-chain reputation storage + read helpers.                                                                                    | `contracts/reputation/`                                             | ✅ testnet · 🛠️ mainnet |
+| **MCP server**              | Exposes router + oracle as MCP tools.                                                                                          | `packages/mcp/`                                                     | ✅ basic                |
+| **SDK**                     | Typed client for the API + MCP.                                                                                                | `packages/sdk/`                                                     | ✅ built, unpublished   |
 
 > All module paths are namespaced — no runtime concern spans two modules in
 > opposite directions. `lib/stellar/*` has no dependencies on `lib/router/*`
@@ -321,6 +321,7 @@ the atomic unit every other component is built around.
 The intent core and envelopes are defined by Zod schemas in `types/intent.ts` (`OfframpIntentSchema`, `SignedIntentEnvelopeSchema`, `IntentV1Schema`, `CanonicalIntentV1Schema`) and `lib/intent/offramp.ts` (`IntentSchema`).
 
 An intent carries:
+
 - `anchorId`, `corridorId`, `amount`, and `publicKey` (for off-ramp intents)
 - Replay protection via random nonces (`nonce`)
 - Canonical Ed25519 signatures over the normalized JSON hash (`intentHash`)
@@ -366,7 +367,7 @@ sequenceDiagram
   O-->>P: Event: OutcomeStored(intent_hash)
 ```
 
-The entire lifecycle is implemented across the stack: rate discovery and firm SEP-38 RFQ quotes (steps 1–6), SEP-10 authentication and interactive SEP-24/SEP-6 withdrawal execution with payment submission (steps 7–16), and attestation outcome reporting via `/api/reputation/append` to the off-chain store and on-chain oracle (steps 17–19).
+The lifecycle is implemented end to end: SEP-38 firm quotes, SEP-10 authentication, interactive SEP-24 / SEP-6 withdrawal with payment submission, and outcome reporting via `/api/reputation/append`, which the publisher then mirrors to the on-chain oracle.
 
 ---
 
@@ -435,18 +436,18 @@ Implemented in `lib/stellar/sep10.ts`. Key invariants:
 
 `ExecuteDrawer` (`components/offramp/ExecuteDrawer.tsx`) manages the interactive withdrawal lifecycle across discrete steps defined in `STEP_LABELS` (`ExecuteDrawerStep`):
 
-| Step             | Substrate            | What happens                                                                                                    | Failure recovery                                                        |
-| ---------------- | -------------------- | --------------------------------------------------------------------------------------------------------------- | ----------------------------------------------------------------------- |
-| `idle`           | —                    | Ready state awaiting execution start.                                                                           | Initial baseline.                                                       |
-| `authenticating` | SEP-10               | Fetch challenge, sign with Freighter, exchange for JWT.                                                         | Retry in-place; on rejection, return to idle.                           |
-| `quoting`        | SEP-38               | Lock in a firm quote with the anchor when advertised.                                                           | Retry quote or fall back to standard flow.                              |
-| `initiating`     | SEP-24               | `POST /transactions/withdraw/interactive` with JWT.                                                             | Surface anchor error; retry with fresh JWT.                             |
-| `kyc`            | Anchor-hosted popup  | Open interactive anchor URL in popup for user KYC.                                                              | On popup close without success, poll `/transaction` for `pending_user`. |
-| `form`           | Direct UI Form       | Render embedded KYC / transfer info form for SEP-6 endpoints.                                                   | Form input validation; re-submission.                                   |
-| `building`       | Horizon              | `buildWithdrawPayment` — construct the payment to the anchor's receiving address at the quoted amount.          | Fee estimation retries; network reselect.                               |
-| `signing`        | Freighter            | User signs the payment XDR in Freighter.                                                                        | User-reject returns to idle; signature-required errors surface.         |
-| `done`           | —                    | Drawer closes; `onExecuteStarted` hoists tracking data to the page; `StatusTracker` mounts.                     | Terminal success state.                                                 |
-| `error`          | —                    | Error state with classified error messages and retry action.                                                    | In-place retry or cancel to return to idle.                             |
+| Step             | Substrate           | What happens                                                                                           | Failure recovery                                                        |
+| ---------------- | ------------------- | ------------------------------------------------------------------------------------------------------ | ----------------------------------------------------------------------- |
+| `idle`           | —                   | Ready state awaiting execution start.                                                                  | Initial baseline.                                                       |
+| `authenticating` | SEP-10              | Fetch challenge, sign with Freighter, exchange for JWT.                                                | Retry in-place; on rejection, return to idle.                           |
+| `quoting`        | SEP-38              | Lock in a firm quote with the anchor when advertised.                                                  | Retry quote or fall back to standard flow.                              |
+| `initiating`     | SEP-24              | `POST /transactions/withdraw/interactive` with JWT.                                                    | Surface anchor error; retry with fresh JWT.                             |
+| `kyc`            | Anchor-hosted popup | Open interactive anchor URL in popup for user KYC.                                                     | On popup close without success, poll `/transaction` for `pending_user`. |
+| `form`           | Direct UI Form      | Render embedded KYC / transfer info form for SEP-6 endpoints.                                          | Form input validation; re-submission.                                   |
+| `building`       | Horizon             | `buildWithdrawPayment` — construct the payment to the anchor's receiving address at the quoted amount. | Fee estimation retries; network reselect.                               |
+| `signing`        | Freighter           | User signs the payment XDR in Freighter.                                                               | User-reject returns to idle; signature-required errors surface.         |
+| `done`           | —                   | Drawer closes; `onExecuteStarted` hoists tracking data to the page; `StatusTracker` mounts.            | Terminal success state.                                                 |
+| `error`          | —                   | Error state with classified error messages and retry action.                                           | In-place retry or cancel to return to idle.                             |
 
 **The `done` hoist is the fix for the tracker-never-mounts bug (#002).**
 Before `commit 45a82eb` the drawer completed the withdrawal but never told the
@@ -554,7 +555,7 @@ sequenceDiagram
   actor Client as UI / Agent
   participant Route as POST /api/reputation/append
   participant Store as Postgres outcome_log
-  participant Cron as POST /api/publisher/tick
+  participant Cron as GET /api/publisher/tick
   participant Pub as packages/publisher (runBatch)
   participant Oracle as Soroban Oracle (submit_outcome)
 
@@ -565,11 +566,11 @@ sequenceDiagram
 
   loop Every 5 minutes
     Cron->>Pub: Trigger tick
-    Pub->>Store: Select un-reconciled attested outcomes
+    Pub->>Store: Select reconciled, unpublished outcomes
     Pub->>Pub: Canonicalize outcome batch & sign with publisher key
     Pub->>Oracle: Invoke submit_outcome(batch)
     Oracle-->>Pub: Emits OutcomeStored event
-    Pub->>Store: Mark outcomes reconciled_at
+    Pub->>Store: Set published_at + oracle_tx_hash
   end
 ```
 

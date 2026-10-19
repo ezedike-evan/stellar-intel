@@ -171,7 +171,7 @@ sequenceDiagram
   O-->>P: Event: OutcomeStored(intent_hash)
 ```
 
-The entire lifecycle is implemented across the stack: rate discovery and firm SEP-38 RFQ quotes (steps 1–6), SEP-10 authentication and interactive SEP-24/SEP-6 withdrawal execution with payment submission (steps 7–16), and attestation outcome reporting via `/api/reputation/append` to the off-chain store and on-chain oracle (steps 17–19).
+The lifecycle is implemented end to end: SEP-38 firm quotes, SEP-10 authentication, interactive SEP-24 / SEP-6 withdrawal with payment submission, and outcome reporting via `/api/reputation/append`, which the publisher then mirrors to the on-chain oracle.
 
 ---
 
@@ -359,7 +359,7 @@ sequenceDiagram
   actor Client as UI / Agent
   participant Route as POST /api/reputation/append
   participant Store as Postgres outcome_log
-  participant Cron as POST /api/publisher/tick
+  participant Cron as GET /api/publisher/tick
   participant Pub as packages/publisher (runBatch)
   participant Oracle as Soroban Oracle (submit_outcome)
 
@@ -370,11 +370,11 @@ sequenceDiagram
 
   loop Every 5 minutes
     Cron->>Pub: Trigger tick
-    Pub->>Store: Select un-reconciled attested outcomes
+    Pub->>Store: Select reconciled, unpublished outcomes
     Pub->>Pub: Canonicalize outcome batch & sign with publisher key
     Pub->>Oracle: Invoke submit_outcome(batch)
     Oracle-->>Pub: Emits OutcomeStored event
-    Pub->>Store: Mark outcomes reconciled_at
+    Pub->>Store: Set published_at + oracle_tx_hash
   end
 ```
 
