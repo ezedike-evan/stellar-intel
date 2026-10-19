@@ -15,6 +15,7 @@ import aquarius from './aquarius.json';
 import audd from './audd.json';
 import blackRidgeTrust from './black-ridge-trust.json';
 import fxdao from './fxdao.json';
+import gloDollar from './glo-dollar.json';
 import gmoTrust from './gmo-trust.json';
 import gratz from './gratz.json';
 import ixinium from './ixinium.json';
@@ -40,6 +41,7 @@ const RAW: unknown[] = [
   audd,
   blackRidgeTrust,
   fxdao,
+  gloDollar,
   gmoTrust,
   gratz,
   ixinium,
