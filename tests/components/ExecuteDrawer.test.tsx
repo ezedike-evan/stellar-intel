@@ -633,7 +633,9 @@ describe('ExecuteDrawer', () => {
       });
 
       await waitFor(() =>
-        expect(screen.getByText(/Your firm quote expired before the transaction/)).toBeInTheDocument()
+        expect(
+          screen.getByText(/Your firm quote expired before the transaction/)
+        ).toBeInTheDocument()
       );
       expect(mockBuildWithdrawPayment).not.toHaveBeenCalled();
       expect(screen.getByRole('button', { name: 'Retry' })).toBeInTheDocument();
