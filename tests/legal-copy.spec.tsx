@@ -3,6 +3,7 @@ import { render, screen } from '@testing-library/react';
 import { readFileSync } from 'fs';
 import { DISCLAIMER_SENTENCES, DISCLAIMER_TEXT, TERMS_HREF } from '@/lib/legal';
 import { DisclaimerBanner } from '@/components/offramp/DisclaimerBanner';
+import { PROSE_CLASSES } from '@/lib/prose';
 
 // #738 / #739 / #742 — the Terms page carried two sentences of its own prose
 // while docs/ had no ToS at all, and the banner hardcoded its own copy. A
@@ -91,14 +92,21 @@ describe('DisclaimerBanner (#742)', () => {
   });
 });
 
+function findProseContainer(container: HTMLElement): HTMLDivElement | undefined {
+  return Array.from(container.querySelectorAll('div')).find(
+    (element) => element.className === PROSE_CLASSES
+  );
+}
+
 describe('Prose pages render markdown with PROSE_CLASSES (#968)', () => {
   it('renders /terms page with PROSE_CLASSES container', async () => {
     const { default: TermsPage } = await import('@/app/terms/page');
     const { container } = render(<TermsPage />);
     // The root layout owns the only <main>; a page must not nest a second one.
     expect(container.querySelector('main')).not.toBeInTheDocument();
-    expect(container.querySelector('[class*="[&_h1]"]')).toBeInTheDocument();
-    expect(container.textContent).toContain('Terms of Service');
+    const prose = findProseContainer(container);
+    expect(prose).toBeInTheDocument();
+    expect(prose).toHaveTextContent('Terms of Service');
   });
 
   it('renders /methodology page with PROSE_CLASSES container', async () => {
@@ -106,7 +114,8 @@ describe('Prose pages render markdown with PROSE_CLASSES (#968)', () => {
     const { container } = render(<MethodologyPage />);
     // The root layout owns the only <main>; a page must not nest a second one.
     expect(container.querySelector('main')).not.toBeInTheDocument();
-    expect(container.querySelector('[class*="[&_h1]"]')).toBeInTheDocument();
-    expect(container.textContent).toContain('Anchor Reputation');
+    const prose = findProseContainer(container);
+    expect(prose).toBeInTheDocument();
+    expect(prose).toHaveTextContent('Anchor Reputation');
   });
 });
