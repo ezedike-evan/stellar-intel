@@ -48,8 +48,7 @@ GitHub Discussion. Roles can lapse with inactivity and be re-earned.
 ## Recognition
 
 Every merged contributor is added to the README contributors table and credited in
-release notes. Contributors merged during OSS week are named in the grant
-resubmission document.
+release notes.
 
 ## Related
 

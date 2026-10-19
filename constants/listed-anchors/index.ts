@@ -9,6 +9,7 @@
 import type { ListedAnchor } from '@/types';
 import { parseListedAnchors } from '@/lib/stellar/listed-anchor-schema';
 
+import afreum from './afreum.json';
 import apsTokens from './aps-tokens.json';
 import audd from './audd.json';
 import blackRidgeTrust from './black-ridge-trust.json';
@@ -32,6 +33,7 @@ import valtorum from './valtorum.json';
 import vnx from './vnx.json';
 
 const RAW: unknown[] = [
+  afreum,
   apsTokens,
   audd,
   blackRidgeTrust,

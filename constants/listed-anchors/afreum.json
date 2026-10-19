@@ -1,0 +1,958 @@
+{
+  "id": "afreum",
+  "name": "Afreum DAO",
+  "kind": "issuer",
+  "domains": ["afreum.com"],
+  "orgUrl": "https://afreum.com",
+  "verifiedAt": "2026-09-23",
+  "assets": [
+    {
+      "code": "AFR",
+      "issuer": "GBX6YI45VU7WNAAKA3RBFDR3I3UKNFHTJPQ5F6KOOKSGYIAM4TRQN54W",
+      "anchorAssetType": null,
+      "anchorAsset": null
+    },
+    {
+      "code": "AFRX",
+      "issuer": "GBDTAQDRSX3QOEAQQKYWRGOTFE5FHQTLIH5YAF2HGUY3PBKRXWDKBLHN",
+      "anchorAssetType": null,
+      "anchorAsset": null
+    },
+    {
+      "code": "AEUR",
+      "issuer": "GDNUVPUOMWOF2ML5FA5E4HQDX7EHV3VCJTLLTO563PUMZKMHJUJIJSYI",
+      "anchorAssetType": null,
+      "anchorAsset": null
+    },
+    {
+      "code": "AALL",
+      "issuer": "GCJFH6HI5UPQVTUUOAS7JPOEPCQZCNGM63GWMBL6ULGUL4XUXRIXXIEQ",
+      "anchorAssetType": null,
+      "anchorAsset": null
+    },
+    {
+      "code": "ADZD",
+      "issuer": "GDNUVPUOMWOF2ML5FA5E4HQDX7EHV3VCJTLLTO563PUMZKMHJUJIJSYI",
+      "anchorAssetType": null,
+      "anchorAsset": null
+    },
+    {
+      "code": "AUSD",
+      "issuer": "GDNUVPUOMWOF2ML5FA5E4HQDX7EHV3VCJTLLTO563PUMZKMHJUJIJSYI",
+      "anchorAssetType": null,
+      "anchorAsset": null
+    },
+    {
+      "code": "AAOA",
+      "issuer": "GDNUVPUOMWOF2ML5FA5E4HQDX7EHV3VCJTLLTO563PUMZKMHJUJIJSYI",
+      "anchorAssetType": null,
+      "anchorAsset": null
+    },
+    {
+      "code": "AXCD",
+      "issuer": "GCJFH6HI5UPQVTUUOAS7JPOEPCQZCNGM63GWMBL6ULGUL4XUXRIXXIEQ",
+      "anchorAssetType": null,
+      "anchorAsset": null
+    },
+    {
+      "code": "AARS",
+      "issuer": "GCJFH6HI5UPQVTUUOAS7JPOEPCQZCNGM63GWMBL6ULGUL4XUXRIXXIEQ",
+      "anchorAssetType": null,
+      "anchorAsset": null
+    },
+    {
+      "code": "AAMD",
+      "issuer": "GCJFH6HI5UPQVTUUOAS7JPOEPCQZCNGM63GWMBL6ULGUL4XUXRIXXIEQ",
+      "anchorAssetType": null,
+      "anchorAsset": null
+    },
+    {
+      "code": "AAWG",
+      "issuer": "GCJFH6HI5UPQVTUUOAS7JPOEPCQZCNGM63GWMBL6ULGUL4XUXRIXXIEQ",
+      "anchorAssetType": null,
+      "anchorAsset": null
+    },
+    {
+      "code": "AAUD",
+      "issuer": "GCJFH6HI5UPQVTUUOAS7JPOEPCQZCNGM63GWMBL6ULGUL4XUXRIXXIEQ",
+      "anchorAssetType": null,
+      "anchorAsset": null
+    },
+    {
+      "code": "AAZN",
+      "issuer": "GCJFH6HI5UPQVTUUOAS7JPOEPCQZCNGM63GWMBL6ULGUL4XUXRIXXIEQ",
+      "anchorAssetType": null,
+      "anchorAsset": null
+    },
+    {
+      "code": "ABSD",
+      "issuer": "GCJFH6HI5UPQVTUUOAS7JPOEPCQZCNGM63GWMBL6ULGUL4XUXRIXXIEQ",
+      "anchorAssetType": null,
+      "anchorAsset": null
+    },
+    {
+      "code": "ABHD",
+      "issuer": "GCJFH6HI5UPQVTUUOAS7JPOEPCQZCNGM63GWMBL6ULGUL4XUXRIXXIEQ",
+      "anchorAssetType": null,
+      "anchorAsset": null
+    },
+    {
+      "code": "ABDT",
+      "issuer": "GCJFH6HI5UPQVTUUOAS7JPOEPCQZCNGM63GWMBL6ULGUL4XUXRIXXIEQ",
+      "anchorAssetType": null,
+      "anchorAsset": null
+    },
+    {
+      "code": "ABBD",
+      "issuer": "GCJFH6HI5UPQVTUUOAS7JPOEPCQZCNGM63GWMBL6ULGUL4XUXRIXXIEQ",
+      "anchorAssetType": null,
+      "anchorAsset": null
+    },
+    {
+      "code": "ABYN",
+      "issuer": "GCJFH6HI5UPQVTUUOAS7JPOEPCQZCNGM63GWMBL6ULGUL4XUXRIXXIEQ",
+      "anchorAssetType": null,
+      "anchorAsset": null
+    },
+    {
+      "code": "ABZD",
+      "issuer": "GCJFH6HI5UPQVTUUOAS7JPOEPCQZCNGM63GWMBL6ULGUL4XUXRIXXIEQ",
+      "anchorAssetType": null,
+      "anchorAsset": null
+    },
+    {
+      "code": "AXOF",
+      "issuer": "GDNUVPUOMWOF2ML5FA5E4HQDX7EHV3VCJTLLTO563PUMZKMHJUJIJSYI",
+      "anchorAssetType": null,
+      "anchorAsset": null
+    },
+    {
+      "code": "ABMD",
+      "issuer": "GCJFH6HI5UPQVTUUOAS7JPOEPCQZCNGM63GWMBL6ULGUL4XUXRIXXIEQ",
+      "anchorAssetType": null,
+      "anchorAsset": null
+    },
+    {
+      "code": "ABTN",
+      "issuer": "GCJFH6HI5UPQVTUUOAS7JPOEPCQZCNGM63GWMBL6ULGUL4XUXRIXXIEQ",
+      "anchorAssetType": null,
+      "anchorAsset": null
+    },
+    {
+      "code": "ABOB",
+      "issuer": "GCJFH6HI5UPQVTUUOAS7JPOEPCQZCNGM63GWMBL6ULGUL4XUXRIXXIEQ",
+      "anchorAssetType": null,
+      "anchorAsset": null
+    },
+    {
+      "code": "ABAM",
+      "issuer": "GCJFH6HI5UPQVTUUOAS7JPOEPCQZCNGM63GWMBL6ULGUL4XUXRIXXIEQ",
+      "anchorAssetType": null,
+      "anchorAsset": null
+    },
+    {
+      "code": "ABWP",
+      "issuer": "GDNUVPUOMWOF2ML5FA5E4HQDX7EHV3VCJTLLTO563PUMZKMHJUJIJSYI",
+      "anchorAssetType": null,
+      "anchorAsset": null
+    },
+    {
+      "code": "ANOK",
+      "issuer": "GCJFH6HI5UPQVTUUOAS7JPOEPCQZCNGM63GWMBL6ULGUL4XUXRIXXIEQ",
+      "anchorAssetType": null,
+      "anchorAsset": null
+    },
+    {
+      "code": "ABRL",
+      "issuer": "GCJFH6HI5UPQVTUUOAS7JPOEPCQZCNGM63GWMBL6ULGUL4XUXRIXXIEQ",
+      "anchorAssetType": null,
+      "anchorAsset": null
+    },
+    {
+      "code": "ABND",
+      "issuer": "GCJFH6HI5UPQVTUUOAS7JPOEPCQZCNGM63GWMBL6ULGUL4XUXRIXXIEQ",
+      "anchorAssetType": null,
+      "anchorAsset": null
+    },
+    {
+      "code": "ABGN",
+      "issuer": "GCJFH6HI5UPQVTUUOAS7JPOEPCQZCNGM63GWMBL6ULGUL4XUXRIXXIEQ",
+      "anchorAssetType": null,
+      "anchorAsset": null
+    },
+    {
+      "code": "ABIF",
+      "issuer": "GDNUVPUOMWOF2ML5FA5E4HQDX7EHV3VCJTLLTO563PUMZKMHJUJIJSYI",
+      "anchorAssetType": null,
+      "anchorAsset": null
+    },
+    {
+      "code": "AKHR",
+      "issuer": "GCJFH6HI5UPQVTUUOAS7JPOEPCQZCNGM63GWMBL6ULGUL4XUXRIXXIEQ",
+      "anchorAssetType": null,
+      "anchorAsset": null
+    },
+    {
+      "code": "AXAF",
+      "issuer": "GDNUVPUOMWOF2ML5FA5E4HQDX7EHV3VCJTLLTO563PUMZKMHJUJIJSYI",
+      "anchorAssetType": null,
+      "anchorAsset": null
+    },
+    {
+      "code": "ACAD",
+      "issuer": "GCJFH6HI5UPQVTUUOAS7JPOEPCQZCNGM63GWMBL6ULGUL4XUXRIXXIEQ",
+      "anchorAssetType": null,
+      "anchorAsset": null
+    },
+    {
+      "code": "ACVE",
+      "issuer": "GDNUVPUOMWOF2ML5FA5E4HQDX7EHV3VCJTLLTO563PUMZKMHJUJIJSYI",
+      "anchorAssetType": null,
+      "anchorAsset": null
+    },
+    {
+      "code": "AKYD",
+      "issuer": "GCJFH6HI5UPQVTUUOAS7JPOEPCQZCNGM63GWMBL6ULGUL4XUXRIXXIEQ",
+      "anchorAssetType": null,
+      "anchorAsset": null
+    },
+    {
+      "code": "ACLP",
+      "issuer": "GCJFH6HI5UPQVTUUOAS7JPOEPCQZCNGM63GWMBL6ULGUL4XUXRIXXIEQ",
+      "anchorAssetType": null,
+      "anchorAsset": null
+    },
+    {
+      "code": "ACNY",
+      "issuer": "GDNUVPUOMWOF2ML5FA5E4HQDX7EHV3VCJTLLTO563PUMZKMHJUJIJSYI",
+      "anchorAssetType": null,
+      "anchorAsset": null
+    },
+    {
+      "code": "ACOP",
+      "issuer": "GCJFH6HI5UPQVTUUOAS7JPOEPCQZCNGM63GWMBL6ULGUL4XUXRIXXIEQ",
+      "anchorAssetType": null,
+      "anchorAsset": null
+    },
+    {
+      "code": "AKMF",
+      "issuer": "GDNUVPUOMWOF2ML5FA5E4HQDX7EHV3VCJTLLTO563PUMZKMHJUJIJSYI",
+      "anchorAssetType": null,
+      "anchorAsset": null
+    },
+    {
+      "code": "ANZD",
+      "issuer": "GCJFH6HI5UPQVTUUOAS7JPOEPCQZCNGM63GWMBL6ULGUL4XUXRIXXIEQ",
+      "anchorAssetType": null,
+      "anchorAsset": null
+    },
+    {
+      "code": "ACRC",
+      "issuer": "GCJFH6HI5UPQVTUUOAS7JPOEPCQZCNGM63GWMBL6ULGUL4XUXRIXXIEQ",
+      "anchorAssetType": null,
+      "anchorAsset": null
+    },
+    {
+      "code": "AHRK",
+      "issuer": "GCJFH6HI5UPQVTUUOAS7JPOEPCQZCNGM63GWMBL6ULGUL4XUXRIXXIEQ",
+      "anchorAssetType": null,
+      "anchorAsset": null
+    },
+    {
+      "code": "ACUP",
+      "issuer": "GCJFH6HI5UPQVTUUOAS7JPOEPCQZCNGM63GWMBL6ULGUL4XUXRIXXIEQ",
+      "anchorAssetType": null,
+      "anchorAsset": null
+    },
+    {
+      "code": "AANG",
+      "issuer": "GCJFH6HI5UPQVTUUOAS7JPOEPCQZCNGM63GWMBL6ULGUL4XUXRIXXIEQ",
+      "anchorAssetType": null,
+      "anchorAsset": null
+    },
+    {
+      "code": "ACZK",
+      "issuer": "GCJFH6HI5UPQVTUUOAS7JPOEPCQZCNGM63GWMBL6ULGUL4XUXRIXXIEQ",
+      "anchorAssetType": null,
+      "anchorAsset": null
+    },
+    {
+      "code": "ADKK",
+      "issuer": "GCJFH6HI5UPQVTUUOAS7JPOEPCQZCNGM63GWMBL6ULGUL4XUXRIXXIEQ",
+      "anchorAssetType": null,
+      "anchorAsset": null
+    },
+    {
+      "code": "ADJF",
+      "issuer": "GDNUVPUOMWOF2ML5FA5E4HQDX7EHV3VCJTLLTO563PUMZKMHJUJIJSYI",
+      "anchorAssetType": null,
+      "anchorAsset": null
+    },
+    {
+      "code": "ADOP",
+      "issuer": "GCJFH6HI5UPQVTUUOAS7JPOEPCQZCNGM63GWMBL6ULGUL4XUXRIXXIEQ",
+      "anchorAssetType": null,
+      "anchorAsset": null
+    },
+    {
+      "code": "AEGP",
+      "issuer": "GDNUVPUOMWOF2ML5FA5E4HQDX7EHV3VCJTLLTO563PUMZKMHJUJIJSYI",
+      "anchorAssetType": null,
+      "anchorAsset": null
+    },
+    {
+      "code": "AETB",
+      "issuer": "GDNUVPUOMWOF2ML5FA5E4HQDX7EHV3VCJTLLTO563PUMZKMHJUJIJSYI",
+      "anchorAssetType": null,
+      "anchorAsset": null
+    },
+    {
+      "code": "AFKP",
+      "issuer": "GCJFH6HI5UPQVTUUOAS7JPOEPCQZCNGM63GWMBL6ULGUL4XUXRIXXIEQ",
+      "anchorAssetType": null,
+      "anchorAsset": null
+    },
+    {
+      "code": "AFJD",
+      "issuer": "GCJFH6HI5UPQVTUUOAS7JPOEPCQZCNGM63GWMBL6ULGUL4XUXRIXXIEQ",
+      "anchorAssetType": null,
+      "anchorAsset": null
+    },
+    {
+      "code": "AXPF",
+      "issuer": "GCJFH6HI5UPQVTUUOAS7JPOEPCQZCNGM63GWMBL6ULGUL4XUXRIXXIEQ",
+      "anchorAssetType": null,
+      "anchorAsset": null
+    },
+    {
+      "code": "AGMD",
+      "issuer": "GDNUVPUOMWOF2ML5FA5E4HQDX7EHV3VCJTLLTO563PUMZKMHJUJIJSYI",
+      "anchorAssetType": null,
+      "anchorAsset": null
+    },
+    {
+      "code": "AGEL",
+      "issuer": "GCJFH6HI5UPQVTUUOAS7JPOEPCQZCNGM63GWMBL6ULGUL4XUXRIXXIEQ",
+      "anchorAssetType": null,
+      "anchorAsset": null
+    },
+    {
+      "code": "AGHS",
+      "issuer": "GDNUVPUOMWOF2ML5FA5E4HQDX7EHV3VCJTLLTO563PUMZKMHJUJIJSYI",
+      "anchorAssetType": null,
+      "anchorAsset": null
+    },
+    {
+      "code": "AGIP",
+      "issuer": "GCJFH6HI5UPQVTUUOAS7JPOEPCQZCNGM63GWMBL6ULGUL4XUXRIXXIEQ",
+      "anchorAssetType": null,
+      "anchorAsset": null
+    },
+    {
+      "code": "AGTQ",
+      "issuer": "GCJFH6HI5UPQVTUUOAS7JPOEPCQZCNGM63GWMBL6ULGUL4XUXRIXXIEQ",
+      "anchorAssetType": null,
+      "anchorAsset": null
+    },
+    {
+      "code": "AGBP",
+      "issuer": "GDNUVPUOMWOF2ML5FA5E4HQDX7EHV3VCJTLLTO563PUMZKMHJUJIJSYI",
+      "anchorAssetType": null,
+      "anchorAsset": null
+    },
+    {
+      "code": "AGNF",
+      "issuer": "GDNUVPUOMWOF2ML5FA5E4HQDX7EHV3VCJTLLTO563PUMZKMHJUJIJSYI",
+      "anchorAssetType": null,
+      "anchorAsset": null
+    },
+    {
+      "code": "AGYD",
+      "issuer": "GCJFH6HI5UPQVTUUOAS7JPOEPCQZCNGM63GWMBL6ULGUL4XUXRIXXIEQ",
+      "anchorAssetType": null,
+      "anchorAsset": null
+    },
+    {
+      "code": "AHTG",
+      "issuer": "GCJFH6HI5UPQVTUUOAS7JPOEPCQZCNGM63GWMBL6ULGUL4XUXRIXXIEQ",
+      "anchorAssetType": null,
+      "anchorAsset": null
+    },
+    {
+      "code": "AHNL",
+      "issuer": "GCJFH6HI5UPQVTUUOAS7JPOEPCQZCNGM63GWMBL6ULGUL4XUXRIXXIEQ",
+      "anchorAssetType": null,
+      "anchorAsset": null
+    },
+    {
+      "code": "AHKD",
+      "issuer": "GDNUVPUOMWOF2ML5FA5E4HQDX7EHV3VCJTLLTO563PUMZKMHJUJIJSYI",
+      "anchorAssetType": null,
+      "anchorAsset": null
+    },
+    {
+      "code": "AHUF",
+      "issuer": "GCJFH6HI5UPQVTUUOAS7JPOEPCQZCNGM63GWMBL6ULGUL4XUXRIXXIEQ",
+      "anchorAssetType": null,
+      "anchorAsset": null
+    },
+    {
+      "code": "AISK",
+      "issuer": "GCJFH6HI5UPQVTUUOAS7JPOEPCQZCNGM63GWMBL6ULGUL4XUXRIXXIEQ",
+      "anchorAssetType": null,
+      "anchorAsset": null
+    },
+    {
+      "code": "AINR",
+      "issuer": "GCJFH6HI5UPQVTUUOAS7JPOEPCQZCNGM63GWMBL6ULGUL4XUXRIXXIEQ",
+      "anchorAssetType": null,
+      "anchorAsset": null
+    },
+    {
+      "code": "AIDR",
+      "issuer": "GCJFH6HI5UPQVTUUOAS7JPOEPCQZCNGM63GWMBL6ULGUL4XUXRIXXIEQ",
+      "anchorAssetType": null,
+      "anchorAsset": null
+    },
+    {
+      "code": "AILS",
+      "issuer": "GCJFH6HI5UPQVTUUOAS7JPOEPCQZCNGM63GWMBL6ULGUL4XUXRIXXIEQ",
+      "anchorAssetType": null,
+      "anchorAsset": null
+    },
+    {
+      "code": "AJMD",
+      "issuer": "GCJFH6HI5UPQVTUUOAS7JPOEPCQZCNGM63GWMBL6ULGUL4XUXRIXXIEQ",
+      "anchorAssetType": null,
+      "anchorAsset": null
+    },
+    {
+      "code": "AJPY",
+      "issuer": "GDNUVPUOMWOF2ML5FA5E4HQDX7EHV3VCJTLLTO563PUMZKMHJUJIJSYI",
+      "anchorAssetType": null,
+      "anchorAsset": null
+    },
+    {
+      "code": "AJOD",
+      "issuer": "GCJFH6HI5UPQVTUUOAS7JPOEPCQZCNGM63GWMBL6ULGUL4XUXRIXXIEQ",
+      "anchorAssetType": null,
+      "anchorAsset": null
+    },
+    {
+      "code": "AKZT",
+      "issuer": "GCJFH6HI5UPQVTUUOAS7JPOEPCQZCNGM63GWMBL6ULGUL4XUXRIXXIEQ",
+      "anchorAssetType": null,
+      "anchorAsset": null
+    },
+    {
+      "code": "AKES",
+      "issuer": "GDNUVPUOMWOF2ML5FA5E4HQDX7EHV3VCJTLLTO563PUMZKMHJUJIJSYI",
+      "anchorAssetType": null,
+      "anchorAsset": null
+    },
+    {
+      "code": "AKWD",
+      "issuer": "GCJFH6HI5UPQVTUUOAS7JPOEPCQZCNGM63GWMBL6ULGUL4XUXRIXXIEQ",
+      "anchorAssetType": null,
+      "anchorAsset": null
+    },
+    {
+      "code": "AKGS",
+      "issuer": "GCJFH6HI5UPQVTUUOAS7JPOEPCQZCNGM63GWMBL6ULGUL4XUXRIXXIEQ",
+      "anchorAssetType": null,
+      "anchorAsset": null
+    },
+    {
+      "code": "ALAK",
+      "issuer": "GCJFH6HI5UPQVTUUOAS7JPOEPCQZCNGM63GWMBL6ULGUL4XUXRIXXIEQ",
+      "anchorAssetType": null,
+      "anchorAsset": null
+    },
+    {
+      "code": "ALSL",
+      "issuer": "GDNUVPUOMWOF2ML5FA5E4HQDX7EHV3VCJTLLTO563PUMZKMHJUJIJSYI",
+      "anchorAssetType": null,
+      "anchorAsset": null
+    },
+    {
+      "code": "ALRD",
+      "issuer": "GDNUVPUOMWOF2ML5FA5E4HQDX7EHV3VCJTLLTO563PUMZKMHJUJIJSYI",
+      "anchorAssetType": null,
+      "anchorAsset": null
+    },
+    {
+      "code": "ACHF",
+      "issuer": "GCJFH6HI5UPQVTUUOAS7JPOEPCQZCNGM63GWMBL6ULGUL4XUXRIXXIEQ",
+      "anchorAssetType": null,
+      "anchorAsset": null
+    },
+    {
+      "code": "AMOP",
+      "issuer": "GCJFH6HI5UPQVTUUOAS7JPOEPCQZCNGM63GWMBL6ULGUL4XUXRIXXIEQ",
+      "anchorAssetType": null,
+      "anchorAsset": null
+    },
+    {
+      "code": "AMGA",
+      "issuer": "GDNUVPUOMWOF2ML5FA5E4HQDX7EHV3VCJTLLTO563PUMZKMHJUJIJSYI",
+      "anchorAssetType": null,
+      "anchorAsset": null
+    },
+    {
+      "code": "AMWK",
+      "issuer": "GDNUVPUOMWOF2ML5FA5E4HQDX7EHV3VCJTLLTO563PUMZKMHJUJIJSYI",
+      "anchorAssetType": null,
+      "anchorAsset": null
+    },
+    {
+      "code": "AMYR",
+      "issuer": "GCJFH6HI5UPQVTUUOAS7JPOEPCQZCNGM63GWMBL6ULGUL4XUXRIXXIEQ",
+      "anchorAssetType": null,
+      "anchorAsset": null
+    },
+    {
+      "code": "AMVR",
+      "issuer": "GCJFH6HI5UPQVTUUOAS7JPOEPCQZCNGM63GWMBL6ULGUL4XUXRIXXIEQ",
+      "anchorAssetType": null,
+      "anchorAsset": null
+    },
+    {
+      "code": "AMRU",
+      "issuer": "GDNUVPUOMWOF2ML5FA5E4HQDX7EHV3VCJTLLTO563PUMZKMHJUJIJSYI",
+      "anchorAssetType": null,
+      "anchorAsset": null
+    },
+    {
+      "code": "AMUR",
+      "issuer": "GDNUVPUOMWOF2ML5FA5E4HQDX7EHV3VCJTLLTO563PUMZKMHJUJIJSYI",
+      "anchorAssetType": null,
+      "anchorAsset": null
+    },
+    {
+      "code": "AMXN",
+      "issuer": "GCJFH6HI5UPQVTUUOAS7JPOEPCQZCNGM63GWMBL6ULGUL4XUXRIXXIEQ",
+      "anchorAssetType": null,
+      "anchorAsset": null
+    },
+    {
+      "code": "AMDL",
+      "issuer": "GCJFH6HI5UPQVTUUOAS7JPOEPCQZCNGM63GWMBL6ULGUL4XUXRIXXIEQ",
+      "anchorAssetType": null,
+      "anchorAsset": null
+    },
+    {
+      "code": "AMNT",
+      "issuer": "GCJFH6HI5UPQVTUUOAS7JPOEPCQZCNGM63GWMBL6ULGUL4XUXRIXXIEQ",
+      "anchorAssetType": null,
+      "anchorAsset": null
+    },
+    {
+      "code": "AMAD",
+      "issuer": "GDNUVPUOMWOF2ML5FA5E4HQDX7EHV3VCJTLLTO563PUMZKMHJUJIJSYI",
+      "anchorAssetType": null,
+      "anchorAsset": null
+    },
+    {
+      "code": "AMZN",
+      "issuer": "GDNUVPUOMWOF2ML5FA5E4HQDX7EHV3VCJTLLTO563PUMZKMHJUJIJSYI",
+      "anchorAssetType": null,
+      "anchorAsset": null
+    },
+    {
+      "code": "AMMK",
+      "issuer": "GCJFH6HI5UPQVTUUOAS7JPOEPCQZCNGM63GWMBL6ULGUL4XUXRIXXIEQ",
+      "anchorAssetType": null,
+      "anchorAsset": null
+    },
+    {
+      "code": "ANAD",
+      "issuer": "GDNUVPUOMWOF2ML5FA5E4HQDX7EHV3VCJTLLTO563PUMZKMHJUJIJSYI",
+      "anchorAssetType": null,
+      "anchorAsset": null
+    },
+    {
+      "code": "ANPR",
+      "issuer": "GCJFH6HI5UPQVTUUOAS7JPOEPCQZCNGM63GWMBL6ULGUL4XUXRIXXIEQ",
+      "anchorAssetType": null,
+      "anchorAsset": null
+    },
+    {
+      "code": "ANIO",
+      "issuer": "GCJFH6HI5UPQVTUUOAS7JPOEPCQZCNGM63GWMBL6ULGUL4XUXRIXXIEQ",
+      "anchorAssetType": null,
+      "anchorAsset": null
+    },
+    {
+      "code": "ANGN",
+      "issuer": "GDNUVPUOMWOF2ML5FA5E4HQDX7EHV3VCJTLLTO563PUMZKMHJUJIJSYI",
+      "anchorAssetType": null,
+      "anchorAsset": null
+    },
+    {
+      "code": "AMKD",
+      "issuer": "GCJFH6HI5UPQVTUUOAS7JPOEPCQZCNGM63GWMBL6ULGUL4XUXRIXXIEQ",
+      "anchorAssetType": null,
+      "anchorAsset": null
+    },
+    {
+      "code": "AOMR",
+      "issuer": "GCJFH6HI5UPQVTUUOAS7JPOEPCQZCNGM63GWMBL6ULGUL4XUXRIXXIEQ",
+      "anchorAssetType": null,
+      "anchorAsset": null
+    },
+    {
+      "code": "APKR",
+      "issuer": "GCJFH6HI5UPQVTUUOAS7JPOEPCQZCNGM63GWMBL6ULGUL4XUXRIXXIEQ",
+      "anchorAssetType": null,
+      "anchorAsset": null
+    },
+    {
+      "code": "APGK",
+      "issuer": "GCJFH6HI5UPQVTUUOAS7JPOEPCQZCNGM63GWMBL6ULGUL4XUXRIXXIEQ",
+      "anchorAssetType": null,
+      "anchorAsset": null
+    },
+    {
+      "code": "APYG",
+      "issuer": "GCJFH6HI5UPQVTUUOAS7JPOEPCQZCNGM63GWMBL6ULGUL4XUXRIXXIEQ",
+      "anchorAssetType": null,
+      "anchorAsset": null
+    },
+    {
+      "code": "APEN",
+      "issuer": "GCJFH6HI5UPQVTUUOAS7JPOEPCQZCNGM63GWMBL6ULGUL4XUXRIXXIEQ",
+      "anchorAssetType": null,
+      "anchorAsset": null
+    },
+    {
+      "code": "APHP",
+      "issuer": "GCJFH6HI5UPQVTUUOAS7JPOEPCQZCNGM63GWMBL6ULGUL4XUXRIXXIEQ",
+      "anchorAssetType": null,
+      "anchorAsset": null
+    },
+    {
+      "code": "APLN",
+      "issuer": "GCJFH6HI5UPQVTUUOAS7JPOEPCQZCNGM63GWMBL6ULGUL4XUXRIXXIEQ",
+      "anchorAssetType": null,
+      "anchorAsset": null
+    },
+    {
+      "code": "AQAR",
+      "issuer": "GCJFH6HI5UPQVTUUOAS7JPOEPCQZCNGM63GWMBL6ULGUL4XUXRIXXIEQ",
+      "anchorAssetType": null,
+      "anchorAsset": null
+    },
+    {
+      "code": "ARON",
+      "issuer": "GCJFH6HI5UPQVTUUOAS7JPOEPCQZCNGM63GWMBL6ULGUL4XUXRIXXIEQ",
+      "anchorAssetType": null,
+      "anchorAsset": null
+    },
+    {
+      "code": "ARUB",
+      "issuer": "GCJFH6HI5UPQVTUUOAS7JPOEPCQZCNGM63GWMBL6ULGUL4XUXRIXXIEQ",
+      "anchorAssetType": null,
+      "anchorAsset": null
+    },
+    {
+      "code": "ARWF",
+      "issuer": "GDNUVPUOMWOF2ML5FA5E4HQDX7EHV3VCJTLLTO563PUMZKMHJUJIJSYI",
+      "anchorAssetType": null,
+      "anchorAsset": null
+    },
+    {
+      "code": "ASHP",
+      "issuer": "GCJFH6HI5UPQVTUUOAS7JPOEPCQZCNGM63GWMBL6ULGUL4XUXRIXXIEQ",
+      "anchorAssetType": null,
+      "anchorAsset": null
+    },
+    {
+      "code": "AWST",
+      "issuer": "GCJFH6HI5UPQVTUUOAS7JPOEPCQZCNGM63GWMBL6ULGUL4XUXRIXXIEQ",
+      "anchorAssetType": null,
+      "anchorAsset": null
+    },
+    {
+      "code": "ASTN",
+      "issuer": "GDNUVPUOMWOF2ML5FA5E4HQDX7EHV3VCJTLLTO563PUMZKMHJUJIJSYI",
+      "anchorAssetType": null,
+      "anchorAsset": null
+    },
+    {
+      "code": "ASAR",
+      "issuer": "GCJFH6HI5UPQVTUUOAS7JPOEPCQZCNGM63GWMBL6ULGUL4XUXRIXXIEQ",
+      "anchorAssetType": null,
+      "anchorAsset": null
+    },
+    {
+      "code": "ARSD",
+      "issuer": "GCJFH6HI5UPQVTUUOAS7JPOEPCQZCNGM63GWMBL6ULGUL4XUXRIXXIEQ",
+      "anchorAssetType": null,
+      "anchorAsset": null
+    },
+    {
+      "code": "ASCR",
+      "issuer": "GDNUVPUOMWOF2ML5FA5E4HQDX7EHV3VCJTLLTO563PUMZKMHJUJIJSYI",
+      "anchorAssetType": null,
+      "anchorAsset": null
+    },
+    {
+      "code": "ASLL",
+      "issuer": "GDNUVPUOMWOF2ML5FA5E4HQDX7EHV3VCJTLLTO563PUMZKMHJUJIJSYI",
+      "anchorAssetType": null,
+      "anchorAsset": null
+    },
+    {
+      "code": "ASGD",
+      "issuer": "GCJFH6HI5UPQVTUUOAS7JPOEPCQZCNGM63GWMBL6ULGUL4XUXRIXXIEQ",
+      "anchorAssetType": null,
+      "anchorAsset": null
+    },
+    {
+      "code": "ASBD",
+      "issuer": "GCJFH6HI5UPQVTUUOAS7JPOEPCQZCNGM63GWMBL6ULGUL4XUXRIXXIEQ",
+      "anchorAssetType": null,
+      "anchorAsset": null
+    },
+    {
+      "code": "AZAR",
+      "issuer": "GDNUVPUOMWOF2ML5FA5E4HQDX7EHV3VCJTLLTO563PUMZKMHJUJIJSYI",
+      "anchorAssetType": null,
+      "anchorAsset": null
+    },
+    {
+      "code": "AKRW",
+      "issuer": "GCJFH6HI5UPQVTUUOAS7JPOEPCQZCNGM63GWMBL6ULGUL4XUXRIXXIEQ",
+      "anchorAssetType": null,
+      "anchorAsset": null
+    },
+    {
+      "code": "ALKR",
+      "issuer": "GCJFH6HI5UPQVTUUOAS7JPOEPCQZCNGM63GWMBL6ULGUL4XUXRIXXIEQ",
+      "anchorAssetType": null,
+      "anchorAsset": null
+    },
+    {
+      "code": "ASRD",
+      "issuer": "GCJFH6HI5UPQVTUUOAS7JPOEPCQZCNGM63GWMBL6ULGUL4XUXRIXXIEQ",
+      "anchorAssetType": null,
+      "anchorAsset": null
+    },
+    {
+      "code": "ASZL",
+      "issuer": "GDNUVPUOMWOF2ML5FA5E4HQDX7EHV3VCJTLLTO563PUMZKMHJUJIJSYI",
+      "anchorAssetType": null,
+      "anchorAsset": null
+    },
+    {
+      "code": "ASEK",
+      "issuer": "GCJFH6HI5UPQVTUUOAS7JPOEPCQZCNGM63GWMBL6ULGUL4XUXRIXXIEQ",
+      "anchorAssetType": null,
+      "anchorAsset": null
+    },
+    {
+      "code": "ATWD",
+      "issuer": "GCJFH6HI5UPQVTUUOAS7JPOEPCQZCNGM63GWMBL6ULGUL4XUXRIXXIEQ",
+      "anchorAssetType": null,
+      "anchorAsset": null
+    },
+    {
+      "code": "ATJS",
+      "issuer": "GCJFH6HI5UPQVTUUOAS7JPOEPCQZCNGM63GWMBL6ULGUL4XUXRIXXIEQ",
+      "anchorAssetType": null,
+      "anchorAsset": null
+    },
+    {
+      "code": "ATZS",
+      "issuer": "GDNUVPUOMWOF2ML5FA5E4HQDX7EHV3VCJTLLTO563PUMZKMHJUJIJSYI",
+      "anchorAssetType": null,
+      "anchorAsset": null
+    },
+    {
+      "code": "ATHB",
+      "issuer": "GCJFH6HI5UPQVTUUOAS7JPOEPCQZCNGM63GWMBL6ULGUL4XUXRIXXIEQ",
+      "anchorAssetType": null,
+      "anchorAsset": null
+    },
+    {
+      "code": "ATOP",
+      "issuer": "GCJFH6HI5UPQVTUUOAS7JPOEPCQZCNGM63GWMBL6ULGUL4XUXRIXXIEQ",
+      "anchorAssetType": null,
+      "anchorAsset": null
+    },
+    {
+      "code": "ATTD",
+      "issuer": "GCJFH6HI5UPQVTUUOAS7JPOEPCQZCNGM63GWMBL6ULGUL4XUXRIXXIEQ",
+      "anchorAssetType": null,
+      "anchorAsset": null
+    },
+    {
+      "code": "ATND",
+      "issuer": "GDNUVPUOMWOF2ML5FA5E4HQDX7EHV3VCJTLLTO563PUMZKMHJUJIJSYI",
+      "anchorAssetType": null,
+      "anchorAsset": null
+    },
+    {
+      "code": "ATRY",
+      "issuer": "GCJFH6HI5UPQVTUUOAS7JPOEPCQZCNGM63GWMBL6ULGUL4XUXRIXXIEQ",
+      "anchorAssetType": null,
+      "anchorAsset": null
+    },
+    {
+      "code": "ATMT",
+      "issuer": "GCJFH6HI5UPQVTUUOAS7JPOEPCQZCNGM63GWMBL6ULGUL4XUXRIXXIEQ",
+      "anchorAssetType": null,
+      "anchorAsset": null
+    },
+    {
+      "code": "AUGX",
+      "issuer": "GDNUVPUOMWOF2ML5FA5E4HQDX7EHV3VCJTLLTO563PUMZKMHJUJIJSYI",
+      "anchorAssetType": null,
+      "anchorAsset": null
+    },
+    {
+      "code": "AUAH",
+      "issuer": "GCJFH6HI5UPQVTUUOAS7JPOEPCQZCNGM63GWMBL6ULGUL4XUXRIXXIEQ",
+      "anchorAssetType": null,
+      "anchorAsset": null
+    },
+    {
+      "code": "AAED",
+      "issuer": "GCJFH6HI5UPQVTUUOAS7JPOEPCQZCNGM63GWMBL6ULGUL4XUXRIXXIEQ",
+      "anchorAssetType": null,
+      "anchorAsset": null
+    },
+    {
+      "code": "AUYU",
+      "issuer": "GCJFH6HI5UPQVTUUOAS7JPOEPCQZCNGM63GWMBL6ULGUL4XUXRIXXIEQ",
+      "anchorAssetType": null,
+      "anchorAsset": null
+    },
+    {
+      "code": "AUZS",
+      "issuer": "GCJFH6HI5UPQVTUUOAS7JPOEPCQZCNGM63GWMBL6ULGUL4XUXRIXXIEQ",
+      "anchorAssetType": null,
+      "anchorAsset": null
+    },
+    {
+      "code": "AVUV",
+      "issuer": "GCJFH6HI5UPQVTUUOAS7JPOEPCQZCNGM63GWMBL6ULGUL4XUXRIXXIEQ",
+      "anchorAssetType": null,
+      "anchorAsset": null
+    },
+    {
+      "code": "AVES",
+      "issuer": "GCJFH6HI5UPQVTUUOAS7JPOEPCQZCNGM63GWMBL6ULGUL4XUXRIXXIEQ",
+      "anchorAssetType": null,
+      "anchorAsset": null
+    },
+    {
+      "code": "AVND",
+      "issuer": "GCJFH6HI5UPQVTUUOAS7JPOEPCQZCNGM63GWMBL6ULGUL4XUXRIXXIEQ",
+      "anchorAssetType": null,
+      "anchorAsset": null
+    },
+    {
+      "code": "AZMW",
+      "issuer": "GDNUVPUOMWOF2ML5FA5E4HQDX7EHV3VCJTLLTO563PUMZKMHJUJIJSYI",
+      "anchorAssetType": null,
+      "anchorAsset": null
+    },
+    {
+      "code": "AZWL",
+      "issuer": "GDNUVPUOMWOF2ML5FA5E4HQDX7EHV3VCJTLLTO563PUMZKMHJUJIJSYI",
+      "anchorAssetType": null,
+      "anchorAsset": null
+    },
+    {
+      "code": "AAFN",
+      "issuer": "GCJFH6HI5UPQVTUUOAS7JPOEPCQZCNGM63GWMBL6ULGUL4XUXRIXXIEQ",
+      "anchorAssetType": null,
+      "anchorAsset": null
+    },
+    {
+      "code": "AIQD",
+      "issuer": "GCJFH6HI5UPQVTUUOAS7JPOEPCQZCNGM63GWMBL6ULGUL4XUXRIXXIEQ",
+      "anchorAssetType": null,
+      "anchorAsset": null
+    },
+    {
+      "code": "AIRR",
+      "issuer": "GCJFH6HI5UPQVTUUOAS7JPOEPCQZCNGM63GWMBL6ULGUL4XUXRIXXIEQ",
+      "anchorAssetType": null,
+      "anchorAsset": null
+    },
+    {
+      "code": "AKPW",
+      "issuer": "GCJFH6HI5UPQVTUUOAS7JPOEPCQZCNGM63GWMBL6ULGUL4XUXRIXXIEQ",
+      "anchorAssetType": null,
+      "anchorAsset": null
+    },
+    {
+      "code": "ALBP",
+      "issuer": "GCJFH6HI5UPQVTUUOAS7JPOEPCQZCNGM63GWMBL6ULGUL4XUXRIXXIEQ",
+      "anchorAssetType": null,
+      "anchorAsset": null
+    },
+    {
+      "code": "APAB",
+      "issuer": "GCJFH6HI5UPQVTUUOAS7JPOEPCQZCNGM63GWMBL6ULGUL4XUXRIXXIEQ",
+      "anchorAssetType": null,
+      "anchorAsset": null
+    },
+    {
+      "code": "ASVC",
+      "issuer": "GCJFH6HI5UPQVTUUOAS7JPOEPCQZCNGM63GWMBL6ULGUL4XUXRIXXIEQ",
+      "anchorAssetType": null,
+      "anchorAsset": null
+    },
+    {
+      "code": "ASYP",
+      "issuer": "GCJFH6HI5UPQVTUUOAS7JPOEPCQZCNGM63GWMBL6ULGUL4XUXRIXXIEQ",
+      "anchorAssetType": null,
+      "anchorAsset": null
+    },
+    {
+      "code": "AYER",
+      "issuer": "GCJFH6HI5UPQVTUUOAS7JPOEPCQZCNGM63GWMBL6ULGUL4XUXRIXXIEQ",
+      "anchorAssetType": null,
+      "anchorAsset": null
+    },
+    {
+      "code": "ASOS",
+      "issuer": "GDNUVPUOMWOF2ML5FA5E4HQDX7EHV3VCJTLLTO563PUMZKMHJUJIJSYI",
+      "anchorAssetType": null,
+      "anchorAsset": null
+    },
+    {
+      "code": "ACDF",
+      "issuer": "GDNUVPUOMWOF2ML5FA5E4HQDX7EHV3VCJTLLTO563PUMZKMHJUJIJSYI",
+      "anchorAssetType": null,
+      "anchorAsset": null
+    },
+    {
+      "code": "ASSP",
+      "issuer": "GDNUVPUOMWOF2ML5FA5E4HQDX7EHV3VCJTLLTO563PUMZKMHJUJIJSYI",
+      "anchorAssetType": null,
+      "anchorAsset": null
+    },
+    {
+      "code": "ASDG",
+      "issuer": "GDNUVPUOMWOF2ML5FA5E4HQDX7EHV3VCJTLLTO563PUMZKMHJUJIJSYI",
+      "anchorAssetType": null,
+      "anchorAsset": null
+    },
+    {
+      "code": "ALYD",
+      "issuer": "GDNUVPUOMWOF2ML5FA5E4HQDX7EHV3VCJTLLTO563PUMZKMHJUJIJSYI",
+      "anchorAssetType": null,
+      "anchorAsset": null
+    },
+    {
+      "code": "AERN",
+      "issuer": "GDNUVPUOMWOF2ML5FA5E4HQDX7EHV3VCJTLLTO563PUMZKMHJUJIJSYI",
+      "anchorAssetType": null,
+      "anchorAsset": null
+    }
+  ]
+}

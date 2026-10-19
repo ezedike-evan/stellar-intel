@@ -30,6 +30,8 @@ const MOCK_CENSUS: AnchorCensus = {
       receiveAssets: [],
       sources: ['stellar.expert', 'anchors.ts'],
       registeredAnchorId: 'anclap',
+      listedAnchorId: null,
+      listedKind: null,
       checkedAt: '2026-09-27T12:00:00.000Z',
     },
     {
@@ -47,6 +49,8 @@ const MOCK_CENSUS: AnchorCensus = {
       receiveAssets: ['EUR'],
       sources: ['stellar.expert'],
       registeredAnchorId: null,
+      listedAnchorId: null,
+      listedKind: null,
       checkedAt: '2026-09-27T12:00:00.000Z',
     },
     {
@@ -64,6 +68,8 @@ const MOCK_CENSUS: AnchorCensus = {
       receiveAssets: [],
       sources: ['stellar.expert'],
       registeredAnchorId: null,
+      listedAnchorId: null,
+      listedKind: null,
       checkedAt: '2026-09-27T12:00:00.000Z',
     },
   ],
@@ -169,5 +175,30 @@ describe('Anchor directory page (ANC057)', () => {
       table.getAttribute('aria-label') === 'Anchor directory' ||
         table.querySelector('caption')?.textContent === 'Anchor directory'
     ).toBe(true);
+  });
+
+  it('renders "Crypto only" badge for a row with listedKind: "crypto-rails"', async () => {
+    const cryptoCensus: AnchorCensus = {
+      ...MOCK_CENSUS,
+      rows: [
+        {
+          domain: 'ultracapital.xyz',
+          tier: 'routable',
+          seps: { sep6: true, sep24: true, sep31: false, sep38: false, sep10: true },
+          withdrawAssets: ['ETH'],
+          depositAssets: ['ETH', 'BTC'],
+          receiveAssets: [],
+          sources: ['stellar.expert'],
+          registeredAnchorId: null,
+          listedAnchorId: 'ultra-capital',
+          listedKind: 'crypto-rails',
+          checkedAt: '2026-09-27T12:00:00.000Z',
+        },
+      ],
+    };
+    const jsx = await AnchorDirectoryPage({ census: cryptoCensus });
+    render(jsx);
+
+    expect(screen.getByText('Crypto only')).toBeTruthy();
   });
 });

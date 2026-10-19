@@ -134,7 +134,9 @@ docs: update environment variable reference
 refactor: extract anchor TOML resolution into lib/sep1.ts
 ```
 
-Types: `feat`, `fix`, `docs`, `refactor`, `test`, `chore`, `ci`.
+Types: `feat`, `fix`, `docs`, `style`, `refactor`, `perf`, `test`, `build`, `ci`, `chore`, `revert`.
+
+Scopes: `offramp`, `onramp`, `anchors`, `intent`, `router`, `reputation`, `oracle`, `mcp`, `sdk`, `sdk-ts`, `sdk-py`, `sdk-rs`, `contracts`, `api`, `ui`, `brand`, `sep1`, `sep6`, `sep10`, `sep24`, `sep38`, `freighter`, `telemetry`, `ops`, `deps`, `release`. An unknown scope will fail the commit via the husky hook and the CI commitlint check. An empty scope (`docs: …`) is allowed for repo-wide or cross-cutting changes. The commit header length is capped at 100 characters. See `commitlint.config.mjs` as the source of truth.
 
 ### Documentation
 
@@ -205,6 +207,28 @@ dependency that needs `std`** — `reqwest`, `tokio` and friends will not compil
 here, and feature-gating them poisons the dependency graph for the contract
 authors this crate exists for.
 
+### `crates/stellar-intel-client` — the HTTP client crate
+
+Mirrors the `rust (stellar-intel-client)` CI job:
+
+```bash
+cargo fmt     --manifest-path crates/stellar-intel-client/Cargo.toml --check
+cargo clippy  --manifest-path crates/stellar-intel-client/Cargo.toml --all-targets --locked -- -D warnings
+cargo test    --manifest-path crates/stellar-intel-client/Cargo.toml --locked
+cargo doc     --manifest-path crates/stellar-intel-client/Cargo.toml --no-deps --locked
+cargo publish --manifest-path crates/stellar-intel-client/Cargo.toml --dry-run --locked
+```
+
+### `packages/sdk` — the TypeScript SDK
+
+npm workspace for the `@stellarintel/sdk` client package. Build it with TypeScript:
+
+```bash
+npm run build --workspace=@stellarintel/sdk
+```
+
+Its tests under `packages/sdk/tests/**` run automatically as part of the root unit test suite (`npm run test`).
+
 ### `packages/python-sdk`
 
 ```bash
@@ -223,7 +247,7 @@ the spec, or change the wrapper.
 ### `packages/publisher`, `packages/mcp`
 
 npm workspaces. Root `npm run test` picks up `packages/*/tests/**` automatically
-(`vitest.config.mts` excludes only `tests/e2e/**`), so their unit tests run with
+(`vitest.config.mts` excludes `tests/e2e/**` and `**/.claude/worktrees/**`), so their unit tests run with
 the root suite. Building the publisher is a prerequisite of the root typecheck
 and is wired into `pretypecheck`/`prebuild`, so you rarely invoke it directly:
 
@@ -240,6 +264,8 @@ npm run build --workspace=@stellarintel/publisher
 | `constants/anchors.ts`                  | Root block **including `check:registry`**     |
 | `contracts/reputation/`                 | Root block + contract block                   |
 | `crates/stellar-intel-reputation/`      | Consumer crate block                          |
+| `crates/stellar-intel-client/`          | Client crate block                            |
+| `packages/sdk/`                         | Root block + SDK build block                  |
 | `packages/publisher/`, `packages/mcp/`  | Root block (their tests run with it)          |
 | `packages/python-sdk/`                  | Python block                                  |
 | Any `*.md`                              | `npm run format:check` — prettier covers docs |

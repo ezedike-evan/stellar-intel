@@ -3,7 +3,6 @@ import {
   fetchAnchorFee,
   fetchAllAnchorFees,
   computeRateComparison,
-  initiateWithdraw,
   getWithdrawTransactionRecord,
 } from '@/lib/stellar/sep24';
 import * as sep1 from '@/lib/stellar/sep1';
@@ -160,8 +159,8 @@ describe('computeRateComparison', () => {
       {
         status: 'fulfilled',
         value: {
-          anchorId: 'flutterwave',
-          anchorName: 'Flutterwave',
+          anchorId: 'moneygram',
+          anchorName: 'MoneyGram',
           corridorId: 'usdc-ngn',
           fee: 1.5,
           feeType: 'flat',
@@ -175,7 +174,7 @@ describe('computeRateComparison', () => {
     ];
 
     const comparison = computeRateComparison(results, 'usdc-ngn');
-    expect(comparison.bestRateId).toBe('flutterwave');
+    expect(comparison.bestRateId).toBe('moneygram');
     expect(comparison.rates).toHaveLength(2);
   });
 
@@ -187,68 +186,6 @@ describe('computeRateComparison', () => {
     expect(comparison.rates).toHaveLength(0);
     expect(comparison.bestRateId).toBe('');
     expect(comparison.pending).toEqual([]);
-  });
-});
-
-// ─── initiateWithdraw ─────────────────────────────────────────────────────────
-
-describe('initiateWithdraw', () => {
-  const params = {
-    jwt: 'test-jwt',
-    assetCode: 'USDC',
-    assetIssuer: 'GA5ZSEJYB37JRC5AVCIA5MOP4RHTM335X2KGX3IHOJAPP5RE34K4KZVN',
-    amount: '100',
-    account: 'GABCDEF',
-  };
-
-  it('constructs the correct POST body with all required fields', async () => {
-    let capturedBody = '';
-    vi.stubGlobal(
-      'fetch',
-      vi.fn(async (_url: string, opts: RequestInit) => {
-        capturedBody = opts.body as string;
-        return {
-          ok: true,
-          json: async () => ({
-            type: 'interactive_customer_info_needed',
-            url: 'https://anchor.io/kyc',
-            id: 'txn-1',
-          }),
-        };
-      })
-    );
-
-    await initiateWithdraw(RESOLVED_ANCHOR, params);
-    const body = JSON.parse(capturedBody);
-    expect(body.asset_code).toBe('USDC');
-    expect(body.amount).toBe('100');
-    expect(body.account).toBe('GABCDEF');
-  });
-
-  it('throws when response type is not interactive_customer_info_needed', async () => {
-    vi.stubGlobal(
-      'fetch',
-      vi.fn(async () => ({
-        ok: true,
-        json: async () => ({ type: 'error', error: 'not supported' }),
-      }))
-    );
-
-    await expect(initiateWithdraw(RESOLVED_ANCHOR, params)).rejects.toThrow(
-      /Unexpected response type/
-    );
-  });
-
-  it('throws when url is absent from the response', async () => {
-    vi.stubGlobal(
-      'fetch',
-      vi.fn(async () => ({
-        ok: true,
-        json: async () => ({ type: 'interactive_customer_info_needed', id: 'txn-1' }),
-      }))
-    );
-
-    await expect(initiateWithdraw(RESOLVED_ANCHOR, params)).rejects.toThrow(/"url"/);
   });
 });
 

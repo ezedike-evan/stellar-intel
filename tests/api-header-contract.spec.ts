@@ -39,9 +39,12 @@ describe('X-RateLimit-Reset has one meaning (#914)', () => {
     // indistinguishable from an epoch only if you never look at it.
     const rl = makeResult({ allowed: false, remaining: 0, retryAfter: 30 });
     const headers = rateLimitHeaders(rl.limit, rl);
+    const viaResponse = withRateLimitHeaders(NextResponse.json({}), rl);
 
     expect(Number(headers['X-RateLimit-Reset'])).toBeGreaterThan(1_000_000_000);
     expect(headers['X-RateLimit-Reset']).not.toBe('30');
+    expect(Number(viaResponse.headers.get('X-RateLimit-Reset'))).toBeGreaterThan(1_000_000_000);
+    expect(viaResponse.headers.get('X-RateLimit-Reset')).not.toBe('30');
     // Retry-After is the header that carries the delta.
     expect(headers['Retry-After']).toBe('30');
   });

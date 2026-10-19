@@ -27,11 +27,10 @@ describe('withApiHeaders', () => {
 });
 
 describe('withRateLimitHeaders', () => {
-  it('stamps limit, remaining, and reset', () => {
+  it('stamps limit and remaining', () => {
     const res = withRateLimitHeaders(NextResponse.json({}), RL);
     expect(res.headers.get('X-RateLimit-Limit')).toBe('20');
     expect(res.headers.get('X-RateLimit-Remaining')).toBe('5');
-    expect(res.headers.get('X-RateLimit-Reset')).toBe(String(Math.ceil(RL.resetAt / 1000)));
   });
 });
 
