@@ -1,95 +1,95 @@
 {
   "thresholdNights": 3,
-  "updatedAt": "2026-10-18T08:51:56.848Z",
+  "updatedAt": "2026-10-19T09:55:33.814Z",
   "anchors": {
     "moneygram": {
       "consecutiveFailures": 0,
       "degraded": false,
-      "lastCheckedAt": "2026-10-18T08:51:56.848Z",
+      "lastCheckedAt": "2026-10-19T09:55:33.814Z",
       "lastStatus": "ok",
       "lastError": null
     },
     "cowrie": {
       "consecutiveFailures": 0,
       "degraded": false,
-      "lastCheckedAt": "2026-10-18T08:51:56.848Z",
+      "lastCheckedAt": "2026-10-19T09:55:33.814Z",
       "lastStatus": "ok",
       "lastError": null
     },
     "anclap": {
       "consecutiveFailures": 0,
       "degraded": false,
-      "lastCheckedAt": "2026-10-18T08:51:56.848Z",
+      "lastCheckedAt": "2026-10-19T09:55:33.814Z",
       "lastStatus": "ok",
       "lastError": null
     },
     "latamex": {
-      "consecutiveFailures": 1,
+      "consecutiveFailures": 2,
       "degraded": false,
-      "lastCheckedAt": "2026-10-18T08:51:56.848Z",
+      "lastCheckedAt": "2026-10-19T09:55:33.814Z",
       "lastStatus": "fail",
       "lastError": "HTTP 403"
     },
     "ngnc": {
       "consecutiveFailures": 0,
       "degraded": false,
-      "lastCheckedAt": "2026-10-18T08:51:56.848Z",
+      "lastCheckedAt": "2026-10-19T09:55:33.814Z",
       "lastStatus": "ok",
       "lastError": null
     },
     "ntokens": {
       "consecutiveFailures": 0,
       "degraded": false,
-      "lastCheckedAt": "2026-10-18T08:51:56.848Z",
+      "lastCheckedAt": "2026-10-19T09:55:33.814Z",
       "lastStatus": "ok",
       "lastError": null
     },
     "zeam": {
       "consecutiveFailures": 0,
       "degraded": false,
-      "lastCheckedAt": "2026-10-18T08:51:56.848Z",
+      "lastCheckedAt": "2026-10-19T09:55:33.814Z",
       "lastStatus": "ok",
       "lastError": null
     },
     "aps": {
       "consecutiveFailures": 0,
       "degraded": false,
-      "lastCheckedAt": "2026-10-18T08:51:56.848Z",
+      "lastCheckedAt": "2026-10-19T09:55:33.814Z",
       "lastStatus": "ok",
       "lastError": null
     },
     "bitnovo": {
-      "consecutiveFailures": 6,
+      "consecutiveFailures": 7,
       "degraded": true,
-      "lastCheckedAt": "2026-10-18T08:51:56.848Z",
+      "lastCheckedAt": "2026-10-19T09:55:33.814Z",
       "lastStatus": "fail",
       "lastError": "HTTP 502"
     },
     "perahub": {
       "consecutiveFailures": 0,
       "degraded": false,
-      "lastCheckedAt": "2026-10-18T08:51:56.848Z",
+      "lastCheckedAt": "2026-10-19T09:55:33.814Z",
       "lastStatus": "ok",
       "lastError": null
     },
     "clpx": {
       "consecutiveFailures": 0,
       "degraded": false,
-      "lastCheckedAt": "2026-10-18T08:51:56.848Z",
+      "lastCheckedAt": "2026-10-19T09:55:33.814Z",
       "lastStatus": "ok",
       "lastError": null
     },
     "sofizpay": {
       "consecutiveFailures": 0,
       "degraded": false,
-      "lastCheckedAt": "2026-10-18T08:51:56.848Z",
+      "lastCheckedAt": "2026-10-19T09:55:33.814Z",
       "lastStatus": "ok",
       "lastError": null
     },
     "finclusive": {
       "consecutiveFailures": 0,
       "degraded": false,
-      "lastCheckedAt": "2026-10-18T08:51:56.848Z",
+      "lastCheckedAt": "2026-10-19T09:55:33.814Z",
       "lastStatus": "ok",
       "lastError": null
     }
