@@ -257,6 +257,87 @@ constraint above. Do not hand-edit `constants/anchor-health.json` or
 `scripts/anchor-survey.snapshot.json`; both are generated, and the next run
 overwrites them.
 
+## Listed operators (issuer-only and crypto-only)
+
+Not all operators on Stellar operate fiat ramps. Many reputable operators issue tokens or operate crypto-to-crypto rails on Stellar without offering fiat deposit or withdrawal. To provide transparency across the broader Stellar ecosystem without confusing users, these operators are catalogued in the **listed-anchor registry** (`constants/listed-anchors/`) and marked on the matching rows of the Anchor Directory (`/anchors/directory`): a row whose domain belongs to a listed operator carries its `listedAnchorId` and `listedKind`, and `crypto-rails` operators show a "Crypto only" badge. The directory does not read the registry directly, so an operator appears there only when its domain is in the survey results.
+
+> **Listed operators are never quoted or routed.** Listed operators are excluded from corridor routing, rate queries, the swap/payment engine, and MCP tools. They are tracked for ecosystem visibility only.
+
+### Decision rule: where does an operator belong?
+
+- **`ANCHORS` (`constants/anchors.ts`)**: An operator with a live fiat withdraw rail (SEP-24 or SEP-6) that moves fiat off-chain.
+- **`constants/listed-anchors/` with `kind: "issuer"`**: An operator whose `stellar.toml` publishes assets under `[[CURRENCIES]]` but provides no SEP-6 or SEP-24 transfer rails (no `TRANSFER_SERVER` or `TRANSFER_SERVER_SEP0024`).
+- **`constants/listed-anchors/` with `kind: "crypto-rails"`**: An operator that offers SEP-6 or SEP-24 transfer rails, but those rails move exclusively crypto assets (e.g. BTC, ETH) with no fiat payout rails.
+
+### File layout
+
+Each listed operator has a consistent four-file layout:
+
+1. **`constants/listed-anchors/<id>.json`**: The metadata definition for the operator, matching the `<id>` of the file.
+2. **`constants/listed-anchors/index.ts`**: The import and registration in the `RAW` array, sorted in alphabetical order.
+3. **`tests/fixtures/listed/<id>.toml`**: An exact snapshot of the operator's `https://{domain}/.well-known/stellar.toml`. For `crypto-rails` operators, also include `<id>.<sep>-info.json` (e.g. `tests/fixtures/listed/<id>.sep6-info.json` or `<id>.sep24-info.json`) capturing the raw `/info` response.
+4. **`tests/listed.<id>.spec.ts`**: The test specification verifying entry shape, domain resolution, fixture matching, asset inventory, and separation from `ANCHORS`.
+
+### Schema and field tables
+
+#### `ListedAnchor`
+
+| Field                | Type                 | Required | Description                                                                                                       |
+| -------------------- | -------------------- | :------: | ----------------------------------------------------------------------------------------------------------------- |
+| `id`                 | `string`             |    ✅    | Stable, lower-case identifier matching the JSON file name (e.g. `'vnx'`).                                         |
+| `name`               | `string`             |    ✅    | Human-readable display name of the operator.                                                                      |
+| `kind`               | `ListedAnchorKind`   |    ✅    | `'issuer'` or `'crypto-rails'`.                                                                                   |
+| `domains`            | `string[]`           |    ✅    | Public hostname(s) owned by the operator. `domains[0]` is the primary domain the TOML fixture was retrieved from. |
+| `orgUrl`             | `string \| null`     |    ✅    | Operator website/organization URL, or `null`.                                                                     |
+| `verifiedAt`         | `string`             |    ✅    | Date the operator's TOML was checked, in `YYYY-MM-DD` format.                                                     |
+| `assets`             | `ListedAsset[]`      |    ✅    | List of assets published in the operator's `stellar.toml` `[[CURRENCIES]]`.                                       |
+| `cryptoRails`        | `ListedCryptoRail[]` |          | Array of transfer rail definitions (required for `kind: "crypto-rails"`).                                         |
+| `registeredAnchorId` | `string`             |          | Identifier of a corresponding anchor in `ANCHORS` if operated by the same organization (e.g. `'moneygram'`).      |
+| `note`               | `string`             |          | Optional context or notes about the operator or listing decision.                                                 |
+
+#### `ListedAsset`
+
+| Field             | Type                          | Required | Description                                                                                                                                                 |
+| ----------------- | ----------------------------- | :------: | ----------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `code`            | `string`                      |    ✅    | Stellar asset code as defined in `stellar.toml`.                                                                                                            |
+| `issuer`          | `string`                      |    ✅    | G-address of the asset issuer account.                                                                                                                      |
+| `anchorAssetType` | `Sep1AnchorAssetType \| null` |    ✅    | Mirrors `anchor_asset_type` from TOML (`'fiat'`, `'crypto'`, `'nft'`, `'stock'`, `'bond'`, `'commodity'`, `'realestate'`, `'other'`), or `null` if omitted. |
+| `anchorAsset`     | `string \| null`              |    ✅    | Mirrors `anchor_asset` identifier from TOML, or `null` if omitted.                                                                                          |
+
+#### `ListedCryptoRail`
+
+| Field            | Type                | Required | Description                                                  |
+| ---------------- | ------------------- | :------: | ------------------------------------------------------------ |
+| `sep`            | `'sep6' \| 'sep24'` |    ✅    | The SEP protocol implemented by this rail.                   |
+| `transferServer` | `string`            |    ✅    | Base URL of the transfer server endpoint.                    |
+| `depositAssets`  | `string[]`          |    ✅    | Enabled deposit asset codes from the `/info` endpoint.       |
+| `withdrawAssets` | `string[]`          |    ✅    | Enabled withdraw asset codes from the `/info` endpoint.      |
+| `withdrawTypes`  | `string[]`          |    ✅    | Sorted union of `types` keys across enabled withdraw assets. |
+
+### Guard rules
+
+The listed registry is protected by automated tests in CI:
+
+1. **`listedRegistryViolations`** ([`lib/stellar/listed-anchors.ts`](../lib/stellar/listed-anchors.ts), enforced by `tests/listed-anchors.registry.spec.ts`):
+   - **Unique ID**: Listed operator `id` values must be unique across all entries.
+   - **No collision with `ANCHORS`**: A listed `id` must not match any `id` in `ANCHORS`.
+   - **No domain collisions**: Domains in `domains` must not appear across multiple listed operators, and must not collide with any `homeDomain` or `serviceDomain` in `ANCHORS`.
+   - **Valid `registeredAnchorId`**: When `registeredAnchorId` is present, it must reference an existing anchor in `ANCHORS`.
+   - **Unique assets**: Each `(code, issuer)` asset pair can belong to only one listed operator.
+2. **`fixtureMismatches`** ([`lib/stellar/listed-anchors.ts`](../lib/stellar/listed-anchors.ts), enforced in each `tests/listed.<id>.spec.ts`):
+   - Compares the `assets` declared in `<id>.json` against the parsed `[[CURRENCIES]]` in `tests/fixtures/listed/<id>.toml`.
+   - Rejects any missing assets, unexpected extra assets, or mismatched `anchorAssetType` / `anchorAsset` values.
+
+### What is never listed
+
+Not every TOML or asset on the network is accepted into the registry. The following are never listed:
+
+- **Memecoins and joke tokens**: Tokens with no functional backing or institutional operator.
+- **Impersonation TOMLs**: Domains that copy or mimic other projects' assets or TOML data.
+- **Empty TOMLs**: Files containing no `[[CURRENCIES]]` declarations.
+
+When an operator or domain is rejected for these reasons, it is not added to `constants/listed-anchors/`. Instead, the exclusion decision and reason are documented by the maintainers in [`docs/anchors/exclusions.md`](anchors/exclusions.md).
+
 ## SEP-6 acceptance caveats
 
 SEP-6 anchors are acceptable for onboarding when they advertise a valid

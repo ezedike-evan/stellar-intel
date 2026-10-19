@@ -219,9 +219,6 @@ Good places to start:
 - Issues tagged [`help-wanted`](https://github.com/Ezedike-Evan/stellar-intel/labels/help-wanted) — larger tickets actively looking for owners.
 - Anchor integrations — see [docs/ANCHOR_ONBOARDING.md](docs/ANCHOR_ONBOARDING.md).
 
-Every contributor merged during OSS week is credited by name in the grant
-resubmission document.
-
 ---
 
 ## Contributors

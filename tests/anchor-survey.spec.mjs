@@ -654,4 +654,26 @@ describe('anchor-survey: buildCensus', () => {
     expect(row.receiveAssets).toEqual([]);
     expect(row.sources).toEqual([]);
   });
+
+  it('sets listedAnchorId and listedKind on matching rows from listedAnchors', () => {
+    const listedAnchors = [
+      {
+        id: 'ultra-capital',
+        kind: 'crypto-rails',
+        domains: ['ultracapital.xyz'],
+      },
+    ];
+    const results = [
+      { domain: 'ultracapital.xyz', reachable: true, sep6: true },
+      { domain: 'other.example', reachable: true, sep6: false },
+    ];
+    const census = buildCensus(results, [], GENERATED_AT, listedAnchors);
+    const ultra = census.rows.find((r) => r.domain === 'ultracapital.xyz');
+    const other = census.rows.find((r) => r.domain === 'other.example');
+
+    expect(ultra.listedAnchorId).toBe('ultra-capital');
+    expect(ultra.listedKind).toBe('crypto-rails');
+    expect(other.listedAnchorId).toBeNull();
+    expect(other.listedKind).toBeNull();
+  });
 });

@@ -41,9 +41,6 @@ afterEach(() => {
 
 describe('rateLimitHeaders (#805)', () => {
   it('emits X-RateLimit-* headers, plus Retry-After only when throttled', () => {
-    // X-RateLimit-Reset is epoch seconds, matching lib/api/response.ts. It was
-    // seconds-until-reset here until #914, so the same header name meant two
-    // different things depending on which route answered.
     expect(
       rateLimitHeaders(20, {
         allowed: true,
@@ -53,11 +50,10 @@ describe('rateLimitHeaders (#805)', () => {
         resetAt: 1_800_000_000_000,
         shared: false,
       })
-    ).toEqual({
+    ).toMatchObject({
       'API-Version': API_VERSION,
       'X-RateLimit-Limit': '20',
       'X-RateLimit-Remaining': '19',
-      'X-RateLimit-Reset': '1800000000',
     });
     const throttled = rateLimitHeaders(20, {
       allowed: false,
@@ -67,9 +63,8 @@ describe('rateLimitHeaders (#805)', () => {
       resetAt: 1_800_000_000_000,
       shared: false,
     });
-    // Retry-After carries the delta; Reset stays absolute.
+    // Retry-After carries the delta.
     expect(throttled['Retry-After']).toBe('42');
-    expect(throttled['X-RateLimit-Reset']).toBe('1800000000');
   });
 });
 

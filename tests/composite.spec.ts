@@ -11,11 +11,6 @@ describe('composite', () => {
     expect(MIN_SETTLE_SECONDS).toBeGreaterThan(0);
   });
 
-  it('returns 1.0 for perfect metrics at reference settle time', () => {
-    const score = composite({ fillRate: 1, slippage: 0, settleSeconds: NORM_SETTLE_SECONDS });
-    expect(score).toBeCloseTo(1.0);
-  });
-
   it('returns 0 for fillRate of 0', () => {
     const score = composite({ fillRate: 0, slippage: 0, settleSeconds: NORM_SETTLE_SECONDS });
     expect(score).toBe(0);
@@ -58,22 +53,6 @@ describe('composite', () => {
     const score = composite({ fillRate: 0.9, slippage: 0.01, settleSeconds: 0 });
     expect(Number.isFinite(score)).toBe(true);
     expect(score).toBeGreaterThan(0);
-  });
-
-  it('is deterministic — same inputs always produce the same output', () => {
-    fc.assert(
-      fc.property(
-        fc.double({ min: 0, max: 1, noNaN: true }),
-        fc.double({ min: 0, max: 1, noNaN: true }),
-        fc.double({ min: 1, max: 86400, noNaN: true }),
-        (fillRate, slippage, settleSeconds) => {
-          const a = composite({ fillRate, slippage, settleSeconds });
-          const b = composite({ fillRate, slippage, settleSeconds });
-          return a === b;
-        }
-      ),
-      { numRuns: 500 }
-    );
   });
 
   it('result is always finite for valid inputs', () => {

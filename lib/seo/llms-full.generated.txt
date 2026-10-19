@@ -198,14 +198,14 @@ in the "no API route handler signs a transaction" guard.
 
 > How the pieces fit together. This document is the map a new contributor
 > reads before opening a PR, the reviewer consults before approving one, and
-> the grant committee reads to understand what is actually being built.
+> the reference contributors and integrators read to understand what is actually built.
 >
 > Scope: the intent router, the reputation write path, the Soroban oracle,
 > the MCP/agent surface, and the SEP-10/24/38 flow. Where something ships
 > today it is marked ✅; where it is planned it is marked 🛠️ and the
 > milestone wave is named.
 
-**Last reviewed:** 2026-08-28
+**Last reviewed:** 2026-10-18
 
 ---
 
@@ -701,31 +701,30 @@ and read reputation — with zero held keys.
 
 ### Tools
 
-| Tool                        | Input                                       | Output                 | Authority                                                   |
-| --------------------------- | ------------------------------------------- | ---------------------- | ----------------------------------------------------------- |
-| `list_corridors`            | —                                           | `Corridor[]`           | Read-only.                                                  |
-| `list_anchors_for_corridor` | `{ corridorId }`                            | `Anchor[]`             | Read-only.                                                  |
-| `quote_corridor`            | `{ corridorId, sellAmount, deliveryHint? }` | `Plan`                 | Read-only; RFQs live anchors.                               |
-| `build_intent`              | `{ plan, deadlineSeconds, preferences? }`   | `Intent` (unsigned)    | Read-only.                                                  |
-| `submit_signed_intent`      | `{ intent, signature }`                     | `{ transactionIds[] }` | Executes — requires user signature from the calling wallet. |
-| `read_reputation`           | `{ anchorId, corridorId }`                  | `Aggregate`            | Read-only.                                                  |
-| `read_outcome`              | `{ intentHash }`                            | `Outcome \| null`      | Read-only.                                                  |
-| `watch_transaction`         | `{ transactionId, transferServer, jwt }`    | Event stream           | Read-only.                                                  |
+| Tool                      | Purpose                                                                                                                                           | Hosted (`/api/mcp`) |
+| ------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------- | ------------------- |
+| `intel.offramp.quote`     | Returns the live net-received quote for a corridor + amount (anchor, quoteId, netReceived, expiresAt).                                            | ✓                   |
+| `intel.offramp.prepare`   | Returns an unsigned intent envelope (intent + hash) and an unsigned Stellar transaction for agent signing.                                        | ✓                   |
+| `intel.execute`           | Verifies an agent-signed intent + transaction against the prepared intent and submits it to Horizon.                                              | ✓                   |
+| `intel.anchor.reputation` | Returns 7/30/90-day rolling percentile scorecards for an anchor (fill rate, settlement latency, slippage).                                        | ✓                   |
+| `intel.anchor.health`     | Returns the current status, consecutive failure count, degraded flag, last check timestamp, last error message, and staleness flag for an anchor. | ✓                   |
+| `intel.probe.coverage`    | Reports whether probe history is trustworthy yet: fleetThresholdMet, daysUntilFleetThreshold, and per-anchor continuous days.                     | ✓                   |
+| `intel.leaderboard`       | Returns anchors ranked by composite reputation score (fill rate, settlement speed, slippage).                                                     | ✓                   |
+| `intel.corridors`         | Lists every corridor Stellar Intel currently surfaces, with its id, display name, source asset, destination fiat currency, country, and anchors.  | ✓                   |
 
 ### Agent-safety invariants
 
-1. **No signing in the MCP.** `submit_signed_intent` _requires_ a signature
+1. **No signing in the MCP.** `intel.execute` _requires_ a signature
    produced by the end-user's wallet. The server never holds a key capable of
    moving funds.
 2. **Scoped JWTs.** The MCP never caches an anchor JWT longer than a single
    intent's lifetime.
-3. **Auditable.** Every `submit_signed_intent` call logs `intent_hash +
+3. **Auditable.** Every `intel.execute` call logs `intent_hash +
 signature + caller` to an append-only local log for the user to review.
 4. **Rate-limited.** Per-caller and per-account quote caps prevent an agent
    from hammering anchors during a runaway loop.
 
-Install: `claude mcp add stellar-intel npx -y @stellarintel/mcp@latest`.
-See `docs/MCP.md` for the end-to-end tutorial and three worked examples.
+Connect to the hosted endpoint at `https://stellar-intel.vercel.app/api/mcp` (Streamable HTTP) or run the local dev server with `npx tsx scripts/mcp/server.ts` (stdio). See [`docs/MCP.md`](MCP.md) for the end-to-end tutorial and worked examples.
 
 ---
 
@@ -1982,7 +1981,7 @@ Additional field:
 
 # GraphQL API
 
-**Last reviewed:** 2026-08-26
+**Last reviewed:** 2026-10-18
 
 An additive, alternative surface over the same resources REST v1 exposes —
 anchors, health, rates, and off-ramp intents. **REST v1 stays canonical**
@@ -1999,14 +1998,14 @@ Source of truth: [`lib/graphql/typeDefs.ts`](../lib/graphql/typeDefs.ts) (schema
 Every resolver calls the exact same `lib/` functions the REST routes call —
 none of the four resources have a second implementation:
 
-| Resource | GraphQL field                   | Shared with REST via                                                                                                       |
-| -------- | ------------------------------- | -------------------------------------------------------------------------------------------------------------------------- |
-| Anchors  | `Query.anchor`, `Query.anchors` | `lib/stellar/anchors.ts` (`getAnchorById`, `getAnchorsByCorridorId`)                                                       |
-| Health   | `Query.health`                  | `lib/stellar/anchors.ts` (degraded anchors), `lib/metrics.ts` (`getPublisherHealth`, `getMetricsSnapshot`)                 |
-| Rates    | `Query.rates`                   | `lib/api/rates-resolver.ts` (`resolveCorridorRates`) — the same cache-aware resolver `GET /api/rates/[corridor]` calls     |
-| Intents  | `Mutation.submitOfframpIntent`  | `lib/api/offramp-intent.ts` (`resolveOfframpIntent`) — the same routing/tx-building logic `POST /api/intent/offramp` calls |
+| Resource | GraphQL field                   | Shared with REST via                                                                                                   |
+| -------- | ------------------------------- | ---------------------------------------------------------------------------------------------------------------------- |
+| Anchors  | `Query.anchor`, `Query.anchors` | `lib/stellar/anchors.ts` (`getAnchorById`, `getAnchorsByCorridorId`)                                                   |
+| Health   | `Query.health`                  | `lib/stellar/anchors.ts` (degraded anchors), `lib/metrics.ts` (`getPublisherHealth`, `getMetricsSnapshot`)             |
+| Rates    | `Query.rates`                   | `lib/api/rates-resolver.ts` (`resolveCorridorRates`) — the same cache-aware resolver `GET /api/rates/[corridor]` calls |
+| Intents  | `Mutation.submitOfframpIntent`  | `lib/intent/offramp.ts` (`createOfframpIntent`) — the same routing/tx-building logic `POST /api/intent/offramp` calls  |
 
-`lib/api/rates-resolver.ts` and `lib/api/offramp-intent.ts` were factored out
+`lib/api/rates-resolver.ts` and `lib/intent/offramp.ts` were factored out
 of the REST routes specifically so both surfaces resolve through one function
 each — see their module docstrings.
 
@@ -2014,12 +2013,13 @@ each — see their module docstrings.
 
 ```
 POST /api/graphql
+GET  /api/graphql?query=...&variables=...&operationName=...
 ```
 
-A GraphiQL explorer is served at the same path outside production
-(`NODE_ENV !== 'production'`) for local/staging use. Requests are rate
-limited per IP (`api.graphql` bucket, 60 requests/minute), mirroring the
-REST routes.
+Supports both `POST` with a JSON body (`{query, variables, operationName}`) and
+`GET` with query parameters (`?query=`, optional `variables` as JSON, and
+optional `operationName`). Requests are rate limited per IP (`api.graphql`
+bucket, 60 requests/minute), mirroring the REST routes.
 
 ## Example query
 
@@ -2058,15 +2058,19 @@ mutation Submit($input: OfframpIntentInput!) {
 ```
 
 `OfframpIntentInput` is validated with the identical zod schema
-(`IntentSchema` in `lib/api/offramp-intent.ts`) `POST /api/intent/offramp`
+(`IntentSchema` in `lib/intent/offramp.ts`) `POST /api/intent/offramp`
 uses, so a payload accepted by one is accepted by the other.
 
 ## Errors
 
-GraphQL always responds `200` with an `errors` array; each error's
+Request-level problems (such as a missing query, malformed JSON body, invalid
+variables JSON, syntax errors, or schema validation failures) return `HTTP 400`
+with `{data: null, errors: [...]}`.
+
+Resolver errors return `HTTP 200` with `{data, errors}`; each error's
 `extensions.code` mirrors the REST `ApiError.code` values (`BAD_USER_INPUT`,
-`NO_ROUTE`, `TX_BUILD_FAILED`) so clients can branch the same way regardless
-of which surface they used.
+`NO_ROUTE`, `TX_BUILD_FAILED`) so clients can branch the same way regardless of
+which surface they used.
 
 <!-- source: docs/VERSIONING.md -->
 
@@ -4182,6 +4186,87 @@ prints. A missing row means the parser skipped your entry — check the flat-ent
 constraint above. Do not hand-edit `constants/anchor-health.json` or
 `scripts/anchor-survey.snapshot.json`; both are generated, and the next run
 overwrites them.
+
+## Listed operators (issuer-only and crypto-only)
+
+Not all operators on Stellar operate fiat ramps. Many reputable operators issue tokens or operate crypto-to-crypto rails on Stellar without offering fiat deposit or withdrawal. To provide transparency across the broader Stellar ecosystem without confusing users, these operators are catalogued in the **listed-anchor registry** (`constants/listed-anchors/`) and marked on the matching rows of the Anchor Directory (`/anchors/directory`): a row whose domain belongs to a listed operator carries its `listedAnchorId` and `listedKind`, and `crypto-rails` operators show a "Crypto only" badge. The directory does not read the registry directly, so an operator appears there only when its domain is in the survey results.
+
+> **Listed operators are never quoted or routed.** Listed operators are excluded from corridor routing, rate queries, the swap/payment engine, and MCP tools. They are tracked for ecosystem visibility only.
+
+### Decision rule: where does an operator belong?
+
+- **`ANCHORS` (`constants/anchors.ts`)**: An operator with a live fiat withdraw rail (SEP-24 or SEP-6) that moves fiat off-chain.
+- **`constants/listed-anchors/` with `kind: "issuer"`**: An operator whose `stellar.toml` publishes assets under `[[CURRENCIES]]` but provides no SEP-6 or SEP-24 transfer rails (no `TRANSFER_SERVER` or `TRANSFER_SERVER_SEP0024`).
+- **`constants/listed-anchors/` with `kind: "crypto-rails"`**: An operator that offers SEP-6 or SEP-24 transfer rails, but those rails move exclusively crypto assets (e.g. BTC, ETH) with no fiat payout rails.
+
+### File layout
+
+Each listed operator has a consistent four-file layout:
+
+1. **`constants/listed-anchors/<id>.json`**: The metadata definition for the operator, matching the `<id>` of the file.
+2. **`constants/listed-anchors/index.ts`**: The import and registration in the `RAW` array, sorted in alphabetical order.
+3. **`tests/fixtures/listed/<id>.toml`**: An exact snapshot of the operator's `https://{domain}/.well-known/stellar.toml`. For `crypto-rails` operators, also include `<id>.<sep>-info.json` (e.g. `tests/fixtures/listed/<id>.sep6-info.json` or `<id>.sep24-info.json`) capturing the raw `/info` response.
+4. **`tests/listed.<id>.spec.ts`**: The test specification verifying entry shape, domain resolution, fixture matching, asset inventory, and separation from `ANCHORS`.
+
+### Schema and field tables
+
+#### `ListedAnchor`
+
+| Field                | Type                 | Required | Description                                                                                                       |
+| -------------------- | -------------------- | :------: | ----------------------------------------------------------------------------------------------------------------- |
+| `id`                 | `string`             |    ✅    | Stable, lower-case identifier matching the JSON file name (e.g. `'vnx'`).                                         |
+| `name`               | `string`             |    ✅    | Human-readable display name of the operator.                                                                      |
+| `kind`               | `ListedAnchorKind`   |    ✅    | `'issuer'` or `'crypto-rails'`.                                                                                   |
+| `domains`            | `string[]`           |    ✅    | Public hostname(s) owned by the operator. `domains[0]` is the primary domain the TOML fixture was retrieved from. |
+| `orgUrl`             | `string \| null`     |    ✅    | Operator website/organization URL, or `null`.                                                                     |
+| `verifiedAt`         | `string`             |    ✅    | Date the operator's TOML was checked, in `YYYY-MM-DD` format.                                                     |
+| `assets`             | `ListedAsset[]`      |    ✅    | List of assets published in the operator's `stellar.toml` `[[CURRENCIES]]`.                                       |
+| `cryptoRails`        | `ListedCryptoRail[]` |          | Array of transfer rail definitions (required for `kind: "crypto-rails"`).                                         |
+| `registeredAnchorId` | `string`             |          | Identifier of a corresponding anchor in `ANCHORS` if operated by the same organization (e.g. `'moneygram'`).      |
+| `note`               | `string`             |          | Optional context or notes about the operator or listing decision.                                                 |
+
+#### `ListedAsset`
+
+| Field             | Type                          | Required | Description                                                                                                                                                 |
+| ----------------- | ----------------------------- | :------: | ----------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `code`            | `string`                      |    ✅    | Stellar asset code as defined in `stellar.toml`.                                                                                                            |
+| `issuer`          | `string`                      |    ✅    | G-address of the asset issuer account.                                                                                                                      |
+| `anchorAssetType` | `Sep1AnchorAssetType \| null` |    ✅    | Mirrors `anchor_asset_type` from TOML (`'fiat'`, `'crypto'`, `'nft'`, `'stock'`, `'bond'`, `'commodity'`, `'realestate'`, `'other'`), or `null` if omitted. |
+| `anchorAsset`     | `string \| null`              |    ✅    | Mirrors `anchor_asset` identifier from TOML, or `null` if omitted.                                                                                          |
+
+#### `ListedCryptoRail`
+
+| Field            | Type                | Required | Description                                                  |
+| ---------------- | ------------------- | :------: | ------------------------------------------------------------ |
+| `sep`            | `'sep6' \| 'sep24'` |    ✅    | The SEP protocol implemented by this rail.                   |
+| `transferServer` | `string`            |    ✅    | Base URL of the transfer server endpoint.                    |
+| `depositAssets`  | `string[]`          |    ✅    | Enabled deposit asset codes from the `/info` endpoint.       |
+| `withdrawAssets` | `string[]`          |    ✅    | Enabled withdraw asset codes from the `/info` endpoint.      |
+| `withdrawTypes`  | `string[]`          |    ✅    | Sorted union of `types` keys across enabled withdraw assets. |
+
+### Guard rules
+
+The listed registry is protected by automated tests in CI:
+
+1. **`listedRegistryViolations`** ([`lib/stellar/listed-anchors.ts`](../lib/stellar/listed-anchors.ts), enforced by `tests/listed-anchors.registry.spec.ts`):
+   - **Unique ID**: Listed operator `id` values must be unique across all entries.
+   - **No collision with `ANCHORS`**: A listed `id` must not match any `id` in `ANCHORS`.
+   - **No domain collisions**: Domains in `domains` must not appear across multiple listed operators, and must not collide with any `homeDomain` or `serviceDomain` in `ANCHORS`.
+   - **Valid `registeredAnchorId`**: When `registeredAnchorId` is present, it must reference an existing anchor in `ANCHORS`.
+   - **Unique assets**: Each `(code, issuer)` asset pair can belong to only one listed operator.
+2. **`fixtureMismatches`** ([`lib/stellar/listed-anchors.ts`](../lib/stellar/listed-anchors.ts), enforced in each `tests/listed.<id>.spec.ts`):
+   - Compares the `assets` declared in `<id>.json` against the parsed `[[CURRENCIES]]` in `tests/fixtures/listed/<id>.toml`.
+   - Rejects any missing assets, unexpected extra assets, or mismatched `anchorAssetType` / `anchorAsset` values.
+
+### What is never listed
+
+Not every TOML or asset on the network is accepted into the registry. The following are never listed:
+
+- **Memecoins and joke tokens**: Tokens with no functional backing or institutional operator.
+- **Impersonation TOMLs**: Domains that copy or mimic other projects' assets or TOML data.
+- **Empty TOMLs**: Files containing no `[[CURRENCIES]]` declarations.
+
+When an operator or domain is rejected for these reasons, it is not added to `constants/listed-anchors/`. Instead, the exclusion decision and reason are documented by the maintainers in [`docs/anchors/exclusions.md`](anchors/exclusions.md).
 
 ## SEP-6 acceptance caveats
 
