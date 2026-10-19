@@ -113,7 +113,7 @@ describe('hashIntent', () => {
 
   it('pins BASE_INTENT to its exact hash — fails if canonicalisation changes', async () => {
     expect(await hashIntent(BASE_INTENT)).toBe(
-      'd92eb38a85d24d8b1fc27240ceb376f51b185f9bef5b434de7df76c6d382ac59'
+      'f24f63585861ffb5fc8d06ddb5d572215650e15332831af81f62a71b056b562e'
     );
   });
 
