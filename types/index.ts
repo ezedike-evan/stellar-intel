@@ -65,6 +65,10 @@ export interface AnchorCensusRow {
   sources: string[];
   /** Matching `constants/anchors.ts` id, matched on home or service domain; null if unregistered. */
   registeredAnchorId: string | null;
+  /** Matching `constants/listed-anchors/` id, matched on domains; null if not in listed registry. */
+  listedAnchorId: string | null;
+  /** Kind of listed operator ('issuer' | 'crypto-rails') if in listed registry; null otherwise. */
+  listedKind: ListedAnchorKind | null;
   checkedAt: string;
 }
 

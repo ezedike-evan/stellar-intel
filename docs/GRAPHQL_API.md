@@ -1,6 +1,6 @@
 # GraphQL API
 
-**Last reviewed:** 2026-08-26
+**Last reviewed:** 2026-10-18
 
 An additive, alternative surface over the same resources REST v1 exposes —
 anchors, health, rates, and off-ramp intents. **REST v1 stays canonical**
@@ -17,14 +17,14 @@ Source of truth: [`lib/graphql/typeDefs.ts`](../lib/graphql/typeDefs.ts) (schema
 Every resolver calls the exact same `lib/` functions the REST routes call —
 none of the four resources have a second implementation:
 
-| Resource | GraphQL field                   | Shared with REST via                                                                                                       |
-| -------- | ------------------------------- | -------------------------------------------------------------------------------------------------------------------------- |
-| Anchors  | `Query.anchor`, `Query.anchors` | `lib/stellar/anchors.ts` (`getAnchorById`, `getAnchorsByCorridorId`)                                                       |
-| Health   | `Query.health`                  | `lib/stellar/anchors.ts` (degraded anchors), `lib/metrics.ts` (`getPublisherHealth`, `getMetricsSnapshot`)                 |
-| Rates    | `Query.rates`                   | `lib/api/rates-resolver.ts` (`resolveCorridorRates`) — the same cache-aware resolver `GET /api/rates/[corridor]` calls     |
-| Intents  | `Mutation.submitOfframpIntent`  | `lib/api/offramp-intent.ts` (`resolveOfframpIntent`) — the same routing/tx-building logic `POST /api/intent/offramp` calls |
+| Resource | GraphQL field                   | Shared with REST via                                                                                                   |
+| -------- | ------------------------------- | ---------------------------------------------------------------------------------------------------------------------- |
+| Anchors  | `Query.anchor`, `Query.anchors` | `lib/stellar/anchors.ts` (`getAnchorById`, `getAnchorsByCorridorId`)                                                   |
+| Health   | `Query.health`                  | `lib/stellar/anchors.ts` (degraded anchors), `lib/metrics.ts` (`getPublisherHealth`, `getMetricsSnapshot`)             |
+| Rates    | `Query.rates`                   | `lib/api/rates-resolver.ts` (`resolveCorridorRates`) — the same cache-aware resolver `GET /api/rates/[corridor]` calls |
+| Intents  | `Mutation.submitOfframpIntent`  | `lib/intent/offramp.ts` (`createOfframpIntent`) — the same routing/tx-building logic `POST /api/intent/offramp` calls  |
 
-`lib/api/rates-resolver.ts` and `lib/api/offramp-intent.ts` were factored out
+`lib/api/rates-resolver.ts` and `lib/intent/offramp.ts` were factored out
 of the REST routes specifically so both surfaces resolve through one function
 each — see their module docstrings.
 
@@ -32,12 +32,13 @@ each — see their module docstrings.
 
 ```
 POST /api/graphql
+GET  /api/graphql?query=...&variables=...&operationName=...
 ```
 
-A GraphiQL explorer is served at the same path outside production
-(`NODE_ENV !== 'production'`) for local/staging use. Requests are rate
-limited per IP (`api.graphql` bucket, 60 requests/minute), mirroring the
-REST routes.
+Supports both `POST` with a JSON body (`{query, variables, operationName}`) and
+`GET` with query parameters (`?query=`, optional `variables` as JSON, and
+optional `operationName`). Requests are rate limited per IP (`api.graphql`
+bucket, 60 requests/minute), mirroring the REST routes.
 
 ## Example query
 
@@ -76,12 +77,16 @@ mutation Submit($input: OfframpIntentInput!) {
 ```
 
 `OfframpIntentInput` is validated with the identical zod schema
-(`IntentSchema` in `lib/api/offramp-intent.ts`) `POST /api/intent/offramp`
+(`IntentSchema` in `lib/intent/offramp.ts`) `POST /api/intent/offramp`
 uses, so a payload accepted by one is accepted by the other.
 
 ## Errors
 
-GraphQL always responds `200` with an `errors` array; each error's
+Request-level problems (such as a missing query, malformed JSON body, invalid
+variables JSON, syntax errors, or schema validation failures) return `HTTP 400`
+with `{data: null, errors: [...]}`.
+
+Resolver errors return `HTTP 200` with `{data, errors}`; each error's
 `extensions.code` mirrors the REST `ApiError.code` values (`BAD_USER_INPUT`,
-`NO_ROUTE`, `TX_BUILD_FAILED`) so clients can branch the same way regardless
-of which surface they used.
+`NO_ROUTE`, `TX_BUILD_FAILED`) so clients can branch the same way regardless of
+which surface they used.

@@ -21,7 +21,7 @@ Ticket ranges point back to numbered issues in the
 >
 > **Reconciliation, 2026-08-06.** Post–Wave-6 sweep flipped the boxes for capabilities now on
 > `main`: v6 Rust SDK (#868/#982), webhooks + HMAC (#869), GraphQL (#870), developer portal
-> (#871); v2.1 publisher whitelist, `read_outcome`/`read_aggregate`, testnet deploy (#194),
+> (#871); v2.1 publisher whitelist, `recent_outcomes`/`get_corridor_aggregate`, testnet deploy (#194),
 > TS read SDK (#201), Python consumer (#203/#821); v2.0 leaderboard/history/composite/dispute
 > (#157–#159, #166). Marked in-flight (`[-]`): `@stellarintel/sdk` + `/mcp` (built, unpublished —
 > npm 404), multisig admin (two-step rotation shipped, 2-of-3 pending), decentralization (#875).
@@ -492,9 +492,9 @@ milestone](#v2-scope-with-no-milestone) — real decomposition, unscheduled.
 - [-] `#181` Multi-signer admin (2-of-3) on the oracle contract — two-step
   admin + upgrade-admin rotation shipped (`admin.rs`, `upgrade.rs`,
   `tests/multisig.rs`); 2-of-3 threshold pending
-- [x] Publisher whitelist management (`add_publisher` / `remove_publisher`) — `publishers.rs`
+- [x] Publisher whitelist management (`add_publisher` / `revoke_publisher` / `list_publishers`) — `publishers.rs`
 - [ ] `publish_outcome` — full signature verification + idempotency
-- [x] `read_outcome` + `read_aggregate` public reads — `lib/oracle/read.ts`
+- [x] `get_corridor_aggregate` (and `_v2`) public reads — `lib/oracle/read.ts`; `recent_outcomes` — `crates/stellar-intel-reputation`
 - [ ] 7-day time-locked upgrade path
 - [ ] `#189` Publisher service (production key rotation, health endpoint)
 - [ ] `#190–#192` Publisher retries, dead-letter, Sentry wiring

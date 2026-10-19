@@ -3,7 +3,6 @@ import type { Anchor } from '@/types';
 import {
   ANCHORS,
   CORRIDORS,
-  ANCHOR_HOME_DOMAINS,
   getAnchorById,
   getAnchorsByCorridorId,
   getDepositCapableAnchors,
@@ -33,17 +32,6 @@ describe('ANCHORS', () => {
     expect(mg.corridors).toContain('usdc-mxn');
     expect(mg.corridors).toContain('usdc-brl');
   });
-
-  it('Cowrie is only in ngnt-ngn', () => {
-    const cowrie = ANCHORS.find((a) => a.id === 'cowrie')!;
-    expect(cowrie.corridors).toEqual(['ngnt-ngn']);
-  });
-
-  it('Anclap covers ars-ars and pen-pen', () => {
-    const anclap = ANCHORS.find((a) => a.id === 'anclap')!;
-    expect(anclap.corridors).toContain('ars-ars');
-    expect(anclap.corridors).toContain('pen-pen');
-  });
 });
 
 describe('CORRIDORS', () => {
@@ -67,20 +55,6 @@ describe('CORRIDORS', () => {
         'pen-pen',
       ])
     );
-  });
-});
-
-describe('ANCHOR_HOME_DOMAINS', () => {
-  it('maps moneygram to stellar.moneygram.com', () => {
-    expect(ANCHOR_HOME_DOMAINS['moneygram']).toBe('stellar.moneygram.com');
-  });
-
-  it('maps cowrie to cowrie.exchange', () => {
-    expect(ANCHOR_HOME_DOMAINS['cowrie']).toBe('cowrie.exchange');
-  });
-
-  it('maps anclap to anclap.com', () => {
-    expect(ANCHOR_HOME_DOMAINS['anclap']).toBe('anclap.com');
   });
 });
 

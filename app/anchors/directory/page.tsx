@@ -128,17 +128,20 @@ export default async function AnchorDirectoryPage(props: PageProps) {
                     </a>
                   </td>
                   <td className="py-4 pr-4">
-                    <Badge
-                      variant={
-                        row.tier === 'routable'
-                          ? 'success'
-                          : row.tier === 'health-only'
-                            ? 'warning'
-                            : 'default'
-                      }
-                    >
-                      {row.tier}
-                    </Badge>
+                    <div className="flex flex-wrap items-center gap-1">
+                      <Badge
+                        variant={
+                          row.tier === 'routable'
+                            ? 'success'
+                            : row.tier === 'health-only'
+                              ? 'warning'
+                              : 'default'
+                        }
+                      >
+                        {row.tier}
+                      </Badge>
+                      {row.listedKind === 'crypto-rails' && <Badge>Crypto only</Badge>}
+                    </div>
                   </td>
                   <td className="py-4 pr-4">
                     <div className="flex flex-wrap gap-1">

@@ -295,7 +295,8 @@ describe('solicitAnchorQuotes — concurrency and deadline', () => {
   });
 
   it('executes all fetches concurrently — all start before any completes', async () => {
-    let feeCallCount = 0;
+    let inFlight = 0;
+    let maxInFlight = 0;
 
     vi.stubGlobal(
       'fetch',
@@ -313,16 +314,22 @@ describe('solicitAnchorQuotes — concurrency and deadline', () => {
           } as unknown as Response;
         }
 
-        // Count /fee endpoint calls
         if (url.includes('/fee')) {
-          feeCallCount++;
+          inFlight++;
+          maxInFlight = Math.max(maxInFlight, inFlight);
         }
 
-        await new Promise<void>((resolve) => setTimeout(resolve, 100));
-        return {
-          ok: true,
-          json: async () => ({ fee: 2, price: 1580 }),
-        } as unknown as Response;
+        try {
+          await new Promise<void>((resolve) => setTimeout(resolve, 100));
+          return {
+            ok: true,
+            json: async () => ({ fee: 2, price: 1580 }),
+          } as unknown as Response;
+        } finally {
+          if (url.includes('/fee')) {
+            inFlight--;
+          }
+        }
       })
     );
 
@@ -331,8 +338,7 @@ describe('solicitAnchorQuotes — concurrency and deadline', () => {
     const results = await resultPromise;
 
     expect(results).toHaveLength(3);
-    // All 3 anchor fee calls must have been made (concurrent, not sequential)
-    expect(feeCallCount).toBe(3);
+    expect(maxInFlight).toBe(3);
   });
 
   it('aggregation correctness — best rate selected from partial results', async () => {

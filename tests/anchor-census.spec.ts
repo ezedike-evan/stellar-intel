@@ -21,6 +21,8 @@ const AnchorCensusRowSchema = z.object({
   receiveAssets: z.array(z.string()),
   sources: z.array(z.string()),
   registeredAnchorId: z.string().nullable(),
+  listedAnchorId: z.string().nullable(),
+  listedKind: z.enum(['issuer', 'crypto-rails']).nullable(),
   checkedAt: z.string(),
 });
 

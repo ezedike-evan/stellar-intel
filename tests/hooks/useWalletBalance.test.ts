@@ -16,7 +16,7 @@ const wrapper = ({ children }: { children: React.ReactNode }) =>
   createElement(SWRConfig, { value: { provider: () => new Map() } }, children);
 
 beforeEach(() => {
-  vi.restoreAllMocks();
+  vi.clearAllMocks();
 });
 
 afterEach(() => {

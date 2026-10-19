@@ -111,12 +111,10 @@ describe('hashIntent', () => {
     expect(await hashIntent(BASE_INTENT)).not.toBe(await hashIntent(modified));
   });
 
-  it('is idempotent — same input always yields same hash', async () => {
-    const h1 = await hashIntent(BASE_INTENT);
-    const h2 = await hashIntent(BASE_INTENT);
-    const h3 = await hashIntent(BASE_INTENT);
-    expect(h1).toBe(h2);
-    expect(h2).toBe(h3);
+  it('pins BASE_INTENT to its exact hash — fails if canonicalisation changes', async () => {
+    expect(await hashIntent(BASE_INTENT)).toBe(
+      'f24f63585861ffb5fc8d06ddb5d572215650e15332831af81f62a71b056b562e'
+    );
   });
 
   it('handles intents with numeric and boolean extra fields deterministically', async () => {
