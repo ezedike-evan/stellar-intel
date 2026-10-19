@@ -188,21 +188,21 @@ authentication docs, SDK documentation, and a live API playground — is at
 
 The full doc surface lives under [`docs/`](docs/). Start with:
 
-| Document                                               | What it covers                                                                                    |
-| ------------------------------------------------------ | ------------------------------------------------------------------------------------------------- |
-| [docs/POSITIONING.md](docs/POSITIONING.md)             | What this is and is not; ROZO and SDF Anchor Directory, with checkable evidence.                  |
-| [docs/PROPOSAL.md](docs/PROPOSAL.md)                   | Longer-form project thesis: what this is for, what it stopped claiming, and how it is sequenced.  |
-| [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md)           | System diagram, intent router, Soroban oracle, MCP/agent surface, SEP-10/24/38 flow.              |
-| [docs/ROADMAP.md](docs/ROADMAP.md)                     | Milestone waves v1.0 → v6, with tickable per-wave scope.                                          |
-| [docs/INTENT_API.md](docs/INTENT_API.md)               | Intent schema, signing rules, replay protection, `curl` + TS snippets.                            |
-| [docs/GRAPHQL_API.md](docs/GRAPHQL_API.md)             | Additive GraphQL surface over the same REST v1 resources — schema, example queries, error shape.  |
-| [docs/ANCHOR_REPUTATION.md](docs/ANCHOR_REPUTATION.md) | Scoring methodology, composite formula, dispute process.                                          |
-| [docs/ORACLE_SPEC.md](docs/ORACLE_SPEC.md)             | Soroban contract interface, consumer examples, publisher whitelist policy.                        |
-| [docs/ORACLE_MIGRATION.md](docs/ORACLE_MIGRATION.md)   | v1 → v2 corridor storage migration: runbook, idempotency, and the v1 compatibility guarantee.     |
+| Document                                               | What it covers                                                                                                                     |
+| ------------------------------------------------------ | ---------------------------------------------------------------------------------------------------------------------------------- |
+| [docs/POSITIONING.md](docs/POSITIONING.md)             | What this is and is not; ROZO and SDF Anchor Directory, with checkable evidence.                                                   |
+| [docs/PROPOSAL.md](docs/PROPOSAL.md)                   | Longer-form project thesis: what this is for, what it stopped claiming, and how it is sequenced.                                   |
+| [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md)           | System diagram, intent router, Soroban oracle, MCP/agent surface, SEP-10/24/38 flow.                                               |
+| [docs/ROADMAP.md](docs/ROADMAP.md)                     | Milestone waves v1.0 → v6, with tickable per-wave scope.                                                                           |
+| [docs/INTENT_API.md](docs/INTENT_API.md)               | Intent schema, signing rules, replay protection, `curl` + TS snippets.                                                             |
+| [docs/GRAPHQL_API.md](docs/GRAPHQL_API.md)             | Additive GraphQL surface over the same REST v1 resources — schema, example queries, error shape.                                   |
+| [docs/ANCHOR_REPUTATION.md](docs/ANCHOR_REPUTATION.md) | Scoring methodology, composite formula, dispute process.                                                                           |
+| [docs/ORACLE_SPEC.md](docs/ORACLE_SPEC.md)             | Soroban contract interface, consumer examples, publisher whitelist policy.                                                         |
+| [docs/ORACLE_MIGRATION.md](docs/ORACLE_MIGRATION.md)   | v1 → v2 corridor storage migration: runbook, idempotency, and the v1 compatibility guarantee.                                      |
 | [docs/MCP.md](docs/MCP.md)                             | Tool list, hosted `POST /api/mcp` endpoint, local `npx tsx scripts/mcp/server.ts` dev server, example prompts, agent-safety notes. |
-| [docs/AGENT_POSITIONING.md](docs/AGENT_POSITIONING.md) | How agent builders should route between Stellar Intel (anchors/fiat exit) and ROZO (chains).      |
-| [docs/SECURITY.md](docs/SECURITY.md)                   | Non-custodial guarantee, key handling, disclosure email, supply-chain policy.                     |
-| [docs/FAQ.md](docs/FAQ.md)                             | "Is this custodial?", "what if an anchor fails?", "how are we different?".                        |
+| [docs/AGENT_POSITIONING.md](docs/AGENT_POSITIONING.md) | How agent builders should route between Stellar Intel (anchors/fiat exit) and ROZO (chains).                                       |
+| [docs/SECURITY.md](docs/SECURITY.md)                   | Non-custodial guarantee, key handling, disclosure email, supply-chain policy.                                                      |
+| [docs/FAQ.md](docs/FAQ.md)                             | "Is this custodial?", "what if an anchor fails?", "how are we different?".                                                         |
 
 ---
 
