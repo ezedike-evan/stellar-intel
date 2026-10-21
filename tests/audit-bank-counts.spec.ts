@@ -3,10 +3,7 @@ import { join } from 'node:path';
 import { describe, expect, it } from 'vitest';
 
 const sourceDirectory = join(process.cwd(), 'contracts/reputation/src');
-const document = readFileSync(
-  join(process.cwd(), 'docs/grants/AUDIT_BANK_APPLICATION.md'),
-  'utf8'
-);
+const document = readFileSync(join(process.cwd(), 'docs/grants/AUDIT_BANK_APPLICATION.md'), 'utf8');
 const scope = document.split('## 2. Scope')[1]?.split('## 3.')[0] ?? '';
 const modules = readdirSync(sourceDirectory, { withFileTypes: true })
   .filter((entry) => entry.isFile() && entry.name.endsWith('.rs'))
@@ -22,10 +19,13 @@ const counts = Object.fromEntries(
 describe('Audit Bank application scope counts', () => {
   it('lists every source module exactly once with its wc -l count', () => {
     const rows = [...scope.matchAll(/^\|\s*`([^`]+\.rs)`\s*\|\s*(\d+)\s*\|/gm)];
-    expect(rows.map((row) => row[1]).sort(), 'Scope table must list every Rust module once').toEqual(
-      modules
-    );
-    for (const [, name, lines] of rows) {
+    expect(
+      rows.map((row) => row[1]).sort(),
+      'Scope table must list every Rust module once'
+    ).toEqual(modules);
+    for (const row of rows) {
+      const name = row[1] ?? '';
+      const lines = row[2];
       expect(Number(lines), `Scope line count for ${name} has drifted`).toBe(counts[name]);
     }
   });
@@ -38,7 +38,7 @@ describe('Audit Bank application scope counts', () => {
     const lib = readFileSync(join(sourceDirectory, 'lib.rs'), 'utf8');
     // Match grep -c "pub fn": count matching lines, not occurrences.
     const entrypoints = lib.split('\n').filter((line) => line.includes('pub fn')).length;
-    expect(Number(headline?.[1].replaceAll(',', ''))).toBe(
+    expect(Number(headline?.[1]?.replaceAll(',', ''))).toBe(
       Object.values(counts).reduce((sum, count) => sum + count, 0)
     );
     expect(Number(headline?.[2])).toBe(modules.length);
