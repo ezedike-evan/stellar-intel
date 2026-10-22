@@ -152,15 +152,16 @@ curl -sX POST https://stellar-intel.vercel.app/api/intent/offramp \
 `types/intent.ts` also exports `IntentV1Schema` / `IntentV1` (re-exported from
 `lib/intent/schema.ts`), the richer canonical intent the router consumes. The
 off-ramp envelope above is the v1 path wired into the UI today; `IntentV1` is the
-shape the multi-anchor router (see [`docs/ROADMAP.md`](ROADMAP.md), Wave 1.2 /
-v2.2) scores and splits across anchors.
+shape the multi-anchor router (see [Wave 1.2 — Router + Seeds](ROADMAP.md#wave-12--router--seeds))
+scores and splits across anchors.
 
-## Canonical Intent V1 — versioned superset
+## Canonical Intent V1 — type definitions (not accepted by `/api/intent/offramp`)
 
-`CanonicalIntentV1Schema` in `types/intent.ts` is the **versioned superset** that
-covers all intent kinds in one discriminated union. It is what `POST /api/intent/offramp`
-parses after #817. Off-ramp-only clients that omit `kind` are accepted unchanged; the
-endpoint injects `kind: "offramp"` automatically.
+`CanonicalIntentV1Schema` and its related schemas are defined in `types/intent.ts`
+and re-exported from `lib/intent/schema.ts` for router and SDK use. They are not
+accepted by `POST /api/intent/offramp`, which accepts only the flat `IntentSchema`
+shape documented above. Sending `kind` without `type: "offramp"` to this endpoint
+returns 400 `VALIDATION_ERROR`.
 
 ### Common fields (all kinds)
 
@@ -176,8 +177,7 @@ endpoint injects `kind: "offramp"` automatically.
 
 ### `kind: "offramp"` (single off-ramp)
 
-Backwards-compatible with legacy clients that send `type: "offramp"` or omit `kind`.
-No additional fields beyond the common base.
+Represents a single off-ramp using the common fields, with `kind` set to `"offramp"`.
 
 ```jsonc
 {
@@ -239,8 +239,7 @@ Each `IntentHop`:
 
 ### `kind: "recurring"` (scheduled)
 
-Repeats a payment on a cron schedule. The endpoint will reject this kind with
-`501 NOT_IMPLEMENTED` until the scheduler service is wired up.
+Represents a payment that repeats on a cron schedule.
 
 Additional field:
 

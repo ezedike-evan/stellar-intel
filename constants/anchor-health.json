@@ -59,7 +59,7 @@
       "lastError": null
     },
     "bitnovo": {
-      "consecutiveFailures": 9,
+      "consecutiveFailures": 10,
       "degraded": true,
       "lastCheckedAt": "2026-10-22T09:26:14.481Z",
       "lastStatus": "fail",

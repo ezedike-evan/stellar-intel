@@ -36,24 +36,24 @@ in the same repository.
 
 ## 2. Scope
 
-**1,148 lines of Rust across 13 modules**, one contract, **28 public
+**1,429 lines of Rust across 14 modules**, one contract, **34 public
 entrypoints**.
 
 | Module              | Lines | What it owns                                   |
 | ------------------- | ----- | ---------------------------------------------- |
-| `lib.rs`            | 299   | `#[contractimpl]` surface — all 28 entrypoints |
+| `lib.rs`            | 374   | `#[contractimpl]` surface — all 34 entrypoints |
 | `admin.rs`          | 117   | Admin identity, two-step transfer              |
-| `score.rs`          | 93    | Composite score computation                    |
-| `upgrade.rs`        | 84    | WASM replacement, separate upgrade admin       |
-| `volume_savings.rs` | 80    | Cumulative volume + savings accumulator        |
-| `migration.rs`      | 80    | v1 → v2 corridor storage migration             |
+| `score.rs`          | 112   | Composite score computation                    |
+| `upgrade.rs`        | 178   | WASM replacement, separate upgrade admin       |
+| `volume_savings.rs` | 109   | Cumulative volume + savings accumulator        |
+| `migration.rs`      | 81    | v1 → v2 corridor storage migration             |
 | `publishers.rs`     | 76    | Publisher authorization set                    |
-| `storage.rs`        | 74    | `DataKey` variants, TTL handling               |
+| `storage.rs`        | 106   | `DataKey` variants, TTL handling               |
 | `corridor_rate.rs`  | 58    | Corridor rate publish/read                     |
 | `history.rs`        | 54    | Bounded outcome history per anchor             |
-| `outcome.rs`        | 46    | Outcome submission and hashing                 |
+| `outcome.rs`        | 57    | Outcome submission and hashing                 |
 | `anchors.rs`        | 41    | Anchor registry                                |
-| `aggregate.rs`      | 35    | Per-corridor counters                          |
+| `aggregate.rs`      | 55    | Per-corridor counters                          |
 | `error.rs`          | 11    | Error enum                                     |
 
 There is **no second contract**. `crates/stellar-intel-reputation` is a

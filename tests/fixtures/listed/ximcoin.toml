@@ -1,0 +1,8 @@
+# Source: https://ximcoin.com/.well-known/stellar.toml (fetched 2026-10-21)
+[DOCUMENTATION]
+ORG_NAME="SecureLC Limited"
+ORG_URL="https://ximcoin.com"
+
+[[CURRENCIES]]
+code = "XIM"
+issuer = "GBZ35ZJRIKJGYH5PBKLKOZ5L6EXCNTO7BKIL7DAVVDFQ2ODJEEHHJXIM"

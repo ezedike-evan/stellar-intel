@@ -1,0 +1,16 @@
+{
+  "id": "ximcoin",
+  "name": "XIM (SecureLC)",
+  "kind": "issuer",
+  "domains": ["ximcoin.com"],
+  "orgUrl": "https://ximcoin.com",
+  "verifiedAt": "2026-09-23",
+  "assets": [
+    {
+      "code": "XIM",
+      "issuer": "GBZ35ZJRIKJGYH5PBKLKOZ5L6EXCNTO7BKIL7DAVVDFQ2ODJEEHHJXIM",
+      "anchorAssetType": null,
+      "anchorAsset": null
+    }
+  ]
+}

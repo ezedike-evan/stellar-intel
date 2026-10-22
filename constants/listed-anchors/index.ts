@@ -33,6 +33,7 @@ import stronghold from './stronghold.json';
 import ultraCapital from './ultra-capital.json';
 import valtorum from './valtorum.json';
 import vnx from './vnx.json';
+import ximcoin from './ximcoin.json';
 
 const RAW: unknown[] = [
   afreum,
@@ -59,6 +60,7 @@ const RAW: unknown[] = [
   ultraCapital,
   valtorum,
   vnx,
+  ximcoin,
 ];
 
 export const LISTED_ANCHORS: readonly ListedAnchor[] = parseListedAnchors(RAW);
