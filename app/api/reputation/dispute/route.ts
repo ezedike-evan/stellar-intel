@@ -4,6 +4,7 @@ import { withRequestLogger } from '@/lib/logger';
 import { STELLAR_PUBKEY_PATTERN } from '@/lib/patterns';
 import type { ApiError } from '@/types';
 import { checkRateLimit, clearRateLimitStore } from '@/lib/api/rate-limit';
+import { _setDisputeStore, getDisputeStore } from '@/lib/reputation/disputes';
 import { verifyIntentSignature } from '@/lib/intent/verify';
 import { enforceRateLimit } from '@/lib/api/response';
 import { ANCHORS } from '@/constants/anchors';
@@ -39,10 +40,6 @@ export interface DisputeRecord {
   createdAt: string;
 }
 
-// ─── In-memory stores (replace with DB for production) ───────────────────────
-
-const disputes = new Map<string, DisputeRecord>();
-
 const DISPUTE_WINDOW_MS = 86_400_000; // 24 hours
 const DISPUTE_MAX = 10;
 
@@ -64,7 +61,7 @@ async function checkDisputeRateLimit(publicKey: string): Promise<boolean> {
 }
 
 export function clearDisputeStores(): void {
-  disputes.clear();
+  _setDisputeStore(null);
   clearRateLimitStore();
 }
 
@@ -135,7 +132,16 @@ export async function POST(request: NextRequest): Promise<NextResponse> {
       disputed: true,
       createdAt: new Date().toISOString(),
     };
-    disputes.set(record.id, record);
+    await getDisputeStore().create({
+      id: record.id,
+      intentHash,
+      publicKey,
+      anchorId,
+      reason,
+      status: 'open',
+      createdAt: record.createdAt,
+      resolvedAt: null,
+    });
 
     logger.info({ event: 'dispute_created', disputeId: record.id });
     return NextResponse.json(record, { status: 201 });

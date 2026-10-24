@@ -3,21 +3,7 @@ import { isAdminRequest } from '@/lib/auth/admin';
 import { withRequestLogger } from '@/lib/logger';
 import type { ApiError } from '@/types';
 import { enforceRateLimit } from '@/lib/api/response';
-
-export type DisputeStatus = 'pending' | 'accepted' | 'rejected';
-
-export interface Dispute {
-  id: string;
-  submittedBy: string;
-  anchorId: string;
-  reason: string;
-  status: DisputeStatus;
-  createdAt: string;
-  resolvedAt: string | null;
-}
-
-// In-memory store — replace with a database client for production persistence.
-const store = new Map<string, Dispute>();
+import { getDisputeStore } from '@/lib/reputation/disputes';
 
 export async function GET(request: NextRequest): Promise<NextResponse> {
   return withRequestLogger(request, 'api.admin.disputes', async (logger) => {
@@ -35,9 +21,8 @@ export async function GET(request: NextRequest): Promise<NextResponse> {
       );
     }
 
-    const disputes = Array.from(store.values()).sort(
-      (a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime()
-    );
+    // Newest first, per the store's contract.
+    const disputes = await getDisputeStore().list();
 
     logger.info({ event: 'admin_disputes_listed', count: disputes.length });
     return NextResponse.json(disputes);
@@ -75,7 +60,11 @@ export async function POST(request: NextRequest): Promise<NextResponse> {
       );
     }
 
-    const dispute = store.get(id);
+    const dispute = await getDisputeStore().resolve(
+      id,
+      action === 'accept' ? 'accepted' : 'rejected',
+      new Date().toISOString()
+    );
     if (!dispute) {
       logger.warn({ event: 'dispute_not_found', disputeId: id });
       return NextResponse.json<ApiError>(
@@ -83,10 +72,6 @@ export async function POST(request: NextRequest): Promise<NextResponse> {
         { status: 404 }
       );
     }
-
-    dispute.status = action === 'accept' ? 'accepted' : 'rejected';
-    dispute.resolvedAt = new Date().toISOString();
-    store.set(id, dispute);
 
     logger.info({ event: 'dispute_resolved', disputeId: id, action });
     return NextResponse.json(dispute);

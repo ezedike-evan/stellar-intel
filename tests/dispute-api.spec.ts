@@ -1,7 +1,8 @@
 // @vitest-environment node
-import { describe, it, expect, beforeEach, beforeAll } from 'vitest';
+import { describe, it, expect, beforeEach, beforeAll, afterEach } from 'vitest';
 import { Keypair } from '@stellar/stellar-sdk';
 import { POST, clearDisputeStores } from '@/app/api/reputation/dispute/route';
+import { GET as ADMIN_GET, POST as ADMIN_POST } from '@/app/api/admin/disputes/route';
 import { NextRequest } from 'next/server';
 
 // ─── Helpers ──────────────────────────────────────────────────────────────────
@@ -226,5 +227,70 @@ describe('POST /api/reputation/dispute — input bounds and per-IP limit (#1355)
 
     const res = await POST(makeRequest(payload({}, Keypair.random()), '192.0.2.77'));
     expect(res.status).toBe(429);
+  });
+});
+
+describe('disputes filed via the public route reach the admin queue (#1356)', () => {
+  const intentHash = makeIntentHash();
+  const ADMIN_KEY = 'test-admin-secret';
+
+  function adminRequest(method: 'GET' | 'POST', body?: unknown): NextRequest {
+    return new NextRequest('http://localhost/api/admin/disputes', {
+      method,
+      headers: { 'x-admin-key': ADMIN_KEY, 'Content-Type': 'application/json' },
+      ...(body === undefined ? {} : { body: JSON.stringify(body) }),
+    });
+  }
+
+  beforeEach(() => {
+    clearDisputeStores();
+    process.env.ADMIN_SECRET_KEY = ADMIN_KEY;
+  });
+
+  afterEach(() => {
+    delete process.env.ADMIN_SECRET_KEY;
+  });
+
+  async function file(signer: Keypair): Promise<{ id: string }> {
+    const res = await POST(
+      makeRequest({
+        intentHash,
+        publicKey: signer.publicKey(),
+        signature: signHash(signer, intentHash),
+        anchorId: 'moneygram',
+        reason: 'transaction never settled',
+      })
+    );
+    expect(res.status).toBe(201);
+    return (await res.json()) as { id: string };
+  }
+
+  it('lists a filed dispute as open', async () => {
+    const signer = Keypair.random();
+    const { id } = await file(signer);
+
+    const res = await ADMIN_GET(adminRequest('GET'));
+    expect(res.status).toBe(200);
+    const list = (await res.json()) as Array<{ id: string; status: string; publicKey: string }>;
+    expect(list).toHaveLength(1);
+    expect(list[0]).toMatchObject({ id, status: 'open', publicKey: signer.publicKey() });
+  });
+
+  it('resolves a filed dispute through the admin route', async () => {
+    const { id } = await file(Keypair.random());
+
+    const res = await ADMIN_POST(adminRequest('POST', { id, action: 'accept' }));
+    expect(res.status).toBe(200);
+    expect(await res.json()).toMatchObject({ id, status: 'accepted' });
+
+    const listed = (await (await ADMIN_GET(adminRequest('GET'))).json()) as Array<{
+      status: string;
+    }>;
+    expect(listed[0]?.status).toBe('accepted');
+  });
+
+  it('answers 404 when resolving an id that was never filed', async () => {
+    const res = await ADMIN_POST(adminRequest('POST', { id: 'nope', action: 'reject' }));
+    expect(res.status).toBe(404);
   });
 });
