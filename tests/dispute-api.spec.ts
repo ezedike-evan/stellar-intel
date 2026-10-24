@@ -4,11 +4,18 @@ import { Keypair } from '@stellar/stellar-sdk';
 import { POST, clearDisputeStores } from '@/app/api/reputation/dispute/route';
 import { GET as ADMIN_GET, POST as ADMIN_POST } from '@/app/api/admin/disputes/route';
 import { NextRequest } from 'next/server';
+import { InMemoryReputationStore, _setReputationStore } from '@/lib/reputation/store';
+import { toOutcomeLogRow } from '@/lib/reputation/schema';
 
 // ─── Helpers ──────────────────────────────────────────────────────────────────
 
 function makeIntentHash(): string {
   return 'a'.repeat(64); // valid 64-char hex
+}
+
+/** A distinct, valid intent hash per signer, so several signers can each own an outcome. */
+function hashFor(signer: Keypair): string {
+  return Buffer.from(signer.rawPublicKey()).toString('hex');
 }
 
 function signHash(keypair: Keypair, intentHash: string): string {
@@ -25,6 +32,37 @@ function makeRequest(body: unknown, ip = '203.0.113.1'): NextRequest {
   });
 }
 
+let reputation: InMemoryReputationStore;
+
+/**
+ * Records an outcome attested by `signer`. Only that account may dispute it
+ * (#1357), so every dispute that is expected to succeed needs one of these.
+ */
+async function seedOutcome(signer: Keypair, intentHash: string): Promise<void> {
+  await reputation.append(
+    toOutcomeLogRow({
+      intentHash,
+      anchorId: 'moneygram',
+      corridor: 'usdc-ngn',
+      quotedRate: '1500.0',
+      quotedAmount: '100',
+      outcome: 'completed',
+      stellarTransactionId: 'a'.repeat(64),
+      publicKey: signer.publicKey(),
+      signature: 'unused-here',
+    })
+  );
+}
+
+beforeEach(() => {
+  reputation = new InMemoryReputationStore();
+  _setReputationStore(reputation);
+});
+
+afterEach(() => {
+  _setReputationStore(null);
+});
+
 // ─── Tests ────────────────────────────────────────────────────────────────────
 
 describe('POST /api/reputation/dispute', () => {
@@ -35,8 +73,9 @@ describe('POST /api/reputation/dispute', () => {
     keypair = Keypair.random();
   });
 
-  beforeEach(() => {
+  beforeEach(async () => {
     clearDisputeStores();
+    await seedOutcome(keypair, intentHash);
   });
 
   it('returns 201 and sets disputed:true for a valid signed request', async () => {
@@ -158,19 +197,20 @@ describe('POST /api/reputation/dispute', () => {
 
   it('allows a different publicKey after the first key is rate-limited', async () => {
     const other = Keypair.random();
-    const sig1 = signHash(keypair, intentHash);
-    const sig2 = signHash(other, intentHash);
+    const otherHash = hashFor(other);
+    await seedOutcome(other, otherHash);
+
     const base1 = {
       intentHash,
       publicKey: keypair.publicKey(),
-      signature: sig1,
+      signature: signHash(keypair, intentHash),
       anchorId: 'moneygram',
       reason: 'r',
     };
     const base2 = {
-      intentHash,
+      intentHash: otherHash,
       publicKey: other.publicKey(),
-      signature: sig2,
+      signature: signHash(other, otherHash),
       anchorId: 'moneygram',
       reason: 'r',
     };
@@ -189,14 +229,15 @@ describe('POST /api/reputation/dispute — input bounds and per-IP limit (#1355)
     keypair = Keypair.random();
   });
 
-  beforeEach(() => {
+  beforeEach(async () => {
     clearDisputeStores();
+    await seedOutcome(keypair, intentHash);
   });
 
-  const payload = (overrides: Record<string, unknown> = {}, signer: Keypair = keypair) => ({
+  const payload = (overrides: Record<string, unknown> = {}) => ({
     intentHash,
-    publicKey: signer.publicKey(),
-    signature: signHash(signer, intentHash),
+    publicKey: keypair.publicKey(),
+    signature: signHash(keypair, intentHash),
     anchorId: 'moneygram',
     reason: 'transaction never settled',
     ...overrides,
@@ -221,17 +262,104 @@ describe('POST /api/reputation/dispute — input bounds and per-IP limit (#1355)
   it('returns 429 on the 11th request from one IP, even with a fresh key each time', async () => {
     for (let i = 0; i < 10; i += 1) {
       const fresh = Keypair.random();
-      const res = await POST(makeRequest(payload({}, fresh), '192.0.2.77'));
+      const freshHash = hashFor(fresh);
+      await seedOutcome(fresh, freshHash);
+      const res = await POST(
+        makeRequest(
+          {
+            intentHash: freshHash,
+            publicKey: fresh.publicKey(),
+            signature: signHash(fresh, freshHash),
+            anchorId: 'moneygram',
+            reason: 'transaction never settled',
+          },
+          '192.0.2.77'
+        )
+      );
       expect(res.status).toBe(201);
     }
 
-    const res = await POST(makeRequest(payload({}, Keypair.random()), '192.0.2.77'));
+    const last = Keypair.random();
+    const lastHash = hashFor(last);
+    const res = await POST(
+      makeRequest(
+        {
+          intentHash: lastHash,
+          publicKey: last.publicKey(),
+          signature: signHash(last, lastHash),
+          anchorId: 'moneygram',
+          reason: 'transaction never settled',
+        },
+        '192.0.2.77'
+      )
+    );
     expect(res.status).toBe(429);
   });
 });
 
-describe('disputes filed via the public route reach the admin queue (#1356)', () => {
+describe('POST /api/reputation/dispute — only the attesting account may dispute (#1357)', () => {
   const intentHash = makeIntentHash();
+  let signer: Keypair;
+
+  beforeAll(() => {
+    signer = Keypair.random();
+  });
+
+  beforeEach(async () => {
+    clearDisputeStores();
+    await seedOutcome(signer, intentHash);
+  });
+
+  function disputeBy(who: Keypair, hash = intentHash): NextRequest {
+    return makeRequest({
+      intentHash: hash,
+      publicKey: who.publicKey(),
+      signature: signHash(who, hash),
+      anchorId: 'moneygram',
+      reason: 'transaction never settled',
+    });
+  }
+
+  it('lets the account that attested the outcome dispute it', async () => {
+    expect((await POST(disputeBy(signer))).status).toBe(201);
+  });
+
+  it('refuses a different, validly signing key with 403', async () => {
+    const stranger = Keypair.random();
+    const res = await POST(disputeBy(stranger));
+    expect(res.status).toBe(403);
+    expect(await res.json()).toMatchObject({
+      code: 'FORBIDDEN',
+      message: 'Only the account that attested the outcome can dispute it',
+    });
+  });
+
+  it('answers 404 for an intent hash with no recorded outcome', async () => {
+    const res = await POST(disputeBy(signer, 'b'.repeat(64)));
+    expect(res.status).toBe(404);
+    expect(await res.json()).toMatchObject({
+      code: 'NOT_FOUND',
+      message: 'No outcome recorded for this intentHash',
+    });
+  });
+
+  it('files nothing when the dispute is refused', async () => {
+    await POST(disputeBy(Keypair.random()));
+    process.env.ADMIN_SECRET_KEY = 'k';
+    try {
+      const list = await ADMIN_GET(
+        new NextRequest('http://localhost/api/admin/disputes', {
+          headers: { 'x-admin-key': 'k' },
+        })
+      );
+      expect(await list.json()).toEqual([]);
+    } finally {
+      delete process.env.ADMIN_SECRET_KEY;
+    }
+  });
+});
+
+describe('disputes filed via the public route reach the admin queue (#1356)', () => {
   const ADMIN_KEY = 'test-admin-secret';
 
   function adminRequest(method: 'GET' | 'POST', body?: unknown): NextRequest {
@@ -252,6 +380,8 @@ describe('disputes filed via the public route reach the admin queue (#1356)', ()
   });
 
   async function file(signer: Keypair): Promise<{ id: string }> {
+    const intentHash = hashFor(signer);
+    await seedOutcome(signer, intentHash);
     const res = await POST(
       makeRequest({
         intentHash,

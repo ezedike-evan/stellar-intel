@@ -216,6 +216,10 @@ export class PostgresReputationStore implements ReputationStore {
     await this.init();
     const where: string[] = [];
     const params: unknown[] = [];
+    if (filter.intentHash) {
+      params.push(filter.intentHash);
+      where.push(`intent_hash = $${params.length}`);
+    }
     if (filter.anchorId) {
       params.push(filter.anchorId);
       where.push(`anchor_id = $${params.length}`);

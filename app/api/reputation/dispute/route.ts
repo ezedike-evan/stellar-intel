@@ -7,6 +7,8 @@ import { checkRateLimit, clearRateLimitStore } from '@/lib/api/rate-limit';
 import { _setDisputeStore, getDisputeStore } from '@/lib/reputation/disputes';
 import { verifyIntentSignature } from '@/lib/intent/verify';
 import { enforceRateLimit } from '@/lib/api/response';
+import { checkDurableStore } from '@/lib/api/store-guard';
+import { getReputationStore } from '@/lib/reputation/store';
 import { ANCHORS } from '@/constants/anchors';
 
 const DisputeBodySchema = z.object({
@@ -111,6 +113,30 @@ export async function POST(request: NextRequest): Promise<NextResponse> {
       logger.warn({ event: 'signature_verification_failed', publicKey, intentHash });
       return NextResponse.json<ApiError>(
         { code: 'FORBIDDEN', message: 'Signature verification failed' },
+        { status: 403 }
+      );
+    }
+
+    // Only the account that attested the outcome may dispute it. Without this,
+    // anyone could dispute any intent hash by signing it with a key of their own.
+    const unavailable = checkDurableStore();
+    if (unavailable) return unavailable;
+
+    const [outcome] = await getReputationStore().query({ intentHash, includeUnattested: true });
+    if (!outcome) {
+      logger.warn({ event: 'dispute_unknown_outcome', intentHash });
+      return NextResponse.json<ApiError>(
+        { code: 'NOT_FOUND', message: 'No outcome recorded for this intentHash' },
+        { status: 404 }
+      );
+    }
+    if (outcome.signerAccount !== publicKey) {
+      logger.warn({ event: 'dispute_signer_mismatch', publicKey, intentHash });
+      return NextResponse.json<ApiError>(
+        {
+          code: 'FORBIDDEN',
+          message: 'Only the account that attested the outcome can dispute it',
+        },
         { status: 403 }
       );
     }

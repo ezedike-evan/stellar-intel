@@ -22,6 +22,8 @@ export const PROBE_RETENTION_DAYS = 90;
 // imports a concrete driver.
 
 export interface OutcomeQuery {
+  /** Exactly one row (or none): the intent hash is the primary key. */
+  intentHash?: string;
   anchorId?: string;
   corridor?: string;
   /**
@@ -139,6 +141,7 @@ export function computeLatencyPercentiles(
 
 function matches(row: OutcomeLogRow, filter: OutcomeQuery): boolean {
   if (!filter.includeUnattested && !row.attested) return false;
+  if (filter.intentHash && row.intentHash !== filter.intentHash) return false;
   if (filter.anchorId && row.anchorId !== filter.anchorId) return false;
   if (filter.corridor && row.corridor !== filter.corridor) return false;
   if (filter.direction && row.direction !== filter.direction) return false;
