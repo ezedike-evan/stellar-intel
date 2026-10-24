@@ -206,15 +206,16 @@ async function handler(request: NextRequest): Promise<Response> {
     );
   } catch (error) {
     // A throw that escaped GraphQL's own error handling. Logged with the stack,
-    // reported with the message — never as an empty body, which is what made
-    // the original outage undiagnosable from outside.
+    // reported without the message — never as an empty body, which is what made
+    // the original outage undiagnosable from outside, and never with the raw
+    // exception text, which can carry driver errors, file paths or upstream URLs.
     const message = error instanceof Error ? error.message : String(error);
     logger.error({
       event: 'graphql_execution_error',
       error: message,
       stack: error instanceof Error ? error.stack : undefined,
     });
-    return errorResponse(`Internal server error: ${message}`, 500);
+    return errorResponse('Internal server error', 500);
   }
 }
 
