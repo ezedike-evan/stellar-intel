@@ -1,5 +1,6 @@
 ﻿import type { NextConfig } from 'next';
 import './lib/env';
+import { SECURITY_HEADERS } from './lib/security-headers';
 
 const nextConfig: NextConfig = {
   // `graphql` loads from node_modules at runtime rather than being bundled. It
@@ -16,6 +17,9 @@ const nextConfig: NextConfig = {
     ],
     formats: ['image/avif', 'image/webp'],
     minimumCacheTTL: 86400,
+  },
+  async headers() {
+    return [{ source: '/:path*', headers: [...SECURITY_HEADERS] }];
   },
 };
 
