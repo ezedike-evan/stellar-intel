@@ -236,3 +236,13 @@ describe('POST /api/graphql — rate limiting', () => {
     expect(res.headers.get('Retry-After')).toBeTruthy();
   });
 });
+
+describe('POST /api/graphql — standard validation', () => {
+  it('rejects an unknown field with a 400 instead of returning data', async () => {
+    const res = await POST(makeRequest('{ bogusField }'));
+    expect(res.status).toBe(400);
+    const body = (await res.json()) as GraphQLResponse<unknown>;
+    expect(body.data).toBeNull();
+    expect(body.errors?.[0]?.message).toMatch(/bogusField/);
+  });
+});

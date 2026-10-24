@@ -1,6 +1,7 @@
 import {
   GraphQLError,
   NoSchemaIntrospectionCustomRule,
+  specifiedRules,
   type ASTVisitor,
   type ValidationContext,
 } from 'graphql';
@@ -55,10 +56,15 @@ export function maxFieldCountRule(maxFields: number) {
 }
 
 /**
- * The validation rules applied to every incoming operation: depth and
- * field-count bounds always, plus introspection disabled in production, where
- * it is a dev/staging convenience rather than something an unauthenticated
- * caller should be able to enumerate the schema with.
+ * The validation rules applied to every incoming operation: graphql-js's
+ * standard `specifiedRules` (unknown fields and arguments, fragment cycles,
+ * variable types and the rest), then depth and field-count bounds, plus
+ * introspection disabled in production, where it is a dev/staging convenience
+ * rather than something an unauthenticated caller should be able to enumerate
+ * the schema with.
+ *
+ * `validate()` replaces its default rule set when given one, so the standard
+ * rules have to be listed here explicitly.
  *
  * Returned as plain `graphql` validation rules and handed to `validate()` by
  * the route. This used to be a graphql-yoga plugin; yoga is no longer in the
@@ -67,6 +73,7 @@ export function maxFieldCountRule(maxFields: number) {
  */
 export function graphqlValidationRules(): Array<(context: ValidationContext) => ASTVisitor> {
   const rules: Array<(context: ValidationContext) => ASTVisitor> = [
+    ...specifiedRules,
     maxDepthRule(MAX_DEPTH),
     maxFieldCountRule(MAX_FIELDS),
   ];

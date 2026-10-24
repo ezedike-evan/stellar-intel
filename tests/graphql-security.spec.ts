@@ -50,3 +50,23 @@ describe('graphql introspection rule', () => {
     expect(errors).toHaveLength(0);
   });
 });
+
+describe('graphql standard validation rules', () => {
+  const errorsFor = (query: string) => validate(schema, parse(query), graphqlValidationRules());
+
+  it.each([
+    ['an unknown root field', '{ bogusField }'],
+    ['an unknown nested field', '{ anchors { nope } }'],
+    ['an unknown argument', '{ anchors(bogus: 1) { id } }'],
+    [
+      'a fragment cycle',
+      'fragment A on Anchor { ...B } fragment B on Anchor { ...A } { anchors { ...A } }',
+    ],
+  ])('rejects %s', (_label, query) => {
+    expect(errorsFor(query).length).toBeGreaterThan(0);
+  });
+
+  it('accepts a valid query', () => {
+    expect(errorsFor('{ anchors { id name } }')).toHaveLength(0);
+  });
+});
