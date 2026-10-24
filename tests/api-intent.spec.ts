@@ -322,19 +322,19 @@ describe('POST /api/intent/offramp — idempotency', () => {
     expect(second.headers.get('Idempotency-Replayed')).toBe('true');
   });
 
-  it('bypasses rate limiting for an idempotent replay', async () => {
+  it('rate-limits an idempotent replay like any other request (#1350)', async () => {
     const ip = '203.0.113.54';
     const headers = { 'Idempotency-Key': 'key-bypass', 'x-forwarded-for': ip };
 
     await POST(makeRequest(VALID_INTENT, headers));
-    // Exhaust the bucket directly so a fresh (non-idempotent) request would 429.
+    // Exhaust the bucket directly: a replay must not be a way around the limit.
     for (let i = 0; i < 20; i++) {
       await checkRateLimit(ip, { bucket: 'api.intent.offramp', maxRequests: 20 });
     }
 
     const replay = await POST(makeRequest(VALID_INTENT, headers));
-    expect(replay.status).toBe(200);
-    expect(replay.headers.get('Idempotency-Replayed')).toBe('true');
+    expect(replay.status).toBe(429);
+    expect(replay.headers.get('Idempotency-Replayed')).toBeNull();
   });
 });
 

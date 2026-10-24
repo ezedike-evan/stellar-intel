@@ -38,6 +38,15 @@ function isIdempotentCacheable(status: number): boolean {
 
 export async function POST(request: NextRequest): Promise<NextResponse> {
   return withRequestLogger(request, 'api.intent.offramp', async (logger) => {
+    // Rate-limit before the idempotency lookup: serving cached responses first
+    // would let a caller probe Idempotency-Key values without limit.
+    const ip = getClientIp(request.headers);
+    const rl = await checkRateLimit(ip, { bucket: 'api.intent.offramp', maxRequests: 20 });
+    if (!rl.allowed) {
+      logger.warn({ event: 'rate_limit_exceeded', ip, retryAfter: rl.retryAfter });
+      return rateLimitedResponse(rl);
+    }
+
     const idempotencyKey = request.headers.get('idempotency-key');
 
     if (idempotencyKey) {
@@ -49,15 +58,8 @@ export async function POST(request: NextRequest): Promise<NextResponse> {
           headers: { ...cached.headers, 'Idempotency-Replayed': 'true' },
         });
         response.headers.set('API-Version', API_VERSION);
-        return response;
+        return withRateLimitHeaders(response, rl);
       }
-    }
-
-    const ip = getClientIp(request.headers);
-    const rl = await checkRateLimit(ip, { bucket: 'api.intent.offramp', maxRequests: 20 });
-    if (!rl.allowed) {
-      logger.warn({ event: 'rate_limit_exceeded', ip, retryAfter: rl.retryAfter });
-      return rateLimitedResponse(rl);
     }
 
     // Async because the idempotency write has to land before the response is
