@@ -256,3 +256,50 @@ describe('POST /api/graphql — root-field cap', () => {
     expect(body.errors?.[0]?.message).toMatch(/more than 10 root fields/);
   });
 });
+
+describe('POST /api/graphql — mutation limits', () => {
+  const MUTATION = `
+    mutation($input: OfframpIntentInput!) {
+      submitOfframpIntent(input: $input) { quoteId }
+    }
+  `;
+  const INPUT = {
+    sourceAsset: 'USDC',
+    destinationAsset: 'NGN',
+    amount: '100',
+    sender: VALID_SENDER,
+    recipient: 'NGN-BANK-ACCOUNT-123',
+  };
+
+  it('rejects two aliased mutation fields in one request', async () => {
+    const query = `mutation($input: OfframpIntentInput!) {
+      a: submitOfframpIntent(input: $input) { quoteId }
+      b: submitOfframpIntent(input: $input) { quoteId }
+    }`;
+    const res = await POST(makeRequest(query, { input: INPUT }));
+    expect(res.status).toBe(400);
+    const body = (await res.json()) as GraphQLResponse<unknown>;
+    expect(body.errors?.[0]?.message).toBe('Only one mutation field per request');
+  });
+
+  it('charges a mutation to the api.intent.offramp bucket', async () => {
+    const ip = '203.0.113.7';
+    for (let i = 0; i < 20; i += 1) {
+      await checkRateLimit(ip, { bucket: 'api.intent.offramp', maxRequests: 20 });
+    }
+
+    const res = await POST(makeRequest(MUTATION, { input: INPUT }, { 'x-forwarded-for': ip }));
+    expect(res.status).toBe(429);
+    expect(res.headers.get('Retry-After')).not.toBeNull();
+  });
+
+  it('does not charge queries to the intent bucket', async () => {
+    const ip = '203.0.113.8';
+    for (let i = 0; i < 20; i += 1) {
+      await checkRateLimit(ip, { bucket: 'api.intent.offramp', maxRequests: 20 });
+    }
+
+    const res = await POST(makeRequest('{ anchors { id } }', undefined, { 'x-forwarded-for': ip }));
+    expect(res.status).toBe(200);
+  });
+});

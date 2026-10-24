@@ -4,6 +4,8 @@ import {
   NoSchemaIntrospectionCustomRule,
   specifiedRules,
   type ASTVisitor,
+  type FragmentDefinitionNode,
+  type OperationDefinitionNode,
   type SelectionSetNode,
   type ValidationContext,
 } from 'graphql';
@@ -116,45 +118,51 @@ export function maxFieldCountRule(maxFields: number) {
 }
 
 /**
+ * Count the fields an operation selects at its root, following top-level
+ * fragment spreads and inline fragments, which execute as root fields too.
+ * Stops counting once `cap` is exceeded, so the result is only exact up to
+ * `cap + 1`.
+ */
+export function countRootFields(
+  operation: OperationDefinitionNode,
+  getFragment: (name: string) => FragmentDefinitionNode | null | undefined,
+  cap: number
+): number {
+  const counter = { count: 0 };
+  const walk = (selectionSet: SelectionSetNode, path: ReadonlySet<string>): void => {
+    for (const selection of selectionSet.selections) {
+      if (counter.count > cap) return;
+      if (selection.kind === Kind.FIELD) {
+        counter.count += 1;
+      } else if (selection.kind === Kind.INLINE_FRAGMENT) {
+        walk(selection.selectionSet, path);
+      } else {
+        const name = selection.name.value;
+        if (path.has(name)) continue;
+        const fragment = getFragment(name);
+        if (fragment) walk(fragment.selectionSet, new Set(path).add(name));
+      }
+    }
+  };
+  walk(operation.selectionSet, new Set());
+  return counter.count;
+}
+
+/**
  * Reject operations whose top-level selection holds more than `max` fields.
- * Fields reached through top-level fragment spreads and inline fragments count,
- * since they execute as root fields too. The total-field cap does not stop
- * alias amplification of an expensive root field; this does.
+ * The total-field cap does not stop alias amplification of an expensive root
+ * field; this does.
  */
 export function maxRootFieldsRule(max: number) {
-  return (context: ValidationContext): ASTVisitor => {
-    const countRoot = (
-      selectionSet: SelectionSetNode,
-      path: ReadonlySet<string>,
-      counter: { count: number }
-    ): void => {
-      for (const selection of selectionSet.selections) {
-        if (counter.count > max) return;
-        if (selection.kind === Kind.FIELD) {
-          counter.count += 1;
-        } else if (selection.kind === Kind.INLINE_FRAGMENT) {
-          countRoot(selection.selectionSet, path, counter);
-        } else {
-          const name = selection.name.value;
-          if (path.has(name)) continue;
-          const fragment = context.getFragment(name);
-          if (fragment) countRoot(fragment.selectionSet, new Set(path).add(name), counter);
-        }
+  return (context: ValidationContext): ASTVisitor => ({
+    OperationDefinition(node) {
+      if (countRootFields(node, (name) => context.getFragment(name), max) > max) {
+        context.reportError(
+          new GraphQLError(`Operation selects more than ${max} root fields.`, { nodes: [node] })
+        );
       }
-    };
-
-    return {
-      OperationDefinition(node) {
-        const counter = { count: 0 };
-        countRoot(node.selectionSet, new Set(), counter);
-        if (counter.count > max) {
-          context.reportError(
-            new GraphQLError(`Operation selects more than ${max} root fields.`, { nodes: [node] })
-          );
-        }
-      },
-    };
-  };
+    },
+  });
 }
 
 /**

@@ -1,8 +1,18 @@
 import { NextRequest, NextResponse } from 'next/server';
-import { GraphQLError, execute, parse, validate, type ExecutionResult } from 'graphql';
+import {
+  GraphQLError,
+  Kind,
+  execute,
+  getOperationAST,
+  parse,
+  validate,
+  type ExecutionResult,
+  type FragmentDefinitionNode,
+} from 'graphql';
 import { schema } from '@/lib/graphql/schema';
-import { graphqlValidationRules } from '@/lib/graphql/security';
+import { countRootFields, graphqlValidationRules } from '@/lib/graphql/security';
 import { checkRateLimit, getClientIp } from '@/lib/api/rate-limit';
+import { rateLimitedResponse } from '@/lib/api/response';
 import { getLogger } from '@/lib/logger';
 
 /**
@@ -153,6 +163,28 @@ async function handler(request: NextRequest): Promise<Response> {
       { data: null, errors: serialiseErrors(validationErrors) },
       { status: 400 }
     );
+  }
+
+  // A mutation builds an intent through the same core as POST /api/intent/offramp,
+  // so it is held to that route's limits: one mutation field per request, charged
+  // to the same bucket. Without this it is the cheapest way to call the builder.
+  const selected = getOperationAST(document, operation.operationName ?? null);
+  if (selected?.operation === 'mutation') {
+    const fragments = new Map<string, FragmentDefinitionNode>();
+    for (const definition of document.definitions) {
+      if (definition.kind === Kind.FRAGMENT_DEFINITION) {
+        fragments.set(definition.name.value, definition);
+      }
+    }
+    if (countRootFields(selected, (name) => fragments.get(name), 1) > 1) {
+      return errorResponse('Only one mutation field per request', 400);
+    }
+
+    const intentLimit = await checkRateLimit(ip, { bucket: 'api.intent.offramp', maxRequests: 20 });
+    if (!intentLimit.allowed) {
+      logger.warn({ event: 'rate_limit_exceeded', ip, retryAfter: intentLimit.retryAfter });
+      return rateLimitedResponse(intentLimit);
+    }
   }
 
   try {
