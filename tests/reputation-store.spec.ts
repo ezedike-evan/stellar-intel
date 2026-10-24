@@ -10,8 +10,12 @@ import {
   type ReputationStore,
 } from '@/lib/reputation/store';
 import type { SqlExecutor } from '@/lib/reputation/postgres';
-import { OutcomeLogRowSchema, toOutcomeLogRow } from '@/lib/reputation/schema';
-import type { OutcomeLogRow, ProbeLedgerRow } from '@/types/reputation';
+import {
+  OutcomeLogRowSchema,
+  QuoteHistoryRowSchema,
+  toOutcomeLogRow,
+} from '@/lib/reputation/schema';
+import type { OutcomeLogRow, ProbeLedgerRow, QuoteHistoryRow } from '@/types/reputation';
 
 // A pg-compatible executor backed by in-memory SQLite, so the Postgres adapter's
 // real SQL ($1 params, ON CONFLICT DO NOTHING RETURNING) is genuinely exercised.
@@ -314,6 +318,95 @@ describe.each(backends)('Probe ledger — %s backend', (_name, make) => {
     });
     expect(ngnQuotes).toHaveLength(1);
     expect(ngnQuotes[0]?.latencyMs).toBe(300);
+  });
+});
+
+function quoteRow(over: Partial<QuoteHistoryRow> = {}): QuoteHistoryRow {
+  return {
+    anchorId: 'cowrie',
+    corridor: 'usdc-ngn',
+    sellAsset: 'stellar:USDC:GA5ZSEJYB37JRC5AVCIA5MOP4RHTM335X2KGX3IHOJAPP5RE34K4KZVN',
+    buyAsset: 'iso4217:NGN',
+    sellAmount: '100',
+    price: '1520.5',
+    totalPrice: '152050',
+    source: 'sep38-prices',
+    observedAt: '2026-07-20T10:00:00.000Z',
+    ...over,
+  };
+}
+
+describe.each(backends)('Quote history — %s backend', (_name, make) => {
+  let store: ReputationStore;
+  afterEach(async () => {
+    await store?.close();
+  });
+
+  it('records a quote and reads it back unchanged', async () => {
+    store = make();
+    await store.recordQuote(quoteRow());
+
+    expect(await store.queryQuotes()).toEqual([quoteRow()]);
+  });
+
+  it('filters by anchor, corridor and since', async () => {
+    store = make();
+    await store.recordQuote(quoteRow({ anchorId: 'cowrie', corridor: 'usdc-ngn' }));
+    await store.recordQuote(quoteRow({ anchorId: 'cowrie', corridor: 'usdc-kes' }));
+    await store.recordQuote(
+      quoteRow({ anchorId: 'zeam', corridor: 'usdc-ngn', observedAt: '2026-07-21T10:00:00.000Z' })
+    );
+
+    expect(await store.queryQuotes({ anchorId: 'cowrie' })).toHaveLength(2);
+    expect(await store.queryQuotes({ corridor: 'usdc-ngn' })).toHaveLength(2);
+    expect(await store.queryQuotes({ anchorId: 'cowrie', corridor: 'usdc-kes' })).toHaveLength(1);
+    const since = await store.queryQuotes({ since: new Date('2026-07-21T00:00:00.000Z') });
+    expect(since.map((r) => r.anchorId)).toEqual(['zeam']);
+  });
+
+  it('returns quotes oldest first', async () => {
+    store = make();
+    await store.recordQuote(quoteRow({ observedAt: '2026-07-20T12:00:00.000Z' }));
+    await store.recordQuote(quoteRow({ observedAt: '2026-07-20T10:00:00.000Z' }));
+
+    const quotes = await store.queryQuotes();
+    expect(quotes.map((r) => r.observedAt)).toEqual([
+      '2026-07-20T10:00:00.000Z',
+      '2026-07-20T12:00:00.000Z',
+    ]);
+  });
+
+  it('compacts quotes older than the cutoff and keeps the rest', async () => {
+    store = make();
+    await store.recordQuote(quoteRow({ observedAt: '2026-07-01T10:00:00.000Z' }));
+    await store.recordQuote(quoteRow({ observedAt: '2026-07-20T10:00:00.000Z' }));
+
+    const removed = await store.compactQuotes(new Date('2026-07-10T00:00:00.000Z'));
+
+    expect(removed).toBe(1);
+    expect((await store.queryQuotes()).map((r) => r.observedAt)).toEqual([
+      '2026-07-20T10:00:00.000Z',
+    ]);
+  });
+
+  it('rejects a non-decimal price and writes nothing', async () => {
+    store = make();
+
+    await expect(store.recordQuote(quoteRow({ price: 'NaN' }))).rejects.toThrow();
+    await expect(store.recordQuote(quoteRow({ totalPrice: '1e3' }))).rejects.toThrow();
+    expect(await store.queryQuotes()).toEqual([]);
+  });
+});
+
+describe('QuoteHistoryRowSchema (Q38012)', () => {
+  it('accepts a valid row and rejects a bad source or timestamp', () => {
+    expect(QuoteHistoryRowSchema.safeParse(quoteRow()).success).toBe(true);
+    expect(QuoteHistoryRowSchema.safeParse(quoteRow({ source: 'other' as never })).success).toBe(
+      false
+    );
+    expect(QuoteHistoryRowSchema.safeParse(quoteRow({ observedAt: 'yesterday' })).success).toBe(
+      false
+    );
   });
 });
 

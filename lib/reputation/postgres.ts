@@ -1,9 +1,17 @@
-import type { OutcomeLogRow, OutcomeStatus, ProbeLedgerRow } from '@/types/reputation';
+import type {
+  OutcomeLogRow,
+  OutcomeStatus,
+  ProbeLedgerRow,
+  QuoteHistoryRow,
+  QuoteSource,
+} from '@/types/reputation';
+import { QuoteHistoryRowSchema } from './schema';
 import type {
   DeliveredUpdate,
   DisputedUpdate,
   OutcomeQuery,
   ProbeSampleQuery,
+  QuoteQuery,
   ReputationStore,
 } from './store';
 
@@ -55,6 +63,20 @@ const CREATE_TABLE_SQL = `
   );
   CREATE INDEX IF NOT EXISTS idx_probe_samples_domain ON probe_samples (domain);
   CREATE INDEX IF NOT EXISTS idx_probe_samples_domain_corridor ON probe_samples (domain, corridor);
+
+  CREATE TABLE IF NOT EXISTS quote_history (
+    anchor_id    TEXT NOT NULL,
+    corridor     TEXT NOT NULL,
+    sell_asset   TEXT NOT NULL,
+    buy_asset    TEXT NOT NULL,
+    sell_amount  TEXT NOT NULL,
+    price        TEXT NOT NULL,
+    total_price  TEXT NOT NULL,
+    source       TEXT NOT NULL,
+    observed_at  TIMESTAMPTZ NOT NULL
+  );
+  CREATE INDEX IF NOT EXISTS idx_quote_history_anchor_corridor_observed
+    ON quote_history (anchor_id, corridor, observed_at);
 `;
 
 // Tables created before migration 006 lack the attestation columns, and
@@ -114,6 +136,20 @@ function fromProbeDb(r: Record<string, unknown>): ProbeLedgerRow {
     failureType: (r['failure_type'] as ProbeLedgerRow['failureType']) ?? null,
     error: (r['error'] as string) ?? null,
     probedAt: new Date(r['probed_at'] as string).toISOString(),
+  };
+}
+
+function fromQuoteDb(r: Record<string, unknown>): QuoteHistoryRow {
+  return {
+    anchorId: String(r['anchor_id']),
+    corridor: String(r['corridor']),
+    sellAsset: String(r['sell_asset']),
+    buyAsset: String(r['buy_asset']),
+    sellAmount: String(r['sell_amount']),
+    price: String(r['price']),
+    totalPrice: String(r['total_price']),
+    source: String(r['source']) as QuoteSource,
+    observedAt: new Date(r['observed_at'] as string).toISOString(),
   };
 }
 
@@ -273,6 +309,59 @@ export class PostgresReputationStore implements ReputationStore {
     await this.init();
     const { rows } = await this.sql.query(
       `DELETE FROM probe_samples WHERE probed_at < $1 RETURNING domain`,
+      [cutoff.toISOString()]
+    );
+    return rows.length;
+  }
+
+  async recordQuote(row: QuoteHistoryRow): Promise<void> {
+    const q = QuoteHistoryRowSchema.parse(row);
+    await this.init();
+    await this.sql.query(
+      `INSERT INTO quote_history
+         (anchor_id, corridor, sell_asset, buy_asset, sell_amount, price, total_price, source, observed_at)
+       VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9)`,
+      [
+        q.anchorId,
+        q.corridor,
+        q.sellAsset,
+        q.buyAsset,
+        q.sellAmount,
+        q.price,
+        q.totalPrice,
+        q.source,
+        q.observedAt,
+      ]
+    );
+  }
+
+  async queryQuotes(filter: QuoteQuery = {}): Promise<QuoteHistoryRow[]> {
+    await this.init();
+    const where: string[] = [];
+    const params: unknown[] = [];
+    if (filter.anchorId) {
+      params.push(filter.anchorId);
+      where.push(`anchor_id = $${params.length}`);
+    }
+    if (filter.corridor) {
+      params.push(filter.corridor);
+      where.push(`corridor = $${params.length}`);
+    }
+    if (filter.since) {
+      params.push(filter.since.toISOString());
+      where.push(`observed_at >= $${params.length}`);
+    }
+    const sql = `SELECT * FROM quote_history ${
+      where.length ? `WHERE ${where.join(' AND ')}` : ''
+    } ORDER BY observed_at ASC`;
+    const { rows } = await this.sql.query(sql, params);
+    return rows.map(fromQuoteDb);
+  }
+
+  async compactQuotes(cutoff: Date): Promise<number> {
+    await this.init();
+    const { rows } = await this.sql.query(
+      `DELETE FROM quote_history WHERE observed_at < $1 RETURNING anchor_id`,
       [cutoff.toISOString()]
     );
     return rows.length;

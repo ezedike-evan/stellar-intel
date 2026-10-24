@@ -2,8 +2,10 @@ import { z } from 'zod';
 import {
   OUTCOME_DIRECTIONS,
   OUTCOME_STATUSES,
+  QUOTE_SOURCES,
   type OutcomeLogRow,
   type OutcomeStatus,
+  type QuoteHistoryRow,
 } from '@/types/reputation';
 import { AMOUNT_PATTERN, SIGNED_AMOUNT_PATTERN, STELLAR_PUBKEY_PATTERN } from '@/lib/patterns';
 import { ANCHORS } from '@/constants/anchors';
@@ -34,6 +36,23 @@ export const OutcomeLogRowSchema = z.object({
   attested: z.boolean(),
   signerAccount: z.string().regex(STELLAR_PUBKEY_PATTERN).nullable(),
 }) satisfies z.ZodType<OutcomeLogRow>;
+
+// ─── Quote history row (Q38012) ───────────────────────────────────────────────
+
+const unsignedDecimalString = z.string().min(1).regex(AMOUNT_PATTERN, 'must be a decimal string');
+
+/** Validates every SEP-38 quote-history row before it is written. */
+export const QuoteHistoryRowSchema = z.object({
+  anchorId: z.string().min(1),
+  corridor: z.string().min(1),
+  sellAsset: z.string().min(1),
+  buyAsset: z.string().min(1),
+  sellAmount: unsignedDecimalString,
+  price: unsignedDecimalString,
+  totalPrice: unsignedDecimalString,
+  source: z.enum(QUOTE_SOURCES),
+  observedAt: z.string().datetime({ offset: true }),
+}) satisfies z.ZodType<QuoteHistoryRow>;
 
 // ─── Append input (POST /api/reputation/append) ───────────────────────────────
 //

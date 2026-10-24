@@ -1,10 +1,18 @@
 import Database from 'better-sqlite3';
-import type { OutcomeLogRow, OutcomeStatus, ProbeLedgerRow } from '@/types/reputation';
+import type {
+  OutcomeLogRow,
+  OutcomeStatus,
+  ProbeLedgerRow,
+  QuoteHistoryRow,
+  QuoteSource,
+} from '@/types/reputation';
+import { QuoteHistoryRowSchema } from './schema';
 import type {
   DeliveredUpdate,
   DisputedUpdate,
   OutcomeQuery,
   ProbeSampleQuery,
+  QuoteQuery,
   ReputationStore,
 } from './store';
 
@@ -48,7 +56,35 @@ const CREATE_TABLE_SQL = `
   );
   CREATE INDEX IF NOT EXISTS idx_probe_samples_domain ON probe_samples (domain);
   CREATE INDEX IF NOT EXISTS idx_probe_samples_domain_corridor ON probe_samples (domain, corridor);
+
+  CREATE TABLE IF NOT EXISTS quote_history (
+    anchor_id    TEXT NOT NULL,
+    corridor     TEXT NOT NULL,
+    sell_asset   TEXT NOT NULL,
+    buy_asset    TEXT NOT NULL,
+    sell_amount  TEXT NOT NULL,
+    price        TEXT NOT NULL,
+    total_price  TEXT NOT NULL,
+    source       TEXT NOT NULL,
+    observed_at  TEXT NOT NULL
+  );
+  CREATE INDEX IF NOT EXISTS idx_quote_history_anchor_corridor_observed
+    ON quote_history (anchor_id, corridor, observed_at);
 `;
+
+function fromQuoteDb(r: Record<string, unknown>): QuoteHistoryRow {
+  return {
+    anchorId: String(r['anchor_id']),
+    corridor: String(r['corridor']),
+    sellAsset: String(r['sell_asset']),
+    buyAsset: String(r['buy_asset']),
+    sellAmount: String(r['sell_amount']),
+    price: String(r['price']),
+    totalPrice: String(r['total_price']),
+    source: String(r['source']) as QuoteSource,
+    observedAt: String(r['observed_at']),
+  };
+}
 
 interface OutcomeLogRowDb {
   intentHash: string;
@@ -237,6 +273,45 @@ export class SqliteReputationStore implements ReputationStore {
   async compactProbes(cutoff: Date): Promise<number> {
     const result = this.db
       .prepare(`DELETE FROM probe_samples WHERE probedAt < @cutoff`)
+      .run({ cutoff: cutoff.toISOString() });
+    return result.changes;
+  }
+
+  async recordQuote(row: QuoteHistoryRow): Promise<void> {
+    const q = QuoteHistoryRowSchema.parse(row);
+    this.db
+      .prepare(
+        `INSERT INTO quote_history
+           (anchor_id, corridor, sell_asset, buy_asset, sell_amount, price, total_price, source, observed_at)
+         VALUES (@anchorId, @corridor, @sellAsset, @buyAsset, @sellAmount, @price, @totalPrice, @source, @observedAt)`
+      )
+      .run({ ...q });
+  }
+
+  async queryQuotes(filter: QuoteQuery = {}): Promise<QuoteHistoryRow[]> {
+    const where: string[] = [];
+    const params: Record<string, unknown> = {};
+    if (filter.anchorId) {
+      where.push('anchor_id = @anchorId');
+      params['anchorId'] = filter.anchorId;
+    }
+    if (filter.corridor) {
+      where.push('corridor = @corridor');
+      params['corridor'] = filter.corridor;
+    }
+    if (filter.since) {
+      where.push('observed_at >= @since');
+      params['since'] = filter.since.toISOString();
+    }
+    const sql = `SELECT * FROM quote_history ${
+      where.length ? `WHERE ${where.join(' AND ')}` : ''
+    } ORDER BY observed_at ASC`;
+    return (this.db.prepare(sql).all(params) as Array<Record<string, unknown>>).map(fromQuoteDb);
+  }
+
+  async compactQuotes(cutoff: Date): Promise<number> {
+    const result = this.db
+      .prepare(`DELETE FROM quote_history WHERE observed_at < @cutoff`)
       .run({ cutoff: cutoff.toISOString() });
     return result.changes;
   }
