@@ -5,8 +5,8 @@ import type { TomlResult } from '@/lib/stellar/sep1';
 // ─── Shared TOML fixture ───────────────────────────────────────────────────────
 
 const GOOD_TOML = {
-  TRANSFER_SERVER_SEP0024: 'https://anchor.example.com/sep24',
-  WEB_AUTH_ENDPOINT: 'https://anchor.example.com/auth',
+  TRANSFER_SERVER_SEP0024: 'https://api.cowrie.exchange/sep24',
+  WEB_AUTH_ENDPOINT: 'https://api.cowrie.exchange/auth',
   SIGNING_KEY: 'GBBD47IF6LWK7P7MDEVSCWR7DPUWV3NY3DTQEVFL4NAT4AQH3ZLLFLA5',
   CURRENCIES: [
     { code: 'USDC', issuer: 'GA5ZSEJYB37JRC5AVCIA5MOP4RHTM335X2KGX3IHOJAPP5RE34K4KZVN' },
@@ -130,7 +130,7 @@ describe('resolveToml — retry & typed result', () => {
   it('returns { ok: true } but sep24: false when TRANSFER_SERVER_SEP0024 is absent', async () => {
     const mockResolve = await getMockedResolve();
     mockResolve.mockResolvedValueOnce({
-      WEB_AUTH_ENDPOINT: 'https://anchor.example.com/auth',
+      WEB_AUTH_ENDPOINT: 'https://api.cowrie.exchange/auth',
     });
 
     const promise = resolveToml('partial.anchor.io');
@@ -147,7 +147,7 @@ describe('resolveToml — retry & typed result', () => {
   it('returns { ok: true } but sep10: false when WEB_AUTH_ENDPOINT is absent', async () => {
     const mockResolve = await getMockedResolve();
     mockResolve.mockResolvedValueOnce({
-      TRANSFER_SERVER_SEP0024: 'https://anchor.example.com/sep24',
+      TRANSFER_SERVER_SEP0024: 'https://api.cowrie.exchange/sep24',
       // intentionally omit WEB_AUTH_ENDPOINT
     });
 

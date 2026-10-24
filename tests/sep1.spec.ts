@@ -31,8 +31,8 @@ describe('SEP-1 seps capability flags', () => {
 
   it('sep6=false when only TRANSFER_SERVER_SEP0024 is present (not TRANSFER_SERVER)', async () => {
     vi.spyOn(StellarToml.Resolver, 'resolve').mockResolvedValue({
-      TRANSFER_SERVER_SEP0024: 'https://anchor.example.com/sep24',
-      WEB_AUTH_ENDPOINT: 'https://anchor.example.com/auth',
+      TRANSFER_SERVER_SEP0024: 'https://api.cowrie.exchange/sep24',
+      WEB_AUTH_ENDPOINT: 'https://api.cowrie.exchange/auth',
       SIGNING_KEY: 'GABCDEF',
       // eslint-disable-next-line @typescript-eslint/no-explicit-any
     } as any);
@@ -48,8 +48,8 @@ describe('SEP-1 seps capability flags', () => {
 
   it('sep6=true when TRANSFER_SERVER is present', async () => {
     vi.spyOn(StellarToml.Resolver, 'resolve').mockResolvedValue({
-      TRANSFER_SERVER: 'https://anchor.example.com/sep6',
-      WEB_AUTH_ENDPOINT: 'https://anchor.example.com/auth',
+      TRANSFER_SERVER: 'https://api.cowrie.exchange/sep6',
+      WEB_AUTH_ENDPOINT: 'https://api.cowrie.exchange/auth',
       SIGNING_KEY: 'GABCDEF',
       // eslint-disable-next-line @typescript-eslint/no-explicit-any
     } as any);
@@ -114,5 +114,57 @@ describe('SEP-1 seps capability flags', () => {
       expect(result.data.seps).toContain('sep6');
       expect(result.data.seps).toContain('sep31');
     }
+  });
+});
+
+describe('SEP-1 server URL filtering (#1353)', () => {
+  beforeEach(() => {
+    _clearTomlCache();
+    vi.restoreAllMocks();
+  });
+
+  async function resolve(toml: Record<string, string>) {
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    vi.spyOn(StellarToml.Resolver, 'resolve').mockResolvedValue(toml as any);
+    const result = await resolveToml('cowrie.exchange');
+    if (!result.ok) throw new Error('expected an ok result');
+    return result.data;
+  }
+
+  it('drops an http:// TRANSFER_SERVER_SEP0024 and clears the sep24 capability', async () => {
+    const data = await resolve({
+      TRANSFER_SERVER_SEP0024: 'http://api.cowrie.exchange/sep24',
+      WEB_AUTH_ENDPOINT: 'https://api.cowrie.exchange/auth',
+    });
+    expect(data.TRANSFER_SERVER_SEP0024).toBeNull();
+    expect(data.capabilities.sep24).toBe(false);
+    expect(data.seps).not.toContain('sep24');
+    expect(data.capabilities.sep10).toBe(true);
+  });
+
+  it('drops a metadata-host ANCHOR_QUOTE_SERVER and clears the sep38 capability', async () => {
+    const data = await resolve({ ANCHOR_QUOTE_SERVER: 'https://169.254.169.254/' });
+    expect(data.ANCHOR_QUOTE_SERVER).toBeNull();
+    expect(data.capabilities.sep38).toBe(false);
+  });
+
+  it('drops every other server key that points off the registry', async () => {
+    const data = await resolve({
+      TRANSFER_SERVER: 'https://evil.example.com/sep6',
+      DIRECT_PAYMENT_SERVER: 'https://localhost/sep31',
+      WEB_AUTH_ENDPOINT: 'https://cowrie.exchange.evil.com/auth',
+    });
+    expect(data.TRANSFER_SERVER).toBeNull();
+    expect(data.DIRECT_PAYMENT_SERVER).toBeNull();
+    expect(data.WEB_AUTH_ENDPOINT).toBeNull();
+    expect(data.capabilities).toMatchObject({ sep6: false, sep31: false, sep10: false });
+  });
+
+  it('keeps an https URL on a registry subdomain', async () => {
+    const data = await resolve({
+      TRANSFER_SERVER_SEP0024: 'https://edge.api.cowrie.exchange/sep24',
+    });
+    expect(data.TRANSFER_SERVER_SEP0024).toBe('https://edge.api.cowrie.exchange/sep24');
+    expect(data.capabilities.sep24).toBe(true);
   });
 });

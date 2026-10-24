@@ -1,6 +1,6 @@
 # Webhooks
 
-**Last reviewed:** 2026-08-26
+**Last reviewed:** 2026-10-24
 
 Stellar Intel can push real-time event notifications to your HTTPS endpoint instead of requiring you to poll the API. Each delivery is HMAC-SHA256 signed so you can verify authenticity before acting on the payload.
 
@@ -81,7 +81,7 @@ function verify(secret: string, header: string, rawBody: string): boolean {
 
 ## Retry and dead-letter
 
-If your endpoint does not respond with a 2xx status code, Stellar Intel retries up to 5 times with exponential backoff (1 s, 2 s, 4 s, 8 s between attempts). After all attempts are exhausted the delivery is moved to the dead-letter log, visible via `GET /api/webhooks/failures` (admin key required).
+If your endpoint does not respond with a 2xx status code, Stellar Intel makes up to 5 delivery attempts (the first plus 4 retries) with exponential backoff (1 s, 2 s, 4 s, 8 s between attempts). After all attempts are exhausted the delivery is moved to the dead-letter log, visible via `GET /api/webhooks/failures` (admin key required).
 
 Your endpoint should return `200` (or any 2xx) as quickly as possible and process the event asynchronously to avoid triggering retries due to slow processing.
 

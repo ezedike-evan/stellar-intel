@@ -2,7 +2,7 @@ import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest';
 import { NextRequest } from 'next/server';
 import { POST } from '@/app/api/v1/intent/offramp/route';
 import { GET } from '@/app/api/v1/health/route';
-import { rateLimitHeaders, clearIdempotencyStore } from '@/lib/api/v1';
+import { rateLimitHeaders, clearIdempotencyStore, withV1 } from '@/lib/api/v1';
 import { API_VERSION } from '@/lib/api/response';
 import { clearRateLimitStore } from '@/lib/api/rate-limit';
 import { _setWebhookEmitter } from '@/lib/webhooks/emit';
@@ -177,5 +177,29 @@ describe('POST /api/v1/intent/offramp — intent.created webhook (#1340)', () =>
     const replay = await POST(postV1(VALID_INTENT, headers));
     expect(replay.headers.get('Idempotency-Replayed')).toBe('true');
     expect(emitted).toHaveLength(1);
+  });
+});
+
+describe('withV1 unhandled errors (#1349)', () => {
+  it('returns a generic 500 that keeps the requestId but not the thrown message', async () => {
+    const res = await withV1(
+      new Request('http://localhost/api/v1/x', { headers: { 'x-request-id': 'req-123' } }),
+      { bucket: 'api.v1.test-throw', maxRequests: 10 },
+      async () => {
+        throw new Error('secret detail');
+      }
+    );
+
+    expect(res.status).toBe(500);
+    const text = await res.text();
+    expect(text).not.toContain('secret detail');
+    const body = JSON.parse(text) as {
+      error: { code: string; message: string; requestId: string };
+    };
+    expect(body.error).toEqual({
+      code: 'internal_error',
+      message: 'Internal error',
+      requestId: 'req-123',
+    });
   });
 });

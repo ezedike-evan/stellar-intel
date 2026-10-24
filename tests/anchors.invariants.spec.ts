@@ -95,10 +95,8 @@ describe('anchor registry / toml invariants', () => {
         fc.subarray([...ALL_SEPS]),
         fc.subarray([...NOISE_KEYS]),
         async (seps, noise) => {
-          const toml = await parse(
-            'generated.example',
-            rawTomlFor('generated.example', seps, noise)
-          );
+          // A registered domain: server URLs on any other host are dropped by design.
+          const toml = await parse('cowrie.exchange', rawTomlFor('cowrie.exchange', seps, noise));
           for (const sep of ALL_SEPS) {
             expect(Boolean(toml.capabilities[sep])).toBe(seps.includes(sep));
           }

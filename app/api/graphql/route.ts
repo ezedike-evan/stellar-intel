@@ -1,8 +1,18 @@
 import { NextRequest, NextResponse } from 'next/server';
-import { GraphQLError, execute, parse, validate, type ExecutionResult } from 'graphql';
+import {
+  GraphQLError,
+  Kind,
+  execute,
+  getOperationAST,
+  parse,
+  validate,
+  type ExecutionResult,
+  type FragmentDefinitionNode,
+} from 'graphql';
 import { schema } from '@/lib/graphql/schema';
-import { graphqlValidationRules } from '@/lib/graphql/security';
+import { countRootFields, graphqlValidationRules } from '@/lib/graphql/security';
 import { checkRateLimit, getClientIp } from '@/lib/api/rate-limit';
+import { rateLimitedResponse } from '@/lib/api/response';
 import { getLogger } from '@/lib/logger';
 
 /**
@@ -155,6 +165,28 @@ async function handler(request: NextRequest): Promise<Response> {
     );
   }
 
+  // A mutation builds an intent through the same core as POST /api/intent/offramp,
+  // so it is held to that route's limits: one mutation field per request, charged
+  // to the same bucket. Without this it is the cheapest way to call the builder.
+  const selected = getOperationAST(document, operation.operationName ?? null);
+  if (selected?.operation === 'mutation') {
+    const fragments = new Map<string, FragmentDefinitionNode>();
+    for (const definition of document.definitions) {
+      if (definition.kind === Kind.FRAGMENT_DEFINITION) {
+        fragments.set(definition.name.value, definition);
+      }
+    }
+    if (countRootFields(selected, (name) => fragments.get(name), 1) > 1) {
+      return errorResponse('Only one mutation field per request', 400);
+    }
+
+    const intentLimit = await checkRateLimit(ip, { bucket: 'api.intent.offramp', maxRequests: 20 });
+    if (!intentLimit.allowed) {
+      logger.warn({ event: 'rate_limit_exceeded', ip, retryAfter: intentLimit.retryAfter });
+      return rateLimitedResponse(intentLimit);
+    }
+  }
+
   try {
     const result: ExecutionResult = await execute({
       schema,
@@ -174,15 +206,16 @@ async function handler(request: NextRequest): Promise<Response> {
     );
   } catch (error) {
     // A throw that escaped GraphQL's own error handling. Logged with the stack,
-    // reported with the message — never as an empty body, which is what made
-    // the original outage undiagnosable from outside.
+    // reported without the message — never as an empty body, which is what made
+    // the original outage undiagnosable from outside, and never with the raw
+    // exception text, which can carry driver errors, file paths or upstream URLs.
     const message = error instanceof Error ? error.message : String(error);
     logger.error({
       event: 'graphql_execution_error',
       error: message,
       stack: error instanceof Error ? error.stack : undefined,
     });
-    return errorResponse(`Internal server error: ${message}`, 500);
+    return errorResponse('Internal server error', 500);
   }
 }
 

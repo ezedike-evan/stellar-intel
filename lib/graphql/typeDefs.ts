@@ -12,7 +12,11 @@ export const typeDefs = /* GraphQL */ `
     "Anchors serving a corridor, or every known anchor when corridorId is omitted."
     anchors(corridorId: ID): [Anchor!]!
     "Live rate comparison for a corridor, resolved through the same cache REST's GET /api/rates/[corridor] uses."
-    rates(corridor: ID!, amount: String, forceRefresh: Boolean): RateComparison!
+    rates(
+      corridor: ID!
+      amount: String
+      forceRefresh: Boolean @deprecated(reason: "Ignored. Rates are served from the shared cache.")
+    ): RateComparison!
     "Aggregate system health: degraded anchors, publisher liveness, rolling rate-cache counters."
     health: HealthStatus!
   }
