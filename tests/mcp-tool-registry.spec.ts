@@ -51,6 +51,22 @@ const EXPECTED_TOOLS: Record<string, { required: string[]; structured: boolean }
   'intel.corridors': { required: [], structured: true },
   'intel.leaderboard': { required: [], structured: false },
   'intel.probe.coverage': { required: [], structured: false },
+  'intel.onramp.quote': {
+    required: ['sourceAsset', 'destinationAsset', 'amount'],
+    structured: true,
+  },
+  'intel.onramp.prepare': {
+    required: [
+      'type',
+      'sourceAsset',
+      'destinationAsset',
+      'amount',
+      'sender',
+      'destination',
+      'depositMethod',
+    ],
+    structured: true,
+  },
 };
 
 describe('MCP tool registry (#1052)', () => {

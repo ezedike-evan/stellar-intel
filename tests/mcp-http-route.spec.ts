@@ -36,7 +36,7 @@ function mcpRequest(body: unknown, headers: Record<string, string> = {}): NextRe
 }
 
 /**
- * Registered by `createServer()` in packages/mcp/src/server.ts. Listed here so
+ * Registered by `createServer()` in lib/mcp/server.ts. Listed here so
  * a tool silently disappearing from the remote surface fails a test rather than
  * going unnoticed.
  */
@@ -49,6 +49,8 @@ const EXPECTED_TOOLS = [
   'intel.probe.coverage',
   'intel.leaderboard',
   'intel.corridors',
+  'intel.onramp.quote',
+  'intel.onramp.prepare',
 ];
 
 const INITIALIZE = {
@@ -117,6 +119,8 @@ describe('POST /api/mcp', () => {
     const names = tools.map((t) => t.name);
 
     expect(names).toEqual(expect.arrayContaining(EXPECTED_TOOLS));
+    // An on-ramp cannot be completed by signing a transaction; the user finishes it.
+    expect(names).not.toContain('intel.onramp.execute');
   });
 
   it('rejects a request that does not accept both content types', async () => {

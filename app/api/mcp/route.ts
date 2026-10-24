@@ -23,8 +23,8 @@ import { getLogger } from '@/lib/logger';
  *       "url": "https://stellar-intel.vercel.app/api/mcp" } } }
  *
  * Tool definitions are not duplicated here. The route builds its server from
- * `createServer()` in `lib/mcp/server.ts`, exposing the complete 8-tool suite
- * alongside stdio and the publishable package.
+ * `createServer()` in `lib/mcp/server.ts`, exposing the full tool suite,
+ * including the on-ramp quote and prepare tools, alongside stdio.
  */
 export const runtime = 'nodejs';
 export const dynamic = 'force-dynamic';

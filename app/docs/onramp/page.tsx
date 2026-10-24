@@ -186,17 +186,17 @@ if (response.unsignedChangeTrustXdr) {
       <section className="space-y-4">
         <h2 className="text-xl font-semibold text-primary-text">AI Agent &amp; MCP Integration</h2>
         <p className="text-secondary-text">
-          Planned: agents using the Model Context Protocol (MCP) server will get on-ramp tools that
-          work without access to secret keys:
+          Agents using the hosted Model Context Protocol (MCP) server at <code>/api/mcp</code> get
+          on-ramp tools that work without access to secret keys:
         </p>
         <ul className="list-inside list-disc space-y-2 text-sm text-secondary-text">
           <li>
-            <code className="text-accent">intel.onramp.quote</code>: Fetches indicative or firm
-            on-ramp quotes across multiple anchors.
+            <code className="text-accent">intel.onramp.quote</code>: Returns the best indicative
+            deposit estimate across the anchors that serve a corridor.
           </li>
           <li>
             <code className="text-accent">intel.onramp.prepare</code>: Constructs the unsigned
-            on-ramp intent and provides the anchor handoff URL for user action.
+            on-ramp intent and returns the app URL where the user completes the deposit.
           </li>
         </ul>
       </section>

@@ -10,7 +10,8 @@ and served over stdio (the default) or streamable HTTP.
 ## Status
 
 `createServer()` (`src/server.ts`) stands up the MCP server and registers
-eight tools, all backed directly by
+ten tools (the off-ramp and discovery tools plus `intel.onramp.quote` and
+`intel.onramp.prepare`), backed directly by
 [`lib/mcp/offramp.ts`](https://github.com/ezedike-evan/stellar-intel/blob/main/lib/mcp/offramp.ts)
 in the main app (imported at build time — see below), so this package and the
 in-repo dev server at
@@ -149,7 +150,7 @@ https://stellar-intel.vercel.app/api/mcp
 }
 ```
 
-It serves the same eight tools, prompts and resources as this package — the
+It serves the same tools, prompts and resources as this package — the
 server is built from one shared implementation in `lib/mcp`. See
 [`docs/MCP.md`](https://github.com/ezedike-evan/stellar-intel/blob/main/docs/MCP.md#hosted-endpoint-nothing-to-install)
 for the tool list.
