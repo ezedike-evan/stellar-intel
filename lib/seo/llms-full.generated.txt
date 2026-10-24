@@ -3209,7 +3209,9 @@ match; `signature` must verify against `intentHash` under `intent.sender`'s
 public key (see the accepted signature forms below); the decoded `signedTx` must be signed, sourced from
 `intent.sender`, carry exactly one payment operation to the routed anchor
 account for `intent.amount`/`intent.sourceAsset`, and memo-hash `intentHash`.
-Any mismatch is rejected before anything reaches Horizon.
+Its fee must be at most 100,000 stroops, and it must carry an expiry
+(`timeBounds.maxTime`) that has not passed and is no more than 15 minutes away.
+Any mismatch is rejected (`TX_MISMATCH`) before anything reaches Horizon.
 
 - **Input:**
   `{ unsignedEnvelope: { intent, intentHash }, signature, signedTx }` — the

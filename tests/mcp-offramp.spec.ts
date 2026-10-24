@@ -5,7 +5,15 @@
  * crypto for secure entropy, which jsdom does not provide.
  */
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
-import { Keypair, TransactionBuilder, Networks } from '@stellar/stellar-sdk';
+import {
+  Account,
+  Keypair,
+  Memo,
+  Networks,
+  Operation,
+  TransactionBuilder,
+  type Transaction,
+} from '@stellar/stellar-sdk';
 import { hashIntent } from '@/lib/intent/hash';
 import type { ServerRatesResult } from '@/lib/stellar/server-rates';
 
@@ -448,6 +456,102 @@ describe('intel.execute (#819)', () => {
     await expect(
       executeIntent({ unsignedEnvelope, signature: wrongSignature, signedTx })
     ).rejects.toMatchObject({ code: 'SIGNATURE_INVALID' });
+  });
+
+  describe('fee and validity bounds (#1363)', () => {
+    const horizonOk = {
+      hash: 'a'.repeat(64),
+      ledger: 12345,
+      successful: true,
+      envelope_xdr: '',
+      result_xdr: '',
+      result_meta_xdr: '',
+      paging_token: '',
+    };
+
+    /** The prepared payment, re-built with a chosen fee and time window, then signed. */
+    async function withBounds(opts: { fee: string; window: [number, number] }) {
+      const kp = Keypair.random();
+      const { unsignedEnvelope, unsignedTx } = await prepareIntent({
+        ...validIntent,
+        sender: kp.publicKey(),
+      });
+      const prepared = TransactionBuilder.fromXDR(unsignedTx, Networks.PUBLIC) as Transaction;
+      const payment = prepared.operations[0] as Operation.Payment;
+      const rebuilt = new TransactionBuilder(new Account(kp.publicKey(), '0'), {
+        fee: opts.fee,
+        networkPassphrase: Networks.PUBLIC,
+      })
+        .addOperation(
+          Operation.payment({
+            destination: payment.destination,
+            asset: payment.asset,
+            amount: payment.amount,
+          })
+        )
+        .addMemo(Memo.hash(Buffer.from(prepared.memo.value as Uint8Array).toString('hex')))
+        .setTimebounds(opts.window[0], opts.window[1])
+        .build();
+      rebuilt.sign(kp);
+
+      const signature = Buffer.from(
+        kp.sign(Buffer.from(unsignedEnvelope.intentHash, 'utf8'))
+      ).toString('base64');
+      return { unsignedEnvelope, signature, signedTx: rebuilt.toXDR() };
+    }
+
+    const nowSec = () => Math.floor(Date.now() / 1000);
+
+    it('accepts a fee of 100 stroops valid for 300 seconds', async () => {
+      submitTransaction.mockResolvedValueOnce(horizonOk);
+      const input = await withBounds({ fee: '100', window: [0, nowSec() + 300] });
+      await expect(executeIntent(input)).resolves.toMatchObject({ status: 'submitted' });
+    });
+
+    it('rejects a fee of 1,000,000 stroops', async () => {
+      const input = await withBounds({ fee: '1000000', window: [0, nowSec() + 300] });
+      await expect(executeIntent(input)).rejects.toMatchObject({ code: 'TX_MISMATCH' });
+      expect(submitTransaction).not.toHaveBeenCalled();
+    });
+
+    it('accepts a fee at exactly the cap', async () => {
+      submitTransaction.mockResolvedValueOnce(horizonOk);
+      const input = await withBounds({ fee: '100000', window: [0, nowSec() + 300] });
+      await expect(executeIntent(input)).resolves.toMatchObject({ status: 'submitted' });
+    });
+
+    it('rejects a transaction with no expiry (timeout 0)', async () => {
+      const input = await withBounds({ fee: '100', window: [0, 0] });
+      await expect(executeIntent(input)).rejects.toMatchObject({
+        code: 'TX_MISMATCH',
+        message: expect.stringContaining('no expiry'),
+      });
+      expect(submitTransaction).not.toHaveBeenCalled();
+    });
+
+    it('rejects a transaction valid for 3600 seconds', async () => {
+      const input = await withBounds({ fee: '100', window: [0, nowSec() + 3600] });
+      await expect(executeIntent(input)).rejects.toMatchObject({ code: 'TX_MISMATCH' });
+      expect(submitTransaction).not.toHaveBeenCalled();
+    });
+
+    it('rejects a transaction that has already expired', async () => {
+      const input = await withBounds({ fee: '100', window: [0, nowSec() - 10] });
+      await expect(executeIntent(input)).rejects.toMatchObject({
+        code: 'TX_MISMATCH',
+        message: expect.stringContaining('expired'),
+      });
+      expect(submitTransaction).not.toHaveBeenCalled();
+    });
+
+    it('measures validity against an injected clock', async () => {
+      const input = await withBounds({ fee: '100', window: [0, nowSec() + 300] });
+      // An hour later the same transaction is long expired.
+      await expect(executeIntent(input, Date.now() + 3_600_000)).rejects.toMatchObject({
+        code: 'TX_MISMATCH',
+      });
+      expect(submitTransaction).not.toHaveBeenCalled();
+    });
   });
 
   describe('signature formats (#1362)', () => {

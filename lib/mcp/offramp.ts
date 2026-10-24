@@ -322,13 +322,27 @@ export const ExecuteOutputSchema = z.object({
 });
 export type ExecuteOutput = z.infer<typeof ExecuteOutputSchema>;
 
+/** Highest fee, in stroops, an agent-signed transaction may carry (0.01 XLM). */
+const MAX_FEE_STROOPS = 100_000;
+/** Longest an agent-signed transaction may stay valid for, in seconds. */
+const MAX_VALIDITY_SECONDS = 900;
+
 /**
  * Verifies a signed intent + transaction against the corridor route it was
  * prepared for, then submits the transaction to Horizon. Throws
  * {@link OfframpToolError} for any mismatch between the signed material and
  * the intent it claims to execute, or if Horizon rejects the submission.
+ *
+ * Besides the payment itself, the fee and validity window are bounded: a fee
+ * over {@link MAX_FEE_STROOPS}, a missing or already-passed expiry, or one more
+ * than {@link MAX_VALIDITY_SECONDS} away is rejected, so the hosted endpoint
+ * cannot be used to relay a transaction with a huge fee or no expiry. `now` is
+ * milliseconds since the epoch, injectable for tests.
  */
-export async function executeIntent(input: ExecuteInput): Promise<ExecuteOutput> {
+export async function executeIntent(
+  input: ExecuteInput,
+  now: number = Date.now()
+): Promise<ExecuteOutput> {
   const parsed = ExecuteInputSchema.parse(input);
   const { intent, intentHash } = parsed.unsignedEnvelope;
 
@@ -402,6 +416,27 @@ export async function executeIntent(input: ExecuteInput): Promise<ExecuteOutput>
   }
   if (!('operations' in tx)) {
     throw new OfframpToolError('signedTx has no operations', 'TX_MISMATCH');
+  }
+
+  if (Number(tx.fee) > MAX_FEE_STROOPS) {
+    throw new OfframpToolError(
+      `Transaction fee ${tx.fee} exceeds the maximum of ${MAX_FEE_STROOPS} stroops`,
+      'TX_MISMATCH'
+    );
+  }
+  const maxTime = Number(tx.timeBounds?.maxTime ?? 0);
+  if (!tx.timeBounds || maxTime === 0) {
+    throw new OfframpToolError('Transaction has no expiry (timeBounds.maxTime)', 'TX_MISMATCH');
+  }
+  const nowSeconds = Math.floor(now / 1000);
+  if (maxTime <= nowSeconds) {
+    throw new OfframpToolError('Transaction has already expired', 'TX_MISMATCH');
+  }
+  if (maxTime - nowSeconds > MAX_VALIDITY_SECONDS) {
+    throw new OfframpToolError(
+      `Transaction stays valid for longer than ${MAX_VALIDITY_SECONDS} seconds`,
+      'TX_MISMATCH'
+    );
   }
 
   const [operation, ...rest] = tx.operations;
