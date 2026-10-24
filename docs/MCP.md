@@ -1,6 +1,6 @@
 # Stellar Intel — MCP Server
 
-**Last reviewed:** 2026-09-26
+**Last reviewed:** 2026-10-25
 
 The MCP server exposes Stellar Intel's off-ramp routing and anchor
 intelligence to MCP-capable agents over stdio or streamable HTTP. It lives in
@@ -189,7 +189,7 @@ prepared for, then submits the transaction to Horizon.
 
 Verification, in order: the `intentHash` is recomputed from `intent` and must
 match; `signature` must verify against `intentHash` under `intent.sender`'s
-public key; the decoded `signedTx` must be signed, sourced from
+public key (see the accepted signature forms below); the decoded `signedTx` must be signed, sourced from
 `intent.sender`, carry exactly one payment operation to the routed anchor
 account for `intent.amount`/`intent.sourceAsset`, and memo-hash `intentHash`.
 Any mismatch is rejected before anything reaches Horizon.
@@ -198,14 +198,19 @@ Any mismatch is rejected before anything reaches Horizon.
   `{ unsignedEnvelope: { intent, intentHash }, signature, signedTx }` — the
   exact `unsignedEnvelope` from `intel.offramp.prepare`, a base64 ed25519
   signature over `intentHash` from the sender's key, and the base64 XDR of
-  `unsignedTx` after the sender has signed it.
+  `unsignedTx` after the sender has signed it. The signature is accepted in
+  the same two forms as the web app: over the 32 raw bytes the hex
+  `intentHash` decodes to (`Keypair.sign`), or SEP-53 (`Keypair.signMessage`,
+  which is what a wallet's `signMessage` produces). A signature over the
+  hash's UTF-8 bytes is deprecated; it is still accepted, and each use is
+  logged as `mcp_legacy_signature_format`.
 - **Output:** `{ status: "submitted", hash, ledger, corridorId, anchorId }`
 
 ```jsonc
 // input
 {
   "unsignedEnvelope": { "intent": { "type": "offramp", "..." }, "intentHash": "<64-hex>" },
-  "signature": "<base64 ed25519 sig over intentHash>",
+  "signature": "<base64 ed25519 sig over intentHash (raw bytes or SEP-53)>",
   "signedTx": "<base64 signed transaction XDR>"
 }
 // output

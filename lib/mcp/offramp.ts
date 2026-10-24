@@ -14,6 +14,7 @@
 import { z } from 'zod';
 import { CORRIDORS } from '@/constants';
 import { hashIntent, type Intent } from '@/lib/intent/hash';
+import { verifyIntentSignature } from '@/lib/intent/verify';
 import { HORIZON_URL, NETWORK_PASSPHRASE } from '@/lib/config';
 import { STELLAR_PUBKEY_PATTERN, AMOUNT_7DP_PATTERN } from '@/lib/patterns';
 import { fetchCorridorRates } from '@/lib/stellar/server-rates';
@@ -231,6 +232,21 @@ export async function getQuote(
 // ─── Tool: intel.offramp.prepare (#136) ──────────────────────────────────────
 
 /**
+ * One structured line on stderr. This module also ships in the standalone
+ * @stellarintel/mcp package, which has neither pino nor next, so it cannot use
+ * lib/logger; stderr is also the one stream a stdio MCP server may write to.
+ */
+function warnLegacySignatureFormat(): void {
+  process.stderr.write(
+    `${JSON.stringify({
+      level: 'warn',
+      name: 'mcp.offramp',
+      event: 'mcp_legacy_signature_format',
+    })}\n`
+  );
+}
+
+/**
  * Returns an unsigned intent envelope plus an unsigned Stellar transaction so an
  * agent can sign both. The `intentHash` in the envelope is the canonical SHA-256
  * an agent signs to authorise the intent.
@@ -279,9 +295,13 @@ export const ExecuteInputSchema = z.object({
   /** The exact envelope returned by intel.offramp.prepare. */
   unsignedEnvelope: UnsignedEnvelopeSchema,
   /**
-   * Base64 ed25519 signature over `unsignedEnvelope.intentHash` (as UTF-8 bytes),
-   * produced by the intent's `sender` key — an off-chain attestation that the
-   * agent authorised this exact intent.
+   * Base64 ed25519 signature over `unsignedEnvelope.intentHash`, produced by the
+   * intent's `sender` key — an off-chain attestation that the agent authorised
+   * this exact intent. Two forms are canonical, the same two the web path
+   * accepts: the 32 raw bytes the hex hash decodes to (`Keypair.sign`), and
+   * SEP-53 (`Keypair.signMessage`, what Freighter's `signMessage` produces). The
+   * older form, a signature over the hash's UTF-8 bytes, is still accepted but
+   * deprecated.
    */
   signature: z.string().min(1),
   /**
@@ -336,14 +356,26 @@ export async function executeIntent(input: ExecuteInput): Promise<ExecuteOutput>
     throw new OfframpToolError('sender is not a valid Stellar public key', 'SIGNATURE_INVALID');
   }
 
-  let signatureValid: boolean;
-  try {
-    signatureValid = senderKey.verify(
-      Buffer.from(intentHash, 'utf8'),
-      Buffer.from(parsed.signature, 'base64')
-    );
-  } catch {
-    signatureValid = false;
+  // The same verifier the web path uses (raw hex bytes or SEP-53), so a wallet
+  // signature that is valid on one surface is valid on the other.
+  let signatureValid = verifyIntentSignature({
+    intentHash,
+    publicKey: intent.sender,
+    signature: parsed.signature,
+  });
+
+  if (!signatureValid) {
+    // Deprecated form kept for existing clients: a signature over the hash's
+    // UTF-8 bytes. Not removed here, but each use is logged so it can be.
+    try {
+      signatureValid = senderKey.verify(
+        Buffer.from(intentHash, 'utf8'),
+        Buffer.from(parsed.signature, 'base64')
+      );
+    } catch {
+      signatureValid = false;
+    }
+    if (signatureValid) warnLegacySignatureFormat();
   }
   if (!signatureValid) {
     throw new OfframpToolError(

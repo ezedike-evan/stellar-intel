@@ -450,6 +450,73 @@ describe('intel.execute (#819)', () => {
     ).rejects.toMatchObject({ code: 'SIGNATURE_INVALID' });
   });
 
+  describe('signature formats (#1362)', () => {
+    const b64 = (bytes: Uint8Array) => Buffer.from(bytes).toString('base64');
+    const horizonOk = {
+      hash: 'a'.repeat(64),
+      ledger: 12345,
+      successful: true,
+      envelope_xdr: '',
+      result_xdr: '',
+      result_meta_xdr: '',
+      paging_token: '',
+    };
+
+    it.each([
+      [
+        'raw hex bytes (Keypair.sign)',
+        (kp: Keypair, hash: string) => kp.sign(Buffer.from(hash, 'hex')),
+      ],
+      ['SEP-53 (Keypair.signMessage)', (kp: Keypair, hash: string) => kp.signMessage(hash)],
+    ])('accepts a signature over the %s without a legacy warning', async (_label, sign) => {
+      const stderr = vi.spyOn(process.stderr, 'write').mockImplementation(() => true);
+      try {
+        const kp = Keypair.random();
+        const { unsignedEnvelope, signedTx } = await prepareAndSign(kp);
+        const signature = b64(sign(kp, unsignedEnvelope.intentHash));
+        submitTransaction.mockResolvedValueOnce(horizonOk);
+
+        const out = await executeIntent({ unsignedEnvelope, signature, signedTx });
+        expect(out.status).toBe('submitted');
+        expect(stderr).not.toHaveBeenCalledWith(
+          expect.stringContaining('mcp_legacy_signature_format')
+        );
+      } finally {
+        stderr.mockRestore();
+      }
+    });
+
+    it('still accepts the legacy UTF-8 form, and logs that it was used', async () => {
+      const stderr = vi.spyOn(process.stderr, 'write').mockImplementation(() => true);
+      try {
+        const kp = Keypair.random();
+        const { unsignedEnvelope, signedTx, signature } = await prepareAndSign(kp);
+        submitTransaction.mockResolvedValueOnce(horizonOk);
+
+        const out = await executeIntent({ unsignedEnvelope, signature, signedTx });
+        expect(out.status).toBe('submitted');
+        expect(stderr).toHaveBeenCalledWith(expect.stringContaining('mcp_legacy_signature_format'));
+      } finally {
+        stderr.mockRestore();
+      }
+    });
+
+    it.each([
+      ['raw hex bytes', (kp: Keypair, hash: string) => kp.sign(Buffer.from(hash, 'hex'))],
+      ['SEP-53', (kp: Keypair, hash: string) => kp.signMessage(hash)],
+      ['UTF-8 bytes', (kp: Keypair, hash: string) => kp.sign(Buffer.from(hash, 'utf8'))],
+    ])('rejects a %s signature made by another key', async (_label, sign) => {
+      const kp = Keypair.random();
+      const { unsignedEnvelope, signedTx } = await prepareAndSign(kp);
+      const signature = b64(sign(Keypair.random(), unsignedEnvelope.intentHash));
+
+      await expect(executeIntent({ unsignedEnvelope, signature, signedTx })).rejects.toMatchObject({
+        code: 'SIGNATURE_INVALID',
+      });
+      expect(submitTransaction).not.toHaveBeenCalled();
+    });
+  });
+
   it('throws UNSIGNED_TX when signedTx still has no signatures', async () => {
     const kp = Keypair.random();
     const intent = { ...validIntent, sender: kp.publicKey() };
