@@ -1,9 +1,15 @@
 import { NextRequest, NextResponse } from 'next/server';
+import { z } from 'zod';
 import { isAdminRequest } from '@/lib/auth/admin';
 import { withRequestLogger } from '@/lib/logger';
 import type { ApiError } from '@/types';
 import { enforceRateLimit } from '@/lib/api/response';
 import { getDisputeStore } from '@/lib/reputation/disputes';
+
+const ResolveBodySchema = z.object({
+  id: z.string().min(1).max(200),
+  action: z.enum(['accept', 'reject']),
+});
 
 export async function GET(request: NextRequest): Promise<NextResponse> {
   return withRequestLogger(request, 'api.admin.disputes', async (logger) => {
@@ -39,6 +45,12 @@ export async function POST(request: NextRequest): Promise<NextResponse> {
       );
     }
 
+    const limited = await enforceRateLimit(request, {
+      bucket: 'api.admin.disputes.resolve',
+      maxRequests: 30,
+    });
+    if (limited) return limited;
+
     let body: unknown;
     try {
       body = await request.json();
@@ -50,15 +62,15 @@ export async function POST(request: NextRequest): Promise<NextResponse> {
       );
     }
 
-    const { id, action } = body as { id?: string; action?: string };
-
-    if (!id || !['accept', 'reject'].includes(action ?? '')) {
-      logger.warn({ event: 'validation_failed', hasId: Boolean(id), action });
+    const parsed = ResolveBodySchema.safeParse(body);
+    if (!parsed.success) {
+      logger.warn({ event: 'validation_failed', issues: parsed.error.issues.length });
       return NextResponse.json<ApiError>(
         { code: 'VALIDATION_ERROR', message: 'id and action (accept|reject) are required' },
         { status: 400 }
       );
     }
+    const { id, action } = parsed.data;
 
     const dispute = await getDisputeStore().resolve(
       id,
