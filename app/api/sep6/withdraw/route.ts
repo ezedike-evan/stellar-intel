@@ -3,10 +3,54 @@ import { withRequestLogger } from '@/lib/logger';
 import { STELLAR_PUBKEY_PATTERN as ACCOUNT_PATTERN, AMOUNT_PATTERN } from '@/lib/patterns';
 import { enforceRateLimit } from '@/lib/api/response';
 import { parseAllowedTransferServer } from '@/lib/api/anchor-allowlist';
+import type { ApiError } from '@/types';
 
 export const dynamic = 'force-dynamic';
 
 const ASSET_CODE_PATTERN = /^[A-Z]{1,12}$/;
+
+const ANCHOR_TIMEOUT_MS = 10_000;
+
+/**
+ * Fetches an allowlisted anchor URL without following redirects and with a
+ * deadline. A redirect from an allowlisted host (an open redirect on any of its
+ * subdomains is enough) would otherwise bounce this server-side request to an
+ * arbitrary host, and a slow anchor would hold the function until maxDuration.
+ * Returns the anchor's response, or the error response to send instead.
+ */
+async function fetchAnchor(
+  url: string,
+  headers: Record<string, string>
+): Promise<{ ok: true; res: Response } | { ok: false; response: NextResponse }> {
+  try {
+    const res = await fetch(url, {
+      headers,
+      redirect: 'manual',
+      signal: AbortSignal.timeout(ANCHOR_TIMEOUT_MS),
+    });
+    if ((res.status >= 300 && res.status < 400) || res.type === 'opaqueredirect') {
+      return {
+        ok: false,
+        response: NextResponse.json<ApiError>(
+          { code: 'UPSTREAM_REDIRECT', message: 'Anchor responded with a redirect' },
+          { status: 502 }
+        ),
+      };
+    }
+    return { ok: true, res };
+  } catch (err) {
+    if (err instanceof Error && err.name === 'TimeoutError') {
+      return {
+        ok: false,
+        response: NextResponse.json<ApiError>(
+          { code: 'UPSTREAM_TIMEOUT', message: 'Anchor did not respond in time' },
+          { status: 504 }
+        ),
+      };
+    }
+    throw err;
+  }
+}
 
 // ─── POST /api/sep6/withdraw ──────────────────────────────────────────────────
 //
@@ -95,7 +139,12 @@ export async function POST(request: NextRequest): Promise<NextResponse> {
       // jwt and KYC fields intentionally omitted
     });
 
-    const anchorRes = await fetch(anchorUrl.toString(), { headers });
+    const upstream = await fetchAnchor(anchorUrl.toString(), headers);
+    if (!upstream.ok) {
+      logger.warn({ event: 'sep6_withdraw_upstream_error', status: upstream.response.status });
+      return upstream.response;
+    }
+    const anchorRes = upstream.res;
     const anchorBody: unknown = await anchorRes.json().catch(() => null);
 
     logger.info({ event: 'sep6_withdraw_response', status: anchorRes.status });
@@ -144,7 +193,12 @@ export async function GET(request: NextRequest): Promise<NextResponse> {
 
     logger.info({ event: 'sep6_customer_proxy', transferServer });
 
-    const res = await fetch(customerUrl.toString(), { headers });
+    const upstream = await fetchAnchor(customerUrl.toString(), headers);
+    if (!upstream.ok) {
+      logger.warn({ event: 'sep6_customer_upstream_error', status: upstream.response.status });
+      return upstream.response;
+    }
+    const res = upstream.res;
     const body: unknown = await res.json().catch(() => null);
 
     return NextResponse.json(body, {
