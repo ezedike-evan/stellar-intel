@@ -246,3 +246,13 @@ describe('POST /api/graphql — standard validation', () => {
     expect(body.errors?.[0]?.message).toMatch(/bogusField/);
   });
 });
+
+describe('POST /api/graphql — root-field cap', () => {
+  it('rejects an operation with 11 aliased root fields', async () => {
+    const aliases = Array.from({ length: 11 }, (_, i) => `a${i}: anchors { id }`).join(' ');
+    const res = await POST(makeRequest(`{ ${aliases} }`));
+    expect(res.status).toBe(400);
+    const body = (await res.json()) as GraphQLResponse<unknown>;
+    expect(body.errors?.[0]?.message).toMatch(/more than 10 root fields/);
+  });
+});

@@ -14,6 +14,8 @@ import {
 // or alias amplification aimed at forcing unbounded server work.
 const MAX_DEPTH = 10;
 const MAX_FIELDS = 500;
+// Each root field is a separate resolver call, and aliases make them free to repeat.
+const MAX_ROOT_FIELDS = 10;
 
 /**
  * Reject queries whose selection-set nesting exceeds `maxDepth`. Depth is the
@@ -114,9 +116,51 @@ export function maxFieldCountRule(maxFields: number) {
 }
 
 /**
+ * Reject operations whose top-level selection holds more than `max` fields.
+ * Fields reached through top-level fragment spreads and inline fragments count,
+ * since they execute as root fields too. The total-field cap does not stop
+ * alias amplification of an expensive root field; this does.
+ */
+export function maxRootFieldsRule(max: number) {
+  return (context: ValidationContext): ASTVisitor => {
+    const countRoot = (
+      selectionSet: SelectionSetNode,
+      path: ReadonlySet<string>,
+      counter: { count: number }
+    ): void => {
+      for (const selection of selectionSet.selections) {
+        if (counter.count > max) return;
+        if (selection.kind === Kind.FIELD) {
+          counter.count += 1;
+        } else if (selection.kind === Kind.INLINE_FRAGMENT) {
+          countRoot(selection.selectionSet, path, counter);
+        } else {
+          const name = selection.name.value;
+          if (path.has(name)) continue;
+          const fragment = context.getFragment(name);
+          if (fragment) countRoot(fragment.selectionSet, new Set(path).add(name), counter);
+        }
+      }
+    };
+
+    return {
+      OperationDefinition(node) {
+        const counter = { count: 0 };
+        countRoot(node.selectionSet, new Set(), counter);
+        if (counter.count > max) {
+          context.reportError(
+            new GraphQLError(`Operation selects more than ${max} root fields.`, { nodes: [node] })
+          );
+        }
+      },
+    };
+  };
+}
+
+/**
  * The validation rules applied to every incoming operation: graphql-js's
  * standard `specifiedRules` (unknown fields and arguments, fragment cycles,
- * variable types and the rest), then depth and field-count bounds, plus
+ * variable types and the rest), then depth, field-count and root-field bounds, plus
  * introspection disabled in production, where it is a dev/staging convenience
  * rather than something an unauthenticated caller should be able to enumerate
  * the schema with.
@@ -134,6 +178,7 @@ export function graphqlValidationRules(): Array<(context: ValidationContext) => 
     ...specifiedRules,
     maxDepthRule(MAX_DEPTH),
     maxFieldCountRule(MAX_FIELDS),
+    maxRootFieldsRule(MAX_ROOT_FIELDS),
   ];
   if (process.env.NODE_ENV === 'production') {
     rules.push(NoSchemaIntrospectionCustomRule as (context: ValidationContext) => ASTVisitor);

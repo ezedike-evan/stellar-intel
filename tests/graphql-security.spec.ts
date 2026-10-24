@@ -1,7 +1,12 @@
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import { buildSchema, parse, validate } from 'graphql';
 import { typeDefs } from '@/lib/graphql/typeDefs';
-import { graphqlValidationRules, maxDepthRule, maxFieldCountRule } from '@/lib/graphql/security';
+import {
+  graphqlValidationRules,
+  maxDepthRule,
+  maxFieldCountRule,
+  maxRootFieldsRule,
+} from '@/lib/graphql/security';
 
 // The schema is built with `buildSchema(typeDefs)` so that `validate` uses the
 // same graphql instance.
@@ -123,5 +128,35 @@ describe('graphql limits follow fragment spreads', () => {
     const started = Date.now();
     validate(schema, doc, [maxDepthRule(10), maxFieldCountRule(500)]);
     expect(Date.now() - started).toBeLessThan(1000);
+  });
+});
+
+describe('graphql root-field cap', () => {
+  const aliases = (n: number) => Array.from({ length: n }, (_, i) => `a${i}: anchors { id }`);
+  const errorsFor = (query: string) => validate(schema, parse(query), [maxRootFieldsRule(10)]);
+
+  it('accepts 10 aliased root fields', () => {
+    expect(errorsFor(`{ ${aliases(10).join(' ')} }`)).toHaveLength(0);
+  });
+
+  it('rejects 11 aliased root fields', () => {
+    const errors = errorsFor(`{ ${aliases(11).join(' ')} }`);
+    expect(errors[0]?.message).toBe('Operation selects more than 10 root fields.');
+  });
+
+  it('rejects 11 root fields hidden in a top-level fragment spread', () => {
+    const errors = errorsFor(`fragment R on Query { ${aliases(11).join(' ')} } { ...R }`);
+    expect(errors.length).toBeGreaterThan(0);
+  });
+
+  it('is part of the rules applied to every operation', () => {
+    const doc = parse(`{ ${aliases(11).join(' ')} }`);
+    expect(validate(schema, doc, graphqlValidationRules()).length).toBeGreaterThan(0);
+  });
+
+  it('does not count nested fields as root fields', () => {
+    expect(
+      errorsFor('{ anchors { id name homeDomain corridors assetCode seps degraded } }')
+    ).toHaveLength(0);
   });
 });
