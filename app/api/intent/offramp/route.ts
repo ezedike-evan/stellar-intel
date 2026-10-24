@@ -1,6 +1,10 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { checkRateLimit, getClientIp } from '@/lib/api/rate-limit';
-import { getIdempotentResponse, storeIdempotentResponse } from '@/lib/api/idempotency';
+import {
+  getIdempotentResponse,
+  scopedIdempotencyKey,
+  storeIdempotentResponse,
+} from '@/lib/api/idempotency';
 import {
   API_VERSION,
   apiErrorResponse,
@@ -47,12 +51,18 @@ export async function POST(request: NextRequest): Promise<NextResponse> {
       return rateLimitedResponse(rl);
     }
 
-    const idempotencyKey = request.headers.get('idempotency-key');
+    // Read the body once, up front: the idempotency key is scoped to the route
+    // and to this exact body, so a replay needs it before anything else runs.
+    const rawBody = await request.text();
+    const clientKey = request.headers.get('idempotency-key');
+    const idempotencyKey = clientKey
+      ? await scopedIdempotencyKey('api.intent.offramp', clientKey, rawBody)
+      : null;
 
     if (idempotencyKey) {
       const cached = await getIdempotentResponse(idempotencyKey);
       if (cached) {
-        logger.info({ event: 'idempotent_replay', idempotencyKey });
+        logger.info({ event: 'idempotent_replay' });
         const response = NextResponse.json(cached.body, {
           status: cached.status,
           headers: { ...cached.headers, 'Idempotency-Replayed': 'true' },
@@ -79,7 +89,7 @@ export async function POST(request: NextRequest): Promise<NextResponse> {
 
     let body: unknown;
     try {
-      body = await request.json();
+      body = JSON.parse(rawBody);
     } catch {
       logger.warn({ event: 'invalid_json', message: 'Request body must be valid JSON' });
       recordIntentError('INVALID_JSON');

@@ -4,6 +4,7 @@ import {
   clearIdempotencyStore,
   getIdempotentResponse as getStoredIdempotent,
   readIdempotencyKey,
+  scopedIdempotencyKey,
   storeIdempotentResponse as storeSharedIdempotentResponse,
 } from './idempotency';
 import { API_VERSION } from './response';
@@ -141,7 +142,13 @@ export async function withV1(
     return v1Error('rate_limited', 'Too many requests', requestId, 429, baseHeaders);
   }
 
-  const idempotencyKey = options.idempotent ? readIdempotencyKey(request.headers) : null;
+  // Scoped to this bucket and the exact body, so a key cannot replay another
+  // caller's response, or one from a different route or payload. The clone
+  // leaves the body unread for the handler.
+  const clientKey = options.idempotent ? readIdempotencyKey(request.headers) : null;
+  const idempotencyKey = clientKey
+    ? await scopedIdempotencyKey(options.bucket, clientKey, await request.clone().text())
+    : null;
   if (idempotencyKey) {
     const replay = await getIdempotentResponse(idempotencyKey, baseHeaders);
     if (replay) return replay;

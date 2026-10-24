@@ -282,9 +282,10 @@ describe('POST /api/intent/offramp — idempotency', () => {
     const firstBody = (await first.json()) as OfframpIntentResponse;
     expect(first.headers.get('Idempotency-Replayed')).toBeNull();
 
-    // A different intent under the same key must still return the FIRST
-    // response verbatim -- that's the point of an idempotency key.
-    const second = await POST(makeRequest({ ...VALID_INTENT, destinationAsset: 'KES' }, headers));
+    // The same body under the same key returns the FIRST response verbatim --
+    // that's the point of an idempotency key. (A different body no longer
+    // replays: keys are scoped to the body, see #1351.)
+    const second = await POST(makeRequest(VALID_INTENT, headers));
     const secondBody = (await second.json()) as OfframpIntentResponse;
 
     expect(second.status).toBe(first.status);

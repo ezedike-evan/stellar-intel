@@ -4,9 +4,11 @@ import {
   getIdempotentResponse,
   storeIdempotentResponse,
   clearIdempotencyStore,
+  scopedIdempotencyKey,
   IDEMPOTENCY_TTL_MS,
 } from '@/lib/api/idempotency';
 import { POST } from '@/app/api/intent/offramp/route';
+import { POST as POST_V1 } from '@/app/api/v1/intent/offramp/route';
 import { checkRateLimit, clearRateLimitStore } from '@/lib/api/rate-limit';
 
 beforeEach(() => {
@@ -113,5 +115,88 @@ describe('POST /api/intent/offramp — idempotency and rate limiting (#1350)', (
     expect(replay.status).toBe(200);
     expect(replay.headers.get('Idempotency-Replayed')).toBe('true');
     expect(replay.headers.get('X-RateLimit-Remaining')).not.toBeNull();
+  });
+});
+
+describe('scopedIdempotencyKey (#1351)', () => {
+  it('is deterministic', async () => {
+    expect(await scopedIdempotencyKey('s', 'k', 'b')).toBe(
+      await scopedIdempotencyKey('s', 'k', 'b')
+    );
+  });
+
+  it('changes with each of scope, key and body', async () => {
+    const base = await scopedIdempotencyKey('s', 'k', 'b');
+    expect(await scopedIdempotencyKey('s2', 'k', 'b')).not.toBe(base);
+    expect(await scopedIdempotencyKey('s', 'k2', 'b')).not.toBe(base);
+    expect(await scopedIdempotencyKey('s', 'k', 'b2')).not.toBe(base);
+  });
+
+  it('never contains the raw client key or body', async () => {
+    const key = await scopedIdempotencyKey('s', 'my-secret-key', '{"recipient":"abc"}');
+    expect(key).not.toContain('my-secret-key');
+    expect(key).not.toContain('recipient');
+    expect(key).toMatch(/^s:[0-9a-f]{64}:[0-9a-f]{64}$/);
+  });
+});
+
+describe('idempotency key scoping on the intent routes (#1351)', () => {
+  const SENDER = 'GA5ZSEJYB37JRC5AVCIA5MOP4RHTM335X2KGX3IHOJAPP5RE34K4KZVN';
+  const INTENT = {
+    type: 'offramp',
+    sourceAsset: 'USDC',
+    destinationAsset: 'NGN',
+    amount: '100',
+    sender: SENDER,
+    recipient: 'NGN-BANK-ACCOUNT-123',
+  };
+
+  function request(path: string, body: unknown, key: string): NextRequest {
+    return new NextRequest(`http://localhost${path}`, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        'Idempotency-Key': key,
+        'x-forwarded-for': '203.0.113.30',
+      },
+      body: JSON.stringify(body),
+    });
+  }
+
+  beforeEach(() => {
+    vi.stubEnv('ANCHOR_PAYMENT_ACCOUNTS', JSON.stringify({ moneygram: SENDER }));
+  });
+
+  it('replays the same key with the same body', async () => {
+    await POST(request('/api/intent/offramp', INTENT, 'same'));
+    const replay = await POST(request('/api/intent/offramp', INTENT, 'same'));
+    expect(replay.headers.get('Idempotency-Replayed')).toBe('true');
+  });
+
+  it('does not replay the same key with a different body', async () => {
+    const first = await POST(request('/api/intent/offramp', INTENT, 'shared-key'));
+    const second = await POST(
+      request('/api/intent/offramp', { ...INTENT, recipient: 'NGN-OTHER-ACCOUNT-9' }, 'shared-key')
+    );
+
+    expect(second.status).toBe(200);
+    expect(second.headers.get('Idempotency-Replayed')).toBeNull();
+    const a = (await first.json()) as { quoteId: string };
+    const b = (await second.json()) as { quoteId: string };
+    expect(b.quoteId).not.toBe(a.quoteId);
+  });
+
+  it('does not replay across the internal and v1 routes', async () => {
+    await POST(request('/api/intent/offramp', INTENT, 'cross-route'));
+    const v1 = await POST_V1(request('/api/v1/intent/offramp', INTENT, 'cross-route'));
+
+    expect(v1.status).toBe(200);
+    expect(v1.headers.get('Idempotency-Replayed')).toBeNull();
+  });
+
+  it('still replays on the v1 route for the same key and body', async () => {
+    await POST_V1(request('/api/v1/intent/offramp', INTENT, 'v1-same'));
+    const replay = await POST_V1(request('/api/v1/intent/offramp', INTENT, 'v1-same'));
+    expect(replay.headers.get('Idempotency-Replayed')).toBe('true');
   });
 });
