@@ -9,12 +9,10 @@ const nextConfig: NextConfig = {
   // graphql-yoga is no longer a dependency; see app/api/graphql/route.ts.
   serverExternalPackages: ['graphql'],
   images: {
-    remotePatterns: [
-      {
-        protocol: 'https',
-        hostname: '**',
-      },
-    ],
+    // No remote host: the only next/image user, components/ui/AnchorLogo.tsx,
+    // loads local /anchors/<id>.svg files. An open `**` pattern made
+    // /_next/image an image proxy for any https host.
+    remotePatterns: [],
     formats: ['image/avif', 'image/webp'],
     minimumCacheTTL: 86400,
   },
