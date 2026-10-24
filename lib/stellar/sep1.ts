@@ -2,6 +2,8 @@ import type { ResolvedAnchor, Sep1TomlData } from '@/types';
 import { ANCHORS } from './anchors';
 import { getCachedToml, setCachedToml, invalidateCachedToml, clearTomlCache } from './toml-cache';
 import { sleep } from '@/lib/utils';
+import { parseAllowedTransferServer } from '@/lib/api/anchor-allowlist';
+import { getLogger } from '@/lib/logger';
 
 // ─── Result type ──────────────────────────────────────────────────────────────
 
@@ -57,13 +59,30 @@ function getCurrencies(raw: Record<string, unknown>): Sep1TomlData['CURRENCIES']
   });
 }
 
+/**
+ * A server URL from a stellar.toml, kept only when it is an https URL on a
+ * registered anchor host (or a subdomain of one). These URLs are fetched
+ * server-side later, so a compromised registered anchor must not be able to
+ * point them at internal or metadata hosts. A dropped value reads as absent, so
+ * the capability it would have implied is false. The log names the key, never
+ * the URL.
+ */
+function safeServerUrl(domain: string, raw: Record<string, unknown>, key: string): string | null {
+  const value = getString(raw, key);
+  if (value === null) return null;
+  if (parseAllowedTransferServer(value) !== null) return value;
+
+  getLogger('stellar.sep1').warn({ event: 'sep1_server_url_rejected', domain, key });
+  return null;
+}
+
 function toSep1TomlData(domain: string, raw: Record<string, unknown>): Sep1TomlData {
-  const transferServer = getString(raw, 'TRANSFER_SERVER_SEP0024');
-  const webAuthEndpoint = getString(raw, 'WEB_AUTH_ENDPOINT');
+  const transferServer = safeServerUrl(domain, raw, 'TRANSFER_SERVER_SEP0024');
+  const webAuthEndpoint = safeServerUrl(domain, raw, 'WEB_AUTH_ENDPOINT');
   const signingKey = getString(raw, 'SIGNING_KEY');
-  const quoteServer = getString(raw, 'ANCHOR_QUOTE_SERVER');
-  const sep6TransferServer = getString(raw, 'TRANSFER_SERVER');
-  const directPaymentServer = getString(raw, 'DIRECT_PAYMENT_SERVER');
+  const quoteServer = safeServerUrl(domain, raw, 'ANCHOR_QUOTE_SERVER');
+  const sep6TransferServer = safeServerUrl(domain, raw, 'TRANSFER_SERVER');
+  const directPaymentServer = safeServerUrl(domain, raw, 'DIRECT_PAYMENT_SERVER');
 
   return {
     domain,
