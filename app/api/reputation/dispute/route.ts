@@ -5,6 +5,8 @@ import { STELLAR_PUBKEY_PATTERN } from '@/lib/patterns';
 import type { ApiError } from '@/types';
 import { checkRateLimit, clearRateLimitStore } from '@/lib/api/rate-limit';
 import { verifyIntentSignature } from '@/lib/intent/verify';
+import { enforceRateLimit } from '@/lib/api/response';
+import { ANCHORS } from '@/constants/anchors';
 
 const DisputeBodySchema = z.object({
   intentHash: z.string().regex(/^[0-9a-f]{64}$/, {
@@ -14,8 +16,15 @@ const DisputeBodySchema = z.object({
     message: 'publicKey must be a valid Stellar public key (G…, 56 chars)',
   }),
   signature: z.string().min(1, { message: 'signature is required' }),
-  anchorId: z.string().min(1, { message: 'anchorId is required' }),
-  reason: z.string().min(1, { message: 'reason is required' }),
+  anchorId: z
+    .string()
+    .min(1, { message: 'anchorId is required' })
+    .max(64)
+    .refine((id) => ANCHORS.some((a) => a.id === id), 'Unknown anchorId'),
+  reason: z
+    .string()
+    .min(1, { message: 'reason is required' })
+    .max(1000, { message: 'reason must be at most 1000 characters' }),
 });
 
 export type DisputeBody = z.infer<typeof DisputeBodySchema>;
@@ -63,6 +72,14 @@ export function clearDisputeStores(): void {
 
 export async function POST(request: NextRequest): Promise<NextResponse> {
   return withRequestLogger(request, 'api.reputation.dispute', async (logger) => {
+    // The per-signer quota below is free to dodge with freshly generated keys, so
+    // there is also a per-IP limit, checked before anything is parsed.
+    const limited = await enforceRateLimit(request, {
+      bucket: 'api.reputation.dispute.ip',
+      maxRequests: 10,
+    });
+    if (limited) return limited;
+
     let body: unknown;
     try {
       body = await request.json();

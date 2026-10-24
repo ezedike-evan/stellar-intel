@@ -16,10 +16,10 @@ function signHash(keypair: Keypair, intentHash: string): string {
   return Buffer.from(sig).toString('base64');
 }
 
-function makeRequest(body: unknown): NextRequest {
+function makeRequest(body: unknown, ip = '203.0.113.1'): NextRequest {
   return new NextRequest('http://localhost/api/reputation/dispute', {
     method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
+    headers: { 'Content-Type': 'application/json', 'x-forwarded-for': ip },
     body: JSON.stringify(body),
   });
 }
@@ -143,12 +143,13 @@ describe('POST /api/reputation/dispute', () => {
       reason: 'test',
     };
 
+    // A different IP each time, so it is the per-key quota that trips, not the per-IP one.
     for (let i = 0; i < 10; i++) {
-      const res = await POST(makeRequest(payload));
+      const res = await POST(makeRequest(payload, `198.51.100.${i + 1}`));
       expect(res.status).toBe(201);
     }
 
-    const limited = await POST(makeRequest(payload));
+    const limited = await POST(makeRequest(payload, '198.51.100.200'));
     expect(limited.status).toBe(429);
     const body = await limited.json();
     expect(body.code).toBe('RATE_LIMITED');
@@ -162,19 +163,68 @@ describe('POST /api/reputation/dispute', () => {
       intentHash,
       publicKey: keypair.publicKey(),
       signature: sig1,
-      anchorId: 'a',
+      anchorId: 'moneygram',
       reason: 'r',
     };
     const base2 = {
       intentHash,
       publicKey: other.publicKey(),
       signature: sig2,
-      anchorId: 'a',
+      anchorId: 'moneygram',
       reason: 'r',
     };
 
-    for (let i = 0; i < 10; i++) await POST(makeRequest(base1));
-    expect((await POST(makeRequest(base1))).status).toBe(429);
-    expect((await POST(makeRequest(base2))).status).toBe(201);
+    for (let i = 0; i < 10; i++) await POST(makeRequest(base1, `198.51.100.${i + 1}`));
+    expect((await POST(makeRequest(base1, '198.51.100.200'))).status).toBe(429);
+    expect((await POST(makeRequest(base2, '198.51.100.201'))).status).toBe(201);
+  });
+});
+
+describe('POST /api/reputation/dispute — input bounds and per-IP limit (#1355)', () => {
+  const intentHash = makeIntentHash();
+  let keypair: Keypair;
+
+  beforeAll(() => {
+    keypair = Keypair.random();
+  });
+
+  beforeEach(() => {
+    clearDisputeStores();
+  });
+
+  const payload = (overrides: Record<string, unknown> = {}, signer: Keypair = keypair) => ({
+    intentHash,
+    publicKey: signer.publicKey(),
+    signature: signHash(signer, intentHash),
+    anchorId: 'moneygram',
+    reason: 'transaction never settled',
+    ...overrides,
+  });
+
+  it('returns 422 for a reason over 1000 characters', async () => {
+    const res = await POST(makeRequest(payload({ reason: 'x'.repeat(1001) })));
+    expect(res.status).toBe(422);
+  });
+
+  it('accepts a reason of exactly 1000 characters', async () => {
+    const res = await POST(makeRequest(payload({ reason: 'x'.repeat(1000) })));
+    expect(res.status).toBe(201);
+  });
+
+  it('returns 422 for an anchorId that is not in the registry', async () => {
+    const res = await POST(makeRequest(payload({ anchorId: 'not-an-anchor' })));
+    expect(res.status).toBe(422);
+    expect((await res.json()).message).toBe('Unknown anchorId');
+  });
+
+  it('returns 429 on the 11th request from one IP, even with a fresh key each time', async () => {
+    for (let i = 0; i < 10; i += 1) {
+      const fresh = Keypair.random();
+      const res = await POST(makeRequest(payload({}, fresh), '192.0.2.77'));
+      expect(res.status).toBe(201);
+    }
+
+    const res = await POST(makeRequest(payload({}, Keypair.random()), '192.0.2.77'));
+    expect(res.status).toBe(429);
   });
 });
