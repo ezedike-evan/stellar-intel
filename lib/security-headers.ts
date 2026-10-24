@@ -15,3 +15,26 @@ export const SECURITY_HEADERS: readonly SecurityHeader[] = [
   { key: 'Referrer-Policy', value: 'strict-origin-when-cross-origin' },
   { key: 'Permissions-Policy', value: 'camera=(), microphone=(), geolocation=(), payment=()' },
 ];
+
+/**
+ * Content-Security-Policy, shipped report-only. The browser talks to anchor
+ * endpoints that come from the registry, so an enforcing policy needs a period
+ * of observation first. `'unsafe-inline'` covers the inline theme script in
+ * app/layout.tsx; plausible.io is the analytics script; `frame-src https:` is
+ * the anchors' KYC iframe.
+ */
+export function buildCspReportOnly(): string {
+  return [
+    "default-src 'self'",
+    "script-src 'self' 'unsafe-inline' https://plausible.io",
+    "style-src 'self' 'unsafe-inline'",
+    "img-src 'self' data: https:",
+    "font-src 'self' data:",
+    "connect-src 'self' https:",
+    'frame-src https:',
+    "frame-ancestors 'none'",
+    "base-uri 'self'",
+    "form-action 'self'",
+    "object-src 'none'",
+  ].join('; ');
+}
