@@ -1853,6 +1853,168 @@
         }
       }
     },
+    "/api/v1/anchors/{id}/quote-gap": {
+      "get": {
+        "summary": "Get how far an anchor lands from the rate it quoted",
+        "description": "Signed gap between the rate shown before execution and the rate that landed, over completed, undisputed withdrawals in the window. Negative means users received less than quoted. Stands in for SEP-38 firm quotes, which most anchors do not offer. Null statistics mean no samples.",
+        "tags": [
+          "Anchors"
+        ],
+        "parameters": [
+          {
+            "schema": {
+              "type": "string",
+              "minLength": 1,
+              "description": "Anchor identifier"
+            },
+            "required": true,
+            "description": "Anchor identifier",
+            "name": "id",
+            "in": "path"
+          },
+          {
+            "schema": {
+              "type": [
+                "number",
+                "null"
+              ],
+              "description": "Lookback window in days: 7, 30 or 90 (default 30)",
+              "example": 30
+            },
+            "required": false,
+            "description": "Lookback window in days: 7, 30 or 90 (default 30)",
+            "name": "window",
+            "in": "query"
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Quote-gap statistics",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "anchorId": {
+                      "type": "string"
+                    },
+                    "basis": {
+                      "type": "string",
+                      "description": "How the rates being compared are defined"
+                    },
+                    "sampleCount": {
+                      "type": "integer"
+                    },
+                    "meanGapPct": {
+                      "type": [
+                        "number",
+                        "null"
+                      ],
+                      "description": "Mean signed gap, percent"
+                    },
+                    "p50GapPct": {
+                      "type": [
+                        "number",
+                        "null"
+                      ],
+                      "description": "Median signed gap, percent"
+                    },
+                    "p95AbsGapPct": {
+                      "type": [
+                        "number",
+                        "null"
+                      ],
+                      "description": "95th percentile of the absolute gap"
+                    },
+                    "worseCount": {
+                      "type": "integer",
+                      "description": "Transactions that landed below the quote"
+                    },
+                    "betterCount": {
+                      "type": "integer",
+                      "description": "Transactions that landed above the quote"
+                    },
+                    "windowDays": {
+                      "anyOf": [
+                        {
+                          "type": "number",
+                          "enum": [
+                            7
+                          ]
+                        },
+                        {
+                          "type": "number",
+                          "enum": [
+                            30
+                          ]
+                        },
+                        {
+                          "type": "number",
+                          "enum": [
+                            90
+                          ]
+                        }
+                      ]
+                    }
+                  },
+                  "required": [
+                    "anchorId",
+                    "basis",
+                    "sampleCount",
+                    "meanGapPct",
+                    "p50GapPct",
+                    "p95AbsGapPct",
+                    "worseCount",
+                    "betterCount",
+                    "windowDays"
+                  ]
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Invalid window",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiError"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Unknown anchor",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiError"
+                }
+              }
+            }
+          },
+          "429": {
+            "description": "Rate limit exceeded",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiError"
+                }
+              }
+            }
+          },
+          "503": {
+            "description": "Reputation store unavailable",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
     "/api/reputation/{anchor}": {
       "get": {
         "summary": "Get anchor reputation",

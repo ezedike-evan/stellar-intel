@@ -142,6 +142,25 @@ export interface AnchorPricePoint {
   source: string;
 }
 
+/**
+ * How far an anchor's landed rate drifts from the rate it showed, over completed
+ * withdrawals. Gaps are percentages and signed: negative means users received less
+ * than quoted. Every statistic is null when `sampleCount` is 0.
+ */
+export interface AnchorQuoteGap {
+  anchorId: string;
+  /** How the two rates are defined. */
+  basis: string;
+  sampleCount: number;
+  meanGapPct: number | null;
+  p50GapPct: number | null;
+  /** 95% of transactions landed within this absolute gap. */
+  p95AbsGapPct: number | null;
+  worseCount: number;
+  betterCount: number;
+  windowDays: 7 | 30 | 90;
+}
+
 export interface AnchorPriceHistory {
   anchorId: string;
   corridor: string;
@@ -235,6 +254,7 @@ export const OPERATIONS = {
   getAnchorHealth: 'GET /api/v1/anchors/{id}/health',
   getAnchorHealthLedger: 'GET /api/v1/anchor-health/ledger',
   getAnchorPriceHistory: 'GET /api/v1/anchors/{id}/price-history',
+  getAnchorQuoteGap: 'GET /api/v1/anchors/{id}/quote-gap',
   getAnchorCensus: 'GET /api/v1/anchors/census',
   getCorridorVolumeSavings: 'GET /api/v1/corridors/{corridor}/volume-savings',
   getHealth: 'GET /api/v1/health',

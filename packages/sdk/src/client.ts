@@ -9,6 +9,7 @@ import type {
   AnchorHealth,
   AnchorHealthLedgerArtifact,
   AnchorPriceHistory,
+  AnchorQuoteGap,
   CorridorVolumeSavings,
   OfframpIntentRequest,
   OfframpIntentResponse,
@@ -229,6 +230,20 @@ export class StellarIntelClient {
     return this.request<AnchorPriceHistory>({
       method: 'GET',
       path: `/api/v1/anchors/${encodeURIComponent(anchorId)}/price-history${qs}`,
+    });
+  }
+
+  /**
+   * Quoted-vs-landed rate gap for one anchor, over completed withdrawals.
+   *
+   * `window` is 7, 30 or 90 days (server default 30). Gaps are signed percentages:
+   * negative means users received less than the anchor showed.
+   */
+  async getAnchorQuoteGap(anchorId: string, window?: 7 | 30 | 90): Promise<AnchorQuoteGap> {
+    const qs = window === undefined ? '' : `?window=${window}`;
+    return this.request<AnchorQuoteGap>({
+      method: 'GET',
+      path: `/api/v1/anchors/${encodeURIComponent(anchorId)}/quote-gap${qs}`,
     });
   }
 

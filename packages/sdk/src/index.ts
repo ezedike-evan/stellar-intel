@@ -21,6 +21,7 @@ export {
   type AnchorHealth,
   type AnchorHealthLedgerArtifact,
   type AnchorPriceHistory,
+  type AnchorQuoteGap,
   type AnchorPricePoint,
   type AnchorHealthLedgerEntry,
   type CorridorVolumeSavings,

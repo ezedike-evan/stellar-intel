@@ -304,3 +304,23 @@ describe('StellarIntelClient — on-ramp', () => {
     expect(new URL(String(fetchMock.mock.calls[0]![0])).search).toBe('?corridor=usdc-ngn&amount=1');
   });
 });
+
+describe('StellarIntelClient — quote gap', () => {
+  it('reads the gap for an anchor, with and without a window', async () => {
+    const gap = { anchorId: 'cowrie', sampleCount: 0, meanGapPct: null };
+    const fetchMock = vi.fn(async (_url: RequestInfo | URL, _init?: RequestInit) =>
+      jsonResponse(200, gap)
+    );
+    const client = makeClient(fetchMock as never);
+
+    expect(await client.getAnchorQuoteGap('cowrie')).toEqual(gap);
+    await client.getAnchorQuoteGap('cow rie', 90);
+
+    expect(String(fetchMock.mock.calls[0]![0])).toBe(
+      'https://api.test/api/v1/anchors/cowrie/quote-gap'
+    );
+    expect(String(fetchMock.mock.calls[1]![0])).toBe(
+      'https://api.test/api/v1/anchors/cow%20rie/quote-gap?window=90'
+    );
+  });
+});

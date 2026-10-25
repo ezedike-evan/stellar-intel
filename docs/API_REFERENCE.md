@@ -34,6 +34,7 @@ the hardening contract (see `lib/api/v1.ts`):
   - [`GET /api/v1/anchors/census`](#get-apiv1anchorscensus)
   - [`GET /api/v1/anchors/{id}/health`](#get-apiv1anchorsidhealth)
   - [`GET /api/v1/anchors/{id}/price-history`](#get-apiv1anchorsidprice-history)
+  - [`GET /api/v1/anchors/{id}/quote-gap`](#get-apiv1anchorsidquote-gap)
 - **Intent**
   - [`POST /api/intent`](#post-apiintent)
   - [`POST /api/intent/offramp`](#post-apiintentofframp)
@@ -215,6 +216,31 @@ Returns recorded SEP-38 price observations for an anchor corridor, downsampled t
 | `404` | Unknown anchor | `application/json` | `ApiError` |
 | `429` | Rate limit exceeded | `application/json` | `ApiError` |
 | `503` | Quote store unavailable | `application/json` | `ApiError` |
+
+---
+
+### `GET /api/v1/anchors/{id}/quote-gap`
+
+**Summary:** Get how far an anchor lands from the rate it quoted  
+
+Signed gap between the rate shown before execution and the rate that landed, over completed, undisputed withdrawals in the window. Negative means users received less than quoted. Stands in for SEP-38 firm quotes, which most anchors do not offer. Null statistics mean no samples.
+
+#### Parameters
+
+| Name | In | Type | Required | Description |
+| :--- | :--- | :--- | :--- | :--- |
+| `id` | `path` | `string` | **Yes** | Anchor identifier |
+| `window` | `query` | `object` | No | Lookback window in days: 7, 30 or 90 (default 30) |
+
+#### Responses
+
+| Status | Description | Content-Type | Schema |
+| :--- | :--- | :--- | :--- |
+| `200` | Quote-gap statistics | `application/json` | `object` |
+| `400` | Invalid window | `application/json` | `ApiError` |
+| `404` | Unknown anchor | `application/json` | `ApiError` |
+| `429` | Rate limit exceeded | `application/json` | `ApiError` |
+| `503` | Reputation store unavailable | `application/json` | `ApiError` |
 
 ---
 

@@ -672,6 +672,68 @@ registry.registerPath({
 
 registry.registerPath({
   method: 'get',
+  path: '/api/v1/anchors/{id}/quote-gap',
+  summary: 'Get how far an anchor lands from the rate it quoted',
+  description:
+    'Signed gap between the rate shown before execution and the rate that landed, over completed, ' +
+    'undisputed withdrawals in the window. Negative means users received less than quoted. ' +
+    'Stands in for SEP-38 firm quotes, which most anchors do not offer. Null statistics mean no samples.',
+  tags: ['Anchors'],
+  request: {
+    params: z.object({
+      id: z.string().min(1).describe('Anchor identifier'),
+    }),
+    query: z.object({
+      window: z.coerce
+        .number()
+        .optional()
+        .openapi({
+          param: { name: 'window', in: 'query' },
+          description: 'Lookback window in days: 7, 30 or 90 (default 30)',
+          example: 30,
+        }),
+    }),
+  },
+  responses: {
+    200: {
+      description: 'Quote-gap statistics',
+      content: {
+        'application/json': {
+          schema: z.object({
+            anchorId: z.string(),
+            basis: z.string().describe('How the rates being compared are defined'),
+            sampleCount: z.number().int(),
+            meanGapPct: z.number().nullable().describe('Mean signed gap, percent'),
+            p50GapPct: z.number().nullable().describe('Median signed gap, percent'),
+            p95AbsGapPct: z.number().nullable().describe('95th percentile of the absolute gap'),
+            worseCount: z.number().int().describe('Transactions that landed below the quote'),
+            betterCount: z.number().int().describe('Transactions that landed above the quote'),
+            windowDays: z.union([z.literal(7), z.literal(30), z.literal(90)]),
+          }),
+        },
+      },
+    },
+    400: {
+      description: 'Invalid window',
+      content: { 'application/json': { schema: ApiErrorSchema } },
+    },
+    404: {
+      description: 'Unknown anchor',
+      content: { 'application/json': { schema: ApiErrorSchema } },
+    },
+    429: {
+      description: 'Rate limit exceeded',
+      content: { 'application/json': { schema: ApiErrorSchema } },
+    },
+    503: {
+      description: 'Reputation store unavailable',
+      content: { 'application/json': { schema: ApiErrorSchema } },
+    },
+  },
+});
+
+registry.registerPath({
+  method: 'get',
   path: '/api/reputation/{anchor}',
   summary: 'Get anchor reputation',
   description:
