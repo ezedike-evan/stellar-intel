@@ -53,6 +53,7 @@ pub fn add_volume_savings(
     if !publishers::is_authorized(env, publisher) {
         return Err(Error::PublisherUnauthorized);
     }
+    publishers::require_in_scope(env, publisher, &corridor)?;
     if !corridors::is_registered(env, &corridor) {
         return Err(Error::CorridorNotRegistered);
     }

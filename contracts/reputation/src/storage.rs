@@ -93,6 +93,9 @@ pub enum DataKey {
     /// Membership flag for a single publisher address.  Checked on every
     /// `submit_outcome` to avoid a full `Publishers` Vec scan.
     Publisher(Address),
+    /// Corridors a publisher may write, as a `Vec<String>`. Absent means the
+    /// publisher is unscoped and may write any registered corridor.
+    PublisherScope(Address),
     /// Current outcome-page pointer for an anchor: `(page_num, page_len)`.
     OutcomeHead(String),
     /// One page of outcome entries for an anchor: at most [`PAGE_SIZE`] items.

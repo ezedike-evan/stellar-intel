@@ -22,6 +22,7 @@ pub fn submit_outcome(
     if !publishers::is_authorized(env, publisher) {
         return Err(Error::PublisherUnauthorized);
     }
+    publishers::require_in_scope(env, publisher, &corridor)?;
 
     // The registry is what list_anchors reports; without this gate a publisher
     // key could create history and scores for ids that were never registered

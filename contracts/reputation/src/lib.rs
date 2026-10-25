@@ -32,6 +32,7 @@ pub enum Error {
     AnchorNotRegistered = 12,
     CorridorExists = 13,
     CorridorNotRegistered = 14,
+    PublisherOutOfScope = 15,
 }
 
 #[contract]
@@ -120,6 +121,41 @@ impl ReputationContract {
         publishers::add(&env, publisher)?;
         storage::extend_instance(&env);
         Ok(())
+    }
+
+    /// Admin-only. Limits `publisher` to the listed corridors, replacing any
+    /// earlier scope. A publisher with no scope may write every registered
+    /// corridor. Returns `PublisherNotFound` if it is not whitelisted.
+    pub fn set_publisher_scope(
+        env: Env,
+        caller: Address,
+        publisher: Address,
+        corridors: Vec<String>,
+    ) -> Result<(), Error> {
+        admin::require_admin(&env, &caller)?;
+        if !publishers::is_authorized(&env, &publisher) {
+            return Err(Error::PublisherNotFound);
+        }
+        publishers::set_scope(&env, publisher, corridors);
+        storage::extend_instance(&env);
+        Ok(())
+    }
+
+    /// Admin-only. Removes `publisher`'s scope, restoring full access.
+    pub fn clear_publisher_scope(
+        env: Env,
+        caller: Address,
+        publisher: Address,
+    ) -> Result<(), Error> {
+        admin::require_admin(&env, &caller)?;
+        publishers::clear_scope(&env, publisher);
+        storage::extend_instance(&env);
+        Ok(())
+    }
+
+    /// The corridors `publisher` is limited to, or `None` if unscoped.
+    pub fn publisher_scope(env: Env, publisher: Address) -> Option<Vec<String>> {
+        publishers::get_scope(&env, &publisher)
     }
 
     pub fn revoke_publisher(env: Env, caller: Address, publisher: Address) -> Result<(), Error> {

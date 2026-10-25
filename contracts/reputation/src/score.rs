@@ -76,6 +76,7 @@ pub fn set_corridor_metrics(
     if !publishers::is_authorized(env, publisher) {
         return Err(Error::PublisherUnauthorized);
     }
+    publishers::require_in_scope(env, publisher, &corridor)?;
 
     if !anchors::is_registered(env, &anchor_id) {
         return Err(Error::AnchorNotRegistered);

@@ -9,9 +9,9 @@
 //! The `Publishers` Vec in instance storage is maintained only for the admin
 //! list-view; it is never touched by the hot write paths.
 
-use soroban_sdk::{Address, Env, Vec};
+use soroban_sdk::{Address, Env, String, Vec};
 
-use crate::storage::DataKey;
+use crate::storage::{self, DataKey};
 use crate::Error;
 
 /// Load the current publisher whitelist (empty if none registered yet).
@@ -52,6 +52,8 @@ pub fn revoke(env: &Env, publisher: Address) -> Result<(), Error> {
     }
 
     env.storage().persistent().remove(&flag_key);
+    // A revoked publisher must not keep a scope that a later re-add would inherit.
+    clear_scope(env, publisher.clone());
 
     let publishers = list(env);
     let mut remaining = Vec::new(env);
@@ -73,4 +75,36 @@ pub fn is_authorized(env: &Env, publisher: &Address) -> bool {
     env.storage()
         .persistent()
         .has(&DataKey::Publisher(publisher.clone()))
+}
+
+/// Restrict `publisher` to the listed corridors. Replaces any earlier scope.
+pub fn set_scope(env: &Env, publisher: Address, corridors: Vec<String>) {
+    let key = DataKey::PublisherScope(publisher);
+    env.storage().persistent().set(&key, &corridors);
+    storage::extend_persistent(env, &key);
+}
+
+/// Remove `publisher`'s scope, restoring access to every registered corridor.
+pub fn clear_scope(env: &Env, publisher: Address) {
+    env.storage()
+        .persistent()
+        .remove(&DataKey::PublisherScope(publisher));
+}
+
+/// The corridors `publisher` is limited to, or `None` if it is unscoped.
+pub fn get_scope(env: &Env, publisher: &Address) -> Option<Vec<String>> {
+    env.storage()
+        .persistent()
+        .get(&DataKey::PublisherScope(publisher.clone()))
+}
+
+/// Succeeds when `publisher` has no scope (backwards compatible) or its scope
+/// contains `corridor`; otherwise `PublisherOutOfScope`. One leaked key then
+/// can only touch the corridors it was granted (audit M-5, per-corridor
+/// publisher scoping).
+pub fn require_in_scope(env: &Env, publisher: &Address, corridor: &String) -> Result<(), Error> {
+    match get_scope(env, publisher) {
+        Some(scope) if !scope.contains(corridor) => Err(Error::PublisherOutOfScope),
+        _ => Ok(()),
+    }
 }
