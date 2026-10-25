@@ -38,6 +38,7 @@ the hardening contract (see `lib/api/v1.ts`):
   - [`POST /api/intent`](#post-apiintent)
   - [`POST /api/intent/offramp`](#post-apiintentofframp)
   - [`POST /api/v1/intent/offramp`](#post-apiv1intentofframp)
+  - [`POST /api/v1/intent/onramp`](#post-apiv1intentonramp)
 - **On-ramp**
   - [`GET /api/v1/onramp/quote`](#get-apiv1onrampquote)
 - **Rates**
@@ -286,6 +287,50 @@ The public v1 intent endpoint. Honours `Idempotency-Key`: a retried request repl
 | `200` | Intent accepted | `application/json` | `OfframpIntentResponse` |
 | `400` | Validation error | `application/json` | `ApiError` |
 | `429` | Rate limited | `application/json` | `ApiError` |
+
+---
+
+### `POST /api/v1/intent/onramp`
+
+**Summary:** Submit an on-ramp intent (v1)  
+
+Routes a deposit intent to the best indicative anchor and returns the /onramp handoff URL, plus an unsigned changeTrust XDR when the destination account has no trustline. No anchor session is opened: KYC and the interactive deposit run in the browser. Honours `Idempotency-Key` like the off-ramp endpoint.
+
+#### Parameters
+
+| Name | In | Type | Required | Description |
+| :--- | :--- | :--- | :--- | :--- |
+| `Idempotency-Key` | `header` | `string` | No | Client-generated key. A repeated value replays the original response. |
+
+#### Request Body
+
+**Content-Type:** `application/json`
+
+| Field | Type | Required | Description |
+| :--- | :--- | :--- | :--- |
+| `type` | `"onramp"` | **Yes** | - |
+| `sourceAsset` | `string` | **Yes** | Fiat currency paid in, for example NGN |
+| `destinationAsset` | `string` | **Yes** | Stellar asset bought, for example USDC |
+| `amount` | `string` | **Yes** | Amount of sourceAsset to spend |
+| `sender` | `string` | **Yes** | Payer reference on the fiat rail (not a Stellar account) |
+| `destination` | `string` | **Yes** | Stellar public key credited when the deposit completes |
+| `depositMethod` | `"bank_transfer" | "cash" | "mobile_money" | "card"` | **Yes** | - |
+| `memo` | `string` | No | Memo for pooled-account anchors; needs memoType |
+| `memoType` | `"text" | "id" | "hash"` | No | - |
+| `signature` | `string` | No | Optional attestation; send with publicKey |
+| `publicKey` | `string` | No | Signer of the optional attestation |
+
+#### Responses
+
+| Status | Description | Content-Type | Schema |
+| :--- | :--- | :--- | :--- |
+| `200` | Route resolved | `application/json` | `OnrampIntentResponse` |
+| `400` | Validation error | `application/json` | `ApiError` |
+| `401` | Attestation signature did not verify | `application/json` | `ApiError` |
+| `404` | No anchor serves this corridor | `application/json` | `ApiError` |
+| `422` | The destination account does not exist on Stellar | `application/json` | `ApiError` |
+| `429` | Rate limited | `application/json` | `ApiError` |
+| `503` | No deposit rate is available right now | `application/json` | `ApiError` |
 
 ---
 

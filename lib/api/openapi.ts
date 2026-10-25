@@ -1308,6 +1308,97 @@ registry.registerPath({
   },
 });
 
+const OnrampIntentRequestSchema = registry.register(
+  'OnrampIntentRequest',
+  z.object({
+    type: z.literal('onramp'),
+    sourceAsset: z.string().min(1).describe('Fiat currency paid in, for example NGN'),
+    destinationAsset: z.string().min(1).describe('Stellar asset bought, for example USDC'),
+    amount: z.string().regex(AMOUNT_PATTERN).describe('Amount of sourceAsset to spend'),
+    sender: z.string().min(1).describe('Payer reference on the fiat rail (not a Stellar account)'),
+    destination: z.string().describe('Stellar public key credited when the deposit completes'),
+    depositMethod: z.enum(['bank_transfer', 'cash', 'mobile_money', 'card']),
+    memo: z.string().optional().describe('Memo for pooled-account anchors; needs memoType'),
+    memoType: z.enum(['text', 'id', 'hash']).optional(),
+    signature: z.string().optional().describe('Optional attestation; send with publicKey'),
+    publicKey: z.string().optional().describe('Signer of the optional attestation'),
+  })
+);
+
+const OnrampIntentResponseSchema = registry.register(
+  'OnrampIntentResponse',
+  z.object({
+    route: z.object({
+      anchorId: z.string(),
+      anchorDomain: z.string(),
+      corridorId: z.string(),
+      asset: z.string().describe('SEP-38 identifier of the asset credited'),
+      estimatedFee: z.string(),
+      estimatedReceived: z.string(),
+      indicative: z.literal(true),
+    }),
+    intentHash: z.string().describe('Hex-encoded SHA-256 of the canonical intent'),
+    handoffUrl: z
+      .string()
+      .describe('Relative path into /onramp, where the interactive deposit runs in a browser'),
+    unsignedChangeTrustXdr: z
+      .string()
+      .nullable()
+      .describe('Base64 changeTrust transaction to sign, or null when a trustline already exists'),
+  })
+);
+
+registry.registerPath({
+  method: 'post',
+  path: '/api/v1/intent/onramp',
+  summary: 'Submit an on-ramp intent (v1)',
+  description:
+    'Routes a deposit intent to the best indicative anchor and returns the /onramp handoff URL, ' +
+    'plus an unsigned changeTrust XDR when the destination account has no trustline. No anchor ' +
+    'session is opened: KYC and the interactive deposit run in the browser. Honours ' +
+    '`Idempotency-Key` like the off-ramp endpoint.',
+  tags: ['Intent'],
+  request: {
+    headers: z.object({
+      'Idempotency-Key': z
+        .string()
+        .optional()
+        .describe('Client-generated key. A repeated value replays the original response.'),
+    }),
+    body: {
+      required: true,
+      content: { 'application/json': { schema: OnrampIntentRequestSchema } },
+    },
+  },
+  responses: {
+    200: {
+      description: 'Route resolved',
+      content: { 'application/json': { schema: OnrampIntentResponseSchema } },
+    },
+    400: {
+      description: 'Validation error',
+      content: { 'application/json': { schema: ApiErrorSchema } },
+    },
+    401: {
+      description: 'Attestation signature did not verify',
+      content: { 'application/json': { schema: ApiErrorSchema } },
+    },
+    404: {
+      description: 'No anchor serves this corridor',
+      content: { 'application/json': { schema: ApiErrorSchema } },
+    },
+    422: {
+      description: 'The destination account does not exist on Stellar',
+      content: { 'application/json': { schema: ApiErrorSchema } },
+    },
+    429: RATE_LIMITED_429,
+    503: {
+      description: 'No deposit rate is available right now',
+      content: { 'application/json': { schema: ApiErrorSchema } },
+    },
+  },
+});
+
 registry.registerPath({
   method: 'get',
   path: '/api/v1/health',

@@ -788,6 +788,144 @@
           "publisherHealth"
         ]
       },
+      "OnrampIntentRequest": {
+        "type": "object",
+        "properties": {
+          "type": {
+            "type": "string",
+            "enum": [
+              "onramp"
+            ]
+          },
+          "sourceAsset": {
+            "type": "string",
+            "minLength": 1,
+            "description": "Fiat currency paid in, for example NGN"
+          },
+          "destinationAsset": {
+            "type": "string",
+            "minLength": 1,
+            "description": "Stellar asset bought, for example USDC"
+          },
+          "amount": {
+            "type": "string",
+            "pattern": "^\\d+(\\.\\d+)?$",
+            "description": "Amount of sourceAsset to spend"
+          },
+          "sender": {
+            "type": "string",
+            "minLength": 1,
+            "description": "Payer reference on the fiat rail (not a Stellar account)"
+          },
+          "destination": {
+            "type": "string",
+            "description": "Stellar public key credited when the deposit completes"
+          },
+          "depositMethod": {
+            "type": "string",
+            "enum": [
+              "bank_transfer",
+              "cash",
+              "mobile_money",
+              "card"
+            ]
+          },
+          "memo": {
+            "type": "string",
+            "description": "Memo for pooled-account anchors; needs memoType"
+          },
+          "memoType": {
+            "type": "string",
+            "enum": [
+              "text",
+              "id",
+              "hash"
+            ]
+          },
+          "signature": {
+            "type": "string",
+            "description": "Optional attestation; send with publicKey"
+          },
+          "publicKey": {
+            "type": "string",
+            "description": "Signer of the optional attestation"
+          }
+        },
+        "required": [
+          "type",
+          "sourceAsset",
+          "destinationAsset",
+          "amount",
+          "sender",
+          "destination",
+          "depositMethod"
+        ]
+      },
+      "OnrampIntentResponse": {
+        "type": "object",
+        "properties": {
+          "route": {
+            "type": "object",
+            "properties": {
+              "anchorId": {
+                "type": "string"
+              },
+              "anchorDomain": {
+                "type": "string"
+              },
+              "corridorId": {
+                "type": "string"
+              },
+              "asset": {
+                "type": "string",
+                "description": "SEP-38 identifier of the asset credited"
+              },
+              "estimatedFee": {
+                "type": "string"
+              },
+              "estimatedReceived": {
+                "type": "string"
+              },
+              "indicative": {
+                "type": "boolean",
+                "enum": [
+                  true
+                ]
+              }
+            },
+            "required": [
+              "anchorId",
+              "anchorDomain",
+              "corridorId",
+              "asset",
+              "estimatedFee",
+              "estimatedReceived",
+              "indicative"
+            ]
+          },
+          "intentHash": {
+            "type": "string",
+            "description": "Hex-encoded SHA-256 of the canonical intent"
+          },
+          "handoffUrl": {
+            "type": "string",
+            "description": "Relative path into /onramp, where the interactive deposit runs in a browser"
+          },
+          "unsignedChangeTrustXdr": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "description": "Base64 changeTrust transaction to sign, or null when a trustline already exists"
+          }
+        },
+        "required": [
+          "route",
+          "intentHash",
+          "handoffUrl",
+          "unsignedChangeTrustXdr"
+        ]
+      },
       "AnchorHealthLedgerArtifact": {
         "type": "object",
         "properties": {
@@ -2947,6 +3085,109 @@
           },
           "429": {
             "description": "Rate limited",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/intent/onramp": {
+      "post": {
+        "summary": "Submit an on-ramp intent (v1)",
+        "description": "Routes a deposit intent to the best indicative anchor and returns the /onramp handoff URL, plus an unsigned changeTrust XDR when the destination account has no trustline. No anchor session is opened: KYC and the interactive deposit run in the browser. Honours `Idempotency-Key` like the off-ramp endpoint.",
+        "tags": [
+          "Intent"
+        ],
+        "parameters": [
+          {
+            "schema": {
+              "type": "string",
+              "description": "Client-generated key. A repeated value replays the original response."
+            },
+            "required": false,
+            "description": "Client-generated key. A repeated value replays the original response.",
+            "name": "Idempotency-Key",
+            "in": "header"
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/OnrampIntentRequest"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Route resolved",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/OnrampIntentResponse"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Validation error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiError"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Attestation signature did not verify",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiError"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "No anchor serves this corridor",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiError"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "The destination account does not exist on Stellar",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiError"
+                }
+              }
+            }
+          },
+          "429": {
+            "description": "Rate limited",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiError"
+                }
+              }
+            }
+          },
+          "503": {
+            "description": "No deposit rate is available right now",
             "content": {
               "application/json": {
                 "schema": {
