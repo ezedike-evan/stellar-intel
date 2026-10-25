@@ -3173,6 +3173,13 @@ Annotated `readOnlyHint: true` — nothing is submitted on-chain until
   `{ type: "offramp", sourceAsset, destinationAsset, amount, sender, recipient }`
 - **Output:** `{ unsignedEnvelope: { intent, intentHash }, unsignedTx }`
 
+`unsignedTx` is built from the sender's real account, so its sequence number is
+the network's current one plus one and it can be signed and submitted as
+returned; it is valid for five minutes. That means `prepare` reads the
+sender's account from Horizon. A sender with no account on the network is
+rejected with `SENDER_NOT_FOUND`; any other failure to read it is
+`TX_BUILD_FAILED`.
+
 #### Routing and payment accounts
 
 `quote`, `prepare` and `execute` all route a corridor the same way the web

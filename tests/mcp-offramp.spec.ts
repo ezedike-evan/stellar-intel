@@ -21,6 +21,9 @@ import type { ServerRatesResult } from '@/lib/stellar/server-rates';
 // so the real signature/tx-construction logic (Keypair, TransactionBuilder) is
 // still exercised, and no test hits the network.
 const submitTransaction = vi.fn();
+// prepare reads the sender's account for its sequence number (#1364); by
+// default every sender is a fresh account at sequence 0.
+const loadAccount = vi.fn();
 vi.mock('@stellar/stellar-sdk', async (importOriginal) => {
   const actual = await importOriginal<typeof import('@stellar/stellar-sdk')>();
   return {
@@ -29,8 +32,10 @@ vi.mock('@stellar/stellar-sdk', async (importOriginal) => {
       ...actual.Horizon,
       Server: vi.fn().mockImplementation(function MockHorizonServer(this: {
         submitTransaction: typeof submitTransaction;
+        loadAccount: typeof loadAccount;
       }) {
         this.submitTransaction = submitTransaction;
+        this.loadAccount = loadAccount;
       }),
     },
   };
@@ -91,6 +96,8 @@ const COWRIE_ACCOUNT = Keypair.random().publicKey();
 const MONEYGRAM_ACCOUNT = Keypair.random().publicKey();
 beforeEach(() => {
   vi.stubEnv('ANCHOR_PAYMENT_ACCOUNTS', JSON.stringify({ cowrie: COWRIE_ACCOUNT }));
+  loadAccount.mockReset();
+  loadAccount.mockImplementation(async (publicKey: string) => new Account(publicKey, '0'));
 });
 afterEach(() => {
   vi.unstubAllEnvs();
@@ -202,6 +209,52 @@ describe('intel.offramp.prepare (#136)', () => {
     expect((tx.operations[0] as { destination?: string }).destination).toBe(COWRIE_ACCOUNT);
     // Unsigned: no signatures attached yet.
     expect(tx.signatures.length).toBe(0);
+  });
+
+  describe('sender account and sequence number (#1364)', () => {
+    const senderIntent = () => ({ ...validIntent, sender: Keypair.random().publicKey() });
+    const sequenceOf = async (unsignedTx: string) => {
+      const { TransactionBuilder, Networks } = await import('@stellar/stellar-sdk');
+      return (TransactionBuilder.fromXDR(unsignedTx, Networks.PUBLIC) as Transaction).sequence;
+    };
+
+    it("builds from the sender's on-chain sequence number", async () => {
+      const intent = senderIntent();
+      const loader = vi.fn(async (publicKey: string) => new Account(publicKey, '12345'));
+
+      const { unsignedTx } = await prepareIntent(intent, loader);
+
+      expect(loader).toHaveBeenCalledWith(intent.sender);
+      expect(await sequenceOf(unsignedTx)).toBe('12346');
+    });
+
+    it('reads the account from the configured Horizon by default', async () => {
+      const intent = senderIntent();
+      loadAccount.mockResolvedValueOnce(new Account(intent.sender, '700'));
+
+      const { unsignedTx } = await prepareIntent(intent);
+
+      expect(loadAccount).toHaveBeenCalledWith(intent.sender);
+      expect(await sequenceOf(unsignedTx)).toBe('701');
+    });
+
+    it('throws SENDER_NOT_FOUND when the sender has no account (Horizon 404)', async () => {
+      const loader = vi.fn().mockRejectedValue({ response: { status: 404 } });
+
+      await expect(prepareIntent(senderIntent(), loader)).rejects.toMatchObject({
+        code: 'SENDER_NOT_FOUND',
+        message: 'sender account does not exist on the network',
+      });
+    });
+
+    it('throws TX_BUILD_FAILED for any other failure to load the account', async () => {
+      const loader = vi.fn().mockRejectedValue(new Error('Horizon timed out'));
+
+      await expect(prepareIntent(senderIntent(), loader)).rejects.toMatchObject({
+        code: 'TX_BUILD_FAILED',
+        message: expect.stringContaining('Horizon timed out'),
+      });
+    });
   });
 
   it('uses the canonical BRL corridor issuer in the prepared payment', async () => {
