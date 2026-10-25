@@ -1,5 +1,6 @@
 ﻿import type { NextConfig } from 'next';
 import './lib/env';
+import { SECURITY_HEADERS, buildCspReportOnly } from './lib/security-headers';
 
 const nextConfig: NextConfig = {
   // `graphql` loads from node_modules at runtime rather than being bundled. It
@@ -8,14 +9,23 @@ const nextConfig: NextConfig = {
   // graphql-yoga is no longer a dependency; see app/api/graphql/route.ts.
   serverExternalPackages: ['graphql'],
   images: {
-    remotePatterns: [
-      {
-        protocol: 'https',
-        hostname: '**',
-      },
-    ],
+    // No remote host: the only next/image user, components/ui/AnchorLogo.tsx,
+    // loads local /anchors/<id>.svg files. An open `**` pattern made
+    // /_next/image an image proxy for any https host.
+    remotePatterns: [],
     formats: ['image/avif', 'image/webp'],
     minimumCacheTTL: 86400,
+  },
+  async headers() {
+    return [
+      {
+        source: '/:path*',
+        headers: [
+          ...SECURITY_HEADERS,
+          { key: 'Content-Security-Policy-Report-Only', value: buildCspReportOnly() },
+        ],
+      },
+    ];
   },
 };
 

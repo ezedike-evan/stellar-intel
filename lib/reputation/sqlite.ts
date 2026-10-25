@@ -186,6 +186,10 @@ export class SqliteReputationStore implements ReputationStore {
   async query(filter: OutcomeQuery = {}): Promise<OutcomeLogRow[]> {
     const where: string[] = [];
     const params: Record<string, unknown> = {};
+    if (filter.intentHash) {
+      where.push('intentHash = @intentHash');
+      params['intentHash'] = filter.intentHash;
+    }
     if (filter.anchorId) {
       where.push('anchorId = @anchorId');
       params['anchorId'] = filter.anchorId;

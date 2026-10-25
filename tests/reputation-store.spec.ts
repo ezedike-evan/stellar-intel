@@ -99,6 +99,21 @@ describe.each(backends)('ReputationStore conformance — %s backend', (_name, ma
     expect(cowrie[0]?.intentHash).toBe('a');
   });
 
+  it('filters by intentHash, including unattested rows only when asked', async () => {
+    store = make();
+    await store.append(row({ intentHash: 'target', anchorId: 'cowrie' }));
+    await store.append(row({ intentHash: 'other', anchorId: 'cowrie' }));
+    await store.append(row({ intentHash: 'unattested', attested: false, signerAccount: null }));
+
+    const hit = await store.query({ intentHash: 'target' });
+    expect(hit.map((r) => r.intentHash)).toEqual(['target']);
+    expect(await store.query({ intentHash: 'missing' })).toEqual([]);
+
+    expect(await store.query({ intentHash: 'unattested' })).toEqual([]);
+    const raw = await store.query({ intentHash: 'unattested', includeUnattested: true });
+    expect(raw.map((r) => r.intentHash)).toEqual(['unattested']);
+  });
+
   it('is insert-only on intentHash: a duplicate never overwrites the stored row', async () => {
     store = make();
     expect(await store.append(row({ intentHash: 'dup', outcome: 'completed' }))).toBe(true);

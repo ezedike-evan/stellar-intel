@@ -270,10 +270,11 @@ const DisputeAdminSchema = registry.register(
   'DisputeAdmin',
   z.object({
     id: z.string(),
-    submittedBy: z.string(),
+    intentHash: z.string(),
+    publicKey: z.string(),
     anchorId: z.string(),
     reason: z.string(),
-    status: z.enum(['pending', 'accepted', 'rejected']),
+    status: z.enum(['open', 'accepted', 'rejected']),
     createdAt: z.string(),
     resolvedAt: z.string().nullable(),
   })

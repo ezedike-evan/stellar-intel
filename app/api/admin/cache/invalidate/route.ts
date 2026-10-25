@@ -1,9 +1,15 @@
 import { NextRequest, NextResponse } from 'next/server';
+import { z } from 'zod';
 import { isAdminRequest } from '@/lib/auth/admin';
 import { withRequestLogger } from '@/lib/logger';
 import { invalidateCachedRates, clearRateCache } from '@/lib/api/rate-cache';
 import type { ApiError } from '@/types';
 import { enforceRateLimit } from '@/lib/api/response';
+
+const InvalidateBodySchema = z.object({
+  anchorId: z.string().trim().min(1).max(64).optional(),
+  all: z.boolean().optional(),
+});
 
 export async function POST(request: NextRequest): Promise<NextResponse> {
   return withRequestLogger(request, 'api.admin.cache.invalidate', async (logger) => {
@@ -32,9 +38,21 @@ export async function POST(request: NextRequest): Promise<NextResponse> {
       );
     }
 
-    const payload = body as { anchorId?: string; all?: boolean };
-    const anchorId = payload.anchorId?.trim();
-    const shouldInvalidateAll = payload.all === true;
+    // A non-string anchorId used to reach `.trim()` and throw a 500.
+    const parsed = InvalidateBodySchema.safeParse(body);
+    if (!parsed.success) {
+      logger.warn({ event: 'validation_failed', issues: parsed.error.issues.length });
+      return NextResponse.json<ApiError>(
+        {
+          code: 'VALIDATION_ERROR',
+          message: 'anchorId must be a non-empty string and all must be a boolean',
+        },
+        { status: 400 }
+      );
+    }
+
+    const anchorId = parsed.data.anchorId;
+    const shouldInvalidateAll = parsed.data.all === true;
 
     if (!anchorId && !shouldInvalidateAll) {
       logger.warn({ event: 'validation_failed', anchorId, all: shouldInvalidateAll });

@@ -582,7 +582,10 @@
           "id": {
             "type": "string"
           },
-          "submittedBy": {
+          "intentHash": {
+            "type": "string"
+          },
+          "publicKey": {
             "type": "string"
           },
           "anchorId": {
@@ -594,7 +597,7 @@
           "status": {
             "type": "string",
             "enum": [
-              "pending",
+              "open",
               "accepted",
               "rejected"
             ]
@@ -611,7 +614,8 @@
         },
         "required": [
           "id",
-          "submittedBy",
+          "intentHash",
+          "publicKey",
           "anchorId",
           "reason",
           "status",
