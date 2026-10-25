@@ -29,6 +29,11 @@ export default function sitemap(): MetadataRoute.Sitemap {
       changeFrequency: 'daily',
     },
     {
+      url: `${SITE_URL}/anchors/sep38`,
+      lastModified: now,
+      changeFrequency: 'daily',
+    },
+    {
       url: `${SITE_URL}/anchors/standings`,
       lastModified: now,
       changeFrequency: 'daily',
