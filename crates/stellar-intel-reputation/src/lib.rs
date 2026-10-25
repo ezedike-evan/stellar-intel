@@ -77,6 +77,14 @@ pub trait ReputationOracle {
     /// per 1 USDC.
     fn get_corridor_rate(env: Env, corridor: String) -> Option<CorridorRate>;
 
+    /// Like `get_corridor_rate`, but only a rate published within the last
+    /// `max_age_seconds`. `None` covers both "never published" and "too old".
+    fn get_corridor_rate_fresh(
+        env: Env,
+        corridor: String,
+        max_age_seconds: u64,
+    ) -> Option<CorridorRate>;
+
     /// Cumulative volume and estimated savings for a corridor, or `None` when
     /// nothing has been recorded. Both figures are in microUSDC.
     fn get_volume_savings(env: Env, corridor: String) -> Option<VolumeSavings>;
@@ -278,6 +286,24 @@ impl<'a> ReputationReader<'a> {
     /// rate of zero, which would be a real (and alarming) published value.
     pub fn corridor_rate(&self, corridor: String) -> Option<CorridorRate> {
         self.client.get_corridor_rate(&corridor)
+    }
+
+    /// Read the latest published rate for a corridor, but only if it was
+    /// published within the last `max_age_seconds`.
+    ///
+    /// `None` covers both "never published" and "too old", which a consumer
+    /// that cannot use a stale rate does not need to tell apart. **Prefer this
+    /// over [`corridor_rate`](Self::corridor_rate) for settlement decisions**:
+    /// the plain read returns whatever was last published, however old, so
+    /// using it means doing your own timestamp arithmetic. `max_age_seconds = 0`
+    /// accepts only a rate published in the current ledger timestamp.
+    pub fn corridor_rate_fresh(
+        &self,
+        corridor: String,
+        max_age_seconds: u64,
+    ) -> Option<CorridorRate> {
+        self.client
+            .get_corridor_rate_fresh(&corridor, &max_age_seconds)
     }
 
     /// Read cumulative volume and estimated savings for a corridor.

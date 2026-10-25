@@ -1,5 +1,7 @@
 use soroban_sdk::{
-    contract, contractimpl, contracttype, testutils::Address as _, Address, Env, String, Vec,
+    contract, contractimpl, contracttype,
+    testutils::{Address as _, Ledger},
+    Address, Env, String, Vec,
 };
 use stellar_intel_reputation::{
     CorridorAggregate, CorridorRate, ProbeSignals, ReputationReader, VolumeSavings,
@@ -205,6 +207,20 @@ impl MockReputationContract {
 
     pub fn get_corridor_rate(env: Env, corridor: String) -> Option<CorridorRate> {
         env.storage().persistent().get(&MockKey::Rate(corridor))
+    }
+
+    pub fn get_corridor_rate_fresh(
+        env: Env,
+        corridor: String,
+        max_age_seconds: u64,
+    ) -> Option<CorridorRate> {
+        let rate: CorridorRate = env.storage().persistent().get(&MockKey::Rate(corridor))?;
+        let age = env.ledger().timestamp().saturating_sub(rate.updated_at);
+        if age <= max_age_seconds {
+            Some(rate)
+        } else {
+            None
+        }
     }
 
     pub fn add_volume_savings(
@@ -575,4 +591,70 @@ fn a_probed_but_unreachable_anchor_is_some_with_zero_latency() {
     let signals = reader.probe_signals(anchor).unwrap();
     assert_eq!(signals.uptime_bps, 0);
     assert_eq!((signals.p50_latency_ms, signals.p95_latency_ms), (0, 0));
+}
+
+// ─── Freshness-checked rate read (#1403) ──────────────────────────────────────
+
+fn publish_rate(env: &Env, contract_id: &Address, publisher: &Address, corridor: &String) {
+    let client = MockReputationContractClient::new(env, contract_id);
+    client.publish_corridor_rate(publisher, corridor, &16_500_000_000, &7);
+}
+
+#[test]
+fn fresh_rate_within_window() {
+    let env = Env::default();
+    env.mock_all_auths();
+    let (contract_id, publisher) = setup(&env);
+    let reader = ReputationReader::new(&env, contract_id.clone());
+    let corridor = String::from_str(&env, "usdc-ngn");
+    publish_rate(&env, &contract_id, &publisher, &corridor);
+
+    env.ledger().with_mut(|l| l.timestamp += 60);
+
+    let rate = reader.corridor_rate_fresh(corridor, 120).unwrap();
+    assert_eq!(rate.rate, 16_500_000_000);
+    assert_eq!(rate.decimals, 7);
+}
+
+#[test]
+fn stale_rate_is_none() {
+    let env = Env::default();
+    env.mock_all_auths();
+    let (contract_id, publisher) = setup(&env);
+    let reader = ReputationReader::new(&env, contract_id.clone());
+    let corridor = String::from_str(&env, "usdc-ngn");
+    publish_rate(&env, &contract_id, &publisher, &corridor);
+
+    env.ledger().with_mut(|l| l.timestamp += 121);
+
+    assert_eq!(reader.corridor_rate_fresh(corridor.clone(), 120), None);
+    // The plain read still returns it, which is the whole reason to prefer the fresh one.
+    assert!(reader.corridor_rate(corridor).is_some());
+}
+
+#[test]
+fn fresh_rate_unknown_corridor_is_none() {
+    let env = Env::default();
+    env.mock_all_auths();
+    let (contract_id, _) = setup(&env);
+    let reader = ReputationReader::new(&env, contract_id);
+
+    assert_eq!(
+        reader.corridor_rate_fresh(String::from_str(&env, "usdc-xyz"), u64::MAX),
+        None
+    );
+}
+
+#[test]
+fn a_rate_exactly_at_the_limit_is_still_fresh() {
+    let env = Env::default();
+    env.mock_all_auths();
+    let (contract_id, publisher) = setup(&env);
+    let reader = ReputationReader::new(&env, contract_id.clone());
+    let corridor = String::from_str(&env, "usdc-ngn");
+    publish_rate(&env, &contract_id, &publisher, &corridor);
+
+    env.ledger().with_mut(|l| l.timestamp += 120);
+
+    assert!(reader.corridor_rate_fresh(corridor, 120).is_some());
 }
