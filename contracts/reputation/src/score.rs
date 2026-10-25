@@ -1,5 +1,6 @@
 use soroban_sdk::{Address, Env, String};
 
+use crate::outcome::MAX_SETTLE_SECONDS;
 use crate::storage::{self, DataKey};
 use crate::{publishers, Error};
 
@@ -74,6 +75,17 @@ pub fn set_corridor_metrics(
 
     if !publishers::is_authorized(env, publisher) {
         return Err(Error::PublisherUnauthorized);
+    }
+
+    // Refuse out-of-range input at write time, before anything is stored, as
+    // submit_outcome does for settle_seconds. Otherwise every reader gets the
+    // raw values back (audit L-14). compute_composite_bps still clamps its own
+    // inputs, as defence in depth.
+    if !(0..=MAX_BPS).contains(&fill_rate_bps)
+        || !(0..=MAX_BPS).contains(&slippage_bps)
+        || settle_seconds_p50 > MAX_SETTLE_SECONDS
+    {
+        return Err(Error::OutOfRange);
     }
 
     // Write BOTH the v1 and v2 keys. Previously only the v1 `Corridor` key was

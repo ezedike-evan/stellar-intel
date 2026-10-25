@@ -1,6 +1,6 @@
 //! Integration tests for corridor score reads.
 
-use reputation::{ReputationContract, ReputationContractClient};
+use reputation::{Error, ReputationContract, ReputationContractClient};
 use soroban_sdk::{testutils::Address as _, Address, Env, String};
 
 const MAX_BPS: i128 = 10000;
@@ -75,7 +75,7 @@ fn test_get_score_for_corridor_reads_stored_metrics_and_computes_composite() {
 }
 
 #[test]
-fn test_get_score_for_corridor_clamps_metrics() {
+fn test_get_score_for_corridor_rejects_out_of_range_metrics() {
     let env = Env::default();
     env.mock_all_auths();
     let (client, admin) = setup(&env);
@@ -86,17 +86,16 @@ fn test_get_score_for_corridor_clamps_metrics() {
     let anchor = String::from_str(&env, "anchor-anclax");
     let corridor = String::from_str(&env, "usdc-kes");
 
-    client.set_corridor_metrics(
+    // Out-of-range input used to be stored raw and clamped on read; it is now
+    // refused at write time (#1381).
+    let res = client.try_set_corridor_metrics(
         &publisher, &anchor, &corridor, &11000i128, &-100i128, &0u64, &33u32,
     );
-
-    let (composite_bps, fill_rate_bps, settle_seconds_p50, n) =
-        client.get_score_for_corridor(&anchor, &corridor);
-
-    assert_eq!(fill_rate_bps, 11000);
-    assert_eq!(settle_seconds_p50, 0);
-    assert_eq!(n, 33);
-    assert_eq!(composite_bps, expected_composite_bps(11000, -100, 0));
+    assert_eq!(res, Err(Ok(Error::OutOfRange)));
+    assert_eq!(
+        client.get_score_for_corridor(&anchor, &corridor),
+        (0, 0, 0, 0)
+    );
 }
 
 fn publish_metrics(
