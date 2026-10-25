@@ -5,9 +5,11 @@
  * funded account — generalizing the pattern proven in
  * packages/publisher/tests/e2e.spec.ts's `countOnChain()` helper.
  *
- * Testnet only for now; mainnet oracle deployment is a separate roadmap gate
- * (see docs/ORACLE_SPEC.md). Defaults match the recorded testnet deployment
- * in .deployments/testnet.json and app/api/publisher/tick/route.ts.
+ * Targets the network named by NEXT_PUBLIC_STELLAR_NETWORK (testnet unless it
+ * is `mainnet`): the recorded deployment in .deployments/<network>.json, and
+ * that network's Soroban RPC and passphrase. Reads against mainnet throw until a
+ * mainnet oracle is recorded (see docs/ORACLE_SPEC.md and docs/MAINNET_LAUNCH.md).
+ * `SOROBAN_RPC_URL` and `STELLAR_NETWORK_PASSPHRASE` override the defaults.
  */
 import {
   Account,
@@ -22,9 +24,20 @@ import {
 } from '@stellar/stellar-sdk';
 
 // Sourced from .deployments/testnet.json rather than hardcoded (#723).
-import { resolveOracleContractId } from './deployment';
-const DEFAULT_RPC_URL = 'https://soroban-testnet.stellar.org';
-const DEFAULT_NETWORK_PASSPHRASE = Networks.TESTNET;
+import { currentNetwork, resolveOracleContractId, type OracleNetwork } from './deployment';
+
+const TESTNET_RPC_URL = 'https://soroban-testnet.stellar.org';
+const MAINNET_RPC_URL = 'https://mainnet.sorobanrpc.com';
+
+/** The RPC endpoint and passphrase to read through, absent any override. */
+export function resolveReadDefaults(network: OracleNetwork = currentNetwork()): {
+  rpcUrl: string;
+  networkPassphrase: string;
+} {
+  return network === 'mainnet'
+    ? { rpcUrl: MAINNET_RPC_URL, networkPassphrase: Networks.PUBLIC }
+    : { rpcUrl: TESTNET_RPC_URL, networkPassphrase: Networks.TESTNET };
+}
 
 // A well-formed but unfunded, never-signed account. simulateTransaction only
 // needs a syntactically valid source account to build the envelope for a
@@ -39,13 +52,14 @@ export interface OracleReadConfig {
 }
 
 function resolveConfig(config: OracleReadConfig): Required<OracleReadConfig> {
+  const defaults = resolveReadDefaults();
   return {
     contractId: resolveOracleContractId(config.contractId),
-    rpcUrl: config.rpcUrl ?? process.env.SOROBAN_RPC_URL ?? DEFAULT_RPC_URL,
+    rpcUrl: config.rpcUrl ?? process.env.SOROBAN_RPC_URL ?? defaults.rpcUrl,
     networkPassphrase:
       config.networkPassphrase ??
       process.env.STELLAR_NETWORK_PASSPHRASE ??
-      DEFAULT_NETWORK_PASSPHRASE,
+      defaults.networkPassphrase,
   };
 }
 

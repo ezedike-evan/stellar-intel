@@ -155,6 +155,18 @@ async function tick(): Promise<BatchResult> {
   // point: the gate below cannot be trusted while a caller guesses the network.
   const network = resolveNetwork();
 
+  // The recorded deployment for the network the tick publishes to. With no
+  // mainnet oracle recorded yet, fall back to the testnet id rather than throw:
+  // the gate below exists to refuse exactly "a mainnet run pointed at the
+  // testnet contract" with a clear verdict, and a throw here would turn that
+  // into a failing tick on every cron run instead.
+  let oracleContractId: string;
+  try {
+    oracleContractId = resolveOracleContractId(undefined, network.network);
+  } catch {
+    oracleContractId = TESTNET_ORACLE_CONTRACT_ID;
+  }
+
   const windowDays = process.env.PROBE_WINDOW_DAYS
     ? parseInt(process.env.PROBE_WINDOW_DAYS, 10)
     : undefined;
@@ -162,7 +174,7 @@ async function tick(): Promise<BatchResult> {
   const config: BatchConfig = {
     batchSize: process.env.BATCH_SIZE ? parseInt(process.env.BATCH_SIZE, 10) : DEFAULT_BATCH_SIZE,
     executor: getExecutor(),
-    oracleContractId: resolveOracleContractId(),
+    oracleContractId,
     networkPassphrase: network.networkPassphrase,
     publisherSecret,
     horizonUrl: network.horizonUrl,
@@ -171,7 +183,7 @@ async function tick(): Promise<BatchResult> {
       network: network.network,
       loadCoverage,
       overrideEnabled: isOverrideEnabled(),
-      contractId: resolveOracleContractId(),
+      contractId: oracleContractId,
       testnetContractId: TESTNET_ORACLE_CONTRACT_ID,
     },
     loadCorridorRates,
