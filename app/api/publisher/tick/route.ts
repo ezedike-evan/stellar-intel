@@ -22,7 +22,7 @@ import { deriveAllCorridorRates } from '@/lib/oracle/corridor-rate';
 import { deriveCorridorMetrics } from '@/lib/oracle/corridor-metrics';
 import { mapOutcomeRow } from '@/lib/oracle/outcome-rows';
 import { ANCHORS } from '@/constants/anchors';
-import type { OutcomeLogRow, ProbeLedgerRow } from '@/types/reputation';
+import type { ProbeLedgerRow } from '@/types/reputation';
 
 export const runtime = 'nodejs';
 // Fluid Compute: allow the function to run for up to 5 minutes per tick so a
@@ -79,7 +79,7 @@ async function loadCorridorRates() {
         ORDER BY reconciled_at DESC
         LIMIT 5000`
     );
-    return deriveAllCorridorRates(rows as unknown as OutcomeLogRow[]);
+    return deriveAllCorridorRates(rows.map((r) => mapOutcomeRow(r as Record<string, unknown>)));
   } catch {
     // A rate is a best-effort refresh of a value the next tick overwrites.
     // Failing the whole tick over it would strand outcomes that did publish.
