@@ -112,6 +112,8 @@ export default defineConfig({
           exclude: [...configDefaults.exclude, '**/.claude/worktrees/**'],
           includeTaskLocation: true,
           env: {
+            // The live project exists to reach real anchors; see tests/network-guard.ts.
+            TEST_ALLOW_NETWORK: '1',
             LOG_LEVEL: 'silent',
             NEXT_PUBLIC_STELLAR_NETWORK: 'mainnet',
             NEXT_PUBLIC_HORIZON_URL: 'https://horizon.stellar.org',
