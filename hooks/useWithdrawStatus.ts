@@ -65,6 +65,14 @@ export interface UseWithdrawStatusResult {
   stellarTransactionId: string | undefined;
   externalTransactionId: string | undefined;
   refunds: Sep24Transaction['refunds'] | undefined;
+  /** How to pay the anchor, for a deposit. Undefined for a withdrawal. */
+  instructions: Sep24Transaction['instructions'] | undefined;
+  /** An https link to the anchor's own page about the transaction. */
+  moreInfoUrl: string | undefined;
+  /** A human-readable status note from the anchor. */
+  message: string | undefined;
+  /** Set when the anchor paid a deposit out as a claimable balance. */
+  claimableBalanceId: string | undefined;
   updatedAt: Date | undefined;
   isLoading: boolean;
   error: string | undefined;
@@ -180,9 +188,22 @@ export function useWithdrawStatus(
     stellarTransactionId: data?.stellarTransactionId,
     externalTransactionId: data?.externalTransactionId,
     refunds: data?.refunds,
+    instructions: data?.instructions,
+    moreInfoUrl: data?.moreInfoUrl,
+    message: data?.message,
+    claimableBalanceId: data?.claimableBalanceId,
     updatedAt: data?.updatedAt,
     isLoading,
     error: error?.message,
     attemptCount,
   };
 }
+
+/**
+ * The same hook under a direction-neutral name. Nothing in it is specific to
+ * withdrawals apart from its name and the fields it returns, and a deposit tracker
+ * needs the same polling and backoff: aliasing it keeps one backoff implementation
+ * instead of two that drift apart. The original export is unchanged.
+ */
+export const useTransferStatus = useWithdrawStatus;
+export type UseTransferStatusResult = UseWithdrawStatusResult;

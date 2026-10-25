@@ -41,6 +41,7 @@ afterEach(() => {
   server.resetHandlers();
   resetOracleRequests();
   vi.clearAllMocks();
+  vi.unstubAllEnvs();
 });
 afterAll(() => {
   server.close();
@@ -119,6 +120,10 @@ const ANCLAP_COMPOSITE = 0.82;
 const COWRIE_COMPOSITE = 0.44;
 
 beforeEach(async () => {
+  // The MSW oracle below answers for the recorded testnet deployment, and the
+  // unit project runs with NEXT_PUBLIC_STELLAR_NETWORK=mainnet. The oracle
+  // address and RPC defaults follow that variable (#1405), so pin testnet.
+  vi.stubEnv('NEXT_PUBLIC_STELLAR_NETWORK', 'testnet');
   const store = new InMemoryReputationStore();
   for (const row of SEED_ROWS) await store.append(row);
   _setReputationStore(store);

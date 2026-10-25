@@ -19,8 +19,10 @@ import { getReputationStore } from '@/lib/reputation/store';
 import { loadProbeCoverageReport } from '@/lib/reputation/probeCoverage';
 import { resolveOracleContractId, TESTNET_ORACLE_CONTRACT_ID } from '@/lib/oracle/deployment';
 import { deriveAllCorridorRates } from '@/lib/oracle/corridor-rate';
+import { deriveCorridorMetrics } from '@/lib/oracle/corridor-metrics';
+import { mapOutcomeRow } from '@/lib/oracle/outcome-rows';
 import { ANCHORS } from '@/constants/anchors';
-import type { OutcomeLogRow, ProbeLedgerRow } from '@/types/reputation';
+import type { ProbeLedgerRow } from '@/types/reputation';
 
 export const runtime = 'nodejs';
 // Fluid Compute: allow the function to run for up to 5 minutes per tick so a
@@ -77,10 +79,37 @@ async function loadCorridorRates() {
         ORDER BY reconciled_at DESC
         LIMIT 5000`
     );
-    return deriveAllCorridorRates(rows as unknown as OutcomeLogRow[]);
+    return deriveAllCorridorRates(rows.map((r) => mapOutcomeRow(r as Record<string, unknown>)));
   } catch {
     // A rate is a best-effort refresh of a value the next tick overwrites.
     // Failing the whole tick over it would strand outcomes that did publish.
+    return [];
+  }
+}
+
+/**
+ * Per-anchor corridor metrics derived from settled outcomes (#1401).
+ *
+ * Same shape as {@link loadCorridorRates}: the same rows, read for the whole
+ * block rather than only the rows this tick published, and a failure is "no
+ * metrics this tick" rather than a failed tick. The raw rows are mapped from
+ * `pg`'s snake_case first - the derivation is written against `OutcomeLogRow`.
+ */
+async function loadCorridorMetrics() {
+  try {
+    const { rows } = await getExecutor()(
+      `SELECT anchor_id, corridor, outcome, quoted_rate, delivered_rate, settle_seconds
+         FROM outcome_log
+        WHERE reconciled_at IS NOT NULL
+          AND attested = TRUE
+          AND direction = 'withdraw'
+        ORDER BY reconciled_at DESC
+        LIMIT 5000`
+    );
+    return deriveCorridorMetrics(rows.map((r) => mapOutcomeRow(r as Record<string, unknown>)));
+  } catch {
+    // Metrics are overwritten next tick; failing the tick over them would
+    // strand outcomes that did publish.
     return [];
   }
 }
@@ -126,6 +155,18 @@ async function tick(): Promise<BatchResult> {
   // point: the gate below cannot be trusted while a caller guesses the network.
   const network = resolveNetwork();
 
+  // The recorded deployment for the network the tick publishes to. With no
+  // mainnet oracle recorded yet, fall back to the testnet id rather than throw:
+  // the gate below exists to refuse exactly "a mainnet run pointed at the
+  // testnet contract" with a clear verdict, and a throw here would turn that
+  // into a failing tick on every cron run instead.
+  let oracleContractId: string;
+  try {
+    oracleContractId = resolveOracleContractId(undefined, network.network);
+  } catch {
+    oracleContractId = TESTNET_ORACLE_CONTRACT_ID;
+  }
+
   const windowDays = process.env.PROBE_WINDOW_DAYS
     ? parseInt(process.env.PROBE_WINDOW_DAYS, 10)
     : undefined;
@@ -133,7 +174,7 @@ async function tick(): Promise<BatchResult> {
   const config: BatchConfig = {
     batchSize: process.env.BATCH_SIZE ? parseInt(process.env.BATCH_SIZE, 10) : DEFAULT_BATCH_SIZE,
     executor: getExecutor(),
-    oracleContractId: resolveOracleContractId(),
+    oracleContractId,
     networkPassphrase: network.networkPassphrase,
     publisherSecret,
     horizonUrl: network.horizonUrl,
@@ -142,10 +183,11 @@ async function tick(): Promise<BatchResult> {
       network: network.network,
       loadCoverage,
       overrideEnabled: isOverrideEnabled(),
-      contractId: resolveOracleContractId(),
+      contractId: oracleContractId,
       testnetContractId: TESTNET_ORACLE_CONTRACT_ID,
     },
     loadCorridorRates,
+    loadCorridorMetrics,
     probeSignals: {
       ...(windowDays ? { windowDays } : {}),
       domainToAnchorId: buildDomainToAnchorId(),

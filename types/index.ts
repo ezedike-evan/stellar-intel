@@ -394,6 +394,33 @@ export interface Sep24DepositRequest {
   amount?: string | undefined;
   account: string; // user's Stellar public key, credited on deposit completion
   jwt: string;
+  /** BCP 47 language tag for the anchor's interactive UI. Defaults to `en`. */
+  lang?: string | undefined;
+}
+
+/** Everything the caller supplies to start a SEP-24 deposit (`startDepositFlow`). */
+export interface DepositFlowParams {
+  /** SEP-10 session token for the anchor. */
+  jwt: string;
+  assetCode: string;
+  assetIssuer: string;
+  amount: string;
+  /** Stellar account credited when the deposit completes. */
+  account: string;
+  /** Where the anchor should return the user after the interactive step. */
+  callbackUrl?: string;
+  /** BCP 47 language tag for the interactive UI. Defaults to `en`. */
+  lang?: string;
+}
+
+/** What the caller needs in order to hand the user off to the anchor. */
+export interface DepositFlowSession {
+  /** Anchor-issued transaction id, used for subsequent status polling. */
+  transactionId: string;
+  /** The URL to open, with the callback applied. */
+  depositUrl: string;
+  /** Transfer server the session was opened against. */
+  transferServer: string;
 }
 
 /** Response from POST /transactions/deposit/interactive. */
@@ -452,6 +479,12 @@ export interface Sep24Refunds {
 }
 
 /** The live record of a SEP-24 withdrawal transaction returned by the anchor. */
+/** One way to pay the anchor, from a SEP-24 deposit's `instructions` map. */
+export interface Sep24DepositInstruction {
+  value: string;
+  description: string;
+}
+
 export interface Sep24Transaction {
   id: string;
   status: WithdrawStatusValue;
@@ -464,6 +497,17 @@ export interface Sep24Transaction {
   stellarTransactionId?: string | undefined;
   externalTransactionId?: string | undefined;
   refunds?: Sep24Refunds | undefined;
+  /** How to pay the anchor, keyed by the anchor's own labels. Deposits only. */
+  instructions?: Record<string, Sep24DepositInstruction> | undefined;
+  /** An https link to the anchor's own page about this transaction. */
+  moreInfoUrl?: string | undefined;
+  /** A human-readable status note from the anchor. */
+  message?: string | undefined;
+  /** Set when the anchor paid a deposit out as a claimable balance. */
+  claimableBalanceId?: string | undefined;
+  from?: string | undefined;
+  to?: string | undefined;
+  kind?: 'deposit' | 'withdrawal' | undefined;
 }
 
 // ─── Intent schema ────────────────────────────────────────────────────────────

@@ -5,6 +5,7 @@ import {
   deriveCorridorRate,
   deriveAllCorridorRates,
 } from '@/lib/oracle/corridor-rate';
+import { mapOutcomeRow } from '@/lib/oracle/outcome-rows';
 import type { OutcomeLogRow } from '@/types/reputation';
 
 function outcome(corridor: string, deliveredRate: string | null): OutcomeLogRow {
@@ -84,5 +85,29 @@ describe('deriveAllCorridorRates (#810)', () => {
       'usdc-brl',
       'usdc-ars',
     ]);
+  });
+});
+
+describe('deriving a rate from raw pg rows', () => {
+  // What the publisher tick's SELECT returns: snake_case column names.
+  const pgRow = {
+    anchor_id: 'cowrie',
+    corridor: 'usdc-ngn',
+    outcome: 'completed',
+    quoted_rate: '1650',
+    delivered_rate: '1648.5',
+    settle_seconds: 42,
+  };
+
+  it('throws on unmapped rows, which the tick would swallow as "no rates"', () => {
+    // This is the failure the loader used to have: every camelCase field read as undefined.
+    expect(() => deriveAllCorridorRates([pgRow as unknown as OutcomeLogRow])).toThrow();
+  });
+
+  it('derives the rate once the rows are mapped', () => {
+    const rates = deriveAllCorridorRates([mapOutcomeRow(pgRow)]);
+    expect(rates).toHaveLength(1);
+    expect(rates[0]).toMatchObject({ corridor: 'usdc-ngn', sampleCount: 1 });
+    expect(rates[0]?.rate).toBe(16_485_000_000n);
   });
 });

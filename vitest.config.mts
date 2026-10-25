@@ -14,29 +14,25 @@ export default defineConfig({
     teardownTimeout: 15000,
     // ── Projects ────────────────────────────────────────────────────────────
     //
-    // Two named projects separate the mocked unit suite from any future tests
-    // that must hit live anchors:
+    // Two named projects separate the mocked unit suite from the tests that must
+    // hit live anchors, by directory:
     //
     //   unit         – the full mocked suite run by `npm test` on every
     //                  PR/push.  A third-party anchor being down CANNOT fail
     //                  a merge: nothing in this project makes a real network
-    //                  call.
+    //                  call.  It excludes `tests/live/**`.
     //
-    //   live-anchors – tests tagged `{ tags: ['live-anchor'] }`.  These are
-    //                  intentionally NOT included in the default `npm test`
-    //                  command.  They run only in the scheduled
-    //                  live-anchor-checks.yml workflow (`npm run test:live`).
-    //                  See .github/workflows/live-anchor-checks.yml for the
-    //                  full job definition and issue-opening logic.
+    //   live-anchors – only `tests/live/**/*.live.spec.ts`.  These are
+    //                  intentionally NOT part of `npm test`.  They run only in
+    //                  the scheduled live-anchor-checks.yml workflow
+    //                  (`npm run test:live`); see that file for the job
+    //                  definition and issue-opening logic.
     //
-    // To add a live test:
-    //   describe('my probe', { tags: ['live-anchor'] }, () => { … });
-    //   // or at the individual test level:
-    //   it('fetches real TOML', { tags: ['live-anchor'] }, async () => { … });
+    // To add a live test, put it in `tests/live/<name>.live.spec.ts`.
     //
-    // The project filter is what keeps live tests out of CI, not an env-var
-    // guard.  That means the split is structural and cannot be accidentally
-    // bypassed by setting an environment variable.
+    // The split is by directory, so it is structural: a spec outside
+    // `tests/live/` can never run in the live project, and one inside it can
+    // never run in CI, whatever environment variables are set.
     projects: [
       {
         // ── Unit project ───────────────────────────────────────────────────
@@ -45,6 +41,10 @@ export default defineConfig({
         extends: true,
         test: {
           name: 'unit',
+          // Vitest refuses to start when two projects have different
+          // `maxWorkers` but the same `sequence.groupOrder`, so give each project
+          // its own. Without this a plain `npx vitest run <file>` aborts.
+          sequence: { groupOrder: 0 },
           pool: 'forks',
           maxWorkers: 4,
           environment: 'happy-dom',
@@ -59,10 +59,14 @@ export default defineConfig({
           // forever.  teardownTimeout is set at the top level (NonProjectOptions).
           testTimeout: 15000,
           hookTimeout: 15000,
-          // Exclude Playwright specs, worktree checkouts, and live-anchor tests.
-          exclude: [...configDefaults.exclude, 'tests/e2e/**', '**/.claude/worktrees/**'],
-          // Exclude tests explicitly tagged as live-anchor; those belong to the
-          // `live-anchors` project below.
+          // Exclude Playwright specs, worktree checkouts, and the live-anchor
+          // tests, which belong to the `live-anchors` project below.
+          exclude: [
+            ...configDefaults.exclude,
+            'tests/e2e/**',
+            'tests/live/**',
+            '**/.claude/worktrees/**',
+          ],
           includeTaskLocation: true,
           env: {
             // Silence pino in tests — info-level logging floods stdout with
@@ -86,11 +90,13 @@ export default defineConfig({
         // Tests that make real network calls to registered anchors.
         // Run exclusively by the scheduled live-anchor-checks.yml workflow.
         //
-        // Only files that contain at least one test tagged `live-anchor` are
-        // collected here.  A file with no such tag is ignored.
+        // Only `tests/live/**/*.live.spec.ts` is collected here.
         extends: true,
         test: {
           name: 'live-anchors',
+          // A unique group order is required because `maxWorkers` differs from
+          // the unit project's; see the note on that project.
+          sequence: { groupOrder: 1 },
           pool: 'forks',
           maxWorkers: 2,
           environment: 'node',
@@ -100,12 +106,14 @@ export default defineConfig({
           // teardownTimeout is set at the top level (NonProjectOptions).
           testTimeout: 60000,
           hookTimeout: 30000,
-          include: ['tests/**/*.{spec,test}.{ts,mts,mjs,tsx}'],
-          exclude: [...configDefaults.exclude, 'tests/e2e/**', '**/.claude/worktrees/**'],
-          // Only run tests carrying the live-anchor tag.
-          // Tests without the tag are collected but immediately skipped.
+          // `npm run test:live` passes --passWithNoTests (a root-only option), so
+          // the scheduled job still passes while this directory is empty.
+          include: ['tests/live/**/*.live.spec.ts'],
+          exclude: [...configDefaults.exclude, '**/.claude/worktrees/**'],
           includeTaskLocation: true,
           env: {
+            // The live project exists to reach real anchors; see tests/network-guard.ts.
+            TEST_ALLOW_NETWORK: '1',
             LOG_LEVEL: 'silent',
             NEXT_PUBLIC_STELLAR_NETWORK: 'mainnet',
             NEXT_PUBLIC_HORIZON_URL: 'https://horizon.stellar.org',

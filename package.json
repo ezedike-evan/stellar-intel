@@ -19,7 +19,7 @@
     "format": "prettier --write \"**/*.{ts,tsx,mjs,json,css,md}\"",
     "format:check": "prettier --check \"**/*.{ts,tsx,mjs,json,css,md}\"",
     "test": "vitest run --project unit",
-    "test:live": "vitest run --project live-anchors",
+    "test:live": "vitest run --project live-anchors --passWithNoTests",
     "test:watch": "vitest --watch --project unit",
     "test:coverage": "vitest --coverage --project unit",
     "check:registry": "node ./scripts/check-registry.mjs",

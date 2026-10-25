@@ -59,6 +59,7 @@ const BASE_CONFIG: BatchConfig = {
 const sdkMocks = vi.hoisted(() => ({
   submitOutcome: vi.fn(),
   publishCorridorRate: vi.fn(),
+  setCorridorMetrics: vi.fn(),
   addVolumeSavings: vi.fn(),
   signAndSend: vi.fn(),
 }));
@@ -73,6 +74,7 @@ vi.mock('@stellar/stellar-sdk', () => ({
       from: vi.fn().mockResolvedValue({
         submit_outcome: sdkMocks.submitOutcome,
         publish_corridor_rate: sdkMocks.publishCorridorRate,
+        set_corridor_metrics: sdkMocks.setCorridorMetrics,
         add_volume_savings: sdkMocks.addVolumeSavings,
       }),
     },
@@ -85,6 +87,7 @@ beforeEach(() => {
   });
   sdkMocks.submitOutcome.mockReset().mockResolvedValue({ signAndSend: sdkMocks.signAndSend });
   sdkMocks.publishCorridorRate.mockReset().mockResolvedValue({ signAndSend: sdkMocks.signAndSend });
+  sdkMocks.setCorridorMetrics.mockReset().mockResolvedValue({ signAndSend: sdkMocks.signAndSend });
   sdkMocks.addVolumeSavings.mockReset().mockResolvedValue({
     signAndSend: vi.fn().mockResolvedValue({
       sendTransactionResponse: { hash: 'mock-volume-savings-tx-hash' },
@@ -570,5 +573,139 @@ describe('runBatch — corridor rates', () => {
 
     expect(result.corridorRatesPublished).toBeUndefined();
     expect(sdkMocks.publishCorridorRate).not.toHaveBeenCalled();
+  });
+});
+
+describe('runBatch — corridor metrics', () => {
+  const ROWS: OutcomeRow[] = [{ ...SAMPLE_ROW, intentHash: 'metrics-1' }];
+
+  const METRICS = [
+    {
+      anchorId: 'cowrie',
+      corridor: 'usdc-ngn',
+      fillRateBps: 9700,
+      slippageBps: 110,
+      settleSecondsP50: 42,
+      n: 1240,
+    },
+    {
+      anchorId: 'moneygram',
+      corridor: 'usdc-kes',
+      fillRateBps: 8800,
+      slippageBps: 0,
+      settleSecondsP50: 300,
+      n: 17,
+    },
+  ];
+
+  function trackingExecutor(rows: OutcomeRow[], updates: string[] = []) {
+    return vi.fn(async (sql: string, params?: unknown[]) => {
+      if (sql.includes('UPDATE outcome_log')) {
+        updates.push((params as [string, string])[1]);
+        return { rows: [] };
+      }
+      return { rows: rows.map(dbRow) };
+    }) as unknown as QueryExecutor;
+  }
+
+  it('publishes a metric per entry after the outcomes land, with bigint args', async () => {
+    sdkMocks.signAndSend.mockResolvedValue({ sendTransactionResponse: { hash: 'tx-m' } });
+
+    const result = await runBatch({
+      ...BASE_CONFIG,
+      executor: trackingExecutor(ROWS),
+      loadCorridorMetrics: async () => METRICS,
+    });
+
+    expect(result.submitted).toBe(1);
+    expect(result.corridorMetricsPublished).toBe(2);
+    expect(sdkMocks.setCorridorMetrics).toHaveBeenCalledTimes(2);
+    expect(sdkMocks.setCorridorMetrics).toHaveBeenNthCalledWith(1, {
+      publisher: 'GPUBLISHERMOCK',
+      anchor_id: 'cowrie',
+      corridor: 'usdc-ngn',
+      fill_rate_bps: 9700n,
+      slippage_bps: 110n,
+      settle_seconds_p50: 42n,
+      n: 1240,
+    });
+  });
+
+  it('skips an entry with n === 0 rather than publishing an empty score', async () => {
+    sdkMocks.signAndSend.mockResolvedValue({ sendTransactionResponse: { hash: 'tx-m' } });
+
+    const result = await runBatch({
+      ...BASE_CONFIG,
+      executor: trackingExecutor(ROWS),
+      loadCorridorMetrics: async () => [{ ...METRICS[0]!, n: 0 }, METRICS[1]!],
+    });
+
+    expect(result.corridorMetricsPublished).toBe(1);
+    expect(sdkMocks.setCorridorMetrics).toHaveBeenCalledTimes(1);
+    expect(sdkMocks.setCorridorMetrics).toHaveBeenCalledWith(
+      expect.objectContaining({ anchor_id: 'moneygram' })
+    );
+  });
+
+  it('clamps and rounds the rates, which the contract would otherwise refuse', async () => {
+    sdkMocks.signAndSend.mockResolvedValue({ sendTransactionResponse: { hash: 'tx-m' } });
+
+    await runBatch({
+      ...BASE_CONFIG,
+      executor: trackingExecutor(ROWS),
+      loadCorridorMetrics: async () => [
+        { ...METRICS[0]!, fillRateBps: 10_400.6, slippageBps: -3.2, settleSecondsP50: 41.6 },
+      ],
+    });
+
+    expect(sdkMocks.setCorridorMetrics).toHaveBeenCalledWith(
+      expect.objectContaining({
+        fill_rate_bps: 10_000n,
+        slippage_bps: 0n,
+        settle_seconds_p50: 42n,
+      })
+    );
+  });
+
+  it('does not roll back published outcomes when a metrics write fails', async () => {
+    const updates: string[] = [];
+    sdkMocks.signAndSend.mockResolvedValue({ sendTransactionResponse: { hash: 'tx-m' } });
+    sdkMocks.setCorridorMetrics.mockRejectedValue(new Error('HostError: contract logic rejected'));
+
+    const result = await runBatch({
+      ...BASE_CONFIG,
+      executor: trackingExecutor(ROWS, updates),
+      loadCorridorMetrics: async () => METRICS,
+    });
+
+    // The outcome is the durable thing; metrics are overwritten next tick.
+    expect(updates).toEqual(['metrics-1']);
+    expect(result.submitted).toBe(1);
+    expect(result.corridorMetricsPublished).toBe(0);
+  });
+
+  it('keeps writing the other entries when one fails, and counts the successes', async () => {
+    sdkMocks.signAndSend.mockResolvedValue({ sendTransactionResponse: { hash: 'tx-m' } });
+    sdkMocks.setCorridorMetrics
+      .mockRejectedValueOnce(new Error('HostError: contract logic rejected'))
+      .mockResolvedValueOnce({ signAndSend: sdkMocks.signAndSend });
+
+    const result = await runBatch({
+      ...BASE_CONFIG,
+      executor: trackingExecutor(ROWS),
+      retry: { maxAttempts: 1 },
+      loadCorridorMetrics: async () => METRICS,
+    });
+
+    expect(result.corridorMetricsPublished).toBe(1);
+  });
+
+  it('leaves BatchResult without corridorMetricsPublished when no loader is set', async () => {
+    sdkMocks.signAndSend.mockResolvedValue({ sendTransactionResponse: { hash: 'tx-m' } });
+
+    const result = await runBatch({ ...BASE_CONFIG, executor: trackingExecutor(ROWS) });
+
+    expect(result).not.toHaveProperty('corridorMetricsPublished');
+    expect(sdkMocks.setCorridorMetrics).not.toHaveBeenCalled();
   });
 });
