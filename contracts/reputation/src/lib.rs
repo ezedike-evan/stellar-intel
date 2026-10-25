@@ -64,7 +64,9 @@ impl ReputationContract {
 
     /// Top up the contract instance's TTL. Callable by anyone — keeping the
     /// oracle alive is permissionless — so a dormant contract cannot silently
-    /// archive between writes. Persistent entries are bumped on every write.
+    /// archive between writes. Every mutating entrypoint also extends the
+    /// instance on its success path, and persistent entries are bumped on every
+    /// write, so this is only needed for a contract that sees no writes at all.
     pub fn bump(env: Env) {
         storage::extend_instance(&env);
     }
@@ -101,19 +103,25 @@ impl ReputationContract {
     /// Step 1 of a safe admin handoff: nominate `candidate` as the next admin.
     /// The change is not live until `candidate` calls `accept_admin`.
     pub fn propose_admin(env: Env, caller: Address, candidate: Address) -> Result<(), Error> {
-        admin::propose_admin(&env, &caller, &candidate)
+        admin::propose_admin(&env, &caller, &candidate)?;
+        storage::extend_instance(&env);
+        Ok(())
     }
 
     /// Step 2 of a safe admin handoff: `candidate` accepts the pending proposal
     /// and becomes the new admin.
     pub fn accept_admin(env: Env, candidate: Address) -> Result<(), Error> {
-        admin::accept_admin(&env, &candidate)
+        admin::accept_admin(&env, &candidate)?;
+        storage::extend_instance(&env);
+        Ok(())
     }
 
     /// Cancel a pending admin proposal without transferring authority.
     /// Only the current admin may call this.
     pub fn cancel_admin_proposal(env: Env, caller: Address) -> Result<(), Error> {
-        admin::cancel_admin_proposal(&env, &caller)
+        admin::cancel_admin_proposal(&env, &caller)?;
+        storage::extend_instance(&env);
+        Ok(())
     }
 
     /// Return the pending admin candidate, if any.
@@ -183,6 +191,7 @@ impl ReputationContract {
     ) -> Result<(), Error> {
         admin::require_admin(&env, &caller)?;
         aggregate::reset(&env, &anchor_id, &corridor);
+        storage::extend_instance(&env);
         events::aggregate_reset(&env, &caller, &anchor_id, &corridor);
         Ok(())
     }
@@ -191,6 +200,7 @@ impl ReputationContract {
     pub fn reset_volume_savings(env: Env, caller: Address, corridor: String) -> Result<(), Error> {
         admin::require_admin(&env, &caller)?;
         volume_savings::reset(&env, corridor.clone());
+        storage::extend_instance(&env);
         events::volume_reset(&env, &caller, &corridor);
         Ok(())
     }
@@ -216,7 +226,9 @@ impl ReputationContract {
             outcome_hash,
             settle_seconds,
             success,
-        )
+        )?;
+        storage::extend_instance(&env);
+        Ok(())
     }
 
     /// Return the rolling aggregate for an (anchor, corridor) pair:
@@ -263,7 +275,9 @@ impl ReputationContract {
 
     /// Upgrade-admin only. Withdraw the pending upgrade proposal, if any.
     pub fn cancel_upgrade(env: Env, caller: Address) -> Result<(), Error> {
-        upgrade::cancel_upgrade(&env, &caller)
+        upgrade::cancel_upgrade(&env, &caller)?;
+        storage::extend_instance(&env);
+        Ok(())
     }
 
     /// The pending upgrade as `(wasm_hash, earliest_execution_timestamp)`, if any.
@@ -295,7 +309,9 @@ impl ReputationContract {
         caller: Address,
         candidate: Address,
     ) -> Result<(), Error> {
-        upgrade::propose_upgrade_admin(&env, &caller, &candidate)
+        upgrade::propose_upgrade_admin(&env, &caller, &candidate)?;
+        storage::extend_instance(&env);
+        Ok(())
     }
 
     /// Accept a pending upgrade-admin proposal (step 2 of 2).
@@ -303,12 +319,16 @@ impl ReputationContract {
     /// The candidate must call this itself, so a mistyped address fails to
     /// complete rather than bricking the role.
     pub fn accept_upgrade_admin(env: Env, candidate: Address) -> Result<(), Error> {
-        upgrade::accept_upgrade_admin(&env, &candidate)
+        upgrade::accept_upgrade_admin(&env, &candidate)?;
+        storage::extend_instance(&env);
+        Ok(())
     }
 
     /// Withdraw a pending upgrade-admin proposal. Current upgrade admin only.
     pub fn cancel_upgrade_proposal(env: Env, caller: Address) -> Result<(), Error> {
-        upgrade::cancel_upgrade_proposal(&env, &caller)
+        upgrade::cancel_upgrade_proposal(&env, &caller)?;
+        storage::extend_instance(&env);
+        Ok(())
     }
 
     /// The address nominated to become upgrade admin, if any.
@@ -346,7 +366,9 @@ impl ReputationContract {
             slippage_bps,
             settle_seconds_p50,
             n,
-        )
+        )?;
+        storage::extend_instance(&env);
+        Ok(())
     }
 
     /// Publish (or overwrite) the block-level rate for a corridor (issue #810).
@@ -358,7 +380,9 @@ impl ReputationContract {
         rate: i128,
         decimals: u32,
     ) -> Result<(), Error> {
-        corridor_rate::publish(&env, &publisher, corridor, rate, decimals)
+        corridor_rate::publish(&env, &publisher, corridor, rate, decimals)?;
+        storage::extend_instance(&env);
+        Ok(())
     }
 
     /// Read the latest published rate for `corridor`, or `None` if unset.
@@ -398,13 +422,17 @@ impl ReputationContract {
         anchor_id: String,
         corridor: String,
     ) -> Result<(), Error> {
-        migration::migrate_corridor(&env, &caller, anchor_id, corridor)
+        migration::migrate_corridor(&env, &caller, anchor_id, corridor)?;
+        storage::extend_instance(&env);
+        Ok(())
     }
 
     /// Migrate all registered anchors across all default corridors.
     /// Admin-only; idempotent, so it skips pairs already migrated.
     pub fn migrate_all_v2(env: Env, caller: Address) -> Result<(), Error> {
-        migration::migrate_all(&env, &caller)
+        migration::migrate_all(&env, &caller)?;
+        storage::extend_instance(&env);
+        Ok(())
     }
 
     /// V2 version of `get_corridor_aggregate`. The aggregate schema is
@@ -476,7 +504,15 @@ impl ReputationContract {
         volume_delta: i128,
         savings_delta: i128,
     ) -> Result<(), Error> {
-        volume_savings::add_volume_savings(&env, &publisher, corridor, volume_delta, savings_delta)
+        volume_savings::add_volume_savings(
+            &env,
+            &publisher,
+            corridor,
+            volume_delta,
+            savings_delta,
+        )?;
+        storage::extend_instance(&env);
+        Ok(())
     }
 
     /// Read the cumulative volume + savings for `corridor`, or `None` if

@@ -7,7 +7,10 @@
 use reputation::storage::{DataKey, TTL_EXTEND_LEDGERS};
 use reputation::{ReputationContract, ReputationContractClient};
 use soroban_sdk::{
-    testutils::{storage::Persistent as _, Address as _, Ledger},
+    testutils::{
+        storage::{Instance as _, Persistent as _},
+        Address as _, Ledger,
+    },
     vec, Address, Env, String,
 };
 
@@ -40,6 +43,22 @@ impl Fixture<'_> {
         self.env.as_contract(&self.client.address, || {
             self.env.storage().persistent().get_ttl(key)
         })
+    }
+
+    fn instance_ttl(&self) -> u32 {
+        self.env.as_contract(&self.client.address, || {
+            self.env.storage().instance().get_ttl()
+        })
+    }
+
+    /// Registers everything a publisher write needs, then lets the instance run
+    /// down to 10 ledgers from archival.
+    fn ready_to_write(&self) {
+        self.client.add_publisher(&self.admin, &self.publisher);
+        self.client.register_anchor(&self.admin, &self.anchor);
+        self.client.register_corridor(&self.admin, &self.corridor);
+        self.nearly_expire();
+        assert_eq!(self.instance_ttl(), 10);
     }
 
     /// Moves the ledger so that `TTL_EXTEND_LEDGERS - 10` of an entry's life is gone.
@@ -155,4 +174,117 @@ fn a_rejected_write_changes_nothing_including_ttls() {
     assert!(res.is_err());
     assert_eq!(f.client.recent_outcomes(&f.anchor, &10u32).len(), 0);
     assert_eq!(f.persistent_ttl(&flag), 10);
+}
+
+// ── Instance TTL (#1391) ─────────────────────────────────────────────────────
+//
+// A contract that only receives publisher writes must not let its instance
+// (admin, anchor list, publisher list, upgrade admin) run down to archival.
+
+#[test]
+fn publisher_write_extends_instance() {
+    let env = Env::default();
+    let f = setup(&env);
+    let hash = String::from_str(&env, "h");
+    f.ready_to_write();
+
+    f.client
+        .submit_outcome(&f.publisher, &f.anchor, &f.corridor, &hash, &30u64, &true);
+
+    assert_eq!(f.instance_ttl(), TTL_EXTEND_LEDGERS);
+}
+
+#[test]
+fn set_corridor_metrics_extends_instance() {
+    let env = Env::default();
+    let f = setup(&env);
+    f.ready_to_write();
+
+    f.client.set_corridor_metrics(
+        &f.publisher,
+        &f.anchor,
+        &f.corridor,
+        &9000i128,
+        &50i128,
+        &60u64,
+        &5u32,
+    );
+
+    assert_eq!(f.instance_ttl(), TTL_EXTEND_LEDGERS);
+}
+
+#[test]
+fn publish_corridor_rate_extends_instance() {
+    let env = Env::default();
+    let f = setup(&env);
+    f.ready_to_write();
+
+    f.client
+        .publish_corridor_rate(&f.publisher, &f.corridor, &1000i128, &7u32);
+
+    assert_eq!(f.instance_ttl(), TTL_EXTEND_LEDGERS);
+}
+
+#[test]
+fn add_volume_savings_extends_instance() {
+    let env = Env::default();
+    let f = setup(&env);
+    f.ready_to_write();
+
+    f.client
+        .add_volume_savings(&f.publisher, &f.corridor, &1_000i128, &10i128);
+
+    assert_eq!(f.instance_ttl(), TTL_EXTEND_LEDGERS);
+}
+
+#[test]
+fn propose_admin_extends_instance() {
+    let env = Env::default();
+    let f = setup(&env);
+    f.ready_to_write();
+
+    f.client.propose_admin(&f.admin, &Address::generate(&env));
+
+    assert_eq!(f.instance_ttl(), TTL_EXTEND_LEDGERS);
+}
+
+#[test]
+fn the_other_mutating_entrypoints_extend_the_instance_too() {
+    let env = Env::default();
+    let f = setup(&env);
+    let candidate = Address::generate(&env);
+    f.ready_to_write();
+
+    // Each step starts from a nearly-expired instance, and must end renewed.
+    let renewed = |f: &Fixture<'_>| {
+        assert_eq!(f.instance_ttl(), TTL_EXTEND_LEDGERS);
+        f.env
+            .ledger()
+            .with_mut(|l| l.sequence_number += TTL_EXTEND_LEDGERS - 10);
+        assert_eq!(f.instance_ttl(), 10);
+    };
+
+    f.client.propose_admin(&f.admin, &candidate);
+    renewed(&f);
+    f.client.cancel_admin_proposal(&f.admin);
+    renewed(&f);
+    f.client.propose_admin(&f.admin, &candidate);
+    renewed(&f);
+    f.client.accept_admin(&candidate);
+    renewed(&f);
+    // The upgrade admin is a separate role: it is still the original admin.
+    f.client.propose_upgrade_admin(&f.admin, &candidate);
+    renewed(&f);
+    f.client.cancel_upgrade_proposal(&f.admin);
+    renewed(&f);
+    f.client
+        .reset_corridor_aggregate(&candidate, &f.anchor, &f.corridor);
+    renewed(&f);
+    f.client.reset_volume_savings(&candidate, &f.corridor);
+    renewed(&f);
+    f.client
+        .migrate_corridor_v2(&candidate, &f.anchor, &f.corridor);
+    renewed(&f);
+    f.client.migrate_all_v2(&candidate);
+    assert_eq!(f.instance_ttl(), TTL_EXTEND_LEDGERS);
 }

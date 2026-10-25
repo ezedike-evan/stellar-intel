@@ -40,7 +40,10 @@ pub const PAGE_SIZE: u32 = 25;
 // touches, and the public `bump()` entrypoint lets anyone top up the instance
 // during dormant periods. Reads deliberately do NOT self-bump — that would turn
 // every read into a state write and blow the gas/footprint budgets — so liveness
-// comes from write activity plus `bump()`.
+// comes from write activity plus `bump()`. Every mutating entrypoint extends the
+// instance on its success path (a rejected call pays nothing for the extension),
+// so a contract that only ever receives publisher writes cannot run its instance
+// down to archival.
 //
 // Ledgers close ~every 5s, so ~17_280 ledgers ≈ 1 day. Extend well past the
 // bump threshold so a single write buys a long runway; both stay comfortably
