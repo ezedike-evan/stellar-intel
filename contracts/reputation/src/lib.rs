@@ -37,6 +37,7 @@ pub enum Error {
     NoPendingUpgrade = 16,
     UpgradeNotReady = 17,
     UpgradeHashMismatch = 18,
+    LimitReached = 19,
 }
 
 #[contract]

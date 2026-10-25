@@ -13,6 +13,14 @@ use soroban_sdk::{Env, String, Vec};
 use crate::storage::{self, DataKey};
 use crate::Error;
 
+/// Most anchors the registry holds. The list lives in instance storage, which
+/// every call loads, so an unbounded list would make every call dearer and past
+/// the entry-size limit would brick the whole contract (audit L-14).
+pub const MAX_ANCHORS: u32 = 200;
+
+/// Longest accepted anchor id, in characters.
+pub const MAX_ANCHOR_ID_LEN: u32 = 64;
+
 /// Load the current anchor list (empty if none registered yet).
 pub fn list(env: &Env) -> Vec<String> {
     env.storage()
@@ -27,15 +35,25 @@ pub fn list(env: &Env) -> Vec<String> {
 /// Existence is checked via a single persistent `AnchorTag` read; the full
 /// `Anchors` list is only loaded to append the new entry for `list_anchors`.
 pub fn register(env: &Env, anchor_id: String) -> Result<(), Error> {
+    if anchor_id.is_empty() || anchor_id.len() > MAX_ANCHOR_ID_LEN {
+        return Err(Error::OutOfRange);
+    }
+
     let tag_key = DataKey::AnchorTag(anchor_id.clone());
     if env.storage().persistent().has(&tag_key) {
         return Err(Error::AnchorExists);
     }
 
+    // Checked before the tag is written. A mistaken admin script loop should
+    // fail cleanly here rather than grow the list until the instance bricks.
+    let mut anchors = list(env);
+    if anchors.len() >= MAX_ANCHORS {
+        return Err(Error::LimitReached);
+    }
+
     env.storage().persistent().set(&tag_key, &true);
     storage::extend_persistent(env, &tag_key);
 
-    let mut anchors = list(env);
     anchors.push_back(anchor_id);
     env.storage().instance().set(&DataKey::Anchors, &anchors);
     Ok(())

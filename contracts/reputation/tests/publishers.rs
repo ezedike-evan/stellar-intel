@@ -1,5 +1,6 @@
 #![cfg(test)]
 
+use reputation::publishers::MAX_PUBLISHERS;
 use reputation::{Error, ReputationContract, ReputationContractClient};
 use soroban_sdk::{testutils::Address as _, Address, Env, String};
 
@@ -93,4 +94,23 @@ fn whitelisted_admin_can_submit() {
 
     let outcomes = client.recent_outcomes(&anchor_id, &10);
     assert_eq!(outcomes.len(), 1);
+}
+
+#[test]
+fn add_publisher_stops_at_max() {
+    let env = Env::default();
+    env.mock_all_auths();
+    let (client, admin) = setup(&env);
+
+    for _ in 0..MAX_PUBLISHERS {
+        client.add_publisher(&admin, &Address::generate(&env));
+    }
+
+    let one_too_many = Address::generate(&env);
+    let res = client.try_add_publisher(&admin, &one_too_many);
+
+    assert_eq!(res, Err(Ok(Error::LimitReached)));
+    assert_eq!(client.list_publishers().len(), MAX_PUBLISHERS);
+    // The refused add left no whitelist flag: it cannot publish.
+    assert!(!client.list_publishers().iter().any(|p| p == one_too_many));
 }

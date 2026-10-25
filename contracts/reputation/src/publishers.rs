@@ -14,6 +14,11 @@ use soroban_sdk::{Address, Env, String, Vec};
 use crate::storage::{self, DataKey};
 use crate::Error;
 
+/// Most publishers the whitelist holds. The list lives in instance storage,
+/// which every call loads; a handful of publishers is the real deployment, so
+/// the cap is small (audit L-14).
+pub const MAX_PUBLISHERS: u32 = 20;
+
 /// Load the current publisher whitelist (empty if none registered yet).
 pub fn list(env: &Env) -> Vec<Address> {
     env.storage()
@@ -33,10 +38,15 @@ pub fn add(env: &Env, publisher: Address) -> Result<(), Error> {
         return Err(Error::PublisherExists);
     }
 
+    // Checked before the flag is written, so a refused add leaves no trace.
+    let mut publishers = list(env);
+    if publishers.len() >= MAX_PUBLISHERS {
+        return Err(Error::LimitReached);
+    }
+
     env.storage().persistent().set(&flag_key, &true);
     storage::extend_persistent(env, &flag_key);
 
-    let mut publishers = list(env);
     publishers.push_back(publisher);
     env.storage()
         .instance()
