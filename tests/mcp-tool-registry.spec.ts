@@ -51,6 +51,8 @@ const EXPECTED_TOOLS: Record<string, { required: string[]; structured: boolean }
   'intel.corridors': { required: [], structured: true },
   'intel.leaderboard': { required: [], structured: false },
   'intel.probe.coverage': { required: [], structured: false },
+  // The inputs are named after the on-ramp intent (sourceAsset / destinationAsset),
+  // not the off-ramp quote's from / to: #1995 shipped them and clients depend on them.
   'intel.onramp.quote': {
     required: ['sourceAsset', 'destinationAsset', 'amount'],
     structured: true,
@@ -113,6 +115,25 @@ describe('MCP tool registry (#1052)', () => {
       expect(Boolean(tool.outputSchema)).toBe(expected.structured);
     }
   );
+
+  it('has no on-ramp execute tool: KYC and the fiat payment are browser-only (#1485)', () => {
+    const names = tools.map((t) => t.name);
+
+    expect(names).toContain('intel.onramp.prepare');
+    expect(names).not.toContain('intel.onramp.execute');
+  });
+
+  it('states in the on-ramp prepare description that it does not execute (#1485)', () => {
+    const prepare = tools.find((t) => t.name === 'intel.onramp.prepare');
+
+    expect(prepare?.description).toContain('Does not execute.');
+  });
+
+  it('describes the on-ramp quote as an estimate (#1484)', () => {
+    const quote = tools.find((t) => t.name === 'intel.onramp.quote');
+
+    expect(quote?.description).toMatch(/indicative estimate/i);
+  });
 
   it('gives every tool a title and a description a model can route on', () => {
     for (const tool of tools) {

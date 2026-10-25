@@ -1,185 +1,268 @@
 'use client';
 
 import { useEffect, useRef, useState } from 'react';
-import { authenticate } from '@/lib/stellar/sep10';
-import { initiateDeposit } from '@/lib/stellar/sep24';
+import { authenticate, NetworkMismatchError } from '@/lib/stellar/sep10';
+import { startDepositFlow } from '@/lib/stellar/sep24';
 import { getResolvedAnchorById } from '@/lib/stellar/anchors';
-import {
-  assertSep38Capable,
-  postSep38Quote,
-  onQuoteExpired,
-  QuoteExpiredError,
-} from '@/lib/stellar/sep38';
 import { classifyExecuteError, isRetryableExecuteError } from '@/lib/errors/messages';
-import { QuotePill } from '@/components/ui/QuotePill';
+import { acceptTerms, hasAcceptedTerms } from '@/lib/consent';
+import { Button } from '@/components/ui/Button';
+import { ConsentModal } from '@/components/offramp/ConsentModal';
 import { KycIframe } from '@/components/offramp/KycIframe';
-import type { AnchorRate, Sep38Quote } from '@/types';
+import { TrustlinePreflight } from './TrustlinePreflight';
+import type { DepositRate } from '@/types';
 
-// ─── Step definitions ─────────────────────────────────────────────────────────
+// ─── Steps ────────────────────────────────────────────────────────────────────
 
 export type DepositDrawerStep =
-  'idle' | 'authenticating' | 'quoting' | 'initiating' | 'kyc' | 'done' | 'error';
+  'idle' | 'preflight' | 'authenticating' | 'initiating' | 'interactive' | 'done' | 'error';
 
 const STEP_LABELS: Record<DepositDrawerStep, string> = {
   idle: 'Ready',
-  authenticating: 'Proving wallet ownership to anchor…',
-  quoting: 'Locking in a firm quote…',
-  initiating: 'Initiating deposit…',
-  kyc: 'Complete deposit in popup…',
-  done: 'Deposit submitted',
+  preflight: 'Checking your wallet can receive the asset…',
+  authenticating: 'Proving wallet ownership to the anchor…',
+  initiating: 'Opening the anchor’s deposit window…',
+  interactive: 'Complete the deposit in the anchor’s window',
+  done: 'Deposit started',
   error: 'Something went wrong',
 };
+
+const ORDERED_STEPS: DepositDrawerStep[] = [
+  'preflight',
+  'authenticating',
+  'initiating',
+  'interactive',
+];
+
+const CANCELLED = 'User cancelled the transaction';
 
 // ─── Props ────────────────────────────────────────────────────────────────────
 
 export interface DepositDrawerProps {
-  rate: AnchorRate | null;
+  rate: DepositRate | null;
+  /** Fiat amount the user intends to deposit, shown to them. The anchor is sent asset units. */
   amount: string;
   publicKey: string;
   onClose: () => void;
-  onDepositStarted?: (transactionId: string, url: string) => void;
-  onExecuteStarted?: (transactionId: string, url: string) => void;
+  onDepositStarted: (
+    transactionId: string,
+    transferServer: string,
+    jwt: string,
+    anchorHomeDomain: string
+  ) => void;
+}
+
+/** `stellar:CODE:ISSUER` / `stellar:native` → the asset's code and issuer. */
+function parseAssetId(assetId: string): { code: string; issuer: string } {
+  if (assetId === 'stellar:native') return { code: 'XLM', issuer: '' };
+  const [, code = '', issuer = ''] = assetId.split(':');
+  return { code, issuer };
+}
+
+/**
+ * SEP-24 reads `amount` in units of the asset being deposited, not in the fiat the
+ * user pays, so the row's gross asset amount is what goes to the anchor. Seven
+ * decimals is Stellar's precision; trailing zeros are dropped.
+ */
+export function toAssetAmount(assetAmount: number | undefined): string {
+  if (assetAmount === undefined || !Number.isFinite(assetAmount) || assetAmount <= 0) {
+    throw new Error(
+      'This estimate has no asset amount to start a deposit from. Refresh the rates.'
+    );
+  }
+  return assetAmount
+    .toFixed(7)
+    .replace(/(\.\d*?)0+$/, '$1')
+    .replace(/\.$/, '');
 }
 
 // ─── Component ────────────────────────────────────────────────────────────────
 
+/**
+ * Starts a deposit: trustline preflight, SEP-10 authentication, then the
+ * anchor's interactive SEP-24 window. There is no payment for the user to sign;
+ * the fiat is paid to the anchor from inside its own window. Every figure shown
+ * is an estimate, because the anchor sets the final rate there.
+ */
 export function DepositDrawer({
   rate,
   amount,
   publicKey,
   onClose,
   onDepositStarted,
-  onExecuteStarted,
 }: DepositDrawerProps) {
   const [step, setStep] = useState<DepositDrawerStep>('idle');
   const [errorMsg, setErrorMsg] = useState<string | null>(null);
   const [errorIsRetryable, setErrorIsRetryable] = useState(true);
-  const [kycUrl, setKycUrl] = useState<string | null>(null);
-  const [kycOrigin, setKycOrigin] = useState<string | null>(null);
-  const [firmQuote, setFirmQuote] = useState<Sep38Quote | null>(null);
+  const [interactive, setInteractive] = useState<{ url: string; origin: string } | null>(null);
+  const [showConsent, setShowConsent] = useState(false);
 
-  const quoteExpiredRef = useRef(false);
-  const quoteExpiryCleanupRef = useRef<(() => void) | null>(null);
+  // Settle the awaits inside handleDeposit from component callbacks, without
+  // reaching for window globals.
+  const preflightResolveRef = useRef<(() => void) | null>(null);
+  const preflightRejectRef = useRef<((error: Error) => void) | null>(null);
   const kycResolveRef = useRef<((transactionId: string) => void) | null>(null);
   const kycRejectRef = useRef<((error: Error) => void) | null>(null);
   const abortRef = useRef<AbortController | null>(null);
 
-  useEffect(() => {
-    return () => {
-      abortRef.current?.abort();
-      quoteExpiryCleanupRef.current?.();
-    };
-  }, []);
+  const drawerRef = useRef<HTMLDivElement>(null);
+  const previouslyFocusedRef = useRef<HTMLElement | null>(null);
 
   const isOpen = rate !== null;
+  const isRunning = !['idle', 'done', 'error'].includes(step);
+  const asset = rate ? parseAssetId(rate.asset) : null;
+  const fiat = rate?.corridorId.split('-')[1]?.toUpperCase() ?? '';
+
+  useEffect(() => {
+    return () => abortRef.current?.abort();
+  }, []);
+
+  // A fresh drawer for a different anchor starts from the top.
+  const rateKey = rate ? `${rate.anchorId}:${rate.asset}` : null;
+  useEffect(() => {
+    setStep('idle');
+    setErrorMsg(null);
+    setInteractive(null);
+  }, [rateKey]);
+
+  // Focus trap, Escape and focus restore, as in the off-ramp ExecuteDrawer.
+  useEffect(() => {
+    if (!isOpen) return;
+    previouslyFocusedRef.current = document.activeElement as HTMLElement | null;
+    return () => previouslyFocusedRef.current?.focus();
+  }, [isOpen]);
+
+  useEffect(() => {
+    if (!isOpen || showConsent) return;
+    const getFocusable = () =>
+      drawerRef.current
+        ? Array.from(
+            drawerRef.current.querySelectorAll<HTMLElement>(
+              'button:not([disabled]), [href], input:not([disabled]), select:not([disabled]), textarea:not([disabled]), iframe, [tabindex]:not([tabindex="-1"])'
+            )
+          )
+        : [];
+    getFocusable()[0]?.focus();
+
+    const onKeyDown = (event: KeyboardEvent) => {
+      if (event.key === 'Escape' && (step === 'idle' || step === 'error')) {
+        onClose();
+        return;
+      }
+      if (event.key !== 'Tab') return;
+      const focusable = getFocusable();
+      if (focusable.length === 0) return;
+      const first = focusable[0]!;
+      const last = focusable[focusable.length - 1]!;
+      if (event.shiftKey && document.activeElement === first) {
+        event.preventDefault();
+        last.focus();
+      } else if (!event.shiftKey && document.activeElement === last) {
+        event.preventDefault();
+        first.focus();
+      }
+    };
+    window.addEventListener('keydown', onKeyDown);
+    return () => window.removeEventListener('keydown', onKeyDown);
+  }, [isOpen, showConsent, step, onClose]);
+
+  // Pin the page behind the drawer; position:fixed is what holds on iOS Safari.
+  useEffect(() => {
+    if (!isOpen) return;
+    const { body } = document;
+    const scrollY = window.scrollY;
+    const prev = {
+      position: body.style.position,
+      top: body.style.top,
+      width: body.style.width,
+      overflow: body.style.overflow,
+    };
+    body.style.position = 'fixed';
+    body.style.top = `-${scrollY}px`;
+    body.style.width = '100%';
+    body.style.overflow = 'hidden';
+    return () => {
+      body.style.position = prev.position;
+      body.style.top = prev.top;
+      body.style.width = prev.width;
+      body.style.overflow = prev.overflow;
+      window.scrollTo(0, scrollY);
+    };
+  }, [isOpen]);
 
   async function handleDeposit() {
-    if (!rate) return;
+    if (!rate || !asset) return;
+
+    // First deposit for this wallet needs the Terms acknowledged. Gated here, not
+    // on the button, so the error-state Retry is covered too.
+    if (!hasAcceptedTerms(publicKey)) {
+      setShowConsent(true);
+      return;
+    }
 
     abortRef.current?.abort();
     abortRef.current = new AbortController();
     const { signal } = abortRef.current;
 
-    setStep('authenticating');
     setErrorMsg(null);
-    setFirmQuote(null);
-    quoteExpiredRef.current = false;
-    quoteExpiryCleanupRef.current?.();
-    quoteExpiryCleanupRef.current = null;
+    setInteractive(null);
 
     try {
-      // Step 0 — Resolve anchor capabilities
-      const anchor = await getResolvedAnchorById(rate.anchorId);
+      // Step 1 — the wallet must exist and hold a trustline, or the payout cannot land.
+      setStep('preflight');
+      await new Promise<void>((resolve, reject) => {
+        preflightResolveRef.current = resolve;
+        preflightRejectRef.current = reject;
+      });
+      preflightResolveRef.current = null;
+      preflightRejectRef.current = null;
 
-      // Step 1 — SEP-10 auth
+      // Step 2 — SEP-10.
+      setStep('authenticating');
+      const anchor = await getResolvedAnchorById(rate.anchorId);
       const auth = await authenticate(anchor, publicKey);
 
-      // Step 1.5 — Lock in a firm SEP-38 quote, when the anchor advertises one
-      let quoteId: string | undefined;
-      let quoteServer: string | null = null;
-      try {
-        quoteServer = assertSep38Capable(anchor);
-      } catch {
-        quoteServer = null;
-      }
-
-      if (quoteServer) {
-        setStep('quoting');
-        try {
-          const parts = rate.corridorId.split('-');
-          const fiatCode =
-            (rate as unknown as { fiatCode?: string }).fiatCode ||
-            (parts[0]?.toLowerCase() === anchor.assetCode.toLowerCase()
-              ? parts[1]
-              : parts[0]
-            )?.toUpperCase() ||
-            'USD';
-
-          const quote = await postSep38Quote(quoteServer, auth.jwt, {
-            sell_asset: `iso4217:${fiatCode}`,
-            buy_asset: `stellar:${anchor.assetCode}:${anchor.assetIssuer}`,
-            sell_amount: amount,
-            context: 'sep24',
-          });
-          setFirmQuote(quote);
-          quoteId = quote.id;
-          quoteExpiryCleanupRef.current = onQuoteExpired(quote, () => {
-            quoteExpiredRef.current = true;
-          });
-        } catch (quoteErr) {
-          // If quoting throws, fall back to the indicative flow and log it. Never block the deposit.
-          // eslint-disable-next-line no-console
-          console.warn(
-            '[DepositDrawer] SEP-38 firm quote failed, falling back to indicative rate:',
-            quoteErr
-          );
-          setFirmQuote(null);
-          quoteId = undefined;
-        }
-      }
-
-      // Step 2 — Initiate SEP-24 deposit
+      // Step 3 — open the interactive deposit.
       setStep('initiating');
-      if (quoteExpiredRef.current) throw new QuoteExpiredError();
-
-      const depositResp = await initiateDeposit(
+      const session = await startDepositFlow(
         anchor,
         {
-          assetCode: anchor.assetCode,
-          assetIssuer: anchor.assetIssuer,
-          amount,
-          account: publicKey,
           jwt: auth.jwt,
-          ...(quoteId ? { quoteId } : {}),
+          assetCode: asset.code,
+          assetIssuer: asset.issuer,
+          amount: toAssetAmount(rate.assetAmount),
+          account: publicKey,
         },
         signal
       );
 
-      // Step 3 — KYC interactive window
-      setStep('kyc');
-      const url = new URL(depositResp.url);
-      setKycUrl(depositResp.url);
-      setKycOrigin(url.origin);
-
+      // Step 4 — the anchor's window, where KYC and the fiat payment happen.
+      setInteractive({ url: session.depositUrl, origin: new URL(session.depositUrl).origin });
+      setStep('interactive');
       const transactionId = await new Promise<string>((resolve, reject) => {
         kycResolveRef.current = resolve;
         kycRejectRef.current = reject;
       });
-
       kycResolveRef.current = null;
       kycRejectRef.current = null;
 
-      if (quoteExpiredRef.current) throw new QuoteExpiredError();
-
       setStep('done');
-      onDepositStarted?.(transactionId, depositResp.url);
-      onExecuteStarted?.(transactionId, depositResp.url);
+      onDepositStarted(transactionId, session.transferServer, auth.jwt, anchor.homeDomain);
       onClose();
     } catch (err) {
+      // Wrong Freighter network: tell the user to switch, never retry the sign.
+      if (err instanceof NetworkMismatchError) {
+        setErrorMsg(err.message);
+        setErrorIsRetryable(false);
+        setStep('error');
+        return;
+      }
+
       if ((err as Error).name === 'AbortError') return;
 
       const message = err instanceof Error ? err.message : 'Unknown error';
       if (message.includes('User rejected') || message.includes('User cancelled')) {
+        setInteractive(null);
         setStep('idle');
         return;
       }
@@ -188,56 +271,54 @@ export function DepositDrawer({
       setErrorIsRetryable(isRetryableExecuteError(err));
       setStep('error');
     } finally {
+      preflightResolveRef.current = null;
+      preflightRejectRef.current = null;
       kycResolveRef.current = null;
       kycRejectRef.current = null;
     }
   }
 
-  const isRunning = !['idle', 'done', 'error'].includes(step);
-
-  const handleKycComplete = (transactionId: string) => {
-    kycResolveRef.current?.(transactionId);
+  const handleConsentAccept = () => {
+    acceptTerms(publicKey);
+    setShowConsent(false);
+    void handleDeposit();
   };
 
-  const handleKycCancel = () => {
-    kycRejectRef.current?.(new Error('User cancelled the transaction'));
+  const handleCancel = () => {
+    preflightRejectRef.current?.(new Error(CANCELLED));
+    kycRejectRef.current?.(new Error(CANCELLED));
   };
-
-  const handleKycError = (error: Error) => {
-    kycRejectRef.current?.(error);
-  };
-
-  const fiat = rate?.corridorId.split('-')[0]?.toUpperCase() ?? 'USD';
-  const crypto = rate?.corridorId.split('-')[1]?.toUpperCase() ?? 'USDC';
 
   return (
     <>
-      {isOpen && (
-        <div
-          className="fixed inset-0 z-40 bg-black/40"
-          onClick={isRunning ? undefined : onClose}
-          aria-hidden="true"
-        />
-      )}
+      <div
+        className={`fixed inset-0 z-40 bg-black/40 backdrop-blur-sm transition-opacity duration-200 motion-reduce:transition-none ${
+          isOpen ? 'opacity-100' : 'pointer-events-none opacity-0'
+        }`}
+        onClick={isRunning ? undefined : onClose}
+        aria-hidden="true"
+      />
 
       <div
+        ref={drawerRef}
         role="dialog"
         aria-modal="true"
         aria-label="Deposit"
-        className={`fixed bottom-0 left-0 right-0 z-50 rounded-t-2xl bg-white shadow-2xl transition-transform duration-300 dark:bg-gray-900 sm:bottom-auto sm:left-auto sm:right-8 sm:top-1/2 sm:w-96 sm:-translate-y-1/2 sm:rounded-2xl ${
-          isOpen ? 'translate-y-0' : 'translate-y-full sm:translate-y-full'
+        aria-hidden={!isOpen}
+        className={`bg-bg-subtle fixed right-0 bottom-0 left-0 z-50 max-h-[90dvh] overflow-y-auto rounded-t-2xl transition-transform duration-300 motion-reduce:transition-none lg:top-1/2 lg:right-auto lg:bottom-auto lg:left-1/2 lg:w-full lg:max-w-[480px] lg:-translate-x-1/2 lg:-translate-y-1/2 lg:rounded-2xl ${
+          isOpen ? 'translate-y-0' : 'translate-y-full lg:translate-y-full'
         }`}
       >
-        <div className="p-6">
+        <div className="px-6 pt-5 pb-6 sm:p-6">
           <div className="mb-5 flex items-center justify-between">
-            <h2 className="text-lg font-semibold text-gray-900 dark:text-white">
+            <h2 className="text-primary-text text-lg font-semibold">
               Deposit via {rate?.anchorName ?? ''}
             </h2>
             <button
               onClick={onClose}
               disabled={isRunning}
               aria-label="Close"
-              className="rounded-lg p-1 text-secondary-text hover:text-primary-text disabled:opacity-40"
+              className="text-secondary-text hover:text-primary-text focus-visible:ring-accent rounded-lg p-1 focus-visible:ring-2 focus-visible:outline-none disabled:opacity-40"
             >
               <svg
                 aria-hidden="true"
@@ -256,171 +337,153 @@ export function DepositDrawer({
             </button>
           </div>
 
-          {rate && (
-            <div className="mb-5 rounded-xl border border-gray-200 p-4 dark:border-gray-700">
+          {rate && asset && (
+            <div className="border-border mb-5 rounded-xl border p-4">
               <dl className="space-y-2 text-sm">
                 <div className="flex justify-between">
-                  <dt className="text-gray-500">You send</dt>
-                  <dd className="font-medium text-gray-900 dark:text-white">
+                  <dt className="text-fg-muted">You pay</dt>
+                  <dd className="text-primary-text font-medium tabular-nums">
                     {amount} {fiat}
                   </dd>
                 </div>
-                <div className="flex justify-between border-t border-gray-100 pt-2 dark:border-gray-700">
-                  <dt className="font-medium text-gray-700 dark:text-gray-300">You receive</dt>
-                  <dd className="font-semibold text-green-600 dark:text-green-400">
-                    {firmQuote
-                      ? `${firmQuote.buy_amount} ${crypto}`
-                      : `${(rate.totalReceived ?? 0).toLocaleString()} ${crypto}`}
-                  </dd>
-                </div>
-                {firmQuote && (
-                  <div className="flex items-center justify-between border-t border-gray-100 pt-2 dark:border-gray-700">
-                    <dt className="text-gray-500">Price</dt>
-                    <dd>
-                      <QuotePill
-                        source="sep38"
-                        expiresAt={new Date(firmQuote.expires_at)}
-                        onExpire={() => {
-                          quoteExpiredRef.current = true;
-                        }}
-                      />
+                {rate.fee !== null && (
+                  <div className="flex justify-between">
+                    <dt className="text-fg-muted">Fee</dt>
+                    <dd className="text-secondary-text tabular-nums">
+                      {rate.fee} {asset.code}
                     </dd>
                   </div>
                 )}
+                <div className="border-border flex justify-between border-t pt-2">
+                  <dt className="text-secondary-text font-medium">Estimated credit</dt>
+                  <dd className="text-primary-text font-semibold tabular-nums">
+                    {rate.totalReceived === null
+                      ? '—'
+                      : `≈ ${rate.totalReceived.toLocaleString(undefined, { maximumFractionDigits: 2 })} ${asset.code}`}
+                  </dd>
+                </div>
               </dl>
+              <p className="text-fg-muted mt-3 text-xs">
+                Estimate only. The anchor sets the final rate and fees in its deposit window.
+              </p>
             </div>
           )}
 
-          {step === 'kyc' && kycUrl && kycOrigin && (
+          {step === 'preflight' && asset && (
             <div className="mb-5">
-              <KycIframe
-                url={kycUrl}
-                origin={kycOrigin}
-                onComplete={handleKycComplete}
-                onCancel={handleKycCancel}
-                onError={handleKycError}
+              <TrustlinePreflight
+                publicKey={publicKey}
+                asset={asset}
+                onReady={() => preflightResolveRef.current?.()}
               />
             </div>
           )}
 
-          {step !== 'kyc' && <StepIndicator step={step} />}
+          {step === 'interactive' && interactive && (
+            <div className="mb-5">
+              <KycIframe
+                url={interactive.url}
+                origin={interactive.origin}
+                onComplete={(transactionId) => kycResolveRef.current?.(transactionId)}
+                onCancel={() => kycRejectRef.current?.(new Error(CANCELLED))}
+                onError={(error) => kycRejectRef.current?.(error)}
+              />
+            </div>
+          )}
+
+          {step !== 'idle' && step !== 'interactive' && <StepIndicator step={step} />}
 
           {step === 'error' && errorMsg && (
-            <p className="mt-3 rounded-lg bg-red-50 px-3 py-2 text-sm text-red-600 dark:bg-red-950/30 dark:text-red-400">
+            <p
+              role="alert"
+              className="bg-bg-sunken text-status-down mt-3 rounded-lg px-3 py-2 text-sm"
+            >
               {errorMsg}
             </p>
           )}
 
-          {step !== 'kyc' && (
-            <div className="mt-5">
-              {step === 'idle' && (
-                <button
-                  onClick={handleDeposit}
-                  className="w-full rounded-xl bg-blue-600 py-3 text-sm font-semibold text-white transition-colors hover:bg-blue-700 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:ring-offset-2"
-                >
-                  Start Deposit
-                </button>
-              )}
-              {isRunning && (
-                <button
-                  disabled
-                  className="flex w-full items-center justify-center gap-2 rounded-xl bg-blue-600 py-3 text-sm font-semibold text-white opacity-75"
-                >
-                  <Spinner />
-                  {STEP_LABELS[step]}
-                </button>
-              )}
-              {step === 'error' && (
-                <button
-                  onClick={handleDeposit}
-                  className="w-full rounded-xl bg-blue-600 py-3 text-sm font-semibold text-white transition-colors hover:bg-blue-700"
-                >
-                  {errorIsRetryable ? 'Retry' : 'Close'}
-                </button>
-              )}
-              {step === 'done' && (
-                <button
-                  onClick={onClose}
-                  className="w-full rounded-xl bg-gray-100 py-3 text-sm font-semibold text-gray-900 transition-colors hover:bg-gray-200 dark:bg-gray-700 dark:text-white dark:hover:bg-gray-600"
-                >
-                  Close
-                </button>
-              )}
-            </div>
-          )}
+          <div className="mt-5 flex gap-3">
+            {step === 'idle' && (
+              <Button className="w-full" onClick={() => void handleDeposit()}>
+                Start deposit
+              </Button>
+            )}
+            {(step === 'preflight' || step === 'interactive') && (
+              <Button variant="secondary" className="w-full" onClick={handleCancel}>
+                Cancel deposit
+              </Button>
+            )}
+            {(step === 'authenticating' || step === 'initiating') && (
+              <Button className="w-full" disabled>
+                {STEP_LABELS[step]}
+              </Button>
+            )}
+            {step === 'error' && (
+              <Button
+                className="w-full"
+                variant={errorIsRetryable ? 'primary' : 'secondary'}
+                onClick={errorIsRetryable ? () => void handleDeposit() : onClose}
+              >
+                {errorIsRetryable ? 'Retry' : 'Close'}
+              </Button>
+            )}
+          </div>
         </div>
       </div>
+
+      <ConsentModal
+        open={showConsent}
+        onAccept={handleConsentAccept}
+        onCancel={() => setShowConsent(false)}
+      />
     </>
   );
 }
 
 // ─── Sub-components ───────────────────────────────────────────────────────────
 
-const ORDERED_STEPS: DepositDrawerStep[] = [
-  'authenticating',
-  'quoting',
-  'initiating',
-  'kyc',
-  'done',
-];
-
 function StepIndicator({ step }: { step: DepositDrawerStep }) {
-  if (step === 'idle') return null;
+  const currentIdx = ORDERED_STEPS.indexOf(step);
 
   return (
-    <ol className="space-y-1">
-      {ORDERED_STEPS.map((s) => {
-        const currentIdx = ORDERED_STEPS.indexOf(step === 'error' ? 'authenticating' : step);
-        const thisIdx = ORDERED_STEPS.indexOf(s);
-        const isComplete = step !== 'error' && thisIdx < ORDERED_STEPS.indexOf(step);
-        const isActive = s === step && step !== 'error' && step !== 'done';
-        const isPending = thisIdx > currentIdx && step !== 'done';
+    <ol className="space-y-1" aria-label="Deposit progress">
+      {ORDERED_STEPS.map((s, idx) => {
+        const isComplete = step === 'done' || (currentIdx !== -1 && idx < currentIdx);
+        const isActive = s === step;
 
         return (
-          <li key={s} className="flex items-center gap-2 text-xs">
+          <li
+            key={s}
+            aria-current={isActive ? 'step' : undefined}
+            className="flex items-center gap-2 text-xs"
+          >
             <span
-              className={`flex h-5 w-5 flex-shrink-0 items-center justify-center rounded-full text-[10px] font-bold
-                ${isComplete ? 'bg-green-500 text-white' : ''}
-                ${isActive ? 'bg-blue-600 text-white animate-pulse' : ''}
-                ${isPending ? 'bg-bg-sunken text-secondary-text' : ''}
-                ${step === 'done' ? 'bg-green-500 text-white' : ''}
-              `}
+              aria-hidden="true"
+              className={`flex h-5 w-5 flex-shrink-0 items-center justify-center rounded-full text-[10px] font-bold ${
+                isComplete
+                  ? 'bg-status-up text-background'
+                  : isActive
+                    ? 'bg-accent text-background animate-pulse'
+                    : 'bg-bg-sunken text-fg-muted'
+              }`}
             >
-              {isComplete || step === 'done' ? '✓' : thisIdx + 1}
+              {idx + 1}
             </span>
             <span
               className={
                 isActive
-                  ? 'font-medium text-blue-600 dark:text-blue-400'
-                  : isComplete || step === 'done'
-                    ? 'text-gray-500 line-through dark:text-gray-400'
+                  ? 'text-accent font-medium'
+                  : isComplete
+                    ? 'text-fg-muted line-through'
                     : 'text-secondary-text'
               }
             >
               {STEP_LABELS[s]}
+              {isComplete && <span className="sr-only"> (done)</span>}
             </span>
           </li>
         );
       })}
     </ol>
-  );
-}
-
-function Spinner() {
-  return (
-    <svg
-      className="h-4 w-4 animate-spin"
-      xmlns="http://www.w3.org/2000/svg"
-      fill="none"
-      viewBox="0 0 24 24"
-      aria-hidden="true"
-    >
-      <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" />
-      <path
-        className="opacity-75"
-        fill="currentColor"
-        d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z"
-      />
-    </svg>
   );
 }

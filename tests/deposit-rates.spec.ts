@@ -12,6 +12,7 @@ vi.mock('@/lib/stellar/anchors', async () => {
 
 import * as anchors from '@/lib/stellar/anchors';
 import {
+  depositLimitStatus,
   estimateDepositForAnchor,
   fetchDepositRates,
   InvalidDepositAmountError,
@@ -20,7 +21,7 @@ import {
 } from '@/lib/stellar/deposit-rates';
 import { serverRatesConfig } from '@/lib/stellar/server-rates';
 import type { Sep24InfoResponse } from '@/lib/stellar/sep24';
-import type { Anchor, Corridor, Sep1TomlData } from '@/types';
+import type { Anchor, Corridor, DepositRate, Sep1TomlData } from '@/types';
 
 const mockGetAnchorsByCorridorId = vi.mocked(anchors.getAnchorsByCorridorId);
 const mockGetCorridorById = vi.mocked(anchors.getCorridorById);
@@ -380,6 +381,8 @@ describe('estimateDepositForAnchor', () => {
     // (100 - 1) * 0.98 = 97.02
     expect(rate.totalReceived).toBeCloseTo(97.02, 7);
     expect(rate.feeType).toBe('combined');
+    // 150000 / 1500 = 100 USDC before fees: the figure the asset-unit limits apply to.
+    expect(rate.assetAmount).toBeCloseTo(100, 7);
     expect(rate.minAmount).toBe(5);
     expect(rate.maxAmount).toBe(500);
     expect(rate.referenceSource).toBe('test USD→NGN reference');
@@ -437,5 +440,55 @@ describe('estimateDepositForAnchor', () => {
     expect(rate.asset).toBe(USDC_ID);
     expect(deps.resolveAnchor).not.toHaveBeenCalled();
     expect(deps.getSep24Info).not.toHaveBeenCalled();
+  });
+});
+
+describe('depositLimitStatus (#1477)', () => {
+  function row(over: Partial<DepositRate>): DepositRate {
+    return {
+      anchorId: 'anchor-a',
+      anchorName: 'Anchor A',
+      corridorId: 'usdc-ngn',
+      asset: USDC_ID,
+      fiatAmount: 150000,
+      fee: null,
+      feeType: 'flat',
+      exchangeRate: 0.00066,
+      totalReceived: 100,
+      assetAmount: 100,
+      source: 'sep24-fee',
+      updatedAt: new Date('2026-10-25T08:00:00.000Z'),
+      ...over,
+    };
+  }
+
+  it('is ok when the anchor publishes no limits', () => {
+    expect(depositLimitStatus(row({}))).toBe('ok');
+  });
+
+  it('is ok when the row has no asset amount to measure', () => {
+    const { assetAmount: _unused, ...withoutAmount } = row({ minAmount: 500, maxAmount: 600 });
+    expect(depositLimitStatus(withoutAmount)).toBe('ok');
+  });
+
+  it('is below_min under the minimum and above_max over the maximum', () => {
+    expect(depositLimitStatus(row({ minAmount: 100.01 }))).toBe('below_min');
+    expect(depositLimitStatus(row({ maxAmount: 99.99 }))).toBe('above_max');
+  });
+
+  it('treats the boundaries themselves as ok', () => {
+    expect(depositLimitStatus(row({ minAmount: 100 }))).toBe('ok');
+    expect(depositLimitStatus(row({ maxAmount: 100 }))).toBe('ok');
+    expect(depositLimitStatus(row({ minAmount: 100, maxAmount: 100 }))).toBe('ok');
+  });
+
+  it('judges asset units, not the fiat amount', () => {
+    // 150000 NGN is far above a 5000 limit, but only 100 USDC is being bought.
+    expect(depositLimitStatus(row({ fiatAmount: 150000, maxAmount: 5000 }))).toBe('ok');
+  });
+
+  it('only looks at one-sided limits', () => {
+    expect(depositLimitStatus(row({ minAmount: 50 }))).toBe('ok');
+    expect(depositLimitStatus(row({ maxAmount: 500 }))).toBe('ok');
   });
 });

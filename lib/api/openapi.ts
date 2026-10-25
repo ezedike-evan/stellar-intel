@@ -580,6 +580,96 @@ registry.registerPath({
     },
   },
 });
+const OnrampQuoteRateSchema = z.object({
+  anchorId: z.string(),
+  anchorName: z.string(),
+  corridorId: z.string(),
+  asset: z.string().describe('SEP-38 identifier of the credited asset'),
+  fiatAmount: z.number().describe('Fiat the user pays'),
+  fee: z.number().nullable().describe('Flat fee in units of the credited asset'),
+  feeType: z.enum(['flat', 'percent', 'combined']),
+  exchangeRate: z.number().nullable().describe('Asset credited per 1 fiat unit, net of fees'),
+  totalReceived: z.number().nullable(),
+  assetAmount: z
+    .number()
+    .optional()
+    .describe('Asset units the fiat buys before fees; the figure minAmount/maxAmount apply to'),
+  minAmount: z.number().optional().describe('Anchor deposit minimum, in asset units'),
+  maxAmount: z.number().optional().describe('Anchor deposit maximum, in asset units'),
+  source: z.enum(['sep38', 'sep24-fee', 'unavailable']),
+  referenceSource: z.string().optional(),
+  updatedAt: z.string().describe('ISO 8601 timestamp'),
+});
+
+registry.registerPath({
+  method: 'get',
+  path: '/api/v1/onramp/quote',
+  summary: 'Get indicative deposit (on-ramp) quotes',
+  description:
+    'Returns an indicative estimate per anchor for depositing a fiat amount into a Stellar asset. SEP-24 publishes deposit fees but the anchor sets the final conversion inside its interactive deposit window, so every figure is an estimate.',
+  tags: ['On-ramp'],
+  request: {
+    query: z.object({
+      corridor: z.string().openapi({
+        param: { name: 'corridor', in: 'query' },
+        description: 'Corridor id, for example usdc-ngn',
+        example: 'usdc-ngn',
+      }),
+      amount: z.string().openapi({
+        param: { name: 'amount', in: 'query' },
+        description: 'Fiat amount to deposit: a positive decimal with at most 7 decimal places',
+        example: '10000',
+      }),
+      asset: z
+        .string()
+        .optional()
+        .openapi({
+          param: { name: 'asset', in: 'query' },
+          description: 'Restrict rows to one SEP-38 asset (stellar:CODE:ISSUER)',
+        }),
+      type: z
+        .enum(['bank_account', 'cash', 'mobile_money'])
+        .optional()
+        .openapi({
+          param: { name: 'type', in: 'query' },
+          description: 'Funding method (default bank_account)',
+        }),
+    }),
+  },
+  responses: {
+    200: {
+      description: 'Deposit estimates per anchor',
+      content: {
+        'application/json': {
+          schema: z.object({
+            corridorId: z.string(),
+            direction: z.literal('deposit'),
+            rates: z.array(OnrampQuoteRateSchema),
+            bestRateId: z.string(),
+            errors: z.array(
+              z.object({ anchorId: z.string(), anchorName: z.string(), reason: z.string() })
+            ),
+            indicative: z.literal(true),
+            disclaimer: z.string(),
+          }),
+        },
+      },
+    },
+    400: {
+      description: 'Unknown corridor or invalid amount, asset or type',
+      content: { 'application/json': { schema: ApiErrorSchema } },
+    },
+    429: {
+      description: 'Rate limit exceeded',
+      content: { 'application/json': { schema: ApiErrorSchema } },
+    },
+    502: {
+      description: 'Anchor rate lookup failed',
+      content: { 'application/json': { schema: ApiErrorSchema } },
+    },
+  },
+});
+
 registry.registerPath({
   method: 'get',
   path: '/api/reputation/{anchor}',
@@ -1219,6 +1309,97 @@ registry.registerPath({
       content: { 'application/json': { schema: ApiErrorSchema } },
     },
     429: RATE_LIMITED_429,
+  },
+});
+
+const OnrampIntentRequestSchema = registry.register(
+  'OnrampIntentRequest',
+  z.object({
+    type: z.literal('onramp'),
+    sourceAsset: z.string().min(1).describe('Fiat currency paid in, for example NGN'),
+    destinationAsset: z.string().min(1).describe('Stellar asset bought, for example USDC'),
+    amount: z.string().regex(AMOUNT_PATTERN).describe('Amount of sourceAsset to spend'),
+    sender: z.string().min(1).describe('Payer reference on the fiat rail (not a Stellar account)'),
+    destination: z.string().describe('Stellar public key credited when the deposit completes'),
+    depositMethod: z.enum(['bank_transfer', 'cash', 'mobile_money', 'card']),
+    memo: z.string().optional().describe('Memo for pooled-account anchors; needs memoType'),
+    memoType: z.enum(['text', 'id', 'hash']).optional(),
+    signature: z.string().optional().describe('Optional attestation; send with publicKey'),
+    publicKey: z.string().optional().describe('Signer of the optional attestation'),
+  })
+);
+
+const OnrampIntentResponseSchema = registry.register(
+  'OnrampIntentResponse',
+  z.object({
+    route: z.object({
+      anchorId: z.string(),
+      anchorDomain: z.string(),
+      corridorId: z.string(),
+      asset: z.string().describe('SEP-38 identifier of the asset credited'),
+      estimatedFee: z.string(),
+      estimatedReceived: z.string(),
+      indicative: z.literal(true),
+    }),
+    intentHash: z.string().describe('Hex-encoded SHA-256 of the canonical intent'),
+    handoffUrl: z
+      .string()
+      .describe('Relative path into /onramp, where the interactive deposit runs in a browser'),
+    unsignedChangeTrustXdr: z
+      .string()
+      .nullable()
+      .describe('Base64 changeTrust transaction to sign, or null when a trustline already exists'),
+  })
+);
+
+registry.registerPath({
+  method: 'post',
+  path: '/api/v1/intent/onramp',
+  summary: 'Submit an on-ramp intent (v1)',
+  description:
+    'Routes a deposit intent to the best indicative anchor and returns the /onramp handoff URL, ' +
+    'plus an unsigned changeTrust XDR when the destination account has no trustline. No anchor ' +
+    'session is opened: KYC and the interactive deposit run in the browser. Honours ' +
+    '`Idempotency-Key` like the off-ramp endpoint.',
+  tags: ['Intent'],
+  request: {
+    headers: z.object({
+      'Idempotency-Key': z
+        .string()
+        .optional()
+        .describe('Client-generated key. A repeated value replays the original response.'),
+    }),
+    body: {
+      required: true,
+      content: { 'application/json': { schema: OnrampIntentRequestSchema } },
+    },
+  },
+  responses: {
+    200: {
+      description: 'Route resolved',
+      content: { 'application/json': { schema: OnrampIntentResponseSchema } },
+    },
+    400: {
+      description: 'Validation error',
+      content: { 'application/json': { schema: ApiErrorSchema } },
+    },
+    401: {
+      description: 'Attestation signature did not verify',
+      content: { 'application/json': { schema: ApiErrorSchema } },
+    },
+    404: {
+      description: 'No anchor serves this corridor',
+      content: { 'application/json': { schema: ApiErrorSchema } },
+    },
+    422: {
+      description: 'The destination account does not exist on Stellar',
+      content: { 'application/json': { schema: ApiErrorSchema } },
+    },
+    429: RATE_LIMITED_429,
+    503: {
+      description: 'No deposit rate is available right now',
+      content: { 'application/json': { schema: ApiErrorSchema } },
+    },
   },
 });
 

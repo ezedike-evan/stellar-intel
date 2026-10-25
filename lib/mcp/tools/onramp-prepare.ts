@@ -1,7 +1,7 @@
 import type { McpServer } from '@modelcontextprotocol/sdk/server/mcp.js';
 import { z } from 'zod';
-import { prepareOnrampIntent, OnrampPrepareOutputSchema } from '@/lib/mcp/onramp';
-import { McpToolError, upstreamTimeout } from '@/lib/mcp/errors';
+import { prepareOnrampIntent, OnrampPrepareOutputSchema, OnrampToolError } from '@/lib/mcp/onramp';
+import { fromOnrampError, McpToolError, upstreamTimeout } from '@/lib/mcp/errors';
 import { OnrampDepositMethodSchema, OnrampMemoTypeSchema } from '@/lib/intent/onramp-schema';
 
 export const ONRAMP_PREPARE_TOOL_NAME = 'intel.onramp.prepare';
@@ -24,8 +24,10 @@ export function registerOnrampPrepareTool(server: McpServer): void {
     {
       title: 'Prepare on-ramp intent',
       description:
-        'Returns an unsigned on-ramp intent envelope (intent + hash) and the app URL where the ' +
-        'user completes the deposit with their own wallet. Nothing is submitted.',
+        'Returns an unsigned on-ramp intent envelope (intent + hash), an unsigned changeTrust ' +
+        'transaction when the destination lacks the trustline, and a handoffUrl. Does not ' +
+        'execute. Returns a handoffUrl the user must open in a browser to complete KYC and the ' +
+        'deposit.',
       inputSchema: inputShape,
       outputSchema: OnrampPrepareOutputSchema,
       annotations: { readOnlyHint: true },
@@ -39,12 +41,14 @@ export function registerOnrampPrepareTool(server: McpServer): void {
         };
       } catch (err) {
         const toolErr =
-          err instanceof McpToolError
-            ? err
-            : upstreamTimeout(
-                err instanceof Error ? err.message : 'Unknown error',
-                'UNKNOWN_ERROR'
-              );
+          err instanceof OnrampToolError
+            ? fromOnrampError(err)
+            : err instanceof McpToolError
+              ? err
+              : upstreamTimeout(
+                  err instanceof Error ? err.message : 'Unknown error',
+                  'UNKNOWN_ERROR'
+                );
         return {
           isError: true,
           content: [{ type: 'text', text: `${toolErr.code}: ${toolErr.message}` }],

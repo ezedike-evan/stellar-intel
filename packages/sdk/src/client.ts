@@ -12,6 +12,10 @@ import type {
   CorridorVolumeSavings,
   OfframpIntentRequest,
   OfframpIntentResponse,
+  OnrampFundingType,
+  OnrampIntentRequest,
+  OnrampIntentResponse,
+  OnrampQuote,
   RateComparison,
 } from './types.js';
 
@@ -143,6 +147,45 @@ export class StellarIntelClient {
       path: '/api/v1/intent/offramp',
       body: { type: 'offramp', ...intent } satisfies OfframpIntentRequest,
       idempotencyKey: options.idempotencyKey ?? newIdempotencyKey(),
+    });
+  }
+
+  /**
+   * Routes an on-ramp (deposit) intent and returns the browser handoff.
+   *
+   * Nothing is paid or opened: the interactive deposit and KYC run in a browser at
+   * `handoffUrl`. If the destination lacks a trustline, `unsignedChangeTrustXdr`
+   * is a transaction for the wallet to sign first. An `Idempotency-Key` is
+   * generated per call and reused across its own retries.
+   */
+  async submitOnrampIntent(
+    intent: Omit<OnrampIntentRequest, 'type'>,
+    options: { idempotencyKey?: string } = {}
+  ): Promise<OnrampIntentResponse> {
+    return this.request<OnrampIntentResponse>({
+      method: 'POST',
+      path: '/api/v1/intent/onramp',
+      body: { type: 'onramp', ...intent } satisfies OnrampIntentRequest,
+      idempotencyKey: options.idempotencyKey ?? newIdempotencyKey(),
+    });
+  }
+
+  /**
+   * Indicative deposit estimates for a fiat amount into a Stellar asset, one row
+   * per anchor. The anchor sets the final rate inside its own deposit window, so
+   * every figure here is an estimate.
+   */
+  async getOnrampQuote(
+    corridor: string,
+    amount: string,
+    options: { asset?: string; type?: OnrampFundingType } = {}
+  ): Promise<OnrampQuote> {
+    const query = new URLSearchParams({ corridor, amount });
+    if (options.asset) query.set('asset', options.asset);
+    if (options.type) query.set('type', options.type);
+    return this.request<OnrampQuote>({
+      method: 'GET',
+      path: `/api/v1/onramp/quote?${query.toString()}`,
     });
   }
 

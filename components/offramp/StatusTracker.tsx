@@ -2,7 +2,7 @@
 import { useEffect, useRef, useState } from 'react';
 import Link from 'next/link';
 import type { WithdrawStatusValue, Sep24Transaction } from '@/types';
-import { formatDeliveredAmount } from '@/lib/format';
+import { formatDeliveredAmount, isValidStellarTxId } from '@/lib/format';
 import { resolveAnchorSupportHref, resolveToml } from '@/lib/stellar/sep1';
 import {
   terminalErrorMessage,
@@ -85,10 +85,6 @@ function statusDot(status: WithdrawStatusValue | undefined): string {
   if (['error', 'no_market', 'too_small', 'too_large'].includes(status)) return 'bg-status-down';
   if (status === 'refunded') return 'bg-status-unknown';
   return 'bg-accent animate-pulse';
-}
-
-function isValidStellarTxId(id: string): boolean {
-  return /^[0-9a-fA-F]{64}$/.test(id);
 }
 
 export function StatusTracker({

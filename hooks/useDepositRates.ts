@@ -1,20 +1,31 @@
 'use client';
 
+import { useState } from 'react';
 import useSWR from 'swr';
-import type { DepositRateComparison } from '@/types';
+import type { AnchorRateError, DepositRateComparison } from '@/types';
+import { RATES_REFRESH_INTERVAL_MS } from './useAnchorRates';
 
 /**
- * Lean deposit-estimates hook for /onramp (interim ONR017): fetches the
- * server-side `fetchDepositRates` comparison through /api/deposit-rates.
- * Deliberately minimal next to `useAnchorRates` — no refresh countdown or
- * stale-while-refresh plumbing until the full on-ramp table (ONR018) lands.
+ * Deposit estimates for /onramp: the server-side `fetchDepositRates` comparison,
+ * read through the public `GET /api/v1/onramp/quote` so the browser never meets
+ * an anchor's CORS policy. Every figure is indicative.
+ *
+ * `rates` is the whole comparison (rows, `bestRateId`); per-anchor failures are
+ * surfaced separately as `anchorErrors` so one dead anchor never hides the rest.
  */
 
 export interface UseDepositRatesResult {
-  comparison: DepositRateComparison | undefined;
+  rates: DepositRateComparison | undefined;
+  anchorErrors: AnchorRateError[];
   isLoading: boolean;
   error: string | undefined;
   mutate: () => Promise<unknown>;
+  /** Epoch ms of the last successful fetch; null before the first one. */
+  lastFetchedAt: number | null;
+}
+
+interface V1ErrorBody {
+  error?: { message?: string };
 }
 
 interface DepositRatesWire extends Omit<DepositRateComparison, 'rates'> {
@@ -24,8 +35,8 @@ interface DepositRatesWire extends Omit<DepositRateComparison, 'rates'> {
 async function fetchDepositRatesApi(url: string): Promise<DepositRateComparison> {
   const res = await fetch(url);
   if (!res.ok) {
-    const body = (await res.json().catch(() => null)) as { error?: string } | null;
-    throw new Error(body?.error ?? `Deposit rates request failed: HTTP ${res.status}`);
+    const body = (await res.json().catch(() => null)) as V1ErrorBody | null;
+    throw new Error(body?.error?.message ?? `Deposit rates request failed: HTTP ${res.status}`);
   }
   const data = (await res.json()) as DepositRatesWire;
   return {
@@ -39,24 +50,33 @@ export function useDepositRates(
   amount: string,
   asset?: string
 ): UseDepositRatesResult {
+  const [lastFetchedAt, setLastFetchedAt] = useState<number | null>(null);
   const amountOk = Number(amount) > 0;
   const key =
     corridorId && amountOk
-      ? `/api/deposit-rates/${corridorId}?amount=${encodeURIComponent(amount)}${
-          asset ? `&asset=${encodeURIComponent(asset)}` : ''
-        }`
+      ? `/api/v1/onramp/quote?corridor=${encodeURIComponent(corridorId)}&amount=${encodeURIComponent(
+          amount
+        )}${asset ? `&asset=${encodeURIComponent(asset)}` : ''}`
       : null;
 
   const { data, error, isLoading, mutate } = useSWR<DepositRateComparison, Error>(
     key,
     fetchDepositRatesApi,
-    { revalidateOnFocus: false, keepPreviousData: true }
+    {
+      refreshInterval: RATES_REFRESH_INTERVAL_MS,
+      refreshWhenHidden: false,
+      revalidateOnFocus: false,
+      keepPreviousData: true,
+      onSuccess: () => setLastFetchedAt(Date.now()),
+    }
   );
 
   return {
-    comparison: data,
+    rates: data,
+    anchorErrors: data?.errors ?? [],
     isLoading,
     error: error?.message,
     mutate,
+    lastFetchedAt,
   };
 }

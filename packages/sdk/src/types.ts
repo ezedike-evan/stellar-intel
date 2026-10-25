@@ -57,6 +57,73 @@ export interface OfframpIntentResponse {
   quoteId: string;
 }
 
+export type OnrampFundingType = 'bank_account' | 'cash' | 'mobile_money';
+
+export interface OnrampQuoteRate {
+  anchorId: string;
+  anchorName: string;
+  corridorId: string;
+  /** SEP-38 identifier of the credited asset. */
+  asset: string;
+  fiatAmount: number;
+  fee: number | null;
+  feeType: 'flat' | 'percent' | 'combined';
+  exchangeRate: number | null;
+  totalReceived: number | null;
+  /** Asset units the fiat buys before fees; the figure minAmount/maxAmount apply to. */
+  assetAmount?: number;
+  minAmount?: number;
+  maxAmount?: number;
+  source: 'sep38' | 'sep24-fee' | 'unavailable';
+  /** ISO 8601. */
+  updatedAt: string;
+}
+
+/** Indicative deposit estimates per anchor. Never a firm quote. */
+export interface OnrampQuote {
+  corridorId: string;
+  direction: 'deposit';
+  rates: OnrampQuoteRate[];
+  bestRateId: string;
+  errors: { anchorId: string; anchorName: string; reason: string }[];
+  indicative: true;
+  disclaimer: string;
+}
+
+export interface OnrampIntentRequest {
+  type: 'onramp';
+  /** Fiat currency paid in, e.g. NGN. */
+  sourceAsset: string;
+  /** Stellar asset bought, e.g. USDC. */
+  destinationAsset: string;
+  amount: string;
+  /** Payer reference on the fiat rail (not a Stellar account). */
+  sender: string;
+  /** Stellar public key credited when the deposit completes. */
+  destination: string;
+  depositMethod: 'bank_transfer' | 'cash' | 'mobile_money' | 'card';
+  memo?: string;
+  memoType?: 'text' | 'id' | 'hash';
+}
+
+export interface OnrampIntentResponse {
+  route: {
+    anchorId: string;
+    anchorDomain: string;
+    corridorId: string;
+    asset: string;
+    estimatedFee: string;
+    estimatedReceived: string;
+    indicative: true;
+  };
+  /** Hex-encoded SHA-256 of the canonical intent. */
+  intentHash: string;
+  /** Relative path into /onramp, where the interactive deposit runs in a browser. */
+  handoffUrl: string;
+  /** Base64 changeTrust transaction to sign, or null when a trustline already exists. */
+  unsignedChangeTrustXdr: string | null;
+}
+
 export interface AnchorHealth {
   anchorId: string;
   status: 'ok' | 'fail' | 'unknown' | 'stale';
@@ -163,6 +230,8 @@ export interface AnchorCensusResponse {
 export const OPERATIONS = {
   getRates: 'GET /api/rates/{corridor}',
   submitOfframpIntent: 'POST /api/v1/intent/offramp',
+  submitOnrampIntent: 'POST /api/v1/intent/onramp',
+  getOnrampQuote: 'GET /api/v1/onramp/quote',
   getAnchorHealth: 'GET /api/v1/anchors/{id}/health',
   getAnchorHealthLedger: 'GET /api/v1/anchor-health/ledger',
   getAnchorPriceHistory: 'GET /api/v1/anchors/{id}/price-history',

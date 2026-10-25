@@ -1,4 +1,6 @@
 import type { Anchor, AnchorRateError, DepositRate, DepositRateComparison } from '@/types';
+
+export { depositLimitStatus, type DepositLimitStatus } from './deposit-limits';
 import { getAnchorsByCorridorId, getCorridorById, sep38AssetId } from './anchors';
 import { resolveAnchor as resolveAnchorToml } from './sep1';
 import {
@@ -192,6 +194,7 @@ async function buildDepositRow(
     feeType,
     exchangeRate,
     totalReceived,
+    assetAmount: grossAsset,
     ...(assetInfo?.min_amount !== undefined ? { minAmount: assetInfo.min_amount } : {}),
     ...(assetInfo?.max_amount !== undefined ? { maxAmount: assetInfo.max_amount } : {}),
     source: 'sep24-fee',
