@@ -42,7 +42,8 @@ pub fn get_admin(env: &Env) -> Option<Address> {
 /// Assert that `caller` is the stored admin and has authorized this invocation.
 ///
 /// Returns:
-///   - `NotInitialized` if `init` has not run,
+///   - `NotInitialized` if no admin is stored (the constructor binds one at
+///     deploy, so this is only reachable on a contract that predates it),
 ///   - `Unauthorized`   if `caller` is not the stored admin.
 pub fn require_admin(env: &Env, caller: &Address) -> Result<(), Error> {
     let admin: Address = env

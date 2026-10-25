@@ -1,7 +1,9 @@
 //! Publisher whitelist storage helpers.
 //!
-//! Publishers are held in instance storage and only authorized publishers can
-//! submit outcomes once the purge endpoint is enabled.
+//! The whitelist is a list in instance storage (for the admin view) plus one
+//! persistent flag per publisher (for the hot path). Only whitelisted
+//! publishers can submit outcomes, metrics, rates and volume; the admin adds
+//! and revokes them, and may scope one to a list of corridors.
 //!
 //! ## Footprint optimisation
 //! Each publisher has a dedicated `DataKey::Publisher(addr)` persistent entry.

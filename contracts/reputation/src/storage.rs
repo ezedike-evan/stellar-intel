@@ -2,11 +2,18 @@
 //!
 //! ## Storage bucket strategy
 //!
-//! | Tier       | Keys stored here                              | Rationale                                           |
-//! |------------|-----------------------------------------------|-----------------------------------------------------|
-//! | Instance   | `Admin`, `Anchors`, `Corridors`, `Publishers` | Tiny hot metadata; always loaded with the instance  |
-//! | Persistent | `AnchorTag`, `CorridorTag`, `Publisher`,      | Large / per-entity blobs; pay only on access        |
-//! |            | `OutcomeHead`, `OutcomePage`, `Corridor`      |                                                     |
+//! | Tier       | Keys stored here                                   | Rationale                                          |
+//! |------------|----------------------------------------------------|----------------------------------------------------|
+//! | Instance   | `Admin`, `PendingAdmin`, `Anchors`, `Corridors`,   | Tiny hot metadata; always loaded with the instance |
+//! |            | `Publishers`                                       |                                                    |
+//! | Persistent | `AnchorTag`, `CorridorTag`, `Publisher`,           | Large / per-entity blobs; pay only on access       |
+//! |            | `PublisherScope`, `OutcomeHead`, `OutcomeFloor`,   |                                                    |
+//! |            | `OutcomePage`, `Corridor`, `CorridorV2`,           |                                                    |
+//! |            | `CorridorAggregate`, `CorridorRate`,               |                                                    |
+//! |            | `VolumeSavings`                                    |                                                    |
+//!
+//! The upgrade module keeps its own instance keys (`UpgradeAdmin`, `Version`,
+//! `PendingUpgradeAdmin`, `PendingUpgrade`) in `upgrade.rs`, outside `DataKey`.
 //!
 //! ### Hot-keyed writes (`OutcomePage`)
 //! Outcome history is split into fixed-size pages of [`PAGE_SIZE`] entries.

@@ -302,7 +302,8 @@ impl ReputationContract {
         upgrade::get_pending_upgrade(&env)
     }
 
-    /// Return the live contract version (`0` before `init_upgrade`).
+    /// Return the live contract version. The constructor stamps version 1 and
+    /// every upgrade increments it; `0` means the upgrade hook was never bound.
     pub fn contract_version(env: Env) -> u32 {
         upgrade::current_version(&env)
     }
@@ -318,9 +319,9 @@ impl ReputationContract {
 
     /// Nominate a new upgrade administrator (step 1 of 2, issue #963).
     ///
-    /// `init_upgrade` is one-shot, so before this the role could never be
-    /// changed once bound — a lost key meant the contract could never be
-    /// upgraded again, and a compromised one could not be revoked.
+    /// The constructor binds the upgrade admin exactly once, so without this the
+    /// role could never be changed — a lost key meant the contract could never
+    /// be upgraded again, and a compromised one could not be revoked.
     pub fn propose_upgrade_admin(
         env: Env,
         caller: Address,
