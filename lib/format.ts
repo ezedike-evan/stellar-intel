@@ -20,3 +20,8 @@ export function formatDeliveredAmount(amount: string, currencyCode: string): str
     return `${currencyCode} ${numeric.toFixed(2)}`;
   }
 }
+
+/** True for a 64-character hex Stellar transaction hash. */
+export function isValidStellarTxId(id: string): boolean {
+  return /^[0-9a-fA-F]{64}$/.test(id);
+}
