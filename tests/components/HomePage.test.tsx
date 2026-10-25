@@ -24,6 +24,14 @@ vi.mock('@/components/landing/RecordProof', () => ({
   RecordProof: () => <section aria-label="record proof stub" />,
 }));
 
+// RatePreview fetches /api/snapshot?amount=100 on mount, which in happy-dom is an
+// unmocked network call that only passed because the failure was swallowed.
+// It has its own spec (RatePreview.test.tsx), so stub it here and keep this file
+// about the page's own structure.
+vi.mock('@/components/landing/RatePreview', () => ({
+  RatePreview: () => <section aria-label="rate preview stub" />,
+}));
+
 vi.mock('next/link', () => ({
   default: ({ href, children }: { href: string; children: React.ReactNode }) => (
     <a href={href}>{children}</a>
@@ -62,6 +70,15 @@ describe('HomePage', () => {
 
   afterEach(() => {
     vi.useRealTimers();
+  });
+
+  it('makes no network request while rendering', async () => {
+    const fetchSpy = vi.fn();
+    vi.stubGlobal('fetch', fetchSpy);
+
+    render(await HomePage());
+
+    expect(fetchSpy).not.toHaveBeenCalled();
   });
 
   it('renders health-monitor hero copy', async () => {
