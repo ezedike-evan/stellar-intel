@@ -1,7 +1,8 @@
 use soroban_sdk::{Address, Env, String};
 
+use crate::outcome::MAX_SETTLE_SECONDS;
 use crate::storage::{self, DataKey};
-use crate::{publishers, Error};
+use crate::{anchors, events, publishers, Error};
 
 const MAX_BPS: i128 = 10000;
 const NORM_SETTLE_SECONDS: i128 = 300;
@@ -21,6 +22,13 @@ fn normalize_settle_seconds(settle_seconds_p50: u64) -> i128 {
     settle_seconds as i128
 }
 
+/// Composite score in basis points: fill rate, discounted by slippage, scaled by
+/// how the anchor's p50 settle time compares to the 300 s norm.
+///
+/// The inputs are clamped to `[0, 10000]`, and so is the result. Without the
+/// final clamp an anchor that settles faster than the norm scored above 100%
+/// (fill 10000, slippage 0, settle 1 s gave 3,000,000), which a consumer
+/// treating the value as basis points cannot make sense of.
 pub fn compute_composite_bps(
     fill_rate_bps: i128,
     slippage_bps: i128,
@@ -42,7 +50,7 @@ pub fn compute_composite_bps(
         return 0;
     }
 
-    (numerator + denominator / 2) / denominator
+    clamp_bps((numerator + denominator / 2) / denominator)
 }
 
 /// Publisher-only. These metrics feed the published composite score, so an
@@ -63,10 +71,20 @@ pub fn set_corridor_metrics(
     settle_seconds_p50: u64,
     n: u32,
 ) -> Result<(), Error> {
-    publisher.require_auth();
+    publishers::require_publisher(env, publisher)?;
+    publishers::require_in_scope(env, publisher, &corridor)?;
 
-    if !publishers::is_authorized(env, publisher) {
-        return Err(Error::PublisherUnauthorized);
+    anchors::require_registered(env, &anchor_id)?;
+
+    // Refuse out-of-range input at write time, before anything is stored, as
+    // submit_outcome does for settle_seconds. Otherwise every reader gets the
+    // raw values back (audit L-14). compute_composite_bps still clamps its own
+    // inputs, as defence in depth.
+    if !(0..=MAX_BPS).contains(&fill_rate_bps)
+        || !(0..=MAX_BPS).contains(&slippage_bps)
+        || settle_seconds_p50 > MAX_SETTLE_SECONDS
+    {
+        return Err(Error::OutOfRange);
     }
 
     // Write BOTH the v1 and v2 keys. Previously only the v1 `Corridor` key was
@@ -81,7 +99,7 @@ pub fn set_corridor_metrics(
     env.storage().persistent().set(&v1_key, &metrics);
     storage::extend_persistent(env, &v1_key);
 
-    let v2_key = DataKey::CorridorV2(anchor_id, corridor);
+    let v2_key = DataKey::CorridorV2(anchor_id.clone(), corridor.clone());
     let metrics_v2 = (
         fill_rate_bps,
         slippage_bps,
@@ -92,6 +110,7 @@ pub fn set_corridor_metrics(
     env.storage().persistent().set(&v2_key, &metrics_v2);
     storage::extend_persistent(env, &v2_key);
 
+    events::metrics(env, publisher, &anchor_id, &corridor, composite_bps, n);
     Ok(())
 }
 

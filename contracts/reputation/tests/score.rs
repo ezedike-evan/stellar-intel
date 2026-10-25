@@ -1,6 +1,6 @@
 //! Integration tests for corridor score reads.
 
-use reputation::{ReputationContract, ReputationContractClient};
+use reputation::{Error, ReputationContract, ReputationContractClient};
 use soroban_sdk::{testutils::Address as _, Address, Env, String};
 
 const MAX_BPS: i128 = 10000;
@@ -28,7 +28,7 @@ fn expected_composite_bps(
     let effective_fill_bps = fill_rate_bps * (MAX_BPS - slippage_bps);
     let numerator = effective_fill_bps * 300;
     let denominator = MAX_BPS * settle_seconds;
-    (numerator + denominator / 2) / denominator
+    ((numerator + denominator / 2) / denominator).clamp(0, MAX_BPS)
 }
 
 #[test]
@@ -59,6 +59,7 @@ fn test_get_score_for_corridor_reads_stored_metrics_and_computes_composite() {
     client.add_publisher(&admin, &publisher);
 
     let anchor = String::from_str(&env, "anchor-bitso");
+    client.register_anchor(&admin, &anchor);
     let corridor = String::from_str(&env, "usdc-ngn");
 
     client.set_corridor_metrics(
@@ -75,7 +76,7 @@ fn test_get_score_for_corridor_reads_stored_metrics_and_computes_composite() {
 }
 
 #[test]
-fn test_get_score_for_corridor_clamps_metrics() {
+fn test_get_score_for_corridor_rejects_out_of_range_metrics() {
     let env = Env::default();
     env.mock_all_auths();
     let (client, admin) = setup(&env);
@@ -84,17 +85,75 @@ fn test_get_score_for_corridor_clamps_metrics() {
     client.add_publisher(&admin, &publisher);
 
     let anchor = String::from_str(&env, "anchor-anclax");
+    client.register_anchor(&admin, &anchor);
     let corridor = String::from_str(&env, "usdc-kes");
 
-    client.set_corridor_metrics(
+    // Out-of-range input used to be stored raw and clamped on read; it is now
+    // refused at write time (#1381).
+    let res = client.try_set_corridor_metrics(
         &publisher, &anchor, &corridor, &11000i128, &-100i128, &0u64, &33u32,
     );
+    assert_eq!(res, Err(Ok(Error::OutOfRange)));
+    assert_eq!(
+        client.get_score_for_corridor(&anchor, &corridor),
+        (0, 0, 0, 0)
+    );
+}
 
-    let (composite_bps, fill_rate_bps, settle_seconds_p50, n) =
-        client.get_score_for_corridor(&anchor, &corridor);
+fn publish_metrics(
+    env: &Env,
+    fill_rate_bps: i128,
+    slippage_bps: i128,
+    settle_seconds_p50: u64,
+) -> (ReputationContractClient<'_>, String, String) {
+    let (client, admin) = setup(env);
+    let publisher = Address::generate(env);
+    client.add_publisher(&admin, &publisher);
 
-    assert_eq!(fill_rate_bps, 11000);
-    assert_eq!(settle_seconds_p50, 0);
-    assert_eq!(n, 33);
-    assert_eq!(composite_bps, expected_composite_bps(11000, -100, 0));
+    let anchor = String::from_str(env, "anchor-fast");
+    let corridor = String::from_str(env, "usdc-ngn");
+    client.register_anchor(&admin, &anchor);
+    client.set_corridor_metrics(
+        &publisher,
+        &anchor,
+        &corridor,
+        &fill_rate_bps,
+        &slippage_bps,
+        &settle_seconds_p50,
+        &10u32,
+    );
+    (client, anchor, corridor)
+}
+
+#[test]
+fn composite_is_clamped_for_sub_norm_settle_time() {
+    let env = Env::default();
+    env.mock_all_auths();
+    // Fill 100%, no slippage, settle in 1 s: the unclamped value is 3_000_000.
+    let (client, anchor, corridor) = publish_metrics(&env, 10000, 0, 1);
+
+    assert_eq!(client.get_score_for_corridor(&anchor, &corridor).0, 10000);
+}
+
+#[test]
+fn composite_v2_is_clamped() {
+    let env = Env::default();
+    env.mock_all_auths();
+    let (client, anchor, corridor) = publish_metrics(&env, 10000, 0, 1);
+
+    // The v2 getter returns (composite, fill, slippage, settle, n).
+    assert_eq!(
+        client.get_score_for_corridor_v2(&anchor, &corridor).0,
+        10000
+    );
+}
+
+#[test]
+fn composite_is_unchanged_at_or_above_the_norm() {
+    let env = Env::default();
+    env.mock_all_auths();
+    // Fill 90%, no slippage, settle exactly at the 300 s norm: in range already.
+    let (client, anchor, corridor) = publish_metrics(&env, 9000, 0, 300);
+
+    assert_eq!(client.get_score_for_corridor(&anchor, &corridor).0, 9000);
 }

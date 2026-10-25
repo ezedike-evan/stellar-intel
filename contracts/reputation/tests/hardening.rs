@@ -10,6 +10,8 @@ fn setup(env: &Env) -> (ReputationContractClient<'_>, Address, Address) {
     let client = ReputationContractClient::new(env, &contract_id);
     let publisher = Address::generate(env);
     client.add_publisher(&admin, &publisher);
+    // Rate and volume writes only accept registered corridors (#1385).
+    client.register_corridor(&admin, &String::from_str(env, "usdc-ngn"));
     (client, admin, publisher)
 }
 
@@ -19,9 +21,10 @@ fn setup(env: &Env) -> (ReputationContractClient<'_>, Address, Address) {
 fn submit_outcome_rejects_settle_seconds_over_the_cap() {
     let env = Env::default();
     env.mock_all_auths();
-    let (client, _admin, publisher) = setup(&env);
+    let (client, admin, publisher) = setup(&env);
 
     let anchor = String::from_str(&env, "cowrie");
+    client.register_anchor(&admin, &anchor);
     let corridor = String::from_str(&env, "usdc-ngn");
     let hash = String::from_str(&env, "h");
 
@@ -43,6 +46,53 @@ fn add_volume_savings_rejects_delta_over_the_cap() {
     assert_eq!(res, Err(Ok(Error::OutOfRange)));
 }
 
+#[test]
+fn submit_outcome_rejects_hash_over_64_chars() {
+    let env = Env::default();
+    env.mock_all_auths();
+    let (client, admin, publisher) = setup(&env);
+    let anchor = String::from_str(&env, "cowrie");
+    client.register_anchor(&admin, &anchor);
+    let corridor = String::from_str(&env, "usdc-ngn");
+    let too_long = String::from_str(&env, &"a".repeat(65));
+
+    let res = client.try_submit_outcome(&publisher, &anchor, &corridor, &too_long, &30u64, &true);
+
+    assert_eq!(res, Err(Ok(Error::OutOfRange)));
+    assert_eq!(client.recent_outcomes(&anchor, &10u32).len(), 0);
+}
+
+#[test]
+fn submit_outcome_rejects_empty_hash() {
+    let env = Env::default();
+    env.mock_all_auths();
+    let (client, admin, publisher) = setup(&env);
+    let anchor = String::from_str(&env, "cowrie");
+    client.register_anchor(&admin, &anchor);
+    let corridor = String::from_str(&env, "usdc-ngn");
+    let empty = String::from_str(&env, "");
+
+    let res = client.try_submit_outcome(&publisher, &anchor, &corridor, &empty, &30u64, &true);
+
+    assert_eq!(res, Err(Ok(Error::OutOfRange)));
+    assert_eq!(client.recent_outcomes(&anchor, &10u32).len(), 0);
+}
+
+#[test]
+fn submit_outcome_accepts_64_char_hex_hash() {
+    let env = Env::default();
+    env.mock_all_auths();
+    let (client, admin, publisher) = setup(&env);
+    let anchor = String::from_str(&env, "cowrie");
+    client.register_anchor(&admin, &anchor);
+    let corridor = String::from_str(&env, "usdc-ngn");
+    let sha256_hex = String::from_str(&env, &"ab".repeat(32));
+
+    client.submit_outcome(&publisher, &anchor, &corridor, &sha256_hex, &30u64, &true);
+
+    assert_eq!(client.recent_outcomes(&anchor, &10u32).len(), 1);
+}
+
 // ── Admin reset ────────────────────────────────────────────────────────────────
 
 #[test]
@@ -52,6 +102,7 @@ fn admin_can_reset_a_polluted_corridor_aggregate() {
     let (client, admin, publisher) = setup(&env);
 
     let anchor = String::from_str(&env, "cowrie");
+    client.register_anchor(&admin, &anchor);
     let corridor = String::from_str(&env, "usdc-ngn");
     let hash = String::from_str(&env, "h");
 
@@ -70,10 +121,11 @@ fn admin_can_reset_a_polluted_corridor_aggregate() {
 fn a_non_admin_cannot_reset_an_aggregate() {
     let env = Env::default();
     env.mock_all_auths();
-    let (client, _admin, publisher) = setup(&env);
+    let (client, admin, publisher) = setup(&env);
     let stranger = Address::generate(&env);
 
     let anchor = String::from_str(&env, "cowrie");
+    client.register_anchor(&admin, &anchor);
     let corridor = String::from_str(&env, "usdc-ngn");
     let hash = String::from_str(&env, "h");
     client.submit_outcome(&publisher, &anchor, &corridor, &hash, &10u64, &true);
@@ -128,6 +180,7 @@ fn set_corridor_metrics_keeps_v2_fresh_after_migration() {
     let (client, admin, publisher) = setup(&env);
 
     let anchor = String::from_str(&env, "cowrie");
+    client.register_anchor(&admin, &anchor);
     let corridor = String::from_str(&env, "usdc-ngn");
 
     // Seed v1, then migrate to v2 (v2 now mirrors the seed).

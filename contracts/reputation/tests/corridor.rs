@@ -1,5 +1,6 @@
 //! Integration tests for per-corridor score aggregates (roadmap #182).
 
+use reputation::storage::DataKey;
 use reputation::{ReputationContract, ReputationContractClient};
 use soroban_sdk::{testutils::Address as _, Address, Env, String};
 
@@ -31,9 +32,10 @@ fn unknown_corridor_returns_zero_aggregate() {
 fn aggregate_accumulates_per_corridor() {
     let env = Env::default();
     env.mock_all_auths();
-    let (client, _admin, publisher) = setup(&env);
+    let (client, admin, publisher) = setup(&env);
 
     let anchor = String::from_str(&env, "cowrie");
+    client.register_anchor(&admin, &anchor);
     let corridor = String::from_str(&env, "usdc-ngn");
     let h1 = String::from_str(&env, "hash-1");
     let h2 = String::from_str(&env, "hash-2");
@@ -53,9 +55,10 @@ fn aggregate_accumulates_per_corridor() {
 fn corridors_are_isolated_within_same_anchor() {
     let env = Env::default();
     env.mock_all_auths();
-    let (client, _admin, publisher) = setup(&env);
+    let (client, admin, publisher) = setup(&env);
 
     let anchor = String::from_str(&env, "bitso");
+    client.register_anchor(&admin, &anchor);
     let ngn = String::from_str(&env, "usdc-ngn");
     let kes = String::from_str(&env, "usdc-kes");
 
@@ -99,10 +102,12 @@ fn corridors_are_isolated_within_same_anchor() {
 fn same_corridor_across_different_anchors_is_isolated() {
     let env = Env::default();
     env.mock_all_auths();
-    let (client, _admin, publisher) = setup(&env);
+    let (client, admin, publisher) = setup(&env);
 
     let anchor_a = String::from_str(&env, "cowrie");
+    client.register_anchor(&admin, &anchor_a);
     let anchor_b = String::from_str(&env, "bitso");
+    client.register_anchor(&admin, &anchor_b);
     let corridor = String::from_str(&env, "usdc-ngn");
 
     client.submit_outcome(
@@ -139,4 +144,37 @@ fn same_corridor_across_different_anchors_is_isolated() {
     assert_eq!(b_total, 2);
     assert_eq!(b_success, 1);
     assert_eq!(b_sum, 50);
+}
+
+// ── migrate_all_v2 covers the app's corridors (#1397) ────────────────────────
+
+#[test]
+fn migrate_all_covers_usdc_ghs() {
+    let env = Env::default();
+    env.mock_all_auths();
+    let (client, admin, publisher) = setup(&env);
+    let anchor = String::from_str(&env, "cowrie");
+    let ghs = String::from_str(&env, "usdc-ghs");
+    client.register_anchor(&admin, &anchor);
+    client.set_corridor_metrics(
+        &publisher, &anchor, &ghs, &9000i128, &50i128, &120u64, &25u32,
+    );
+
+    // set_corridor_metrics writes both keys; drop the v2 one so the migration
+    // has work to do (usdc-ghs was missing from the old hardcoded list).
+    let v2_key = DataKey::CorridorV2(anchor.clone(), ghs.clone());
+    env.as_contract(&client.address, || {
+        env.storage().persistent().remove(&v2_key);
+    });
+    let has_v2 = || env.as_contract(&client.address, || env.storage().persistent().has(&v2_key));
+    assert!(!has_v2());
+
+    client.migrate_all_v2(&admin);
+
+    // The v2 getter falls back to v1 when the key is absent, so read the key
+    // itself to prove the migration wrote it.
+    assert!(has_v2());
+    let (composite, fill, slippage, settle, n) = client.get_score_for_corridor_v2(&anchor, &ghs);
+    assert_eq!((fill, slippage, settle, n), (9000, 50, 120, 25));
+    assert!(composite > 0);
 }

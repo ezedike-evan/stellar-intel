@@ -36,25 +36,27 @@ in the same repository.
 
 ## 2. Scope
 
-**1,429 lines of Rust across 14 modules**, one contract, **34 public
+**2,353 lines of Rust across 16 modules**, one contract, **47 public
 entrypoints**.
 
-| Module              | Lines | What it owns                                   |
-| ------------------- | ----- | ---------------------------------------------- |
-| `lib.rs`            | 374   | `#[contractimpl]` surface — all 34 entrypoints |
-| `admin.rs`          | 117   | Admin identity, two-step transfer              |
-| `score.rs`          | 112   | Composite score computation                    |
-| `upgrade.rs`        | 178   | WASM replacement, separate upgrade admin       |
-| `volume_savings.rs` | 109   | Cumulative volume + savings accumulator        |
-| `migration.rs`      | 81    | v1 → v2 corridor storage migration             |
-| `publishers.rs`     | 76    | Publisher authorization set                    |
-| `storage.rs`        | 106   | `DataKey` variants, TTL handling               |
-| `corridor_rate.rs`  | 58    | Corridor rate publish/read                     |
-| `history.rs`        | 54    | Bounded outcome history per anchor             |
-| `outcome.rs`        | 57    | Outcome submission and hashing                 |
-| `anchors.rs`        | 41    | Anchor registry                                |
-| `aggregate.rs`      | 55    | Per-corridor counters                          |
-| `error.rs`          | 11    | Error enum                                     |
+| Module              | Lines | What it owns                                      |
+| ------------------- | ----- | ------------------------------------------------- |
+| `lib.rs`            | 573   | `#[contractimpl]` surface — all 47 entrypoints    |
+| `admin.rs`          | 123   | Admin identity, two-step transfer                 |
+| `score.rs`          | 131   | Composite score computation                       |
+| `upgrade.rs`        | 248   | WASM replacement, separate upgrade admin          |
+| `volume_savings.rs` | 109   | Cumulative volume + savings accumulator           |
+| `migration.rs`      | 86    | v1 → v2 corridor storage migration                |
+| `publishers.rs`     | 147   | Publisher authorization set                       |
+| `storage.rs`        | 130   | `DataKey` variants, TTL handling                  |
+| `corridor_rate.rs`  | 104   | Corridor rate publish/read                        |
+| `history.rs`        | 62    | Bounded outcome history per anchor                |
+| `outcome.rs`        | 104   | Outcome submission and hashing                    |
+| `anchors.rs`        | 81    | Anchor registry                                   |
+| `aggregate.rs`      | 55    | Per-corridor counters                             |
+| `corridors.rs`      | 60    | Corridor registry                                 |
+| `events.rs`         | 262   | Event emission for writes and admin changes       |
+| `probe_signals.rs`  | 78    | Per-anchor probe signals (uptime, latency, drift) |
 
 There is **no second contract**. `crates/stellar-intel-reputation` is a
 `#![no_std]` read-only client crate for third-party contract authors; it holds no

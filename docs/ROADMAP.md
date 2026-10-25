@@ -495,7 +495,7 @@ milestone](#v2-scope-with-no-milestone) — real decomposition, unscheduled.
 - [x] Publisher whitelist management (`add_publisher` / `revoke_publisher` / `list_publishers`) — `publishers.rs`
 - [ ] `publish_outcome` — full signature verification + idempotency
 - [x] `get_corridor_aggregate` (and `_v2`) public reads — `lib/oracle/read.ts`; `recent_outcomes` — `crates/stellar-intel-reputation`
-- [ ] 7-day time-locked upgrade path
+- [x] 7-day time-locked upgrade path
 - [ ] `#189` Publisher service (production key rotation, health endpoint)
 - [ ] `#190–#192` Publisher retries, dead-letter, Sentry wiring
 - [x] `#194` Contract deployed to Soroban testnet, e2e green — 2026-07-09, `.deployments/`

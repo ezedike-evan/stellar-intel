@@ -3,6 +3,7 @@
 //! Verifies the init + register + list round-trip and the admin authorization
 //! and duplicate-protection error paths.
 
+use reputation::anchors::MAX_ANCHORS;
 use reputation::{Error, ReputationContract, ReputationContractClient};
 use soroban_sdk::{testutils::Address as _, Address, Env, String};
 
@@ -97,4 +98,49 @@ fn requires_admin_auth() {
     // Without the admin's authorization, the call panics on require_auth.
     let res = client.try_register_anchor(&admin, &anchor);
     assert!(res.is_err());
+}
+
+// ── Registry bounds (#1394) ──────────────────────────────────────────────────
+
+#[test]
+fn register_anchor_stops_at_max() {
+    let env = Env::default();
+    env.mock_all_auths();
+    let (client, admin) = setup(&env);
+
+    for i in 0..MAX_ANCHORS {
+        let id = String::from_str(&env, &format!("anchor-{i}"));
+        client.register_anchor(&admin, &id);
+    }
+
+    let one_too_many = String::from_str(&env, "anchor-one-too-many");
+    let res = client.try_register_anchor(&admin, &one_too_many);
+
+    assert_eq!(res, Err(Ok(Error::LimitReached)));
+    assert_eq!(client.list_anchors().len(), MAX_ANCHORS);
+    // The refused id left no tag behind: it can be registered once there is room.
+    assert!(!client.list_anchors().iter().any(|a| a == one_too_many));
+}
+
+#[test]
+fn register_anchor_rejects_empty_and_long_ids() {
+    let env = Env::default();
+    env.mock_all_auths();
+    let (client, admin) = setup(&env);
+
+    let empty = String::from_str(&env, "");
+    assert_eq!(
+        client.try_register_anchor(&admin, &empty),
+        Err(Ok(Error::OutOfRange))
+    );
+
+    let too_long = String::from_str(&env, &"a".repeat(65));
+    assert_eq!(
+        client.try_register_anchor(&admin, &too_long),
+        Err(Ok(Error::OutOfRange))
+    );
+
+    let longest = String::from_str(&env, &"a".repeat(64));
+    client.register_anchor(&admin, &longest);
+    assert_eq!(client.list_anchors().len(), 1);
 }

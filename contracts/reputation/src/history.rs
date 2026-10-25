@@ -19,7 +19,15 @@ pub fn recent_outcomes(env: &Env, anchor_id: String, n: u32) -> Vec<(String, u64
     let (current_page, current_len): (u32, u32) =
         env.storage().persistent().get(&head_key).unwrap_or((0, 0));
 
-    if current_len == 0 && current_page == 0 {
+    // After a reset the floor is the first page that belongs to the live
+    // history; everything below it is hidden.
+    let floor: u32 = env
+        .storage()
+        .persistent()
+        .get(&DataKey::OutcomeFloor(anchor_id.clone()))
+        .unwrap_or(0);
+
+    if current_len == 0 && current_page <= floor {
         return Vec::new(env);
     }
 
@@ -44,7 +52,7 @@ pub fn recent_outcomes(env: &Env, anchor_id: String, n: u32) -> Vec<(String, u64
             remaining -= take;
         }
 
-        if remaining == 0 || page == 0 {
+        if remaining == 0 || page <= floor {
             break;
         }
         page -= 1;

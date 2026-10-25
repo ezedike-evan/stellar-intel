@@ -1,7 +1,11 @@
 //! Integration tests for the admin-gated contract upgrade hook (issue #352).
 
-use reputation::{ReputationContract, ReputationContractClient};
-use soroban_sdk::{testutils::Address as _, Address, BytesN, Env, String};
+use reputation::upgrade::UPGRADE_DELAY_SECONDS;
+use reputation::{Error, ReputationContract, ReputationContractClient};
+use soroban_sdk::{
+    testutils::{Address as _, Ledger},
+    Address, BytesN, Env, String,
+};
 
 fn setup(env: &Env) -> (ReputationContractClient<'_>, Address) {
     let admin = Address::generate(env);
@@ -34,10 +38,15 @@ fn upgrade_requires_admin_authorization() {
     let env = Env::default();
     let (client, _admin) = setup(&env);
 
+    // Propose and wait out the delay with auths mocked, so the only thing
+    // missing from the final call is the upgrade admin's signature.
     env.mock_all_auths();
-    env.set_auths(&[]);
-
     let wasm_hash = BytesN::from_array(&env, &[0u8; 32]);
+    client.propose_upgrade(&_admin, &wasm_hash);
+    env.ledger()
+        .with_mut(|l| l.timestamp += UPGRADE_DELAY_SECONDS);
+
+    env.set_auths(&[]);
     let res = client.try_upgrade(&wasm_hash);
     assert!(res.is_err());
 }
@@ -51,6 +60,7 @@ fn contract_state_is_disjoint_from_upgrade_metadata() {
     client.add_publisher(&admin, &admin);
 
     let anchor = String::from_str(&env, "moneygram");
+    client.register_anchor(&admin, &anchor);
     let corridor = String::from_str(&env, "NGN-USD");
     let h1 = String::from_str(&env, "hash-1");
     let h2 = String::from_str(&env, "hash-2");
@@ -192,3 +202,131 @@ fn the_old_admin_cannot_upgrade_after_handover() {
 // now bound at construction, so there is no "before init" window in which the
 // role is unset. The equivalent guard — a non-admin cannot propose — is covered
 // by `a_non_admin_cannot_propose`.
+
+// ── Time-lock (#1389) ────────────────────────────────────────────────────────
+
+fn hash(env: &Env, byte: u8) -> BytesN<32> {
+    BytesN::from_array(env, &[byte; 32])
+}
+
+#[test]
+fn upgrade_without_proposal_fails() {
+    let env = Env::default();
+    env.mock_all_auths();
+    let (client, _admin) = setup(&env);
+
+    let res = client.try_upgrade(&hash(&env, 1));
+    assert_eq!(res, Err(Ok(Error::NoPendingUpgrade)));
+}
+
+#[test]
+fn upgrade_before_delay_fails() {
+    let env = Env::default();
+    env.mock_all_auths();
+    let (client, admin) = setup(&env);
+    let h = hash(&env, 1);
+    client.propose_upgrade(&admin, &h);
+
+    env.ledger()
+        .with_mut(|l| l.timestamp += UPGRADE_DELAY_SECONDS - 1);
+
+    assert_eq!(client.try_upgrade(&h), Err(Ok(Error::UpgradeNotReady)));
+    // A failed attempt leaves the proposal in place.
+    assert!(client.pending_upgrade().is_some());
+    assert_eq!(client.contract_version(), 1);
+}
+
+#[test]
+fn upgrade_with_other_hash_fails() {
+    let env = Env::default();
+    env.mock_all_auths();
+    let (client, admin) = setup(&env);
+    client.propose_upgrade(&admin, &hash(&env, 1));
+    env.ledger()
+        .with_mut(|l| l.timestamp += UPGRADE_DELAY_SECONDS);
+
+    let res = client.try_upgrade(&hash(&env, 2));
+    assert_eq!(res, Err(Ok(Error::UpgradeHashMismatch)));
+}
+
+#[test]
+fn non_upgrade_admin_cannot_propose() {
+    let env = Env::default();
+    env.mock_all_auths();
+    let (client, _admin) = setup(&env);
+    let stranger = Address::generate(&env);
+
+    let res = client.try_propose_upgrade(&stranger, &hash(&env, 1));
+    assert_eq!(res, Err(Ok(Error::Unauthorized)));
+    assert_eq!(client.pending_upgrade(), None);
+
+    let res = client.try_cancel_upgrade(&stranger);
+    assert_eq!(res, Err(Ok(Error::Unauthorized)));
+}
+
+#[test]
+fn cancel_clears_pending() {
+    let env = Env::default();
+    env.mock_all_auths();
+    let (client, admin) = setup(&env);
+    let h = hash(&env, 1);
+    client.propose_upgrade(&admin, &h);
+    assert!(client.pending_upgrade().is_some());
+
+    client.cancel_upgrade(&admin);
+
+    assert_eq!(client.pending_upgrade(), None);
+    env.ledger()
+        .with_mut(|l| l.timestamp += UPGRADE_DELAY_SECONDS);
+    assert_eq!(client.try_upgrade(&h), Err(Ok(Error::NoPendingUpgrade)));
+}
+
+#[test]
+fn after_delay_gate_is_passed() {
+    let env = Env::default();
+    env.mock_all_auths();
+    let (client, admin) = setup(&env);
+    let h = hash(&env, 1);
+    client.propose_upgrade(&admin, &h);
+    env.ledger()
+        .with_mut(|l| l.timestamp += UPGRADE_DELAY_SECONDS);
+
+    // The host then fails on the unknown WASM hash, which is expected in a unit
+    // test; what matters is that none of the three gate errors is the reason.
+    let res = client.try_upgrade(&h);
+    assert_ne!(res, Err(Ok(Error::NoPendingUpgrade)));
+    assert_ne!(res, Err(Ok(Error::UpgradeNotReady)));
+    assert_ne!(res, Err(Ok(Error::UpgradeHashMismatch)));
+}
+
+#[test]
+fn pending_upgrade_is_readable() {
+    let env = Env::default();
+    env.mock_all_auths();
+    let (client, admin) = setup(&env);
+    let h = hash(&env, 9);
+    assert_eq!(client.pending_upgrade(), None);
+
+    let proposed_at = env.ledger().timestamp();
+    client.propose_upgrade(&admin, &h);
+
+    assert_eq!(
+        client.pending_upgrade(),
+        Some((h, proposed_at + UPGRADE_DELAY_SECONDS))
+    );
+}
+
+#[test]
+fn a_second_proposal_restarts_the_clock_and_replaces_the_hash() {
+    let env = Env::default();
+    env.mock_all_auths();
+    let (client, admin) = setup(&env);
+    client.propose_upgrade(&admin, &hash(&env, 1));
+    env.ledger().with_mut(|l| l.timestamp += 1_000);
+
+    client.propose_upgrade(&admin, &hash(&env, 2));
+
+    let (pending, eta) = client.pending_upgrade().unwrap();
+    assert_eq!(pending, hash(&env, 2));
+    assert_eq!(eta, env.ledger().timestamp() + UPGRADE_DELAY_SECONDS);
+}

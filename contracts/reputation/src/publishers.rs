@@ -1,7 +1,9 @@
 //! Publisher whitelist storage helpers.
 //!
-//! Publishers are held in instance storage and only authorized publishers can
-//! submit outcomes once the purge endpoint is enabled.
+//! The whitelist is a list in instance storage (for the admin view) plus one
+//! persistent flag per publisher (for the hot path). Only whitelisted
+//! publishers can submit outcomes, metrics, rates and volume; the admin adds
+//! and revokes them, and may scope one to a list of corridors.
 //!
 //! ## Footprint optimisation
 //! Each publisher has a dedicated `DataKey::Publisher(addr)` persistent entry.
@@ -9,10 +11,15 @@
 //! The `Publishers` Vec in instance storage is maintained only for the admin
 //! list-view; it is never touched by the hot write paths.
 
-use soroban_sdk::{Address, Env, Vec};
+use soroban_sdk::{Address, Env, String, Vec};
 
-use crate::storage::DataKey;
+use crate::storage::{self, DataKey};
 use crate::Error;
+
+/// Most publishers the whitelist holds. The list lives in instance storage,
+/// which every call loads; a handful of publishers is the real deployment, so
+/// the cap is small (audit L-14).
+pub const MAX_PUBLISHERS: u32 = 20;
 
 /// Load the current publisher whitelist (empty if none registered yet).
 pub fn list(env: &Env) -> Vec<Address> {
@@ -33,9 +40,15 @@ pub fn add(env: &Env, publisher: Address) -> Result<(), Error> {
         return Err(Error::PublisherExists);
     }
 
-    env.storage().persistent().set(&flag_key, &true);
-
+    // Checked before the flag is written, so a refused add leaves no trace.
     let mut publishers = list(env);
+    if publishers.len() >= MAX_PUBLISHERS {
+        return Err(Error::LimitReached);
+    }
+
+    env.storage().persistent().set(&flag_key, &true);
+    storage::extend_persistent(env, &flag_key);
+
     publishers.push_back(publisher);
     env.storage()
         .instance()
@@ -52,6 +65,8 @@ pub fn revoke(env: &Env, publisher: Address) -> Result<(), Error> {
     }
 
     env.storage().persistent().remove(&flag_key);
+    // A revoked publisher must not keep a scope that a later re-add would inherit.
+    clear_scope(env, publisher.clone());
 
     let publishers = list(env);
     let mut remaining = Vec::new(env);
@@ -73,4 +88,60 @@ pub fn is_authorized(env: &Env, publisher: &Address) -> bool {
     env.storage()
         .persistent()
         .has(&DataKey::Publisher(publisher.clone()))
+}
+
+/// The gate every publisher write goes through: the caller must have authorised
+/// this invocation and be whitelisted.
+///
+/// Also extends the whitelist flag's TTL. The flag is read on every publisher
+/// write and was otherwise written once and never extended, so after it
+/// archived every write stalled until someone restored it (audit P2, contract
+/// TTL). A publisher that is writing therefore keeps its own flag alive.
+/// [`is_authorized`] stays for read-only use, which must not write.
+pub fn require_publisher(env: &Env, publisher: &Address) -> Result<(), Error> {
+    publisher.require_auth();
+
+    let flag_key = DataKey::Publisher(publisher.clone());
+    if !env.storage().persistent().has(&flag_key) {
+        return Err(Error::PublisherUnauthorized);
+    }
+    storage::extend_persistent(env, &flag_key);
+    Ok(())
+}
+
+/// Restrict `publisher` to the listed corridors. Replaces any earlier scope.
+pub fn set_scope(env: &Env, publisher: Address, corridors: Vec<String>) {
+    let key = DataKey::PublisherScope(publisher);
+    env.storage().persistent().set(&key, &corridors);
+    storage::extend_persistent(env, &key);
+}
+
+/// Remove `publisher`'s scope, restoring access to every registered corridor.
+pub fn clear_scope(env: &Env, publisher: Address) {
+    env.storage()
+        .persistent()
+        .remove(&DataKey::PublisherScope(publisher));
+}
+
+/// The corridors `publisher` is limited to, or `None` if it is unscoped.
+pub fn get_scope(env: &Env, publisher: &Address) -> Option<Vec<String>> {
+    env.storage()
+        .persistent()
+        .get(&DataKey::PublisherScope(publisher.clone()))
+}
+
+/// Succeeds when `publisher` has no scope (backwards compatible) or its scope
+/// contains `corridor`; otherwise `PublisherOutOfScope`. One leaked key then
+/// can only touch the corridors it was granted (audit M-5, per-corridor
+/// publisher scoping).
+pub fn require_in_scope(env: &Env, publisher: &Address, corridor: &String) -> Result<(), Error> {
+    match get_scope(env, publisher) {
+        Some(scope) if !scope.contains(corridor) => Err(Error::PublisherOutOfScope),
+        Some(_) => {
+            // Keep a scope that is being used alive, like the publisher flag.
+            storage::extend_persistent(env, &DataKey::PublisherScope(publisher.clone()));
+            Ok(())
+        }
+        None => Ok(()),
+    }
 }
