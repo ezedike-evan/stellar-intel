@@ -7,6 +7,7 @@ import {
   fetchProbeSamples,
   publishProbeSignals,
   runBatch,
+  toProbeSignalArgs,
   type BatchConfig,
   type OutcomeRow,
   type QueryExecutor,
@@ -381,6 +382,57 @@ describe('fetchProbeSamples', () => {
   });
 });
 
+describe('toProbeSignalArgs (#1399)', () => {
+  const signal = (over: Partial<Parameters<typeof toProbeSignalArgs>[0]> = {}) => ({
+    anchorId: 'cowrie',
+    uptimeRatio: 0.98,
+    p50LatencyMs: 120,
+    p95LatencyMs: 450,
+    driftFlagCount: 2,
+    ...over,
+  });
+
+  it('maps a full signal to the contract arguments', () => {
+    expect(toProbeSignalArgs(signal())).toEqual({
+      anchor_id: 'cowrie',
+      uptime_bps: 9800,
+      p50_latency_ms: 120,
+      p95_latency_ms: 450,
+      drift_flag_count: 2,
+    });
+  });
+
+  it('returns null when uptime is unknown rather than writing 0%', () => {
+    expect(toProbeSignalArgs(signal({ uptimeRatio: null }))).toBeNull();
+  });
+
+  it('turns null latencies into the 0/0 "no reachable samples" sentinel', () => {
+    const args = toProbeSignalArgs(signal({ p50LatencyMs: null, p95LatencyMs: null }));
+    expect(args).toMatchObject({ p50_latency_ms: 0, p95_latency_ms: 0 });
+  });
+
+  it('maps a ratio of 1.0 to 10000 and clamps anything outside 0..1', () => {
+    expect(toProbeSignalArgs(signal({ uptimeRatio: 1 }))?.uptime_bps).toBe(10000);
+    expect(toProbeSignalArgs(signal({ uptimeRatio: 1.2 }))?.uptime_bps).toBe(10000);
+    expect(toProbeSignalArgs(signal({ uptimeRatio: -0.1 }))?.uptime_bps).toBe(0);
+    expect(toProbeSignalArgs(signal({ uptimeRatio: 0 }))?.uptime_bps).toBe(0);
+  });
+
+  it('rounds the ratio to the nearest basis point', () => {
+    expect(toProbeSignalArgs(signal({ uptimeRatio: 0.98765 }))?.uptime_bps).toBe(9877);
+  });
+
+  it('raises p95 to p50 when p95 < p50', () => {
+    const args = toProbeSignalArgs(signal({ p50LatencyMs: 300, p95LatencyMs: 100 }));
+    expect(args).toMatchObject({ p50_latency_ms: 300, p95_latency_ms: 300 });
+  });
+
+  it('rounds fractional latencies to integers', () => {
+    const args = toProbeSignalArgs(signal({ p50LatencyMs: 120.4, p95LatencyMs: 450.6 }));
+    expect(args).toMatchObject({ p50_latency_ms: 120, p95_latency_ms: 451 });
+  });
+});
+
 describe('publishProbeSignals', () => {
   it('publishes versioned payload via contract and returns signal count', async () => {
     const payload = {
@@ -409,9 +461,87 @@ describe('publishProbeSignals', () => {
       rpcUrl: BASE_CONFIG.rpcUrl,
     });
     expect(n).toBe(2);
-    expect(sdkMocks.publishProbeSignals).toHaveBeenCalledWith(
-      expect.objectContaining({ payload: JSON.stringify(payload) })
+    // One typed write per anchor, with the numeric fields the contract stores.
+    expect(sdkMocks.publishProbeSignals).toHaveBeenCalledTimes(2);
+    expect(sdkMocks.publishProbeSignals).toHaveBeenNthCalledWith(1, {
+      publisher: expect.any(String),
+      anchor_id: 'cowrie',
+      uptime_bps: 10000,
+      p50_latency_ms: 100,
+      p95_latency_ms: 200,
+      drift_flag_count: 0,
+    });
+    expect(sdkMocks.publishProbeSignals).toHaveBeenNthCalledWith(2, {
+      publisher: expect.any(String),
+      anchor_id: 'ngnc',
+      uptime_bps: 5000,
+      p50_latency_ms: 150,
+      p95_latency_ms: 300,
+      drift_flag_count: 1,
+    });
+  });
+
+  it('skips an anchor with no uptime samples and counts only the writes made', async () => {
+    const n = await publishProbeSignals(
+      {
+        version: 1,
+        signals: [
+          {
+            anchorId: 'dark',
+            uptimeRatio: null,
+            p50LatencyMs: null,
+            p95LatencyMs: null,
+            driftFlagCount: 0,
+          },
+          {
+            anchorId: 'cowrie',
+            uptimeRatio: 1,
+            p50LatencyMs: 10,
+            p95LatencyMs: 20,
+            driftFlagCount: 0,
+          },
+        ],
+      },
+      {
+        oracleContractId: BASE_CONFIG.oracleContractId,
+        networkPassphrase: BASE_CONFIG.networkPassphrase,
+        publisherSecret: BASE_CONFIG.publisherSecret,
+        rpcUrl: BASE_CONFIG.rpcUrl,
+      }
     );
+    expect(n).toBe(1);
+    expect(sdkMocks.publishProbeSignals).toHaveBeenCalledTimes(1);
+    expect(sdkMocks.publishProbeSignals).toHaveBeenCalledWith(
+      expect.objectContaining({ anchor_id: 'cowrie' })
+    );
+  });
+
+  it('keeps publishing the other anchors when one write rejects, and counts the successes', async () => {
+    sdkMocks.publishProbeSignals
+      .mockResolvedValueOnce({ signAndSend: sdkMocks.signAndSend })
+      .mockRejectedValueOnce(new Error('HostError: contract logic rejected'))
+      .mockResolvedValueOnce({ signAndSend: sdkMocks.signAndSend });
+    const signal = (anchorId: string) => ({
+      anchorId,
+      uptimeRatio: 0.9,
+      p50LatencyMs: 10,
+      p95LatencyMs: 20,
+      driftFlagCount: 0,
+    });
+
+    const n = await publishProbeSignals(
+      { version: 1, signals: [signal('a'), signal('b'), signal('c')] },
+      {
+        oracleContractId: BASE_CONFIG.oracleContractId,
+        networkPassphrase: BASE_CONFIG.networkPassphrase,
+        publisherSecret: BASE_CONFIG.publisherSecret,
+        rpcUrl: BASE_CONFIG.rpcUrl,
+        retry: { maxAttempts: 1 },
+      }
+    );
+
+    expect(n).toBe(2);
+    expect(sdkMocks.publishProbeSignals).toHaveBeenCalledTimes(3);
   });
 
   it('returns 0 and does not throw when contract has no entrypoint', async () => {

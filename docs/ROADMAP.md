@@ -520,8 +520,9 @@ milestone](#v2-scope-with-no-milestone) — real decomposition, unscheduled.
 ### Rung 1 — Data Infra
 
 > Tickets: `D001–D077`. Milestone `H1 Rung 1 — Data Infra + Grant` — all of its
-> issues are closed. D070's on-chain half is still outstanding (the publisher
-> side shipped; the contract has no `publish_probe_signals` entrypoint), and it
+> issues are closed. D070's on-chain half is in the contract source now (the publisher
+> writes one typed `publish_probe_signals` call per anchor), but it only
+> reaches the chain once a deployed contract is upgraded to include it. It
 > is where the last several months of commits actually landed.
 
 **Why it is not called "Wave 2.2".** It was filed under the Horizon/Rung
@@ -552,15 +553,16 @@ had to happen alongside them.
 - [-] `D070` Publish probe-derived signals on-chain — extend the publisher
   beyond `outcome_log`
   ([#785](https://github.com/ezedike-evan/stellar-intel/issues/785)).
-  Publisher side shipped (`publishProbeSignals` in `packages/publisher`);
-  the contract has no `publish_probe_signals` entrypoint, so the call is
-  skipped and nothing is written on-chain
+  Publisher side shipped (`publishProbeSignals` in `packages/publisher`,
+  one typed call per anchor) and the contract source has the
+  `publish_probe_signals` entrypoint; a contract deployed before it still
+  has no such entrypoint, so the call is skipped there until it is upgraded
 
 **Rung 1 release gate.**
 
-- [-] `D070` closed — publisher side shipped (`publishProbeSignals`), but the
-  contract has no `publish_probe_signals` entrypoint, so nothing reaches
-  the chain yet
+- [-] `D070` closed — publisher side shipped (`publishProbeSignals`) and the
+  contract source has `publish_probe_signals`, but nothing reaches the chain
+  until the deployed contract is upgraded to include it
 - [x] The 90-day gate is a refusal in the publish path, not a convention
 - [x] Probe coverage is queryable at `GET /api/reputation/probe-coverage`
 

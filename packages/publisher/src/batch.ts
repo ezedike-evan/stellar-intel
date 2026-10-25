@@ -591,16 +591,21 @@ interface OracleSubmitClient {
   }): AssembledTx;
 
   /**
-   * Probe-derived signals (D070 / #785).
+   * Probe-derived signals for one anchor (D070 / #785, typed in #1399).
    *
    * Not every deployment's contract has this entrypoint yet — the publisher
    * treats a missing method as a no-op rather than a failure, so a rollout can
-   * ship the off-chain publisher before the on-chain upgrade lands.
+   * ship the off-chain publisher before the on-chain upgrade lands. It takes
+   * the numeric fields the contract stores; there is one call per anchor.
    */
-  publish_probe_signals?: (args: { publisher: string; payload: string }) => AssembledTx;
-
-  /** Legacy alias some local deploys expose. */
-  set_probe_signals?: (args: { publisher: string; payload: string }) => AssembledTx;
+  publish_probe_signals?: (args: {
+    publisher: string;
+    anchor_id: string;
+    uptime_bps: number;
+    p50_latency_ms: number;
+    p95_latency_ms: number;
+    drift_flag_count: number;
+  }) => AssembledTx;
 }
 
 /**
@@ -817,16 +822,54 @@ function calculateSavingsUsdc(row: OutcomeRow, medianRate?: number): number {
   return Math.max(0, savings);
 }
 
+/** The numeric arguments of the contract's `publish_probe_signals` for one anchor. */
+export interface ProbeSignalArgs {
+  anchor_id: string;
+  uptime_bps: number;
+  p50_latency_ms: number;
+  p95_latency_ms: number;
+  drift_flag_count: number;
+}
+
 /**
- * Publishes probe-derived signals (#D070 / #785).
+ * Maps an aggregated {@link ProbeSignals} to the contract's typed arguments, or
+ * `null` when there is nothing to publish.
+ *
+ * - `uptimeRatio === null` (no uptime samples) is `null`: an unknown uptime must
+ *   not be written as 0%, which would read as "always down".
+ * - `uptime_bps` is the ratio in basis points, rounded and clamped to 0..10000.
+ * - A null latency becomes 0. The contract treats p50 = p95 = 0 as "no
+ *   reachable samples".
+ * - Latencies are rounded to integers and p95 is raised to at least p50, which
+ *   the contract requires.
+ */
+export function toProbeSignalArgs(s: ProbeSignals): ProbeSignalArgs | null {
+  if (s.uptimeRatio === null) return null;
+
+  const uptimeBps = Math.min(10_000, Math.max(0, Math.round(s.uptimeRatio * 10_000)));
+  const p50 = Math.max(0, Math.round(s.p50LatencyMs ?? 0));
+  const p95 = Math.max(p50, Math.round(s.p95LatencyMs ?? 0));
+
+  return {
+    anchor_id: s.anchorId,
+    uptime_bps: uptimeBps,
+    p50_latency_ms: p50,
+    p95_latency_ms: p95,
+    drift_flag_count: Math.max(0, Math.round(s.driftFlagCount)),
+  };
+}
+
+/**
+ * Publishes probe-derived signals (#D070 / #785, per-anchor since #1399).
  *
  * A **third phase**, after outcomes and corridor rates: best-effort, never
  * throws. A missing contract method is treated as "not yet deployed" rather
  * than a failure, so the publisher can ship before the on-chain upgrade.
- * The payload is JSON-stringified with `version: 1` so the consumer crate can
- * distinguish shapes.
  *
- * Returns the number of anchor signals written (0 when skipped or unsupported).
+ * One write per anchor, each through `withRetry`; an anchor with no uptime
+ * samples is skipped, and one failing anchor does not stop the rest.
+ *
+ * Returns the number of anchors written (0 when skipped or unsupported).
  */
 export async function publishProbeSignals(
   payload: ProbeSignalsPayload,
@@ -860,13 +903,7 @@ export async function publishProbeSignals(
     return 0;
   }
 
-  const publishFn =
-    client.publish_probe_signals ??
-    client.set_probe_signals ??
-    // Mock-friendly fallback: some test doubles expose a generic `publish_probe_signals` under a different key.
-    (client as unknown as Record<string, unknown>)['publish_probe_signals'] ??
-    (client as unknown as Record<string, unknown>)['set_probe_signals'];
-
+  const publishFn = client.publish_probe_signals;
   if (typeof publishFn !== 'function') {
     // Contract does not yet expose the entrypoint — log and skip.
     // eslint-disable-next-line no-console
@@ -876,28 +913,28 @@ export async function publishProbeSignals(
     return 0;
   }
 
-  const payloadJson = JSON.stringify(payload);
+  let written = 0;
+  for (const signal of payload.signals) {
+    const args = toProbeSignalArgs(signal);
+    if (!args) continue;
 
-  try {
-    const assembled = await withRetry(
-      async () => {
-        const tx = await (
-          publishFn as (a: { publisher: string; payload: string }) => AssembledTx
-        ).call(client, {
-          publisher: publisherPublicKey,
-          payload: payloadJson,
-        });
-        return tx.signAndSend();
-      },
-      { onAlert: config.onAlert, options: config.retry }
-    );
-    if (assembled.sendTransactionResponse?.hash) return payload.signals.length;
-    return 0;
-  } catch {
-    // withRetry has already alerted. Probe signals are overwritten next tick,
-    // so one failure must not fail the batch that already published outcomes.
-    return 0;
+    try {
+      const assembled = await withRetry(
+        async () => {
+          const tx = await publishFn.call(client, { publisher: publisherPublicKey, ...args });
+          return tx.signAndSend();
+        },
+        { onAlert: config.onAlert, options: config.retry }
+      );
+      if (assembled.sendTransactionResponse?.hash) written += 1;
+    } catch {
+      // withRetry has already alerted. Probe signals are overwritten next tick,
+      // and one unwritable anchor must not stop the others or fail the batch
+      // that already published outcomes.
+    }
   }
+
+  return written;
 }
 
 export async function runBatch(config: BatchConfig): Promise<BatchResult> {
