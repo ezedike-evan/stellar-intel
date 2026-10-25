@@ -169,25 +169,14 @@ export const ANCHORS: Anchor[] = [
     assetIssuer: USDC_ISSUER,
     seps: ['sep10', 'sep24'],
   },
-  // bitnovo.com: EUR buy/sell provider bringing back usdc-eur, orphaned by the
-  // MyKobo delisting. Verified 2026-09-23. SEP-24 at
-  // https://stellar.bitnovo.com/sep24 (`TRANSFER_SERVER_SEP0024` in
-  // https://stellar.bitnovo.com/.well-known/stellar.toml); /info lists
-  // deposit/withdraw asset pairs [EUR, native, USDC] with `fee.enabled = false`;
-  // SEP-10 /auth is alive. The TOML CURRENCIES list only USDC (canonical issuer)
-  // and XLM — the EUR entry on the rail is not a declared TOML asset, so EUR is
-  // NOT registered as a sold asset here. Payout is not proven end-to-end, so the
-  // corridor stays flagged unverified pending an interactive check.
-  {
-    id: 'bitnovo',
-    name: 'Bitnovo',
-    homeDomain: 'stellar.bitnovo.com',
-    corridors: ['usdc-eur'],
-    unverifiedCorridors: ['usdc-eur'],
-    assetCode: 'USDC',
-    assetIssuer: USDC_ISSUER,
-    seps: ['sep10', 'sep24'],
-  },
+  // bitnovo.com: DELISTED 2026-10-25. stellar.bitnovo.com answers every request,
+  // the TOML included, with HTTP 502 from its proxy, and has done on each nightly
+  // probe for 13 nights running. SEP-24 cannot be reached, so the anchor cannot
+  // serve usdc-eur. Nothing here is fixable from our side: re-list when
+  // /.well-known/stellar.toml and the advertised SEP-24 /info answer 200 again.
+  // Was: USDC (canonical issuer), usdc-eur (unverified), seps sep10/sep24, SEP-24
+  // at https://stellar.bitnovo.com/sep24. usdc-eur stays served by APS Ramp.
+  // See docs/anchors/delisted.md.
   // perahub.com.ph (PETNET, Philippines): a live SEP-31 receiving anchor paying PHP.
   // Tracked for health and survey coverage, never routed — see the usdc-php corridor
   // entry below for why. Verified 2026-09-23.
@@ -275,26 +264,16 @@ export const ANCHORS: Anchor[] = [
     assetIssuer: 'GCAZI7YBLIDJWIVEL7ETNAZGPP3LC24NO6KAOBWZHUERXQ7M5BC52DLV',
     seps: ['sep6', 'sep10', 'sep24'],
   },
-  // finclusive.com: US licensed money transmitter (North Carolina) advertising
-  // live SEP-6, SEP-24 and SEP-31 rails for USDC with zero fees. Verified
-  // 2026-09-23. SEP-6 and SEP-24 both live at
-  // https://api.finclusive.com/stellar/transfer, SEP-31 at
-  // https://api.finclusive.com/stellar/directpayment; /info lists
-  // deposit/withdraw asset pairs [XLM, USDC] enabled on both rails; SEP-10
-  // authentication is alive. The TOML USDC issuer is the canonical one, with
-  // anchor_asset USD — but /info shows no withdraw types, so the fiat leg is
-  // only evidenced by the SDF directory (USD) and the corridor stays flagged
-  // unverified. Confidence: low.
-  {
-    id: 'finclusive',
-    name: 'FinClusive',
-    homeDomain: 'finclusive.com',
-    corridors: ['usdc-usd'],
-    unverifiedCorridors: ['usdc-usd'],
-    assetCode: 'USDC',
-    assetIssuer: USDC_ISSUER,
-    seps: ['sep6', 'sep10', 'sep24', 'sep31'],
-  },
+  // finclusive.com: DELISTED 2026-10-25. The TLS certificate on
+  // api.finclusive.com, which hosts the SEP-6/SEP-24 transfer server and SEP-10
+  // auth, expired 2026-10-04, so every client that verifies certificates fails
+  // before reaching /info. The home-domain TOML still serves 200, which is why
+  // the hourly ledger read this anchor as healthy; the nightly probe follows the
+  // advertised endpoint and does not. Nothing here is fixable from our side:
+  // re-list when api.finclusive.com presents a valid certificate and /info
+  // answers 200. Was: USDC (canonical issuer), usdc-usd (unverified), seps
+  // sep6/sep10/sep24/sep31, transfer server
+  // https://api.finclusive.com/stellar/transfer. See docs/anchors/delisted.md.
 ];
 
 export const KNOWN_ANCHORS = ANCHORS;
@@ -562,6 +541,8 @@ export const V11_CORRIDOR_IDS: ReadonlySet<string> = new Set([
   // usdc-pen: orphaned when anclap was corrected to its own tokens 2026-09-23
   // (usdc-ars is served again by latamex via SEP-6 withdraw-exchange)
   'usdc-pen',
+  // usdc-usd: orphaned when finclusive, its only anchor, was delisted 2026-10-25.
+  'usdc-usd',
 ]);
 
 /**

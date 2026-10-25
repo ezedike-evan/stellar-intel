@@ -1,43 +1,47 @@
 import { describe, it, expect } from 'vitest';
-import { ANCHORS, CORRIDORS, ANCHOR_HOME_DOMAINS } from '@/constants/anchors';
+import {
+  ANCHORS,
+  CORRIDORS,
+  VISIBLE_CORRIDORS,
+  V11_CORRIDOR_IDS,
+  ANCHOR_HOME_DOMAINS,
+} from '@/constants/anchors';
 
-describe('finclusive.com onboarding (ANC034)', () => {
-  const finclusive = ANCHORS.find((a) => a.id === 'finclusive');
-
-  it('is included in ANCHORS — live SEP-24 USDC anchor', () => {
-    expect(finclusive).toBeDefined();
+/**
+ * finclusive.com (ANC034) — delisted 2026-10-25.
+ *
+ * The TLS certificate on api.finclusive.com, which hosts the SEP-6/SEP-24
+ * transfer server and SEP-10 auth, expired 2026-10-04, so every client that
+ * verifies certificates fails before reaching /info. The home-domain TOML still
+ * serves 200, which is why a check that stops at the TOML read this anchor as
+ * healthy.
+ *
+ * These assertions are the inverse of the ones this file used to make. They
+ * exist so a re-list is a deliberate act with a passing endpoint behind it,
+ * rather than something that happens by accident. See docs/anchors/delisted.md.
+ */
+describe('finclusive.com (ANC034) — delisted', () => {
+  it('is not in the registry', () => {
+    expect(ANCHORS.find((a) => a.id === 'finclusive')).toBeUndefined();
   });
 
-  it('uses the live home domain for SEP endpoint discovery', () => {
-    expect(finclusive?.homeDomain).toBe('finclusive.com');
-    expect(finclusive?.serviceDomain).toBeUndefined();
+  it('has no home-domain entry', () => {
+    expect(ANCHOR_HOME_DOMAINS['finclusive']).toBeUndefined();
   });
 
-  it('serves usdc-usd and flags it as unverified', () => {
-    expect(finclusive?.corridors).toContain('usdc-usd');
-    expect(finclusive?.unverifiedCorridors).toContain('usdc-usd');
+  it('leaves usdc-usd with no anchor', () => {
+    expect(ANCHORS.filter((a) => a.corridors.includes('usdc-usd'))).toEqual([]);
   });
 
-  it('anchors USDC with the canonical issuer', () => {
-    expect(finclusive?.assetCode).toBe('USDC');
-  });
-
-  it('advertises SEP-6, SEP-10, SEP-24 and SEP-31 capability', () => {
-    expect(finclusive?.seps).toContain('sep6');
-    expect(finclusive?.seps).toContain('sep10');
-    expect(finclusive?.seps).toContain('sep24');
-    expect(finclusive?.seps).toContain('sep31');
-  });
-
-  it('usdc-usd corridor is defined in CORRIDORS', () => {
+  it('keeps the usdc-usd corridor defined so lookups still resolve', () => {
     const corridor = CORRIDORS.find((c) => c.id === 'usdc-usd');
-    expect(corridor).toBeDefined();
     expect(corridor?.from).toBe('USDC');
     expect(corridor?.to).toBe('USD');
     expect(corridor?.countryCode).toBe('US');
   });
 
-  it('finclusive home domain is registered in ANCHOR_HOME_DOMAINS', () => {
-    expect(ANCHOR_HOME_DOMAINS['finclusive']).toBe('finclusive.com');
+  it('hides the orphaned usdc-usd corridor from selectors', () => {
+    expect(V11_CORRIDOR_IDS.has('usdc-usd')).toBe(true);
+    expect(VISIBLE_CORRIDORS.map((c) => c.id)).not.toContain('usdc-usd');
   });
 });
