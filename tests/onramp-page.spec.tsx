@@ -180,6 +180,7 @@ async function startDeposit(user: ReturnType<typeof userEvent.setup>) {
 beforeEach(() => {
   vi.clearAllMocks();
   mockSearch = '';
+  sessionStorage.clear();
   mockUseWallet.mockReturnValue(connectedWallet());
   mockUseDepositRates.mockReturnValue({
     rates: COMPARISON,
@@ -368,5 +369,93 @@ describe('/onramp page signed outcomes (ONR032)', () => {
     // …and no unsigned outcome is posted: the append route would answer 401.
     await new Promise((resolve) => setTimeout(resolve, 100));
     expect(appendCalls(fetchFn)).toHaveLength(0);
+  });
+});
+
+describe('/onramp page tracking resume (#1480)', () => {
+  const NONCE = 'nonce-1';
+  const TRACKING =
+    'tx=deposit-tx-1&server=https%3A%2F%2Fstellar.moneygram.com%2Fsep24&nonce=' + NONCE;
+
+  function pending() {
+    mockGetSep24Transaction.mockResolvedValue({
+      id: 'deposit-tx-1',
+      status: 'pending_user_transfer_start',
+      updatedAt: new Date(),
+    });
+  }
+
+  it('saves the JWT under a nonce and puts the tracking params in the URL', async () => {
+    pending();
+    stubAppendFetch();
+    const user = userEvent.setup();
+    renderPage();
+
+    await startDeposit(user);
+
+    const call = mockReplace.mock.calls.map((c) => String(c[0])).find((u) => u.includes('tx='));
+    expect(call).toBeTruthy();
+    const params = new URLSearchParams(call!.slice(1));
+    expect(params.get('tx')).toBe('deposit-tx-1');
+    expect(params.get('server')).toBe('https://stellar.moneygram.com/sep24');
+    expect(sessionStorage.getItem(`si_jwt_${params.get('nonce')}`)).toBe('test-jwt');
+  });
+
+  it('renders the tracker for tracking params whose JWT is in the session', async () => {
+    pending();
+    mockSearch = TRACKING;
+    sessionStorage.setItem(`si_jwt_${NONCE}`, 'restored-jwt');
+    renderPage();
+
+    expect(await screen.findByText('Deposit status')).toBeTruthy();
+    await waitFor(() =>
+      expect(mockGetSep24Transaction).toHaveBeenCalledWith(
+        'https://stellar.moneygram.com/sep24',
+        'deposit-tx-1',
+        'restored-jwt',
+        expect.anything()
+      )
+    );
+  });
+
+  it('renders no tracker when the session no longer holds the JWT', () => {
+    pending();
+    mockSearch = TRACKING;
+    renderPage();
+
+    expect(screen.queryByText('Deposit status')).toBeNull();
+    expect(mockGetSep24Transaction).not.toHaveBeenCalled();
+  });
+
+  it('does not overwrite the tracking params with corridor and amount', () => {
+    pending();
+    mockSearch = TRACKING;
+    sessionStorage.setItem(`si_jwt_${NONCE}`, 'restored-jwt');
+    renderPage();
+
+    expect(
+      mockReplace.mock.calls.map((c) => String(c[0])).some((u) => u.includes('corridor='))
+    ).toBe(false);
+  });
+
+  it('clears the params and the stored JWT on a terminal status', async () => {
+    mockSearch = TRACKING; // getSep24Transaction resolves `completed` by default
+    sessionStorage.setItem(`si_jwt_${NONCE}`, 'restored-jwt');
+    stubAppendFetch();
+    renderPage();
+
+    await waitFor(() => expect(mockReplace).toHaveBeenCalledWith(window.location.pathname));
+    expect(sessionStorage.getItem(`si_jwt_${NONCE}`)).toBeNull();
+  });
+
+  it('keeps the JWT while the deposit is still pending', async () => {
+    pending();
+    mockSearch = TRACKING;
+    sessionStorage.setItem(`si_jwt_${NONCE}`, 'restored-jwt');
+    renderPage();
+
+    await screen.findByText('Deposit status');
+    await waitFor(() => expect(mockGetSep24Transaction).toHaveBeenCalled());
+    expect(sessionStorage.getItem(`si_jwt_${NONCE}`)).toBe('restored-jwt');
   });
 });

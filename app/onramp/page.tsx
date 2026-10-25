@@ -13,6 +13,15 @@ import { useTransferStatus, type OutcomeAppendContext } from '@/hooks/useWithdra
 import { VISIBLE_CORRIDORS } from '@/constants/anchors';
 import { getCorridorById } from '@/lib/stellar/anchors';
 import { signIntent } from '@/lib/intent/sign';
+import {
+  buildTrackingSearch,
+  clearJwtFromSession,
+  generateNonce,
+  loadJwtFromSession,
+  parseTrackingParams,
+  saveJwtToSession,
+} from '@/lib/session';
+import { TERMINAL_STATES } from '@/lib/stellar/sep24';
 import type { OnrampIntent } from '@/types/intent';
 import type { DepositRate } from '@/types';
 
@@ -30,6 +39,11 @@ const DepositDrawer = dynamic(
  * transactions from the same /transaction endpoint with the same statuses. Once
  * a deposit starts, the wallet-signed onramp intent is attached so its terminal
  * outcome is recorded through the attested append path with direction 'deposit'.
+ *
+ * A deposit can take hours while the user sends fiat, so tracking survives a
+ * reload or a return from the anchor: the SEP-10 JWT is kept in sessionStorage
+ * under a nonce, and `tx`/`server`/`nonce` in the URL point back at it. They are
+ * cleared once the transaction reaches a terminal status.
  */
 
 const DEFAULT_CORRIDOR_ID = 'usdc-ngn';
@@ -72,6 +86,7 @@ function OnrampContent() {
   const [trackingTransactionId, setTrackingTransactionId] = useState<string | null>(null);
   const [trackingTransferServer, setTrackingTransferServer] = useState<string | null>(null);
   const [trackingJwt, setTrackingJwt] = useState<string | null>(null);
+  const [trackingNonce, setTrackingNonce] = useState<string | null>(null);
   const [trackingAnchorHomeDomain, setTrackingAnchorHomeDomain] = useState<string | null>(null);
 
   // Quote context captured when the deposit starts, so the terminal outcome is
@@ -112,13 +127,41 @@ function OnrampContent() {
     [comparison, activeAssetId]
   );
 
+  // Restore tracking after a reload or a redirect back from the anchor. Without
+  // the JWT in this tab's session there is nothing to poll with, so the page
+  // renders no tracker rather than one that can only fail.
   useEffect(() => {
+    const params = parseTrackingParams(searchParams.toString());
+    if (!params) return;
+    const jwt = loadJwtFromSession(params.nonce);
+    if (!jwt) return;
+    setTrackingTransactionId(params.transactionId);
+    setTrackingTransferServer(params.transferServer);
+    setTrackingJwt(jwt);
+    setTrackingNonce(params.nonce);
+    // Mount only: later URL changes are this page's own writes.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+
+  useEffect(() => {
+    // Tracking params own the URL while a deposit is in flight, so don't clobber
+    // them with corridor/amount. Reading the raw `tx` param, not the state, avoids
+    // a race on first mount where this runs before the restore effect above lands.
+    if (trackingTransactionId || searchParams.get('tx')) return;
     const sp = new URLSearchParams();
     sp.set('corridor', corridorId);
     sp.set('amount', amount);
     if (activeAssetId) sp.set('asset', activeAssetId);
     router.replace(`?${sp.toString()}`, { scroll: false });
-  }, [corridorId, amount, activeAssetId, router]);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [corridorId, amount, activeAssetId, trackingTransactionId]);
+
+  useEffect(() => {
+    if (depositStatus.status && TERMINAL_STATES.has(depositStatus.status) && trackingNonce) {
+      clearJwtFromSession(trackingNonce);
+      router.replace(window.location.pathname);
+    }
+  }, [depositStatus.status, trackingNonce, router]);
 
   const handleAmountChange = useCallback((value: string) => {
     if (value === '' || POSITIVE_DECIMAL_RE.test(value)) setAmount(value);
@@ -170,23 +213,29 @@ function OnrampContent() {
 
   const handleDepositStarted = useCallback(
     (transactionId: string, transferServer: string, jwt: string, anchorHomeDomain: string) => {
+      const nonce = generateNonce();
+      saveJwtToSession(nonce, jwt);
+      router.replace(`?${buildTrackingSearch({ transactionId, transferServer, nonce })}`);
       setTrackingTransactionId(transactionId);
       setTrackingTransferServer(transferServer);
       setTrackingJwt(jwt);
+      setTrackingNonce(nonce);
       setTrackingAnchorHomeDomain(anchorHomeDomain);
 
       if (selectedRate) void recordOutcomeIntent(selectedRate, transactionId);
     },
-    [selectedRate, recordOutcomeIntent]
+    [router, selectedRate, recordOutcomeIntent]
   );
 
   const handleStartAnother = useCallback(() => {
+    if (trackingNonce) clearJwtFromSession(trackingNonce);
     setTrackingTransactionId(null);
     setTrackingTransferServer(null);
     setTrackingJwt(null);
+    setTrackingNonce(null);
     setTrackingAnchorHomeDomain(null);
     setOutcomeContext(null);
-  }, []);
+  }, [trackingNonce]);
 
   return (
     <div className="mx-auto max-w-4xl space-y-6 px-4 py-8">
