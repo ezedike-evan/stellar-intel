@@ -938,6 +938,7 @@ the hardening contract (see `lib/api/v1.ts`):
   - [`GET /api/v1/anchors/{id}/health`](#get-apiv1anchorsidhealth)
   - [`GET /api/v1/anchors/{id}/price-history`](#get-apiv1anchorsidprice-history)
   - [`GET /api/v1/anchors/{id}/quote-gap`](#get-apiv1anchorsidquote-gap)
+  - [`GET /api/v1/sep38/readiness`](#get-apiv1sep38readiness)
 - **Intent**
   - [`POST /api/intent`](#post-apiintent)
   - [`POST /api/intent/offramp`](#post-apiintentofframp)
@@ -1144,6 +1145,21 @@ Signed gap between the rate shown before execution and the rate that landed, ove
 | `404` | Unknown anchor | `application/json` | `ApiError` |
 | `429` | Rate limit exceeded | `application/json` | `ApiError` |
 | `503` | Reputation store unavailable | `application/json` | `ApiError` |
+
+---
+
+### `GET /api/v1/sep38/readiness`
+
+**Summary:** Get SEP-38 firm-quote readiness per anchor  
+
+For each registered anchor: whether the operator declares SEP-38, whether its stellar.toml advertises a quote server, whether that server’s /info answers, and whether it lists the anchor’s registered asset. Checked live and cached for ten minutes.
+
+#### Responses
+
+| Status | Description | Content-Type | Schema |
+| :--- | :--- | :--- | :--- |
+| `200` | Readiness per anchor | `application/json` | `object` |
+| `429` | Rate limit exceeded | `application/json` | `ApiError` |
 
 ---
 

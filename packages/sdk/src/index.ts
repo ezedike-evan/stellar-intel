@@ -22,6 +22,8 @@ export {
   type AnchorHealthLedgerArtifact,
   type AnchorPriceHistory,
   type AnchorQuoteGap,
+  type Sep38Readiness,
+  type Sep38ReadinessResponse,
   type AnchorPricePoint,
   type AnchorHealthLedgerEntry,
   type CorridorVolumeSavings,

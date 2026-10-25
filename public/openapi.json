@@ -2015,6 +2015,100 @@
         }
       }
     },
+    "/api/v1/sep38/readiness": {
+      "get": {
+        "summary": "Get SEP-38 firm-quote readiness per anchor",
+        "description": "For each registered anchor: whether the operator declares SEP-38, whether its stellar.toml advertises a quote server, whether that server’s /info answers, and whether it lists the anchor’s registered asset. Checked live and cached for ten minutes.",
+        "tags": [
+          "Anchors"
+        ],
+        "responses": {
+          "200": {
+            "description": "Readiness per anchor",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "anchors": {
+                      "type": "array",
+                      "items": {
+                        "type": "object",
+                        "properties": {
+                          "anchorId": {
+                            "type": "string"
+                          },
+                          "declared": {
+                            "type": "boolean",
+                            "description": "The operator declares SEP-38 support"
+                          },
+                          "quoteServer": {
+                            "type": [
+                              "string",
+                              "null"
+                            ],
+                            "description": "ANCHOR_QUOTE_SERVER from the toml"
+                          },
+                          "infoReachable": {
+                            "type": "boolean"
+                          },
+                          "assets": {
+                            "type": "array",
+                            "items": {
+                              "type": "string"
+                            },
+                            "description": "SEP-38 asset identifiers listed"
+                          },
+                          "sellsRegisteredAsset": {
+                            "type": "boolean"
+                          },
+                          "error": {
+                            "type": [
+                              "string",
+                              "null"
+                            ]
+                          },
+                          "checkedAt": {
+                            "type": "string"
+                          }
+                        },
+                        "required": [
+                          "anchorId",
+                          "declared",
+                          "quoteServer",
+                          "infoReachable",
+                          "assets",
+                          "sellsRegisteredAsset",
+                          "error",
+                          "checkedAt"
+                        ]
+                      }
+                    },
+                    "generatedAt": {
+                      "type": "string"
+                    }
+                  },
+                  "required": [
+                    "anchors",
+                    "generatedAt"
+                  ]
+                }
+              }
+            }
+          },
+          "429": {
+            "description": "Rate limit exceeded",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
     "/api/reputation/{anchor}": {
       "get": {
         "summary": "Get anchor reputation",

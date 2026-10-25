@@ -161,6 +161,26 @@ export interface AnchorQuoteGap {
   windowDays: 7 | 30 | 90;
 }
 
+/** Whether one anchor is ready to give firm (SEP-38) quotes. */
+export interface Sep38Readiness {
+  anchorId: string;
+  /** The operator declares SEP-38 support. */
+  declared: boolean;
+  /** `ANCHOR_QUOTE_SERVER` from the anchor's stellar.toml, or null. */
+  quoteServer: string | null;
+  infoReachable: boolean;
+  /** SEP-38 asset identifiers the quote server lists. */
+  assets: string[];
+  sellsRegisteredAsset: boolean;
+  error: string | null;
+  checkedAt: string;
+}
+
+export interface Sep38ReadinessResponse {
+  anchors: Sep38Readiness[];
+  generatedAt: string;
+}
+
 export interface AnchorPriceHistory {
   anchorId: string;
   corridor: string;
@@ -255,6 +275,7 @@ export const OPERATIONS = {
   getAnchorHealthLedger: 'GET /api/v1/anchor-health/ledger',
   getAnchorPriceHistory: 'GET /api/v1/anchors/{id}/price-history',
   getAnchorQuoteGap: 'GET /api/v1/anchors/{id}/quote-gap',
+  getSep38Readiness: 'GET /api/v1/sep38/readiness',
   getAnchorCensus: 'GET /api/v1/anchors/census',
   getCorridorVolumeSavings: 'GET /api/v1/corridors/{corridor}/volume-savings',
   getHealth: 'GET /api/v1/health',

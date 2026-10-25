@@ -734,6 +734,45 @@ registry.registerPath({
 
 registry.registerPath({
   method: 'get',
+  path: '/api/v1/sep38/readiness',
+  summary: 'Get SEP-38 firm-quote readiness per anchor',
+  description:
+    'For each registered anchor: whether the operator declares SEP-38, whether its stellar.toml ' +
+    'advertises a quote server, whether that server’s /info answers, and whether it lists the ' +
+    'anchor’s registered asset. Checked live and cached for ten minutes.',
+  tags: ['Anchors'],
+  responses: {
+    200: {
+      description: 'Readiness per anchor',
+      content: {
+        'application/json': {
+          schema: z.object({
+            anchors: z.array(
+              z.object({
+                anchorId: z.string(),
+                declared: z.boolean().describe('The operator declares SEP-38 support'),
+                quoteServer: z.string().nullable().describe('ANCHOR_QUOTE_SERVER from the toml'),
+                infoReachable: z.boolean(),
+                assets: z.array(z.string()).describe('SEP-38 asset identifiers listed'),
+                sellsRegisteredAsset: z.boolean(),
+                error: z.string().nullable(),
+                checkedAt: z.string(),
+              })
+            ),
+            generatedAt: z.string(),
+          }),
+        },
+      },
+    },
+    429: {
+      description: 'Rate limit exceeded',
+      content: { 'application/json': { schema: ApiErrorSchema } },
+    },
+  },
+});
+
+registry.registerPath({
+  method: 'get',
   path: '/api/reputation/{anchor}',
   summary: 'Get anchor reputation',
   description:

@@ -324,3 +324,15 @@ describe('StellarIntelClient — quote gap', () => {
     );
   });
 });
+
+describe('StellarIntelClient — SEP-38 readiness', () => {
+  it('reads the readiness table', async () => {
+    const body = { anchors: [], generatedAt: '2026-10-25T08:00:00.000Z' };
+    const fetchMock = vi.fn(async (_url: RequestInfo | URL, _init?: RequestInit) =>
+      jsonResponse(200, body)
+    );
+
+    expect(await makeClient(fetchMock as never).getSep38Readiness()).toEqual(body);
+    expect(String(fetchMock.mock.calls[0]![0])).toBe('https://api.test/api/v1/sep38/readiness');
+  });
+});

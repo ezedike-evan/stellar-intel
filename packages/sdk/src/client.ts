@@ -18,6 +18,7 @@ import type {
   OnrampIntentResponse,
   OnrampQuote,
   RateComparison,
+  Sep38ReadinessResponse,
 } from './types.js';
 
 export const DEFAULT_BASE_URL = 'https://stellar-intel.vercel.app';
@@ -230,6 +231,18 @@ export class StellarIntelClient {
     return this.request<AnchorPriceHistory>({
       method: 'GET',
       path: `/api/v1/anchors/${encodeURIComponent(anchorId)}/price-history${qs}`,
+    });
+  }
+
+  /**
+   * Which anchors are ready to give firm (SEP-38) quotes: quote server advertised,
+   * /info reachable, registered asset listed. Checked live; the server caches the
+   * answer for ten minutes.
+   */
+  async getSep38Readiness(): Promise<Sep38ReadinessResponse> {
+    return this.request<Sep38ReadinessResponse>({
+      method: 'GET',
+      path: '/api/v1/sep38/readiness',
     });
   }
 
