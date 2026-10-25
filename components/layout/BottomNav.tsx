@@ -1,11 +1,12 @@
 'use client';
 import Link from 'next/link';
 import { usePathname } from 'next/navigation';
-import { ArrowDownLeft, BarChart3 } from 'lucide-react';
+import { ArrowDownLeft, ArrowUpRight, BarChart3 } from 'lucide-react';
 import { clsx } from 'clsx';
 
 const TAB_LINKS = [
   { href: '/offramp', label: 'Off-ramp', icon: ArrowDownLeft },
+  { href: '/onramp', label: 'On-ramp', icon: ArrowUpRight },
   { href: '/anchors', label: 'Anchors', icon: BarChart3 },
 ];
 
