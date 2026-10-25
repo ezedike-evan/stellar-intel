@@ -51,6 +51,7 @@ fn contract_state_is_disjoint_from_upgrade_metadata() {
     client.add_publisher(&admin, &admin);
 
     let anchor = String::from_str(&env, "moneygram");
+    client.register_anchor(&admin, &anchor);
     let corridor = String::from_str(&env, "NGN-USD");
     let h1 = String::from_str(&env, "hash-1");
     let h2 = String::from_str(&env, "hash-2");

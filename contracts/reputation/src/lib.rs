@@ -28,6 +28,7 @@ pub enum Error {
     ArithmeticOverflow = 9,
     OutOfRange = 10,
     RateJumpTooLarge = 11,
+    AnchorNotRegistered = 12,
 }
 
 #[contract]

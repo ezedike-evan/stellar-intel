@@ -39,3 +39,11 @@ pub fn register(env: &Env, anchor_id: String) -> Result<(), Error> {
     env.storage().instance().set(&DataKey::Anchors, &anchors);
     Ok(())
 }
+
+/// True when `anchor_id` is in the registry. One persistent `AnchorTag` read;
+/// the `Anchors` list is not loaded.
+pub fn is_registered(env: &Env, anchor_id: &String) -> bool {
+    env.storage()
+        .persistent()
+        .has(&DataKey::AnchorTag(anchor_id.clone()))
+}

@@ -31,9 +31,10 @@ fn unknown_corridor_returns_zero_aggregate() {
 fn aggregate_accumulates_per_corridor() {
     let env = Env::default();
     env.mock_all_auths();
-    let (client, _admin, publisher) = setup(&env);
+    let (client, admin, publisher) = setup(&env);
 
     let anchor = String::from_str(&env, "cowrie");
+    client.register_anchor(&admin, &anchor);
     let corridor = String::from_str(&env, "usdc-ngn");
     let h1 = String::from_str(&env, "hash-1");
     let h2 = String::from_str(&env, "hash-2");
@@ -53,9 +54,10 @@ fn aggregate_accumulates_per_corridor() {
 fn corridors_are_isolated_within_same_anchor() {
     let env = Env::default();
     env.mock_all_auths();
-    let (client, _admin, publisher) = setup(&env);
+    let (client, admin, publisher) = setup(&env);
 
     let anchor = String::from_str(&env, "bitso");
+    client.register_anchor(&admin, &anchor);
     let ngn = String::from_str(&env, "usdc-ngn");
     let kes = String::from_str(&env, "usdc-kes");
 
@@ -99,10 +101,12 @@ fn corridors_are_isolated_within_same_anchor() {
 fn same_corridor_across_different_anchors_is_isolated() {
     let env = Env::default();
     env.mock_all_auths();
-    let (client, _admin, publisher) = setup(&env);
+    let (client, admin, publisher) = setup(&env);
 
     let anchor_a = String::from_str(&env, "cowrie");
+    client.register_anchor(&admin, &anchor_a);
     let anchor_b = String::from_str(&env, "bitso");
+    client.register_anchor(&admin, &anchor_b);
     let corridor = String::from_str(&env, "usdc-ngn");
 
     client.submit_outcome(

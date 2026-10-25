@@ -19,9 +19,10 @@ fn setup(env: &Env) -> (ReputationContractClient<'_>, Address, Address) {
 fn submit_outcome_rejects_settle_seconds_over_the_cap() {
     let env = Env::default();
     env.mock_all_auths();
-    let (client, _admin, publisher) = setup(&env);
+    let (client, admin, publisher) = setup(&env);
 
     let anchor = String::from_str(&env, "cowrie");
+    client.register_anchor(&admin, &anchor);
     let corridor = String::from_str(&env, "usdc-ngn");
     let hash = String::from_str(&env, "h");
 
@@ -52,6 +53,7 @@ fn admin_can_reset_a_polluted_corridor_aggregate() {
     let (client, admin, publisher) = setup(&env);
 
     let anchor = String::from_str(&env, "cowrie");
+    client.register_anchor(&admin, &anchor);
     let corridor = String::from_str(&env, "usdc-ngn");
     let hash = String::from_str(&env, "h");
 
@@ -70,10 +72,11 @@ fn admin_can_reset_a_polluted_corridor_aggregate() {
 fn a_non_admin_cannot_reset_an_aggregate() {
     let env = Env::default();
     env.mock_all_auths();
-    let (client, _admin, publisher) = setup(&env);
+    let (client, admin, publisher) = setup(&env);
     let stranger = Address::generate(&env);
 
     let anchor = String::from_str(&env, "cowrie");
+    client.register_anchor(&admin, &anchor);
     let corridor = String::from_str(&env, "usdc-ngn");
     let hash = String::from_str(&env, "h");
     client.submit_outcome(&publisher, &anchor, &corridor, &hash, &10u64, &true);
@@ -128,6 +131,7 @@ fn set_corridor_metrics_keeps_v2_fresh_after_migration() {
     let (client, admin, publisher) = setup(&env);
 
     let anchor = String::from_str(&env, "cowrie");
+    client.register_anchor(&admin, &anchor);
     let corridor = String::from_str(&env, "usdc-ngn");
 
     // Seed v1, then migrate to v2 (v2 now mirrors the seed).

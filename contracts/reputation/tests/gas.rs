@@ -22,6 +22,8 @@ fn setup(env: &Env) -> (ReputationContractClient<'_>, Address, String, String) {
     let client = ReputationContractClient::new(env, &contract_id);
     let anchor = String::from_str(env, "moneygram");
     let corridor = String::from_str(env, "NGN-USD");
+    env.mock_all_auths();
+    client.register_anchor(&admin, &anchor);
     (client, admin, anchor, corridor)
 }
 

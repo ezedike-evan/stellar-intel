@@ -65,6 +65,7 @@ fn authorized_publisher_can_submit() {
 
     let publisher = Address::generate(&env);
     let anchor_id = String::from_str(&env, "anchor1");
+    client.register_anchor(&admin, &anchor_id);
     let corridor = String::from_str(&env, "NGN-USD");
     let outcome_hash = String::from_str(&env, "hash1");
 
@@ -84,6 +85,7 @@ fn whitelisted_admin_can_submit() {
     client.add_publisher(&admin, &admin);
 
     let anchor_id = String::from_str(&env, "anchor1");
+    client.register_anchor(&admin, &anchor_id);
     let corridor = String::from_str(&env, "NGN-USD");
     let outcome_hash = String::from_str(&env, "hash1");
 

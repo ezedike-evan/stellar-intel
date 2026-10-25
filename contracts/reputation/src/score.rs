@@ -2,7 +2,7 @@ use soroban_sdk::{Address, Env, String};
 
 use crate::outcome::MAX_SETTLE_SECONDS;
 use crate::storage::{self, DataKey};
-use crate::{publishers, Error};
+use crate::{anchors, publishers, Error};
 
 const MAX_BPS: i128 = 10000;
 const NORM_SETTLE_SECONDS: i128 = 300;
@@ -75,6 +75,10 @@ pub fn set_corridor_metrics(
 
     if !publishers::is_authorized(env, publisher) {
         return Err(Error::PublisherUnauthorized);
+    }
+
+    if !anchors::is_registered(env, &anchor_id) {
+        return Err(Error::AnchorNotRegistered);
     }
 
     // Refuse out-of-range input at write time, before anything is stored, as

@@ -1,7 +1,7 @@
 use soroban_sdk::{Address, Env, String, Vec};
 
 use crate::storage::{self, DataKey, PAGE_SIZE};
-use crate::{aggregate, publishers, Error};
+use crate::{aggregate, anchors, publishers, Error};
 
 /// Upper bound on a single outcome's settle time (~11.6 days). Rejects absurd
 /// values that would otherwise inflate the settle-seconds accumulator toward
@@ -21,6 +21,13 @@ pub fn submit_outcome(
 
     if !publishers::is_authorized(env, publisher) {
         return Err(Error::PublisherUnauthorized);
+    }
+
+    // The registry is what list_anchors reports; without this gate a publisher
+    // key could create history and scores for ids that were never registered
+    // (audit M-5).
+    if !anchors::is_registered(env, &anchor_id) {
+        return Err(Error::AnchorNotRegistered);
     }
 
     if settle_seconds > MAX_SETTLE_SECONDS {

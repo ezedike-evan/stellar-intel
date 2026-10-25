@@ -18,6 +18,7 @@ fn test_recent_outcomes() {
     client.add_publisher(&admin, &admin);
 
     let anchor = String::from_str(&env, "testanchor");
+    client.register_anchor(&admin, &anchor);
     let corridor = String::from_str(&env, "NGN-USD");
 
     for i in 0..5 {

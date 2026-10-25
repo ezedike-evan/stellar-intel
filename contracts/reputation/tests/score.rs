@@ -59,6 +59,7 @@ fn test_get_score_for_corridor_reads_stored_metrics_and_computes_composite() {
     client.add_publisher(&admin, &publisher);
 
     let anchor = String::from_str(&env, "anchor-bitso");
+    client.register_anchor(&admin, &anchor);
     let corridor = String::from_str(&env, "usdc-ngn");
 
     client.set_corridor_metrics(
@@ -84,6 +85,7 @@ fn test_get_score_for_corridor_rejects_out_of_range_metrics() {
     client.add_publisher(&admin, &publisher);
 
     let anchor = String::from_str(&env, "anchor-anclax");
+    client.register_anchor(&admin, &anchor);
     let corridor = String::from_str(&env, "usdc-kes");
 
     // Out-of-range input used to be stored raw and clamped on read; it is now
@@ -110,6 +112,7 @@ fn publish_metrics(
 
     let anchor = String::from_str(env, "anchor-fast");
     let corridor = String::from_str(env, "usdc-ngn");
+    client.register_anchor(&admin, &anchor);
     client.set_corridor_metrics(
         &publisher,
         &anchor,

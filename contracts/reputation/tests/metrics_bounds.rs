@@ -9,12 +9,9 @@ fn setup(env: &Env) -> (ReputationContractClient<'_>, Address, String, String) {
     let client = ReputationContractClient::new(env, &contract_id);
     let publisher = Address::generate(env);
     client.add_publisher(&admin, &publisher);
-    (
-        client,
-        publisher,
-        String::from_str(env, "anchor-bounds"),
-        String::from_str(env, "usdc-ngn"),
-    )
+    let anchor = String::from_str(env, "anchor-bounds");
+    client.register_anchor(&admin, &anchor);
+    (client, publisher, anchor, String::from_str(env, "usdc-ngn"))
 }
 
 /// Asserts the call is refused and that it wrote neither the v1 nor the v2 key.

@@ -101,6 +101,8 @@ fn permission_matrix() {
         env.mock_all_auths();
         client.add_publisher(&admin, &admin);
         client.add_publisher(&admin, &publisher);
+        // Registered while auths are still mocked, before an unauthorised case clears them.
+        client.register_anchor(&admin, &String::from_str(&env, "moneygram"));
 
         if !case.authorized {
             env.set_auths(&[]);
