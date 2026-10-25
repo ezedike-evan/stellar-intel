@@ -21,6 +21,13 @@ fn normalize_settle_seconds(settle_seconds_p50: u64) -> i128 {
     settle_seconds as i128
 }
 
+/// Composite score in basis points: fill rate, discounted by slippage, scaled by
+/// how the anchor's p50 settle time compares to the 300 s norm.
+///
+/// The inputs are clamped to `[0, 10000]`, and so is the result. Without the
+/// final clamp an anchor that settles faster than the norm scored above 100%
+/// (fill 10000, slippage 0, settle 1 s gave 3,000,000), which a consumer
+/// treating the value as basis points cannot make sense of.
 pub fn compute_composite_bps(
     fill_rate_bps: i128,
     slippage_bps: i128,
@@ -42,7 +49,7 @@ pub fn compute_composite_bps(
         return 0;
     }
 
-    (numerator + denominator / 2) / denominator
+    clamp_bps((numerator + denominator / 2) / denominator)
 }
 
 /// Publisher-only. These metrics feed the published composite score, so an
