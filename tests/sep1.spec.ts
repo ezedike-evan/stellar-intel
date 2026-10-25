@@ -160,6 +160,19 @@ describe('SEP-1 server URL filtering (#1353)', () => {
     expect(data.capabilities).toMatchObject({ sep6: false, sep31: false, sep10: false });
   });
 
+  it('logs the rejection by key, never the URL', async () => {
+    const warn = vi.spyOn(console, 'warn').mockImplementation(() => {});
+
+    await resolve({ TRANSFER_SERVER_SEP0024: 'https://evil.example.com/secret-path?token=abc' });
+
+    expect(warn).toHaveBeenCalledWith(
+      '[sep1] server URL rejected',
+      expect.objectContaining({ event: 'sep1_server_url_rejected', key: 'TRANSFER_SERVER_SEP0024' })
+    );
+    expect(JSON.stringify(warn.mock.calls)).not.toContain('evil.example.com');
+    expect(JSON.stringify(warn.mock.calls)).not.toContain('token=abc');
+  });
+
   it('keeps an https URL on a registry subdomain', async () => {
     const data = await resolve({
       TRANSFER_SERVER_SEP0024: 'https://edge.api.cowrie.exchange/sep24',
