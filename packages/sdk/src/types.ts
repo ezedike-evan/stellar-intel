@@ -142,6 +142,45 @@ export interface AnchorPricePoint {
   source: string;
 }
 
+/**
+ * How far an anchor's landed rate drifts from the rate it showed, over completed
+ * withdrawals. Gaps are percentages and signed: negative means users received less
+ * than quoted. Every statistic is null when `sampleCount` is 0.
+ */
+export interface AnchorQuoteGap {
+  anchorId: string;
+  /** How the two rates are defined. */
+  basis: string;
+  sampleCount: number;
+  meanGapPct: number | null;
+  p50GapPct: number | null;
+  /** 95% of transactions landed within this absolute gap. */
+  p95AbsGapPct: number | null;
+  worseCount: number;
+  betterCount: number;
+  windowDays: 7 | 30 | 90;
+}
+
+/** Whether one anchor is ready to give firm (SEP-38) quotes. */
+export interface Sep38Readiness {
+  anchorId: string;
+  /** The operator declares SEP-38 support. */
+  declared: boolean;
+  /** `ANCHOR_QUOTE_SERVER` from the anchor's stellar.toml, or null. */
+  quoteServer: string | null;
+  infoReachable: boolean;
+  /** SEP-38 asset identifiers the quote server lists. */
+  assets: string[];
+  sellsRegisteredAsset: boolean;
+  error: string | null;
+  checkedAt: string;
+}
+
+export interface Sep38ReadinessResponse {
+  anchors: Sep38Readiness[];
+  generatedAt: string;
+}
+
 export interface AnchorPriceHistory {
   anchorId: string;
   corridor: string;
@@ -235,6 +274,8 @@ export const OPERATIONS = {
   getAnchorHealth: 'GET /api/v1/anchors/{id}/health',
   getAnchorHealthLedger: 'GET /api/v1/anchor-health/ledger',
   getAnchorPriceHistory: 'GET /api/v1/anchors/{id}/price-history',
+  getAnchorQuoteGap: 'GET /api/v1/anchors/{id}/quote-gap',
+  getSep38Readiness: 'GET /api/v1/sep38/readiness',
   getAnchorCensus: 'GET /api/v1/anchors/census',
   getCorridorVolumeSavings: 'GET /api/v1/corridors/{corridor}/volume-savings',
   getHealth: 'GET /api/v1/health',

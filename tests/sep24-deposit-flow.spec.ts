@@ -87,6 +87,15 @@ describe('startDepositFlow', () => {
       expect(opts.method).toBe('POST');
     });
 
+    it('forwards a SEP-38 quote id to the anchor (#1511)', async () => {
+      const { calls } = stubFetch(makeFetchResponse(makeDepositInteractiveResponse()));
+
+      await startDepositFlow(depositAnchor, { ...depositFlowParams, quoteId: 'quote-123' });
+
+      const [, opts] = interactiveCall(calls);
+      expect(JSON.parse(opts.body as string)['quote_id']).toBe('quote-123');
+    });
+
     it('authenticates with the SEP-10 session token', async () => {
       const { calls } = stubFetch(makeFetchResponse(makeDepositInteractiveResponse()));
 

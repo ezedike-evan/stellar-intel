@@ -131,7 +131,13 @@ Returns the best net-received quote for a corridor + amount. Annotated
 `readOnlyHint: true` — it never submits anything.
 
 - **Input:** `{ from: string, to: string, amount: string }`
-- **Output:** `{ anchor, quoteId, netReceived, expiresAt }`
+- **Output:** `{ anchor, quoteId, netReceived, expiresAt, source, indicative }`
+
+`source` says where the rate came from: `sep38` is a firm quote the anchor commits
+to; `sep24-fee`, `sep6-info` and `sep6-fee` are estimates built from the anchor's
+published fees. `indicative` is `false` only for `sep38`. When it is `true`,
+`netReceived` can move before the payout, so do not present it to a user as a
+guarantee.
 
 ```jsonc
 // input
@@ -141,7 +147,9 @@ Returns the best net-received quote for a corridor + amount. Annotated
   "anchor": "cowrie",
   "quoteId": "<64-hex sha256>",
   "netReceived": "156800",
-  "expiresAt": "2026-…Z"
+  "expiresAt": "2026-…Z",
+  "source": "sep24-fee",
+  "indicative": true
 }
 ```
 

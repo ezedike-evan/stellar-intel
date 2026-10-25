@@ -22,6 +22,7 @@ const mocks = vi.hoisted(() => ({
   probeAllAnchorIssuers: vi.fn(),
   probeAllAnchorIntegrity: vi.fn(),
   probeAllAnchorSep31: vi.fn(),
+  probeAllAnchorDeposits: vi.fn(),
   probeSep38Prices: vi.fn(),
 }));
 
@@ -41,6 +42,7 @@ vi.mock('@/lib/reputation/probe', async (importOriginal) => {
     probeAllAnchorIssuers: mocks.probeAllAnchorIssuers,
     probeAllAnchorIntegrity: mocks.probeAllAnchorIntegrity,
     probeAllAnchorSep31: mocks.probeAllAnchorSep31,
+    probeAllAnchorDeposits: mocks.probeAllAnchorDeposits,
     probeSep38Prices: mocks.probeSep38Prices,
   };
 });
@@ -72,6 +74,7 @@ beforeEach(() => {
   mocks.probeAllAnchorIssuers.mockResolvedValue([{}, {}, {}]);
   mocks.probeAllAnchorIntegrity.mockResolvedValue([{}]);
   mocks.probeAllAnchorSep31.mockResolvedValue([{}, {}, {}, {}]);
+  mocks.probeAllAnchorDeposits.mockResolvedValue([{}, {}, {}, {}, {}, {}]);
   mocks.probeSep38Prices.mockResolvedValue([{}, {}, {}, {}, {}]);
 });
 
@@ -94,6 +97,7 @@ describe('POST /api/reputation/refresh probe sweep', () => {
       [mocks.probeAllAnchorQuotes, 'quote'],
       [mocks.probeAllAnchorIssuers, 'issuer-mismatch'],
       [mocks.probeAllAnchorIntegrity, 'toml-integrity'],
+      [mocks.probeAllAnchorDeposits, 'deposit'],
     ];
     for (const [probe, kind] of expected) {
       expect(probe).toHaveBeenCalledTimes(1);
@@ -112,6 +116,7 @@ describe('POST /api/reputation/refresh probe sweep', () => {
       issuerMismatch: 3,
       tomlIntegrity: 1,
       sep31Info: 4,
+      deposit: 6,
       sep38Prices: 5,
       persisted: 0,
       failed: 0,

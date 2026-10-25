@@ -1,22 +1,13 @@
 /**
- * Scaffold for the SEP-6 programmatic deposit flow (#1093) — the counterpart
- * to `buildSep6WithdrawRequest` (lib/stellar/sep6.ts, covered by
- * tests/sep6-withdraw.spec.ts). Neither `buildSep6DepositRequest` nor a
- * deposit response schema exists yet.
+ * The SEP-6 programmatic deposit request builder, the counterpart to
+ * `buildSep6WithdrawRequest` (covered by tests/sep6-withdraw.spec.ts).
  *
- * The `buildSep6DepositRequest` block below is skipped until that function is
- * exported from lib/stellar/sep6.ts — accessed through a loose module cast so
- * this file always imports cleanly rather than failing to compile against a
- * symbol that doesn't exist yet. Implementing the function with this exact
- * name and signature is what turns the block on with no test-file changes.
- *
- * The fixture-shape block is NOT skipped: it validates tests/fixtures/sep6-
- * deposit.ts today, against the schemas already enforced for withdraw
- * (lib/stellar/sep6-schemas.ts), so the documented contract can't drift
- * silently before an implementation exists to exercise it directly.
+ * The response-shape block validates tests/fixtures/sep6-deposit.ts against the
+ * schemas already enforced for withdraw (lib/stellar/sep6-schemas.ts), since SEP-6
+ * gives both directions the same three response shapes.
  */
 import { describe, it, expect } from 'vitest';
-import * as sep6 from '@/lib/stellar/sep6';
+import { buildSep6DepositRequest } from '@/lib/stellar/sep6';
 import {
   Sep6WithdrawInteractiveSchema,
   Sep6WithdrawNonInteractiveSchema,
@@ -31,27 +22,8 @@ import {
   sep6DepositNeedsInfoResponse,
 } from './fixtures/sep6-deposit';
 
-interface Sep6DepositParams {
-  asset_code: string;
-  account: string;
-  amount?: string;
-  type?: string;
-  email_address?: string;
-  memo_type?: string;
-  memo?: string;
-  lang?: string;
-}
-
-type Sep6DepositRequestBuilder = (transferServer: string, params: Sep6DepositParams) => string;
-
-// Un-typed lookup: `buildSep6DepositRequest` isn't part of the module's type
-// yet, so a direct `sep6.buildSep6DepositRequest` reference would fail to
-// compile rather than just be undefined at runtime.
-const buildSep6DepositRequest = (sep6 as unknown as Record<string, unknown>)
-  .buildSep6DepositRequest as Sep6DepositRequestBuilder | undefined;
-
-describe.skipIf(!buildSep6DepositRequest)('buildSep6DepositRequest (scaffold)', () => {
-  const build = buildSep6DepositRequest as Sep6DepositRequestBuilder;
+describe('buildSep6DepositRequest', () => {
+  const build = buildSep6DepositRequest;
 
   it('builds correct URL with the required params (asset_code, account)', () => {
     const url = build(SEP6_DEPOSIT_TRANSFER_SERVER, SEP6_DEPOSIT_PARAMS_MINIMAL);
@@ -82,13 +54,27 @@ describe.skipIf(!buildSep6DepositRequest)('buildSep6DepositRequest (scaffold)', 
     ).toThrow('account is required');
   });
 
+  it('always asks for a claimable balance', () => {
+    const url = new URL(build(SEP6_DEPOSIT_TRANSFER_SERVER, SEP6_DEPOSIT_PARAMS_MINIMAL));
+    expect(url.searchParams.get('claimable_balance_supported')).toBe('true');
+  });
+
+  it('omits optional params that were not given', () => {
+    const url = new URL(build(SEP6_DEPOSIT_TRANSFER_SERVER, SEP6_DEPOSIT_PARAMS_MINIMAL));
+    expect([...url.searchParams.keys()].sort()).toEqual([
+      'account',
+      'asset_code',
+      'claimable_balance_supported',
+    ]);
+  });
+
   it('base path is {transferServer}/deposit', () => {
     const url = build(SEP6_DEPOSIT_TRANSFER_SERVER, SEP6_DEPOSIT_PARAMS_MINIMAL);
     expect(new URL(url).pathname).toBe('/sep6/deposit');
   });
 });
 
-describe('SEP-6 deposit response shapes (#1093)', () => {
+describe('SEP-6 deposit response shapes', () => {
   it('interactive_customer_info_needed matches the schema withdraw already validates against', () => {
     expect(() => Sep6WithdrawInteractiveSchema.parse(sep6DepositInteractiveResponse)).not.toThrow();
   });

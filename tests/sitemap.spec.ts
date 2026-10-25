@@ -17,4 +17,8 @@ describe('sitemap (#1482)', () => {
   it('lists each URL once', () => {
     expect(new Set(urls).size).toBe(urls.length);
   });
+
+  it('lists /anchors/sep38', () => {
+    expect(urls.some((u) => u.endsWith('/anchors/sep38'))).toBe(true);
+  });
 });

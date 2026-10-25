@@ -851,6 +851,7 @@ cross-reference for reviewers and contributors.
 | `NEXT_PUBLIC_MCP_ADVERTISE`       | No                     | on                                                      | `lib/flags.ts`                                    | Controls the MCP install banner in the UI. Set to `'off'` to hide.                                                                                                                          |
 | `NEXT_PUBLIC_V11_CORRIDORS`       | No                     | off                                                     | `lib/flags.ts`                                    | Enables v1.1 corridors (ZAR, XOF). Must be `'on'`; a corridor still stays hidden until at least one anchor serves it.                                                                       |
 | `NEXT_PUBLIC_RECURRING_INTENTS`   | No                     | off                                                     | `lib/flags.ts`                                    | Enables the sign-once recurring-intent engine. Must be `'on'`; effective only when `NEXT_PUBLIC_INTENT_FLOW` is also enabled.                                                               |
+| `NEXT_PUBLIC_FIRM_QUOTE_BONUS`    | No                     | off                                                     | `lib/flags.ts`                                    | Ranks a firm SEP-38 quote above an estimate that is up to 0.5% better (`FIRM_QUOTE_BONUS_PCT`). Must be `'on'`. Changes ordering only, never a displayed amount.                            |
 | `NEXT_PUBLIC_MIN_OUTCOMES`        | No                     | `30`                                                    | `lib/reputation/thresholds.ts`                    | Minimum recorded outcomes before a reputation score is considered statistically meaningful.                                                                                                 |
 | `ADMIN_SECRET_KEY`                | Yes (admin routes)     | —                                                       | `lib/auth/admin.ts`                               | Bearer secret for `/admin/*` API routes and the dispute management surface.                                                                                                                 |
 | `CRON_SECRET`                     | Yes (cron routes)      | —                                                       | `lib/api/cron-auth.ts`                            | Bearer secret for cron-triggered routes (publisher tick, reconcile, refresh).                                                                                                               |
@@ -937,6 +938,8 @@ the hardening contract (see `lib/api/v1.ts`):
   - [`GET /api/v1/anchors/census`](#get-apiv1anchorscensus)
   - [`GET /api/v1/anchors/{id}/health`](#get-apiv1anchorsidhealth)
   - [`GET /api/v1/anchors/{id}/price-history`](#get-apiv1anchorsidprice-history)
+  - [`GET /api/v1/anchors/{id}/quote-gap`](#get-apiv1anchorsidquote-gap)
+  - [`GET /api/v1/sep38/readiness`](#get-apiv1sep38readiness)
 - **Intent**
   - [`POST /api/intent`](#post-apiintent)
   - [`POST /api/intent/offramp`](#post-apiintentofframp)
@@ -1118,6 +1121,46 @@ Returns recorded SEP-38 price observations for an anchor corridor, downsampled t
 | `404` | Unknown anchor | `application/json` | `ApiError` |
 | `429` | Rate limit exceeded | `application/json` | `ApiError` |
 | `503` | Quote store unavailable | `application/json` | `ApiError` |
+
+---
+
+### `GET /api/v1/anchors/{id}/quote-gap`
+
+**Summary:** Get how far an anchor lands from the rate it quoted  
+
+Signed gap between the rate shown before execution and the rate that landed, over completed, undisputed withdrawals in the window. Negative means users received less than quoted. Stands in for SEP-38 firm quotes, which most anchors do not offer. Null statistics mean no samples.
+
+#### Parameters
+
+| Name | In | Type | Required | Description |
+| :--- | :--- | :--- | :--- | :--- |
+| `id` | `path` | `string` | **Yes** | Anchor identifier |
+| `window` | `query` | `object` | No | Lookback window in days: 7, 30 or 90 (default 30) |
+
+#### Responses
+
+| Status | Description | Content-Type | Schema |
+| :--- | :--- | :--- | :--- |
+| `200` | Quote-gap statistics | `application/json` | `object` |
+| `400` | Invalid window | `application/json` | `ApiError` |
+| `404` | Unknown anchor | `application/json` | `ApiError` |
+| `429` | Rate limit exceeded | `application/json` | `ApiError` |
+| `503` | Reputation store unavailable | `application/json` | `ApiError` |
+
+---
+
+### `GET /api/v1/sep38/readiness`
+
+**Summary:** Get SEP-38 firm-quote readiness per anchor  
+
+For each registered anchor: whether the operator declares SEP-38, whether its stellar.toml advertises a quote server, whether that server’s /info answers, and whether it lists the anchor’s registered asset. Checked live and cached for ten minutes.
+
+#### Responses
+
+| Status | Description | Content-Type | Schema |
+| :--- | :--- | :--- | :--- |
+| `200` | Readiness per anchor | `application/json` | `object` |
+| `429` | Rate limit exceeded | `application/json` | `ApiError` |
 
 ---
 
@@ -3223,7 +3266,13 @@ Returns the best net-received quote for a corridor + amount. Annotated
 `readOnlyHint: true` — it never submits anything.
 
 - **Input:** `{ from: string, to: string, amount: string }`
-- **Output:** `{ anchor, quoteId, netReceived, expiresAt }`
+- **Output:** `{ anchor, quoteId, netReceived, expiresAt, source, indicative }`
+
+`source` says where the rate came from: `sep38` is a firm quote the anchor commits
+to; `sep24-fee`, `sep6-info` and `sep6-fee` are estimates built from the anchor's
+published fees. `indicative` is `false` only for `sep38`. When it is `true`,
+`netReceived` can move before the payout, so do not present it to a user as a
+guarantee.
 
 ```jsonc
 // input
@@ -3233,7 +3282,9 @@ Returns the best net-received quote for a corridor + amount. Annotated
   "anchor": "cowrie",
   "quoteId": "<64-hex sha256>",
   "netReceived": "156800",
-  "expiresAt": "2026-…Z"
+  "expiresAt": "2026-…Z",
+  "source": "sep24-fee",
+  "indicative": true
 }
 ```
 
@@ -3710,11 +3761,20 @@ sampled**, with the weights renormalised across exactly those:
 healthScore = Σ wᵢ · successRateᵢ ÷ Σ wᵢ      (over signals with samples > 0)
 
 HEALTH_WEIGHTS = { uptime: 0.4, quoteAvailability: 0.2,
-                   issuerMatch: 0.2, tomlIntegrity: 0.2 }
+                   issuerMatch: 0.2, tomlIntegrity: 0.2,
+                   depositAvailability: 0 }
 ```
 
 Uptime carries the most weight because it is the signal a user feels first: an
 anchor that does not answer cannot be used at any price.
+
+`depositAvailability` is reported next to the four scored signals and has weight 0:
+the SEP-24 deposit probe (one sample per deposit asset, stored as kind `deposit`)
+says whether an anchor has switched deposits off while withdrawals keep working, which
+is a different question from whether it is healthy to withdraw through today. Its rows
+are also left out of the sample count, the score threshold and the probing streak, so
+the withdraw-side numbers read the same with or without a deposit sweep. A disabled
+deposit is a verdict about the anchor; a deposit probe that could not complete is not.
 
 ### A check that could not complete is not a failure by the anchor
 

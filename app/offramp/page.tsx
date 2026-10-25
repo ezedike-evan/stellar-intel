@@ -30,6 +30,7 @@ import { amountBucket, FUNNEL_EVENTS, trackFunnelEvent } from '@/lib/analytics';
 import { VISIBLE_CORRIDORS } from '@/constants/anchors';
 import { getCorridorAsset, getCorridorById } from '@/lib/stellar/anchors';
 import { signIntent } from '@/lib/intent/sign';
+import { quotedAllInRate } from '@/lib/stellar/realized-rate';
 import type { Intent } from '@/lib/intent/hash';
 import type { AnchorRate } from '@/types';
 import { MIN_RECEIVE_TOLERANCE } from '@/lib/rate-ranking';
@@ -198,7 +199,9 @@ function OfframpContent() {
         const quote = {
           anchorId: selectedRate.anchorId,
           corridor: selectedRate.corridorId,
-          quotedRate: String(selectedRate.exchangeRate),
+          // All-in basis (totalReceived / amount), so it is comparable with the
+          // delivered rate the hook computes from amount_out / amount_in.
+          quotedRate: quotedAllInRate(selectedRate, amount) ?? String(selectedRate.exchangeRate),
           quotedAmount: amount,
         };
         signIntent(intent)

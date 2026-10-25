@@ -93,15 +93,16 @@ export const PROBE_KINDS = [
   'issuer-mismatch',
   'toml-integrity',
   'sep31-info',
+  'deposit',
 ] as const;
 export type ProbeKind = (typeof PROBE_KINDS)[number];
 
 export interface ProbeLedgerRow {
   /** Anchor home domain that was probed. */
   domain: string;
-  /** Which check this row represents: stellar.toml reachability, a SEP-38 quote round-trip, an issuer-mismatch comparison, a toml-integrity validation, or a SEP-31 receive-capability check. */
+  /** Which check this row represents: stellar.toml reachability, a SEP-38 quote round-trip, an issuer-mismatch comparison, a toml-integrity validation, a SEP-31 receive-capability check, or SEP-24 deposit availability. */
   kind: ProbeKind;
-  /** Corridor ID (e.g. 'usdc-ngn') for `quote` rows; null for `uptime`/`issuer-mismatch`/`toml-integrity` rows. */
+  /** Corridor ID (e.g. 'usdc-ngn') for `quote` rows; `deposit:<CODE>` (one row per deposit asset) for `deposit` rows; null for `uptime`/`issuer-mismatch`/`toml-integrity` rows. */
   corridor: string | null;
   /** True when the probe succeeded (toml resolved, a quote was returned, the issuer matched, or the toml validated clean). */
   reachable: boolean;

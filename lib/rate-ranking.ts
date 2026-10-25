@@ -11,6 +11,7 @@
  */
 
 import { compareDecimals } from '@/lib/decimal';
+import { isFlag } from '@/lib/flags';
 import type { AnchorRate, RateComparison } from '@/types';
 
 // ─── Constants ────────────────────────────────────────────────────────────────
@@ -20,6 +21,21 @@ import type { AnchorRate, RateComparison } from '@/types';
  * Pass a higher value for currencies with sub-cent units (e.g. KWD = 3).
  */
 export const DEFAULT_FIAT_PRECISION = 2;
+
+/**
+ * How much better (in percent) an estimate must be to outrank a firm SEP-38 quote,
+ * when the `firmQuoteBonus` flag is on. A firm quote cannot slip; an estimate can.
+ */
+export const FIRM_QUOTE_BONUS_PCT = 0.5;
+
+export interface RankingOptions {
+  /** Let a firm quote beat an estimate that is only marginally better. */
+  firmQuoteBonus: boolean;
+}
+
+function defaultRankingOptions(): RankingOptions {
+  return { firmQuoteBonus: isFlag('firmQuoteBonus') };
+}
 
 // ─── Core computation ─────────────────────────────────────────────────────────
 
@@ -70,13 +86,29 @@ export function computeNetReceived(
  */
 export function rankByNetReceived(
   rates: AnchorRate[],
-  precision: number = DEFAULT_FIAT_PRECISION
+  precision: number = DEFAULT_FIAT_PRECISION,
+  opts: RankingOptions = defaultRankingOptions()
 ): AnchorRate[] {
-  return [...rates].sort((a, b) => {
-    const aVal = resolvedNetReceived(a, precision);
-    const bVal = resolvedNetReceived(b, precision);
-    return bVal - aVal;
-  });
+  return [...rates].sort(
+    (a, b) => rankingScore(b, precision, opts) - rankingScore(a, precision, opts)
+  );
+}
+
+/**
+ * The value rates are ordered by: the net received amount, scaled up by
+ * {@link FIRM_QUOTE_BONUS_PCT} for a firm (`sep38`) quote when the bonus is on.
+ * It is for ordering only; a row's displayed `totalReceived` is never modified.
+ * An unavailable row stays at `-Infinity`, so a bonus cannot lift it.
+ */
+export function rankingScore(
+  rate: AnchorRate,
+  precision: number = DEFAULT_FIAT_PRECISION,
+  opts: RankingOptions = defaultRankingOptions()
+): number {
+  const net = resolvedNetReceived(rate, precision);
+  return opts.firmQuoteBonus && rate.source === 'sep38'
+    ? net * (1 + FIRM_QUOTE_BONUS_PCT / 100)
+    : net;
 }
 
 /**
@@ -87,13 +119,14 @@ export function rankByNetReceived(
  */
 export function bestRate(
   rates: AnchorRate[],
-  precision: number = DEFAULT_FIAT_PRECISION
+  precision: number = DEFAULT_FIAT_PRECISION,
+  opts: RankingOptions = defaultRankingOptions()
 ): AnchorRate | null {
   if (rates.length === 0) return null;
 
   return rates.reduce((best, candidate) => {
-    const bestVal = resolvedNetReceived(best, precision);
-    const candVal = resolvedNetReceived(candidate, precision);
+    const bestVal = rankingScore(best, precision, opts);
+    const candVal = rankingScore(candidate, precision, opts);
     return candVal > bestVal ? candidate : best;
   });
 }

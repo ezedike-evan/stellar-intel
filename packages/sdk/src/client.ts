@@ -9,6 +9,7 @@ import type {
   AnchorHealth,
   AnchorHealthLedgerArtifact,
   AnchorPriceHistory,
+  AnchorQuoteGap,
   CorridorVolumeSavings,
   OfframpIntentRequest,
   OfframpIntentResponse,
@@ -17,6 +18,7 @@ import type {
   OnrampIntentResponse,
   OnrampQuote,
   RateComparison,
+  Sep38ReadinessResponse,
 } from './types.js';
 
 export const DEFAULT_BASE_URL = 'https://stellar-intel.vercel.app';
@@ -229,6 +231,32 @@ export class StellarIntelClient {
     return this.request<AnchorPriceHistory>({
       method: 'GET',
       path: `/api/v1/anchors/${encodeURIComponent(anchorId)}/price-history${qs}`,
+    });
+  }
+
+  /**
+   * Which anchors are ready to give firm (SEP-38) quotes: quote server advertised,
+   * /info reachable, registered asset listed. Checked live; the server caches the
+   * answer for ten minutes.
+   */
+  async getSep38Readiness(): Promise<Sep38ReadinessResponse> {
+    return this.request<Sep38ReadinessResponse>({
+      method: 'GET',
+      path: '/api/v1/sep38/readiness',
+    });
+  }
+
+  /**
+   * Quoted-vs-landed rate gap for one anchor, over completed withdrawals.
+   *
+   * `window` is 7, 30 or 90 days (server default 30). Gaps are signed percentages:
+   * negative means users received less than the anchor showed.
+   */
+  async getAnchorQuoteGap(anchorId: string, window?: 7 | 30 | 90): Promise<AnchorQuoteGap> {
+    const qs = window === undefined ? '' : `?window=${window}`;
+    return this.request<AnchorQuoteGap>({
+      method: 'GET',
+      path: `/api/v1/anchors/${encodeURIComponent(anchorId)}/quote-gap${qs}`,
     });
   }
 
