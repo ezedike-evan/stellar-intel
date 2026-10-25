@@ -43,7 +43,7 @@ async function fetchSep24TransactionOnce(
   jwt: string,
   signal?: AbortSignal
 ): Promise<Sep24Transaction> {
-  const res = await fetch(`${transferServer}/transaction?id=${transactionId}`, {
+  const res = await fetch(`${transferServer}/transaction?id=${encodeURIComponent(transactionId)}`, {
     headers: { Authorization: `Bearer ${jwt}` },
     ...(signal ? { signal } : {}),
   });
@@ -743,58 +743,6 @@ export async function initiateDeposit(
   };
 }
 
-/**
- * Opens the anchor's KYC popup and waits for the user to complete it.
- * Resolves with the transaction ID on success.
- * Rejects if the user cancels or closes the popup.
- */
-export function openWithdrawPopup(url: string): Promise<string> {
-  return new Promise((resolve, reject) => {
-    const width = 600;
-    const height = 700;
-    const left = Math.round(window.screen.width / 2 - width / 2);
-    const top = Math.round(window.screen.height / 2 - height / 2);
-
-    const popup = window.open(
-      url,
-      'stellar_anchor_kyc',
-      `width=${width},height=${height},left=${left},top=${top}`
-    );
-
-    if (!popup) {
-      reject(new Error('Failed to open popup. Check that popups are not blocked.'));
-      return;
-    }
-
-    let resolved = false;
-
-    const onMessage = (event: MessageEvent) => {
-      if (event.data?.type === 'stellar_transaction_created') {
-        cleanup();
-        resolve(event.data.transaction_id as string);
-      } else if (event.data?.type === 'stellar_cancel') {
-        cleanup();
-        reject(new Error('User cancelled the transaction'));
-      }
-    };
-
-    const pollInterval = setInterval(() => {
-      if (popup.closed && !resolved) {
-        cleanup();
-        reject(new Error('Popup was closed'));
-      }
-    }, 500);
-
-    function cleanup() {
-      resolved = true;
-      clearInterval(pollInterval);
-      window.removeEventListener('message', onMessage);
-    }
-
-    window.addEventListener('message', onMessage);
-  });
-}
-
 /** The fields of a SEP-24 `/transaction` record the withdraw flow reads. */
 export interface WithdrawTransactionRecord {
   withdrawAnchorAccount: string;
@@ -817,7 +765,7 @@ export async function getWithdrawTransactionRecord(
   jwt: string,
   signal?: AbortSignal
 ): Promise<WithdrawTransactionRecord> {
-  const res = await fetch(`${transferServer}/transaction?id=${transactionId}`, {
+  const res = await fetch(`${transferServer}/transaction?id=${encodeURIComponent(transactionId)}`, {
     headers: { Authorization: `Bearer ${jwt}` },
     ...(signal ? { signal } : {}),
   });
