@@ -6,7 +6,7 @@ import { Badge } from '@/components/ui/Badge';
 import { Button } from '@/components/ui/Button';
 import { QuotePill } from '@/components/ui/QuotePill';
 import { Skeleton } from '@/components/ui/Skeleton';
-import { depositLimitStatus } from '@/lib/stellar/deposit-rates';
+import { depositLimitStatus } from '@/lib/stellar/deposit-limits';
 
 interface DepositRateTableProps {
   rates: DepositRateComparison | undefined;
