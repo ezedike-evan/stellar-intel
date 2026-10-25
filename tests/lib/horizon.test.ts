@@ -1,6 +1,6 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest';
 import { Account } from '@stellar/stellar-sdk';
-import { fetchAccount, buildWithdrawPayment } from '@/lib/stellar/horizon';
+import { fetchAccount, buildWithdrawPayment, checkDepositPreflight } from '@/lib/stellar/horizon';
 import { horizonServer } from '@/lib/stellar/horizon';
 
 vi.mock('@stellar/freighter-api', () => ({
@@ -31,6 +31,113 @@ describe('fetchAccount', () => {
     await expect(fetchAccount(SOURCE_KEY)).rejects.toThrow(
       'Account does not exist on the Stellar network'
     );
+  });
+});
+
+describe('checkDepositPreflight (#1462)', () => {
+  const USDC = { code: 'USDC', issuer: USDC_ISSUER };
+
+  /** An account response reduced to the field the preflight reads. */
+  const accountWith = (balances: unknown[]) =>
+    ({ balances }) as unknown as Awaited<ReturnType<typeof horizonServer.loadAccount>>;
+
+  const usdcLine = (extra: Record<string, unknown> = {}) => ({
+    asset_type: 'credit_alphanum4',
+    asset_code: 'USDC',
+    asset_issuer: USDC_ISSUER,
+    balance: '42.5000000',
+    is_authorized: true,
+    ...extra,
+  });
+  const nativeLine = { asset_type: 'native', balance: '10.0000000' };
+
+  it('reports a missing account (Horizon 404) without throwing', async () => {
+    vi.spyOn(horizonServer, 'loadAccount').mockRejectedValue({ response: { status: 404 } });
+
+    await expect(checkDepositPreflight(SOURCE_KEY, USDC)).resolves.toEqual({
+      accountExists: false,
+      hasTrustline: false,
+      trustlineAuthorized: null,
+      balance: null,
+    });
+  });
+
+  it('lets any other error propagate', async () => {
+    vi.spyOn(horizonServer, 'loadAccount').mockRejectedValue({ response: { status: 503 } });
+
+    await expect(checkDepositPreflight(SOURCE_KEY, USDC)).rejects.toEqual({
+      response: { status: 503 },
+    });
+  });
+
+  it('finds the trustline and its balance', async () => {
+    vi.spyOn(horizonServer, 'loadAccount').mockResolvedValue(accountWith([nativeLine, usdcLine()]));
+
+    await expect(checkDepositPreflight(SOURCE_KEY, USDC)).resolves.toEqual({
+      accountExists: true,
+      hasTrustline: true,
+      trustlineAuthorized: true,
+      balance: '42.5000000',
+    });
+  });
+
+  it('reports an existing account with no trustline for the asset', async () => {
+    vi.spyOn(horizonServer, 'loadAccount').mockResolvedValue(accountWith([nativeLine]));
+
+    await expect(checkDepositPreflight(SOURCE_KEY, USDC)).resolves.toEqual({
+      accountExists: true,
+      hasTrustline: false,
+      trustlineAuthorized: null,
+      balance: null,
+    });
+  });
+
+  it('does not match a trustline for the same code from a different issuer', async () => {
+    vi.spyOn(horizonServer, 'loadAccount').mockResolvedValue(
+      accountWith([usdcLine({ asset_issuer: ANCHOR_ACCOUNT })])
+    );
+
+    const result = await checkDepositPreflight(SOURCE_KEY, USDC);
+    expect(result.hasTrustline).toBe(false);
+  });
+
+  it('reports a trustline the issuer has not authorized', async () => {
+    vi.spyOn(horizonServer, 'loadAccount').mockResolvedValue(
+      accountWith([usdcLine({ is_authorized: false })])
+    );
+
+    const result = await checkDepositPreflight(SOURCE_KEY, USDC);
+    expect(result.hasTrustline).toBe(true);
+    expect(result.trustlineAuthorized).toBe(false);
+  });
+
+  it('leaves trustlineAuthorized null when Horizon omits is_authorized', async () => {
+    const { is_authorized: _omit, ...withoutFlag } = usdcLine();
+    vi.spyOn(horizonServer, 'loadAccount').mockResolvedValue(accountWith([withoutFlag]));
+
+    const result = await checkDepositPreflight(SOURCE_KEY, USDC);
+    expect(result.hasTrustline).toBe(true);
+    expect(result.trustlineAuthorized).toBeNull();
+  });
+
+  it('always reports a trustline for XLM, and its balance', async () => {
+    vi.spyOn(horizonServer, 'loadAccount').mockResolvedValue(accountWith([nativeLine]));
+
+    await expect(checkDepositPreflight(SOURCE_KEY, { code: 'XLM', issuer: '' })).resolves.toEqual({
+      accountExists: true,
+      hasTrustline: true,
+      trustlineAuthorized: null,
+      balance: '10.0000000',
+    });
+  });
+
+  it('is asset-generic: it finds a non-USDC line', async () => {
+    vi.spyOn(horizonServer, 'loadAccount').mockResolvedValue(
+      accountWith([usdcLine({ asset_code: 'NGNC', balance: '7.0000000' })])
+    );
+
+    const result = await checkDepositPreflight(SOURCE_KEY, { code: 'NGNC', issuer: USDC_ISSUER });
+    expect(result).toMatchObject({ hasTrustline: true, balance: '7.0000000' });
   });
 });
 

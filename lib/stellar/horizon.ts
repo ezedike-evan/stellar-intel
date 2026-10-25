@@ -33,6 +33,67 @@ export async function fetchAccount(publicKey: string): Promise<Horizon.AccountRe
   }
 }
 
+// ─── Deposit preflight ────────────────────────────────────────────────────────
+
+/** Whether an account can receive a deposit of a given asset right now. */
+export interface DepositPreflight {
+  accountExists: boolean;
+  hasTrustline: boolean;
+  /** The trustline's `is_authorized`; null when there is no line or Horizon omits it. */
+  trustlineAuthorized: boolean | null;
+  /** The asset balance as a decimal string; null when there is no line. */
+  balance: string | null;
+}
+
+/**
+ * Checks that `publicKey` can receive `asset`: the account must exist (be funded)
+ * and hold a trustline for it. The on-ramp runs this before sending the user to
+ * the anchor, so nobody completes KYC and pays fiat into a deposit that cannot
+ * land.
+ *
+ * A Horizon 404 means "no such account" and returns the all-false result rather
+ * than throwing; any other error propagates. The native asset needs no trustline,
+ * so it always reports `hasTrustline: true` for an existing account.
+ */
+export async function checkDepositPreflight(
+  publicKey: string,
+  asset: { code: string; issuer: string }
+): Promise<DepositPreflight> {
+  let account: Horizon.AccountResponse;
+  try {
+    account = await horizonServer.loadAccount(publicKey);
+  } catch (err) {
+    if ((err as { response?: { status?: number } })?.response?.status === 404) {
+      return {
+        accountExists: false,
+        hasTrustline: false,
+        trustlineAuthorized: null,
+        balance: null,
+      };
+    }
+    throw err;
+  }
+
+  const isNative = asset.code === 'XLM' && !asset.issuer;
+  const line = account.balances.find((b) =>
+    isNative
+      ? b.asset_type === 'native'
+      : 'asset_code' in b && b.asset_code === asset.code && b.asset_issuer === asset.issuer
+  );
+
+  const authorized =
+    line && 'is_authorized' in line && typeof line.is_authorized === 'boolean'
+      ? line.is_authorized
+      : null;
+
+  return {
+    accountExists: true,
+    hasTrustline: isNative || line !== undefined,
+    trustlineAuthorized: authorized,
+    balance: line?.balance ?? null,
+  };
+}
+
 // ─── Payment builder ──────────────────────────────────────────────────────────
 
 export interface BuildWithdrawPaymentParams {
