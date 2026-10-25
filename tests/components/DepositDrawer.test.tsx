@@ -1,6 +1,6 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest';
 import { render, screen, fireEvent, waitFor } from '@testing-library/react';
-import { DepositDrawer } from '@/components/onramp/DepositDrawer';
+import { DepositDrawer, toAssetAmount } from '@/components/onramp/DepositDrawer';
 import type { DepositRate } from '@/types';
 
 // ─── Module mocks ─────────────────────────────────────────────────────────────
@@ -79,6 +79,7 @@ const RATE: DepositRate = {
   corridorId: 'usdc-ngn',
   asset: `stellar:USDC:${ISSUER}`,
   fiatAmount: 150000,
+  assetAmount: 99.5,
   fee: 1,
   feeType: 'flat',
   exchangeRate: 0.00066,
@@ -153,7 +154,8 @@ describe('DepositDrawer (#1478)', () => {
         jwt: 'test.jwt.token',
         assetCode: 'USDC',
         assetIssuer: ISSUER,
-        amount: '150000',
+        // SEP-24 wants asset units (what the fiat buys), not the fiat amount shown to the user.
+        amount: '99.5',
         account: PUBLIC_KEY,
       },
       expect.any(AbortSignal)
@@ -265,5 +267,30 @@ describe('DepositDrawer (#1478)', () => {
 
     await screen.findByTestId('preflight');
     expect(mockAcceptTerms).toHaveBeenCalledWith(PUBLIC_KEY);
+  });
+
+  it('shows an error instead of starting when the estimate has no asset amount', async () => {
+    const { assetAmount: _unused, ...withoutAmount } = RATE;
+    renderDrawer({ rate: withoutAmount });
+    await startAndPassPreflight();
+
+    const alert = await screen.findByRole('alert');
+    expect(alert.textContent).toBeTruthy();
+    expect(mockStartDepositFlow).not.toHaveBeenCalled();
+  });
+});
+
+describe('toAssetAmount', () => {
+  it('formats to seven decimals and drops trailing zeros', () => {
+    expect(toAssetAmount(100)).toBe('100');
+    expect(toAssetAmount(99.5)).toBe('99.5');
+    expect(toAssetAmount(0.12345678)).toBe('0.1234568');
+    expect(toAssetAmount(10)).toBe('10');
+  });
+
+  it('rejects a missing or non-positive amount', () => {
+    expect(() => toAssetAmount(undefined)).toThrow();
+    expect(() => toAssetAmount(0)).toThrow();
+    expect(() => toAssetAmount(Number.NaN)).toThrow();
   });
 });

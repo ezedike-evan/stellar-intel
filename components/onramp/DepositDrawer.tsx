@@ -40,7 +40,7 @@ const CANCELLED = 'User cancelled the transaction';
 
 export interface DepositDrawerProps {
   rate: DepositRate | null;
-  /** Fiat amount the user intends to deposit. */
+  /** Fiat amount the user intends to deposit, shown to them. The anchor is sent asset units. */
   amount: string;
   publicKey: string;
   onClose: () => void;
@@ -57,6 +57,23 @@ function parseAssetId(assetId: string): { code: string; issuer: string } {
   if (assetId === 'stellar:native') return { code: 'XLM', issuer: '' };
   const [, code = '', issuer = ''] = assetId.split(':');
   return { code, issuer };
+}
+
+/**
+ * SEP-24 reads `amount` in units of the asset being deposited, not in the fiat the
+ * user pays, so the row's gross asset amount is what goes to the anchor. Seven
+ * decimals is Stellar's precision; trailing zeros are dropped.
+ */
+export function toAssetAmount(assetAmount: number | undefined): string {
+  if (assetAmount === undefined || !Number.isFinite(assetAmount) || assetAmount <= 0) {
+    throw new Error(
+      'This estimate has no asset amount to start a deposit from. Refresh the rates.'
+    );
+  }
+  return assetAmount
+    .toFixed(7)
+    .replace(/(\.\d*?)0+$/, '$1')
+    .replace(/\.$/, '');
 }
 
 // ─── Component ────────────────────────────────────────────────────────────────
@@ -213,7 +230,7 @@ export function DepositDrawer({
           jwt: auth.jwt,
           assetCode: asset.code,
           assetIssuer: asset.issuer,
-          amount,
+          amount: toAssetAmount(rate.assetAmount),
           account: publicKey,
         },
         signal
