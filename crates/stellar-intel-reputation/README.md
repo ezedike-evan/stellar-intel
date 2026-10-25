@@ -23,7 +23,7 @@ in the main repository, including the deployed testnet contract id.
 ```toml
 [dependencies]
 stellar-intel-reputation = { git = "https://github.com/ezedike-evan/stellar-intel", package = "stellar-intel-reputation" }
-# once published: stellar-intel-reputation = "0.3"
+# once published: stellar-intel-reputation = "0.4"
 ```
 
 ## Usage
@@ -53,14 +53,16 @@ top of this crate.
 
 ## What this crate exposes
 
-| Method                                    | Wraps contract entrypoint      | Returns                                                                                  |
-| ----------------------------------------- | ------------------------------ | ---------------------------------------------------------------------------------------- |
-| `list_anchors()`                          | `list_anchors`                 | Every anchor id the oracle has data for.                                                 |
-| `recent_outcomes(anchor_id, n)`           | `recent_outcomes`              | Last `n` outcome rows, most recent first (capped at 100).                                |
-| `corridor_aggregate(anchor_id, corridor)` | `get_corridor_aggregate`       | `CorridorAggregate { total, successes, settle_seconds_sum }`                             |
-| `corridor_score(anchor_id, corridor)`     | `get_score_for_corridor`       | `CorridorScore { composite_bps, fill_rate_bps, settle_seconds_p50, sample_size }`        |
-| `read_aggregate(anchor_id, window)`       | derived from `recent_outcomes` | `ReputationAggregate` — client-side success-rate score, no reliance on published metrics |
-| `score_bps(anchor_id, window)`            | derived from `read_aggregate`  | Just the score, in basis points.                                                         |
+| Method                                    | Wraps contract entrypoint      | Returns                                                                                           |
+| ----------------------------------------- | ------------------------------ | ------------------------------------------------------------------------------------------------- |
+| `list_anchors()`                          | `list_anchors`                 | Every anchor id the oracle has data for.                                                          |
+| `recent_outcomes(anchor_id, n)`           | `recent_outcomes`              | Last `n` outcome rows, most recent first (capped at 100).                                         |
+| `corridor_aggregate(anchor_id, corridor)` | `get_corridor_aggregate`       | `CorridorAggregate { total, successes, settle_seconds_sum }`                                      |
+| `corridor_score(anchor_id, corridor)`     | `get_score_for_corridor`       | `CorridorScore { composite_bps, fill_rate_bps, settle_seconds_p50, sample_size }`                 |
+| `corridor_score_v2(anchor_id, corridor)`  | `get_score_for_corridor_v2`    | `CorridorScoreV2 { composite_bps, fill_rate_bps, slippage_bps, settle_seconds_p50, sample_size }` |
+| `probe_signals(anchor_id)`                | `get_probe_signals`            | `Option<ProbeSignals>` — uptime, p50/p95 latency and drift flag count; `None` if never probed     |
+| `read_aggregate(anchor_id, window)`       | derived from `recent_outcomes` | `ReputationAggregate` — client-side success-rate score, no reliance on published metrics          |
+| `score_bps(anchor_id, window)`            | derived from `read_aggregate`  | Just the score, in basis points.                                                                  |
 
 `corridor_score`/`corridor_aggregate` read whatever an admin has published
 for that exact corridor via `set_corridor_metrics`/`submit_outcome`.

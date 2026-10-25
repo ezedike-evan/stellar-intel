@@ -2910,7 +2910,7 @@ until the maintainer wires up a `CARGO_REGISTRY_TOKEN`, depend on it directly:
 ```toml
 [dependencies]
 stellar-intel-reputation = { git = "https://github.com/ezedike-evan/stellar-intel", package = "stellar-intel-reputation" }
-# once published: stellar-intel-reputation = "0.3"
+# once published: stellar-intel-reputation = "0.4"
 ```
 
 ```rust,ignore
