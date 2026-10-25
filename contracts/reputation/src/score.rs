@@ -2,7 +2,7 @@ use soroban_sdk::{Address, Env, String};
 
 use crate::outcome::MAX_SETTLE_SECONDS;
 use crate::storage::{self, DataKey};
-use crate::{anchors, publishers, Error};
+use crate::{anchors, events, publishers, Error};
 
 const MAX_BPS: i128 = 10000;
 const NORM_SETTLE_SECONDS: i128 = 300;
@@ -105,7 +105,7 @@ pub fn set_corridor_metrics(
     env.storage().persistent().set(&v1_key, &metrics);
     storage::extend_persistent(env, &v1_key);
 
-    let v2_key = DataKey::CorridorV2(anchor_id, corridor);
+    let v2_key = DataKey::CorridorV2(anchor_id.clone(), corridor.clone());
     let metrics_v2 = (
         fill_rate_bps,
         slippage_bps,
@@ -116,6 +116,7 @@ pub fn set_corridor_metrics(
     env.storage().persistent().set(&v2_key, &metrics_v2);
     storage::extend_persistent(env, &v2_key);
 
+    events::metrics(env, publisher, &anchor_id, &corridor, composite_bps, n);
     Ok(())
 }
 

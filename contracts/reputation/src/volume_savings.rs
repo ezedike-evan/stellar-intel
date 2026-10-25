@@ -17,7 +17,7 @@
 use soroban_sdk::{contracttype, Address, Env, String};
 
 use crate::storage::{self, DataKey};
-use crate::{corridors, publishers, Error};
+use crate::{corridors, events, publishers, Error};
 
 /// Upper bound on a single volume/savings delta (in microUSDC): 1e18 µUSDC =
 /// 1e12 USDC. Any real settlement is far below this; the cap keeps the
@@ -93,6 +93,7 @@ pub fn add_volume_savings(
 
     env.storage().persistent().set(&key, &record);
     storage::extend_persistent(env, &key);
+    events::volume(env, publisher, &corridor, volume_delta, savings_delta);
     Ok(())
 }
 

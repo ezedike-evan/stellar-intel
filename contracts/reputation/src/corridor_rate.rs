@@ -16,7 +16,7 @@
 use soroban_sdk::{contracttype, Address, Env, String};
 
 use crate::storage::{self, DataKey};
-use crate::{corridors, publishers, Error};
+use crate::{corridors, events, publishers, Error};
 
 /// Most decimals a rate may be scaled by; beyond this `10^decimals` overflows
 /// `i128` arithmetic in consumers.
@@ -53,7 +53,7 @@ pub fn publish(
         return Err(Error::InvalidCorridorRate);
     }
 
-    let key = DataKey::CorridorRate(corridor);
+    let key = DataKey::CorridorRate(corridor.clone());
     if let Some(prev) = env
         .storage()
         .persistent()
@@ -75,6 +75,7 @@ pub fn publish(
     };
     env.storage().persistent().set(&key, &record);
     storage::extend_persistent(env, &key);
+    events::rate(env, publisher, &corridor, rate, decimals);
     Ok(())
 }
 

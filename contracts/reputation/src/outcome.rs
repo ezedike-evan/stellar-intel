@@ -1,7 +1,7 @@
 use soroban_sdk::{Address, Env, String, Vec};
 
 use crate::storage::{self, DataKey, PAGE_SIZE};
-use crate::{aggregate, anchors, publishers, Error};
+use crate::{aggregate, anchors, events, publishers, Error};
 
 /// Upper bound on a single outcome's settle time (~11.6 days). Rejects absurd
 /// values that would otherwise inflate the settle-seconds accumulator toward
@@ -61,5 +61,13 @@ pub fn submit_outcome(
     storage::extend_persistent(env, &head_key);
 
     aggregate::record(env, &anchor_id, &corridor, settle_seconds, success)?;
+    events::outcome(
+        env,
+        publisher,
+        &anchor_id,
+        &corridor,
+        settle_seconds,
+        success,
+    );
     Ok(())
 }

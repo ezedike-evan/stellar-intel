@@ -6,6 +6,7 @@ pub mod aggregate;
 pub mod anchors;
 pub mod corridor_rate;
 pub mod corridors;
+pub mod events;
 pub mod history;
 pub mod migration;
 pub mod outcome;
