@@ -26,9 +26,9 @@ jobs:
     permissions:
       id-token: write # required for npm provenance
     steps:
-      - uses: actions/checkout@v7
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
 
-      - uses: actions/setup-node@v7
+      - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
         with:
           node-version: '20'
           cache: 'npm'
@@ -61,8 +61,14 @@ jobs:
       - name: Build
         run: npm run build --workspace=@stellarintel/sdk
 
+      # Trusted publishing needs npm >= 11.5.1; Node 20 ships npm 10. Pinned
+      # exactly, as with the actions, so the publish toolchain cannot change
+      # underneath a release.
+      - name: npm with trusted publishing support
+        run: npm install --global npm@11.5.1
+
+      # No NODE_AUTH_TOKEN: authentication is the OIDC token only. A long-lived
+      # NPM_TOKEN wired in here would quietly take over from it.
       - name: Publish to npm
         run: npm publish --provenance --access public
         working-directory: packages/sdk
-        env:
-          NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}
