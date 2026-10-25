@@ -5,11 +5,22 @@
 //! fed off-chain from live execution + probe data (see `lib/oracle/`); this
 //! module is the publish/read surface. Auth mirrors `outcome::submit_outcome`:
 //! the caller must both authorize the call and be a registered publisher.
+//!
+//! A publish may not move a corridor's rate by more than 2x in either direction
+//! from the previous record (and `decimals` is capped at 18), so a leaked
+//! publisher key cannot swing every consumer's settlement rate arbitrarily in
+//! one transaction (audit P3, rate bounds). A real move beyond 2x needs the
+//! admin to `reset` the corridor first. The check applies only when the previous
+//! record has the same `decimals`: a rescale is a different unit, not a jump.
 
 use soroban_sdk::{contracttype, Address, Env, String};
 
 use crate::storage::{self, DataKey};
 use crate::{publishers, Error};
+
+/// Most decimals a rate may be scaled by; beyond this `10^decimals` overflows
+/// `i128` arithmetic in consumers.
+const MAX_DECIMALS: u32 = 18;
 
 /// A published corridor rate. `rate` is scaled by 10^`decimals` fiat units per
 /// 1 USDC, stamped with the publishing address and the ledger timestamp.
@@ -34,8 +45,22 @@ pub fn publish(
     if !publishers::is_authorized(env, publisher) {
         return Err(Error::PublisherUnauthorized);
     }
-    if rate <= 0 {
+    if rate <= 0 || decimals > MAX_DECIMALS {
         return Err(Error::InvalidCorridorRate);
+    }
+
+    let key = DataKey::CorridorRate(corridor);
+    if let Some(prev) = env
+        .storage()
+        .persistent()
+        .get::<DataKey, CorridorRate>(&key)
+    {
+        if prev.decimals == decimals {
+            let ceiling = prev.rate.checked_mul(2).ok_or(Error::ArithmeticOverflow)?;
+            if rate < prev.rate / 2 || rate > ceiling {
+                return Err(Error::RateJumpTooLarge);
+            }
+        }
     }
 
     let record = CorridorRate {
@@ -44,10 +69,16 @@ pub fn publish(
         updated_at: env.ledger().timestamp(),
         publisher: publisher.clone(),
     };
-    let key = DataKey::CorridorRate(corridor);
     env.storage().persistent().set(&key, &record);
     storage::extend_persistent(env, &key);
     Ok(())
+}
+
+/// Remove the stored rate for `corridor`. Admin-gated by the caller.
+pub fn reset(env: &Env, corridor: String) {
+    env.storage()
+        .persistent()
+        .remove(&DataKey::CorridorRate(corridor));
 }
 
 /// Read the latest published rate for `corridor`, if any.

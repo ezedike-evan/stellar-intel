@@ -162,3 +162,125 @@ fn max_age_zero_accepts_only_same_timestamp() {
     env.ledger().with_mut(|l| l.timestamp += 1);
     assert_eq!(client.get_corridor_rate_fresh(&c, &0u64), None);
 }
+
+// ── Rate bounds (#1383) ──────────────────────────────────────────────────────
+
+#[test]
+fn rate_can_move_up_to_double() {
+    let env = Env::default();
+    env.mock_all_auths();
+    let (client, _admin, publisher) = setup(&env);
+    let c = String::from_str(&env, "usdc-ngn");
+
+    client.publish_corridor_rate(&publisher, &c, &1000i128, &7u32);
+    client.publish_corridor_rate(&publisher, &c, &2000i128, &7u32);
+    assert_eq!(client.get_corridor_rate(&c).unwrap().rate, 2000);
+}
+
+#[test]
+fn rate_can_move_down_to_half() {
+    let env = Env::default();
+    env.mock_all_auths();
+    let (client, _admin, publisher) = setup(&env);
+    let c = String::from_str(&env, "usdc-ngn");
+
+    client.publish_corridor_rate(&publisher, &c, &1000i128, &7u32);
+    client.publish_corridor_rate(&publisher, &c, &500i128, &7u32);
+    assert_eq!(client.get_corridor_rate(&c).unwrap().rate, 500);
+}
+
+#[test]
+fn rate_jump_over_double_is_rejected() {
+    let env = Env::default();
+    env.mock_all_auths();
+    let (client, _admin, publisher) = setup(&env);
+    let c = String::from_str(&env, "usdc-ngn");
+
+    client.publish_corridor_rate(&publisher, &c, &1000i128, &7u32);
+    let res = client.try_publish_corridor_rate(&publisher, &c, &2001i128, &7u32);
+
+    assert_eq!(res, Err(Ok(Error::RateJumpTooLarge)));
+    assert_eq!(client.get_corridor_rate(&c).unwrap().rate, 1000);
+}
+
+#[test]
+fn rate_drop_under_half_is_rejected() {
+    let env = Env::default();
+    env.mock_all_auths();
+    let (client, _admin, publisher) = setup(&env);
+    let c = String::from_str(&env, "usdc-ngn");
+
+    client.publish_corridor_rate(&publisher, &c, &1000i128, &7u32);
+    let res = client.try_publish_corridor_rate(&publisher, &c, &499i128, &7u32);
+
+    assert_eq!(res, Err(Ok(Error::RateJumpTooLarge)));
+    assert_eq!(client.get_corridor_rate(&c).unwrap().rate, 1000);
+}
+
+#[test]
+fn decimals_over_18_rejected() {
+    let env = Env::default();
+    env.mock_all_auths();
+    let (client, _admin, publisher) = setup(&env);
+    let c = String::from_str(&env, "usdc-ngn");
+
+    assert_eq!(
+        client.try_publish_corridor_rate(&publisher, &c, &1000i128, &19u32),
+        Err(Ok(Error::InvalidCorridorRate))
+    );
+    client.publish_corridor_rate(&publisher, &c, &1000i128, &18u32);
+}
+
+#[test]
+fn changing_decimals_skips_jump_check() {
+    let env = Env::default();
+    env.mock_all_auths();
+    let (client, _admin, publisher) = setup(&env);
+    let c = String::from_str(&env, "usdc-ngn");
+
+    client.publish_corridor_rate(&publisher, &c, &1000i128, &3u32);
+    // The same price rescaled to 7 decimals is 10^4 times larger as an integer.
+    client.publish_corridor_rate(&publisher, &c, &10_000_000i128, &7u32);
+    assert_eq!(client.get_corridor_rate(&c).unwrap().decimals, 7);
+}
+
+#[test]
+fn doubling_a_rate_near_i128_max_reports_overflow() {
+    let env = Env::default();
+    env.mock_all_auths();
+    let (client, _admin, publisher) = setup(&env);
+    let c = String::from_str(&env, "usdc-ngn");
+
+    client.publish_corridor_rate(&publisher, &c, &i128::MAX, &7u32);
+    let res = client.try_publish_corridor_rate(&publisher, &c, &1i128, &7u32);
+    assert_eq!(res, Err(Ok(Error::ArithmeticOverflow)));
+}
+
+#[test]
+fn admin_reset_allows_a_fresh_rate() {
+    let env = Env::default();
+    env.mock_all_auths();
+    let (client, admin, publisher) = setup(&env);
+    let c = String::from_str(&env, "usdc-ngn");
+
+    client.publish_corridor_rate(&publisher, &c, &1000i128, &7u32);
+    client.reset_corridor_rate(&admin, &c);
+    assert_eq!(client.get_corridor_rate(&c), None);
+
+    client.publish_corridor_rate(&publisher, &c, &5000i128, &7u32);
+    assert_eq!(client.get_corridor_rate(&c).unwrap().rate, 5000);
+}
+
+#[test]
+fn non_admin_cannot_reset_rate() {
+    let env = Env::default();
+    env.mock_all_auths();
+    let (client, _admin, publisher) = setup(&env);
+    let c = String::from_str(&env, "usdc-ngn");
+
+    client.publish_corridor_rate(&publisher, &c, &1000i128, &7u32);
+    let res = client.try_reset_corridor_rate(&publisher, &c);
+
+    assert_eq!(res, Err(Ok(Error::Unauthorized)));
+    assert_eq!(client.get_corridor_rate(&c).unwrap().rate, 1000);
+}

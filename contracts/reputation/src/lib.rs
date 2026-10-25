@@ -27,6 +27,7 @@ pub enum Error {
     InvalidCorridorRate = 8,
     ArithmeticOverflow = 9,
     OutOfRange = 10,
+    RateJumpTooLarge = 11,
 }
 
 #[contract]
@@ -273,6 +274,16 @@ impl ReputationContract {
     /// Read the latest published rate for `corridor`, or `None` if unset.
     pub fn get_corridor_rate(env: Env, corridor: String) -> Option<corridor_rate::CorridorRate> {
         corridor_rate::get(&env, corridor)
+    }
+
+    /// Admin-only. Removes the published rate for `corridor`, so the next
+    /// `publish_corridor_rate` is accepted at any value. This is the recovery
+    /// path for a real move of more than 2x, which publish refuses to follow.
+    pub fn reset_corridor_rate(env: Env, caller: Address, corridor: String) -> Result<(), Error> {
+        admin::require_admin(&env, &caller)?;
+        corridor_rate::reset(&env, corridor);
+        storage::extend_instance(&env);
+        Ok(())
     }
 
     /// Like `get_corridor_rate`, but only returns a rate published within the
