@@ -13,6 +13,7 @@
 //! | `("metrics", anchor_id, corridor)`       | `(publisher, composite_bps, n)`         |
 //! | `("rate", corridor)`                     | `(publisher, rate, decimals)`           |
 //! | `("volume", corridor)`                   | `(publisher, volume_delta, savings_delta)` |
+//! | `("probe", anchor_id)`                   | `(publisher, uptime_bps)`               |
 //!
 //! ## Registry, custody and upgrade changes
 //!
@@ -102,6 +103,14 @@ pub fn volume(
     env.events().publish(
         (symbol_short!("volume"), corridor.clone()),
         (publisher.clone(), volume_delta, savings_delta),
+    );
+}
+
+/// Probe signals were published for `anchor_id`.
+pub fn probe_signals(env: &Env, publisher: &Address, anchor_id: &String, uptime_bps: u32) {
+    env.events().publish(
+        (symbol_short!("probe"), anchor_id.clone()),
+        (publisher.clone(), uptime_bps),
     );
 }
 

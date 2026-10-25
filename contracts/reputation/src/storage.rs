@@ -10,7 +10,7 @@
 //! |            | `PublisherScope`, `OutcomeHead`, `OutcomeFloor`,   |                                                    |
 //! |            | `OutcomePage`, `Corridor`, `CorridorV2`,           |                                                    |
 //! |            | `CorridorAggregate`, `CorridorRate`,               |                                                    |
-//! |            | `VolumeSavings`                                    |                                                    |
+//! |            | `VolumeSavings`, `ProbeSignals`                    |                                                    |
 //!
 //! The upgrade module keeps its own instance keys (`UpgradeAdmin`, `Version`,
 //! `PendingUpgradeAdmin`, `PendingUpgrade`) in `upgrade.rs`, outside `DataKey`.
@@ -123,6 +123,8 @@ pub enum DataKey {
     /// V2 corridor metrics: `(fill_rate_bps, slippage_bps, composite_bps, settle_seconds_p50, n)`.
     /// Supports multi-corridor expansion without breaking v1 readers.
     CorridorV2(String, String),
+    /// Latest probe signals for an anchor, keyed by anchor id.
+    ProbeSignals(String),
     /// Cumulative volume + savings for a corridor (issue #826).
     VolumeSavings(String),
 }

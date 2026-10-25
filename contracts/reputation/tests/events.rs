@@ -150,3 +150,24 @@ fn rejected_write_emits_no_event() {
     assert_eq!(res, Err(Ok(Error::PublisherUnauthorized)));
     assert_eq!(env.events().all(), vec![&env]);
 }
+
+#[test]
+fn publish_probe_signals_emits_one_event() {
+    let env = Env::default();
+    let f = setup(&env);
+
+    f.client
+        .publish_probe_signals(&f.publisher, &f.anchor, &9800u32, &120u32, &450u32, &2u32);
+
+    assert_eq!(
+        env.events().all(),
+        vec![
+            &env,
+            (
+                f.client.address.clone(),
+                (symbol_short!("probe"), f.anchor.clone()).into_val(&env),
+                (f.publisher.clone(), 9800u32).into_val(&env),
+            )
+        ]
+    );
+}

@@ -10,6 +10,7 @@ pub mod events;
 pub mod history;
 pub mod migration;
 pub mod outcome;
+pub mod probe_signals;
 pub mod publishers;
 pub mod score;
 pub mod storage;
@@ -401,6 +402,37 @@ impl ReputationContract {
         corridor_rate::publish(&env, &publisher, corridor, rate, decimals)?;
         storage::extend_instance(&env);
         Ok(())
+    }
+
+    /// Publisher-only. Write the latest probe signals for `anchor_id` (uptime in
+    /// basis points, p50/p95 latency in ms, current SEP drift flag count),
+    /// replacing any earlier record. `p50 == 0 && p95 == 0` means "no reachable
+    /// samples". `OutOfRange` if `uptime_bps` exceeds 10000 or p50 exceeds p95.
+    pub fn publish_probe_signals(
+        env: Env,
+        publisher: Address,
+        anchor_id: String,
+        uptime_bps: u32,
+        p50_latency_ms: u32,
+        p95_latency_ms: u32,
+        drift_flag_count: u32,
+    ) -> Result<(), Error> {
+        probe_signals::publish(
+            &env,
+            &publisher,
+            anchor_id,
+            uptime_bps,
+            p50_latency_ms,
+            p95_latency_ms,
+            drift_flag_count,
+        )?;
+        storage::extend_instance(&env);
+        Ok(())
+    }
+
+    /// The latest probe signals for `anchor_id`, or `None` if never published.
+    pub fn get_probe_signals(env: Env, anchor_id: String) -> Option<probe_signals::ProbeSignals> {
+        probe_signals::get(&env, anchor_id)
     }
 
     /// Read the latest published rate for `corridor`, or `None` if unset.
