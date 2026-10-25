@@ -111,7 +111,8 @@ node scripts/anchor-survey.mjs --sources registry,sdf-anchor-directory
                                          # limit candidate sources (default: all)
 ```
 
-Builds the candidate set from every source (the anchor registry, the full
-stellar.expert directory, top asset home domains and the SDF Anchor Directory),
+Builds the candidate set from every source (the anchor registry, the hand-curated
+listed operators in `constants/listed-anchors/`, the full stellar.expert directory,
+top asset home domains and the SDF Anchor Directory),
 then classifies each domain by SEP support — see
 [`docs/SEP_COMPLIANCE.md`](SEP_COMPLIANCE.md).

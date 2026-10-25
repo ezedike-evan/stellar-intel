@@ -21,6 +21,7 @@ import { resolveOracleContractId, TESTNET_ORACLE_CONTRACT_ID } from '@/lib/oracl
 import { deriveAllCorridorRates } from '@/lib/oracle/corridor-rate';
 import { deriveCorridorMetrics } from '@/lib/oracle/corridor-metrics';
 import { mapOutcomeRow } from '@/lib/oracle/outcome-rows';
+import { emitHealthChanges } from '@/lib/webhooks/health-diff';
 import { ANCHORS } from '@/constants/anchors';
 import type { ProbeLedgerRow } from '@/types/reputation';
 
@@ -215,6 +216,18 @@ export async function GET(request: NextRequest): Promise<NextResponse> {
     if (!(await acquireLock(LOCK_KEY, LOCK_TTL_MS))) {
       logger.warn({ event: 'publisher_tick_conflict' });
       return NextResponse.json({ error: 'Publisher tick already in progress' }, { status: 409 });
+    }
+
+    // Tell subscribers about anchors whose degraded flag changed since the last tick.
+    // Independent of publishing, so it can neither fail the tick nor be skipped by it.
+    try {
+      const emitted = await emitHealthChanges();
+      if (emitted > 0) logger.info({ event: 'anchor_health_changes_emitted', count: emitted });
+    } catch (err) {
+      logger.warn({
+        event: 'anchor_health_changes_failed',
+        error: err instanceof Error ? err.message : String(err),
+      });
     }
 
     try {

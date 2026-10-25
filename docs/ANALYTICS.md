@@ -102,6 +102,32 @@ Amount buckets: `0-10`, `10-50`, `50-100`, `100-500`, `500-1000`, `1000+`, and
 | `execution_completed`   | `components/offramp/ExecuteDrawer.tsx` | After the payment submits and step flips to `done`      |
 | `execution_failed`      | `components/offramp/ExecuteDrawer.tsx` | Both error branches of the execute handler              |
 
+### On-ramp events
+
+The deposit flow has its own events, so on-ramp traffic is never counted as
+off-ramp traffic. They are defined in `ONRAMP_FUNNEL_EVENTS` (`lib/analytics.ts`),
+are valid `FunnelEventName`s, and always carry `direction: 'onramp'`. `direction`
+is also an optional property of `FunnelEventProps` (`'offramp'` or `'onramp'`);
+the off-ramp events above do not set it.
+
+| #   | Event name                  | Fires when                                                    | Properties (aggregate, no PII)                          |
+| --- | --------------------------- | ------------------------------------------------------------- | ------------------------------------------------------- |
+| 1   | `onramp_rate_table_viewed`  | Deposit estimates first show for a corridor                   | `direction`, `corridor`, `amount_bucket`                |
+| 2   | `onramp_trustline_prompted` | The wallet needs a trustline and the user is asked to add it  | `direction`, `amount_bucket`                            |
+| 3   | `onramp_trustline_added`    | The trustline transaction is signed and submitted             | `direction`, `amount_bucket`                            |
+| 4   | `onramp_deposit_started`    | The anchor's interactive deposit window opens                 | `direction`, `corridor`, `anchor`, `amount_bucket`      |
+| 5   | `onramp_instructions_shown` | The anchor's payment instructions are shown, once per deposit | `direction`, `amount_bucket`                            |
+| 6   | `onramp_deposit_completed`  | The deposit reaches `completed`                               | `direction`, `corridor`, `amount_bucket`                |
+| 7   | `onramp_deposit_failed`     | The deposit reaches any other terminal status                 | `direction`, `corridor`, `amount_bucket`, `error_class` |
+
+`onramp_deposit_failed` is not a funnel step; its `error_class` is the terminal
+status (`error`, `refunded`, `expired`, `no_market`, `too_small`, `too_large`), a
+fixed vocabulary. Only the coarse `amount_bucket` is sent, never the amount, and
+`redactProperties` strips `account` and wallet addresses before anything leaves
+the browser. The steps fire from `app/onramp/page.tsx`,
+`components/onramp/TrustlinePreflight.tsx`, `components/onramp/DepositDrawer.tsx`
+and `components/onramp/DepositStatusTracker.tsx`.
+
 ---
 
 ## Funnel definition

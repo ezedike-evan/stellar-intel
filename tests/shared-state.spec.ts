@@ -293,3 +293,13 @@ describe('shared intent nonces (#1335)', () => {
     });
   });
 });
+
+describe('webhook health snapshot (#1342)', () => {
+  it('returns null and does nothing without a database', async () => {
+    const { getHealthSnapshot, setHealthSnapshot } = await import('@/lib/api/shared-state');
+
+    await expect(getHealthSnapshot()).resolves.toBeNull();
+    await expect(setHealthSnapshot('{"a":true}')).resolves.toBeUndefined();
+    await expect(getHealthSnapshot()).resolves.toBeNull();
+  });
+});

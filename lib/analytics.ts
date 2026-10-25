@@ -40,9 +40,28 @@ export const FUNNEL_EVENTS = {
   executionFailed: 'execution_failed',
 } as const;
 
-export type FunnelEventName = (typeof FUNNEL_EVENTS)[keyof typeof FUNNEL_EVENTS];
+/**
+ * Funnel event names for the on-ramp (deposit) path. Separate from FUNNEL_EVENTS,
+ * and sent with `direction: 'onramp'`, so deposit traffic is never counted as
+ * off-ramp traffic.
+ */
+export const ONRAMP_FUNNEL_EVENTS = {
+  onrampRateTableViewed: 'onramp_rate_table_viewed',
+  onrampTrustlinePrompted: 'onramp_trustline_prompted',
+  onrampTrustlineAdded: 'onramp_trustline_added',
+  onrampDepositStarted: 'onramp_deposit_started',
+  onrampInstructionsShown: 'onramp_instructions_shown',
+  onrampDepositCompleted: 'onramp_deposit_completed',
+  onrampDepositFailed: 'onramp_deposit_failed',
+} as const;
+
+export type FunnelEventName =
+  | (typeof FUNNEL_EVENTS)[keyof typeof FUNNEL_EVENTS]
+  | (typeof ONRAMP_FUNNEL_EVENTS)[keyof typeof ONRAMP_FUNNEL_EVENTS];
 
 export type FunnelEventProps = {
+  /** Which flow the event belongs to; on-ramp events always set it. */
+  direction?: 'offramp' | 'onramp';
   corridor?: string;
   anchor?: string;
   /** Coarse amount bucket — never the raw amount. */
@@ -116,9 +135,10 @@ export function trackAnalyticsEvent(eventName: string, properties?: Record<strin
   window.plausible(eventName, props && Object.keys(props).length > 0 ? { props } : undefined);
 }
 
-/** Track a typed off-ramp funnel event with corridor/anchor/amount_bucket props. */
+/** Track a typed funnel event with direction/corridor/anchor/amount_bucket props. */
 export function trackFunnelEvent(eventName: FunnelEventName, props: FunnelEventProps = {}): void {
   const payload: Record<string, unknown> = {};
+  if (props.direction) payload.direction = props.direction;
   if (props.corridor) payload.corridor = props.corridor;
   if (props.anchor) payload.anchor = props.anchor;
   if (props.amount_bucket) payload.amount_bucket = props.amount_bucket;

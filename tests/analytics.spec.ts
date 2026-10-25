@@ -1,6 +1,8 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import {
   FUNNEL_EVENTS,
+  ONRAMP_FUNNEL_EVENTS,
+  type FunnelEventName,
   amountBucket,
   redactProperties,
   trackAnalyticsEvent,
@@ -145,5 +147,85 @@ describe('trackAnalyticsEvent / trackFunnelEvent', () => {
     expect(() =>
       trackFunnelEvent(FUNNEL_EVENTS.rateTableViewed, { corridor: 'usdc-ngn' })
     ).not.toThrow();
+  });
+});
+
+describe('on-ramp funnel events (#1491)', () => {
+  let plausible: ReturnType<typeof vi.fn>;
+
+  beforeEach(() => {
+    plausible = vi.fn();
+    // @ts-expect-error test shim
+    globalThis.window = { plausible };
+  });
+
+  afterEach(() => {
+    // @ts-expect-error cleanup
+    delete globalThis.window;
+  });
+
+  it('defines the seven documented names', () => {
+    expect(ONRAMP_FUNNEL_EVENTS).toEqual({
+      onrampRateTableViewed: 'onramp_rate_table_viewed',
+      onrampTrustlinePrompted: 'onramp_trustline_prompted',
+      onrampTrustlineAdded: 'onramp_trustline_added',
+      onrampDepositStarted: 'onramp_deposit_started',
+      onrampInstructionsShown: 'onramp_instructions_shown',
+      onrampDepositCompleted: 'onramp_deposit_completed',
+      onrampDepositFailed: 'onramp_deposit_failed',
+    });
+  });
+
+  it('keeps the on-ramp names distinct from the off-ramp ones', () => {
+    const offramp = new Set<string>(Object.values(FUNNEL_EVENTS));
+    for (const name of Object.values(ONRAMP_FUNNEL_EVENTS)) {
+      expect(offramp.has(name)).toBe(false);
+      expect(name.startsWith('onramp_')).toBe(true);
+    }
+  });
+
+  it('accepts every on-ramp name as a FunnelEventName', () => {
+    const names: FunnelEventName[] = Object.values(ONRAMP_FUNNEL_EVENTS);
+    for (const name of names) trackFunnelEvent(name, { direction: 'onramp' });
+
+    expect((plausible.mock.calls as PlausibleCall[]).map(([name]) => name)).toEqual(names);
+  });
+
+  it('sends direction through redaction untouched', () => {
+    trackFunnelEvent(ONRAMP_FUNNEL_EVENTS.onrampDepositStarted, {
+      direction: 'onramp',
+      corridor: 'usdc-ngn',
+      anchor: 'cowrie',
+      amount_bucket: amountBucket(10000),
+    });
+
+    expect((plausible.mock.calls as PlausibleCall[])[0]).toEqual([
+      'onramp_deposit_started',
+      {
+        props: {
+          direction: 'onramp',
+          corridor: 'usdc-ngn',
+          anchor: 'cowrie',
+          amount_bucket: '1000+',
+        },
+      },
+    ]);
+    expect(redactProperties({ direction: 'onramp' })).toEqual({ direction: 'onramp' });
+  });
+
+  it('still strips an account if one is passed alongside direction', () => {
+    const wallet = 'G' + 'C'.repeat(55);
+    expect(redactProperties({ direction: 'onramp', account: wallet, owner: wallet })).toEqual({
+      direction: 'onramp',
+      account: '[REDACTED]',
+      owner: '[REDACTED_WALLET]',
+    });
+  });
+
+  it('leaves direction out of off-ramp events that do not set it', () => {
+    trackFunnelEvent(FUNNEL_EVENTS.rateTableViewed, { corridor: 'usdc-ngn' });
+    expect((plausible.mock.calls as PlausibleCall[])[0]?.[1]?.props).toEqual({
+      corridor: 'usdc-ngn',
+    });
   });
 });

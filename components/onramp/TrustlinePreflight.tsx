@@ -1,6 +1,7 @@
 'use client';
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { Button } from '@/components/ui/Button';
+import { ONRAMP_FUNNEL_EVENTS, amountBucket, trackFunnelEvent } from '@/lib/analytics';
 import {
   buildChangeTrustTx,
   checkDepositPreflight,
@@ -12,6 +13,8 @@ interface TrustlinePreflightProps {
   asset: { code: string; issuer: string };
   /** Called once when the wallet can receive the asset. */
   onReady: () => void;
+  /** Fiat amount of the deposit this check is for; only its coarse bucket is sent to analytics. */
+  amount?: string;
 }
 
 type PreflightState =
@@ -28,7 +31,7 @@ type PreflightState =
  * finish KYC and pay fiat for nothing. Each way it can fail gets its own message
  * and, where the user can fix it, the action to do so.
  */
-export function TrustlinePreflight({ publicKey, asset, onReady }: TrustlinePreflightProps) {
+export function TrustlinePreflight({ publicKey, asset, onReady, amount }: TrustlinePreflightProps) {
   const [state, setState] = useState<PreflightState>({ kind: 'checking' });
   const [adding, setAdding] = useState(false);
   const [addError, setAddError] = useState<string | undefined>();
@@ -75,6 +78,17 @@ export function TrustlinePreflight({ publicKey, asset, onReady }: TrustlinePrefl
     }
   }, [state, checkKey]);
 
+  // The user is being asked to add a trustline: once per entry into that state.
+  useEffect(() => {
+    if (state.kind !== 'no-trustline') return;
+    trackFunnelEvent(ONRAMP_FUNNEL_EVENTS.onrampTrustlinePrompted, {
+      direction: 'onramp',
+      amount_bucket: amountBucket(amount),
+    });
+    // Only a change of state is an event, not a change of amount.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [state.kind]);
+
   const retry = useCallback(() => setAttempt((n) => n + 1), []);
 
   const addTrustline = useCallback(async () => {
@@ -87,6 +101,10 @@ export function TrustlinePreflight({ publicKey, asset, onReady }: TrustlinePrefl
         assetIssuer: issuer,
       });
       await signAndSubmitPayment(tx);
+      trackFunnelEvent(ONRAMP_FUNNEL_EVENTS.onrampTrustlineAdded, {
+        direction: 'onramp',
+        amount_bucket: amountBucket(amount),
+      });
       setAttempt((n) => n + 1);
     } catch (err) {
       const message = err instanceof Error ? err.message : String(err);
@@ -97,7 +115,7 @@ export function TrustlinePreflight({ publicKey, asset, onReady }: TrustlinePrefl
     } finally {
       setAdding(false);
     }
-  }, [publicKey, code, issuer]);
+  }, [publicKey, code, issuer, amount]);
 
   return (
     <div className="border-border rounded-xl border p-4" aria-busy={state.kind === 'checking'}>

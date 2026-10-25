@@ -43,6 +43,11 @@ const SCHEMA_SQL = `
     expires_at BIGINT NOT NULL,
     PRIMARY KEY (public_key, nonce)
   );
+
+  CREATE TABLE IF NOT EXISTS webhook_health_snapshot (
+    id       INTEGER PRIMARY KEY,
+    snapshot TEXT    NOT NULL
+  );
 `;
 
 let schemaReady: Promise<void> | null = null;
@@ -260,4 +265,38 @@ export async function pruneSharedIntentNonces(now: number): Promise<void> {
   if (!hasSharedBackend()) return;
   await ensureSchema();
   await getSqlExecutor().query(`DELETE FROM intent_nonces WHERE expires_at <= $1`, [now]);
+}
+
+// ─── Webhook health snapshot ───────────────────────────────────────────────────
+
+/** The one row: which anchors were degraded the last time health changes were emitted. */
+const HEALTH_SNAPSHOT_ID = 1;
+
+/**
+ * The JSON snapshot last stored by `setHealthSnapshot`, or null when there is none
+ * yet or no database to hold one.
+ */
+export async function getHealthSnapshot(): Promise<string | null> {
+  if (!hasSharedBackend()) return null;
+
+  await ensureSchema();
+  const { rows } = await getSqlExecutor().query(
+    `SELECT snapshot FROM webhook_health_snapshot WHERE id = $1`,
+    [HEALTH_SNAPSHOT_ID]
+  );
+  const snapshot = rows[0]?.['snapshot'];
+  return snapshot == null ? null : String(snapshot);
+}
+
+/** Replaces the stored snapshot. A no-op without a database. */
+export async function setHealthSnapshot(json: string): Promise<void> {
+  if (!hasSharedBackend()) return;
+
+  await ensureSchema();
+  await getSqlExecutor().query(
+    `INSERT INTO webhook_health_snapshot (id, snapshot)
+          VALUES ($1, $2)
+     ON CONFLICT (id) DO UPDATE SET snapshot = EXCLUDED.snapshot`,
+    [HEALTH_SNAPSHOT_ID, json]
+  );
 }

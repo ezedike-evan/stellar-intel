@@ -3,6 +3,12 @@ import { render, screen, waitFor, fireEvent } from '@testing-library/react';
 import { TrustlinePreflight } from '@/components/onramp/TrustlinePreflight';
 import * as horizon from '@/lib/stellar/horizon';
 import { UserRejectedError } from '@/lib/stellar/errors';
+import { trackFunnelEvent } from '@/lib/analytics';
+
+vi.mock('@/lib/analytics', async (importOriginal) => ({
+  ...(await importOriginal<typeof import('@/lib/analytics')>()),
+  trackFunnelEvent: vi.fn(),
+}));
 
 vi.mock('@/lib/stellar/horizon', () => ({
   checkDepositPreflight: vi.fn(),
@@ -43,7 +49,9 @@ beforeEach(() => {
 });
 
 function renderGate(onReady = vi.fn(), asset = ASSET) {
-  render(<TrustlinePreflight publicKey={PUBLIC_KEY} asset={asset} onReady={onReady} />);
+  render(
+    <TrustlinePreflight publicKey={PUBLIC_KEY} asset={asset} onReady={onReady} amount="150000" />
+  );
   return onReady;
 }
 
@@ -176,5 +184,54 @@ describe('TrustlinePreflight', () => {
 
     const text = await screen.findByText(/needs a trustline for USDC/);
     expect(text.closest('[aria-live="polite"]')).not.toBeNull();
+  });
+});
+
+describe('TrustlinePreflight analytics (#1491)', () => {
+  const track = vi.mocked(trackFunnelEvent);
+
+  it('records that a trustline was prompted, with only a coarse amount bucket', async () => {
+    check.mockResolvedValue(noTrustline);
+    renderGate();
+    await screen.findByRole('button', { name: 'Add USDC trustline' });
+
+    expect(track).toHaveBeenCalledTimes(1);
+    expect(track).toHaveBeenCalledWith('onramp_trustline_prompted', {
+      direction: 'onramp',
+      amount_bucket: '1000+',
+    });
+    expect(JSON.stringify(track.mock.calls)).not.toContain('150000');
+    expect(JSON.stringify(track.mock.calls)).not.toContain(PUBLIC_KEY);
+  });
+
+  it('records the trustline being added after it is submitted', async () => {
+    check.mockResolvedValueOnce(noTrustline).mockResolvedValue(ready);
+    renderGate();
+    fireEvent.click(await screen.findByRole('button', { name: 'Add USDC trustline' }));
+
+    await waitFor(() =>
+      expect(track).toHaveBeenCalledWith('onramp_trustline_added', {
+        direction: 'onramp',
+        amount_bucket: '1000+',
+      })
+    );
+  });
+
+  it('records neither when the wallet is already ready', async () => {
+    check.mockResolvedValue(ready);
+    renderGate();
+    await screen.findByText(/ready to receive USDC/i);
+
+    expect(track).not.toHaveBeenCalled();
+  });
+
+  it('does not record an added trustline when Freighter rejects it', async () => {
+    check.mockResolvedValue(noTrustline);
+    submit.mockRejectedValue(new UserRejectedError());
+    renderGate();
+    fireEvent.click(await screen.findByRole('button', { name: 'Add USDC trustline' }));
+    await waitFor(() => expect(submit).toHaveBeenCalled());
+
+    expect(track).not.toHaveBeenCalledWith('onramp_trustline_added', expect.anything());
   });
 });

@@ -2768,8 +2768,9 @@ node scripts/anchor-survey.mjs --sources registry,sdf-anchor-directory
                                          # limit candidate sources (default: all)
 ```
 
-Builds the candidate set from every source (the anchor registry, the full
-stellar.expert directory, top asset home domains and the SDF Anchor Directory),
+Builds the candidate set from every source (the anchor registry, the hand-curated
+listed operators in `constants/listed-anchors/`, the full stellar.expert directory,
+top asset home domains and the SDF Anchor Directory),
 then classifies each domain by SEP support — see
 [`docs/SEP_COMPLIANCE.md`](SEP_COMPLIANCE.md).
 
@@ -3569,6 +3570,27 @@ Stellar Intel can push real-time event notifications to your HTTPS endpoint inst
 | `intent.failed`                | An intent reaches a terminal `failed` state                          |
 | `reputation.event_written`     | A new outcome row is appended to the reputation log                  |
 | `anchor.health_status_changed` | An anchor's health status transitions (e.g. `healthy` to `degraded`) |
+
+### `anchor.health_status_changed`
+
+Emitted by the publisher tick (every five minutes) when an anchor's `degraded` flag in
+the nightly health ledger (`constants/anchor-health.json`) differs from the last
+snapshot it notified, so a change arrives within a tick of the deploy that carries
+it. One event per anchor, in anchor-id order:
+
+```json
+{
+  "anchorId": "cowrie",
+  "from": "healthy",
+  "to": "degraded",
+  "lastCheckedAt": "2026-10-25T00:00:00.000Z",
+  "lastError": "stellar.toml returned HTTP 503"
+}
+```
+
+`from` and `to` are `healthy` or `degraded`. The first run only records a baseline and
+emits nothing, and without a database there is no baseline to keep, so nothing is
+emitted. `lastCheckedAt` and `lastError` are `null` when the ledger has none.
 
 ## Payload envelope
 

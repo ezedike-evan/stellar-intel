@@ -2,6 +2,12 @@ import { describe, it, expect, vi } from 'vitest';
 import { render, screen, fireEvent } from '@testing-library/react';
 import { DepositStatusTracker } from '@/components/onramp/DepositStatusTracker';
 import { isValidStellarTxId } from '@/lib/format';
+import { trackFunnelEvent } from '@/lib/analytics';
+
+vi.mock('@/lib/analytics', async (importOriginal) => ({
+  ...(await importOriginal<typeof import('@/lib/analytics')>()),
+  trackFunnelEvent: vi.fn(),
+}));
 
 const TX_HASH = 'a'.repeat(64);
 
@@ -94,5 +100,37 @@ describe('isValidStellarTxId', () => {
     expect(isValidStellarTxId(TX_HASH)).toBe(true);
     expect(isValidStellarTxId('abc')).toBe(false);
     expect(isValidStellarTxId('g'.repeat(64))).toBe(false);
+  });
+});
+
+describe('DepositStatusTracker analytics (#1491)', () => {
+  const track = vi.mocked(trackFunnelEvent);
+
+  it('records that the payment instructions were shown, once per transaction', () => {
+    track.mockClear();
+    const { rerender } = render(<DepositStatusTracker {...BASE} />);
+    rerender(<DepositStatusTracker {...BASE} isLoading />);
+
+    expect(track).toHaveBeenCalledTimes(1);
+    expect(track).toHaveBeenCalledWith('onramp_instructions_shown', {
+      direction: 'onramp',
+      amount_bucket: '100-500',
+    });
+    expect(JSON.stringify(track.mock.calls)).not.toContain('dep-123');
+  });
+
+  it('records it again for a different transaction', () => {
+    track.mockClear();
+    const { rerender } = render(<DepositStatusTracker {...BASE} />);
+    rerender(<DepositStatusTracker {...BASE} transactionId="dep-456" />);
+
+    expect(track).toHaveBeenCalledTimes(2);
+  });
+
+  it('records nothing once the user no longer has to pay', () => {
+    track.mockClear();
+    render(<DepositStatusTracker {...BASE} status="pending_anchor" />);
+
+    expect(track).not.toHaveBeenCalled();
   });
 });

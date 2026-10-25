@@ -8,8 +8,10 @@ import {
   statusTimeEstimate,
   terminalErrorMessage,
 } from '@/lib/stellar/status-messages';
+import { useEffect, useRef } from 'react';
 import { CopyButton } from '@/components/ui/CopyButton';
 import { Button } from '@/components/ui/Button';
+import { ONRAMP_FUNNEL_EVENTS, amountBucket, trackFunnelEvent } from '@/lib/analytics';
 import { DepositInstructions } from './DepositInstructions';
 
 interface DepositStatusTrackerProps {
@@ -91,6 +93,17 @@ export function DepositStatusTracker({
   const outAsset = parseAsset(amountOutAsset);
   const inAsset = parseAsset(amountInAsset);
   const hasTxLink = Boolean(stellarTransactionId && isValidStellarTxId(stellarTransactionId));
+
+  // The payment instructions reached the user: once per transaction.
+  const instructionsShownFor = useRef<string | null>(null);
+  useEffect(() => {
+    if (!mustPay || instructionsShownFor.current === transactionId) return;
+    instructionsShownFor.current = transactionId;
+    trackFunnelEvent(ONRAMP_FUNNEL_EVENTS.onrampInstructionsShown, {
+      direction: 'onramp',
+      amount_bucket: amountBucket(amountIn),
+    });
+  }, [mustPay, transactionId, amountIn]);
 
   return (
     <div
