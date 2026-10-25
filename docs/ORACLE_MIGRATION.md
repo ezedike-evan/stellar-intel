@@ -72,13 +72,34 @@ the rest.
 
 ```rust
 const V2_CORRIDORS: &[&str] = &[
-    "usdc-ngn", "usdc-kes", "usdc-mxn", "usdc-php", "usdc-brl", "usdc-ars",
+    "usdc-ngn",
+    "ngnt-ngn",
+    "usdc-kes",
+    "usdc-ghs",
+    "usdc-mxn",
+    "usdc-brl",
+    "usdc-ars",
+    "usdc-pen",
+    "usdc-eur",
+    "usdc-clp",
+    "usdc-usd",
+    "brl-brl",
+    "ars-ars",
+    "pen-pen",
+    "ngnc-ngn",
+    "dzt-dzd",
+    "arst-ars",
+    "brlt-brl",
+    "usdc-zar",
+    "usdc-xof",
+    "usdc-php",
+    "clpx-clp",
 ];
 ```
 
-**Known drift:** `V2_CORRIDORS` contains `usdc-php`, which is not an active app corridor,
-and lacks `usdc-ghs`, `usdc-pen`, `usdc-eur`, `brl-brl`, `usdc-zar`, and `usdc-xof`. This is documented as
-a known drift between the compiled contract constant and the application corridor list.
+This list is exactly the corridor ids of `CORRIDORS` in `constants/anchors.ts`, in the
+same order. `tests/oracle-v2-corridors.spec.ts` fails if either side changes without
+the other, so the fleet migration cannot silently skip a corridor.
 
 **Adding a corridor to the app does not add it here.** This constant is compiled
 into the contract, so extending it requires a contract change and a redeploy or
@@ -86,8 +107,8 @@ upgrade. Until that happens, a new corridor's aggregate is reachable via
 `migrate_corridor_v2` per pair, which takes the corridor as an argument and is not
 bound by the list.
 
-If you add a corridor to `constants/anchors.ts`, add it here in the same PR or
-the fleet migration will silently skip it.
+If you add a corridor to `constants/anchors.ts`, add it here in the same PR; the
+guard test will fail until you do.
 
 ---
 
