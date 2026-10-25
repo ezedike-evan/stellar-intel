@@ -38,9 +38,9 @@ jobs:
       degraded: ${{ steps.probe.outputs.degraded }}
       summary: ${{ steps.probe.outputs.summary }}
     steps:
-      - uses: actions/checkout@v7
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
 
-      - uses: actions/setup-node@v7
+      - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
         with:
           node-version: '20'
           cache: 'npm'
@@ -88,9 +88,9 @@ jobs:
     outputs:
       result: ${{ steps.run.outcome }}
     steps:
-      - uses: actions/checkout@v7
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
 
-      - uses: actions/setup-node@v7
+      - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
         with:
           node-version: '20'
           cache: 'npm'
@@ -114,7 +114,7 @@ jobs:
       failure() ||
       needs.live-anchor-probe.outputs.degraded != '0'
     steps:
-      - uses: actions/github-script@v9
+      - uses: actions/github-script@3a2844b7e9c422d3c10d287c895573f7108da1b3 # v9.0.0
         env:
           PROBE_SUMMARY: ${{ needs.live-anchor-probe.outputs.summary }}
           PROBE_DEGRADED: ${{ needs.live-anchor-probe.outputs.degraded }}

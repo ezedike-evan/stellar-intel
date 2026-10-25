@@ -102,7 +102,11 @@ export async function POST(request: NextRequest): Promise<NextResponse> {
     const parsed = IntentSchema.safeParse(body);
     if (!parsed.success) {
       const first = parsed.error.issues[0];
-      logger.warn({ event: 'validation_failed', issues: parsed.error.issues });
+      // Path and code only: an issue's message and params can quote the input.
+      logger.warn({
+        event: 'validation_failed',
+        issues: parsed.error.issues.map((i) => ({ path: i.path, code: i.code })),
+      });
       recordIntentError('VALIDATION_ERROR');
       return await respond<ApiError>(
         { code: 'VALIDATION_ERROR', message: first?.message ?? 'Invalid intent payload' },
@@ -170,9 +174,13 @@ export async function POST(request: NextRequest): Promise<NextResponse> {
 
     const result = await createOfframpIntent(intent);
     if (!result.ok) {
+      // Never the whole intent: it carries the sender and recipient, which are
+      // personal data and do not belong in logs.
       logger.warn({
         event: result.code === 'NO_ROUTE' ? 'no_route' : 'tx_build_failed',
-        ...intent,
+        sourceAsset: intent.sourceAsset,
+        destinationAsset: intent.destinationAsset,
+        code: result.code,
       });
       recordIntentError(result.code);
       // A 500 (TX_BUILD_FAILED) is deliberately not cached under the

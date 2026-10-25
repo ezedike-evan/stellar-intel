@@ -27,7 +27,6 @@ vi.mock('@/lib/stellar/sep24', async () => {
   return {
     ...actual,
     initiateWithdraw: vi.fn(),
-    openWithdrawPopup: vi.fn(),
     getWithdrawTransactionRecord: vi.fn(),
   };
 });
@@ -98,7 +97,6 @@ import * as analytics from '@/lib/analytics';
 
 const mockAuthenticate = vi.mocked(sep10.authenticate);
 const mockInitiateWithdraw = vi.mocked(sep24.initiateWithdraw);
-const mockOpenWithdrawPopup = vi.mocked(sep24.openWithdrawPopup);
 const mockGetWithdrawTransactionRecord = vi.mocked(sep24.getWithdrawTransactionRecord);
 const mockPostSep38Quote = vi.mocked(sep38.postSep38Quote);
 const _mockGetTransferServer = vi.mocked(sep1.getTransferServer);
@@ -197,7 +195,6 @@ beforeEach(() => {
     url: 'https://anchor.example/kyc',
     id: 'txn-abc-123',
   });
-  mockOpenWithdrawPopup.mockResolvedValue('txn-abc-123');
   mockGetWithdrawTransactionRecord.mockResolvedValue({
     withdrawAnchorAccount: 'GANCHOR123',
     memo: 'TEST_MEMO',

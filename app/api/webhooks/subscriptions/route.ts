@@ -68,6 +68,14 @@ export async function POST(request: NextRequest): Promise<NextResponse> {
 
 export async function GET(request: NextRequest): Promise<NextResponse> {
   return withRequestLogger(request, 'api.webhooks.subscriptions.list', async (logger) => {
+    // Before the admin check: every other webhook admin endpoint is limited, and
+    // without one here each guess at the admin key would be answered unthrottled.
+    const limited = await enforceRateLimit(request, {
+      bucket: 'api.webhooks.subscriptions.list',
+      maxRequests: 30,
+    });
+    if (limited) return limited;
+
     if (!isAdminRequest(request)) {
       return NextResponse.json<ApiError>(
         { code: 'FORBIDDEN', message: 'Admin key required' },

@@ -48,7 +48,7 @@ export interface OnRampHopParams {
  * completion (KYC, payment, on-chain credit) always happens out of band in
  * the anchor's hosted UI, so `execute` succeeds once that session has been
  * created, not once funds have actually landed -- the same handoff shape as
- * the existing withdraw flow (initiateWithdraw / openWithdrawPopup).
+ * the existing withdraw flow (initiateWithdraw).
  */
 export function createOnRampHop(params: OnRampHopParams): Hop {
   const hopId = `${params.anchorId}-on-ramp`;
