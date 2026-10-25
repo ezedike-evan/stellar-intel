@@ -154,6 +154,58 @@ export async function buildWithdrawPayment(
   return builder.build();
 }
 
+// ─── Trustline builder ────────────────────────────────────────────────────────
+
+export interface BuildChangeTrustParams {
+  sourcePublicKey: string;
+  assetCode: string;
+  assetIssuer: string;
+  /** Decimal string. Omit for the SDK default, which is the maximum. */
+  limit?: string;
+}
+
+/**
+ * Builds an unsigned transaction that adds a trustline for an asset, so a wallet
+ * can receive a deposit (see {@link checkDepositPreflight}).
+ *
+ * Uses the same fee logic and network as {@link buildWithdrawPayment}: the
+ * network's base fee capped at 10,000 stroops. Submit it with
+ * {@link signAndSubmitPayment}, which signs with Freighter and submits to Horizon
+ * whatever the transaction holds. The native asset needs no trustline and throws.
+ */
+export async function buildChangeTrustTx(
+  params: BuildChangeTrustParams
+): Promise<ReturnType<TransactionBuilder['build']>> {
+  const { sourcePublicKey, assetCode, assetIssuer, limit } = params;
+
+  if (!assetIssuer || assetCode === 'XLM') {
+    throw new Error('XLM is the native asset and needs no trustline.');
+  }
+
+  const account = await fetchAccount(sourcePublicKey);
+
+  let recommendedFee = parseInt(BASE_FEE, 10);
+  try {
+    recommendedFee = await horizonServer.fetchBaseFee();
+  } catch {
+    // fall back to BASE_FEE
+  }
+  const fee = Math.min(recommendedFee, MAX_FEE_STROOPS).toString();
+
+  return new TransactionBuilder(account, {
+    fee,
+    networkPassphrase: Networks.PUBLIC,
+  })
+    .setTimeout(180)
+    .addOperation(
+      Operation.changeTrust({
+        asset: new Asset(assetCode, assetIssuer),
+        ...(limit !== undefined ? { limit } : {}),
+      })
+    )
+    .build();
+}
+
 // ─── Sign and submit ──────────────────────────────────────────────────────────
 
 /**

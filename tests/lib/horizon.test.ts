@@ -1,6 +1,11 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest';
 import { Account } from '@stellar/stellar-sdk';
-import { fetchAccount, buildWithdrawPayment, checkDepositPreflight } from '@/lib/stellar/horizon';
+import {
+  fetchAccount,
+  buildWithdrawPayment,
+  buildChangeTrustTx,
+  checkDepositPreflight,
+} from '@/lib/stellar/horizon';
 import { horizonServer } from '@/lib/stellar/horizon';
 
 vi.mock('@stellar/freighter-api', () => ({
@@ -138,6 +143,82 @@ describe('checkDepositPreflight (#1462)', () => {
 
     const result = await checkDepositPreflight(SOURCE_KEY, { code: 'NGNC', issuer: USDC_ISSUER });
     expect(result).toMatchObject({ hasTrustline: true, balance: '7.0000000' });
+  });
+});
+
+describe('buildChangeTrustTx (#1463)', () => {
+  beforeEach(() => {
+    vi.spyOn(horizonServer, 'loadAccount').mockResolvedValue(mockAccount);
+    vi.spyOn(horizonServer, 'fetchBaseFee').mockResolvedValue(100);
+  });
+
+  const params = { sourcePublicKey: SOURCE_KEY, assetCode: 'USDC', assetIssuer: USDC_ISSUER };
+
+  it('builds exactly one changeTrust operation for the asset', async () => {
+    const tx = await buildChangeTrustTx(params);
+
+    expect(tx.operations).toHaveLength(1);
+    const op = tx.operations[0] as { type: string; line: { code: string; issuer: string } };
+    expect(op.type).toBe('changeTrust');
+    expect(op.line.code).toBe('USDC');
+    expect(op.line.issuer).toBe(USDC_ISSUER);
+  });
+
+  it('leaves the limit at the SDK default (the maximum) when none is given', async () => {
+    const tx = await buildChangeTrustTx(params);
+
+    expect((tx.operations[0] as { limit: string }).limit).toBe('922337203685.4775807');
+  });
+
+  it('applies an explicit limit', async () => {
+    const tx = await buildChangeTrustTx({ ...params, limit: '5000' });
+
+    expect((tx.operations[0] as { limit: string }).limit).toBe('5000.0000000');
+  });
+
+  it('caps the fee at 10,000 stroops', async () => {
+    vi.spyOn(horizonServer, 'fetchBaseFee').mockResolvedValue(5_000_000);
+
+    const tx = await buildChangeTrustTx(params);
+
+    expect(tx.fee).toBe('10000');
+  });
+
+  it('uses the network base fee when it is under the cap, and falls back to BASE_FEE', async () => {
+    expect((await buildChangeTrustTx(params)).fee).toBe('100');
+
+    vi.spyOn(horizonServer, 'fetchBaseFee').mockRejectedValue(new Error('down'));
+    expect((await buildChangeTrustTx(params)).fee).toBe('100');
+  });
+
+  it('sets a 180 second timeout', async () => {
+    const tx = await buildChangeTrustTx(params);
+
+    const maxTime = Number(tx.timeBounds?.maxTime);
+    const now = Math.floor(Date.now() / 1000);
+    expect(maxTime - now).toBeGreaterThan(170);
+    expect(maxTime - now).toBeLessThanOrEqual(180);
+  });
+
+  it('throws for the native asset, which needs no trustline', async () => {
+    await expect(
+      buildChangeTrustTx({ sourcePublicKey: SOURCE_KEY, assetCode: 'XLM', assetIssuer: '' })
+    ).rejects.toThrow(/native asset/);
+    await expect(
+      buildChangeTrustTx({
+        sourcePublicKey: SOURCE_KEY,
+        assetCode: 'XLM',
+        assetIssuer: USDC_ISSUER,
+      })
+    ).rejects.toThrow(/native asset/);
+  });
+
+  it('surfaces a missing account as the usual clear error', async () => {
+    vi.spyOn(horizonServer, 'loadAccount').mockRejectedValue({ response: { status: 404 } });
+
+    await expect(buildChangeTrustTx(params)).rejects.toThrow(
+      'Account does not exist on the Stellar network'
+    );
   });
 });
 
