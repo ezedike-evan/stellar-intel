@@ -3,6 +3,7 @@ import { getTransferServer } from './sep1';
 import { getAnchorsByCorridorId, getCorridorById } from './anchors';
 import { fetchWithTimeout } from './http';
 import { computeTotalReceived } from '@/lib/utils';
+import { AMOUNT_PATTERN } from '@/lib/patterns';
 import { normalizeStatus } from './sep24-status-map';
 import type {
   Sep24FeeParams,
@@ -12,6 +13,8 @@ import type {
   Sep24WithdrawResponse,
   Sep24DepositRequest,
   Sep24DepositResponse,
+  DepositFlowParams,
+  DepositFlowSession,
   Sep24Transaction,
   WithdrawStatusValue,
   ResolvedAnchor,
@@ -734,7 +737,7 @@ export async function initiateDeposit(
   params: Sep24DepositRequest,
   signal?: AbortSignal
 ): Promise<Sep24DepositResponse> {
-  const { jwt, assetCode, assetIssuer, amount, account } = params;
+  const { jwt, assetCode, assetIssuer, amount, account, lang } = params;
   const transferServer = anchor.TRANSFER_SERVER_SEP0024;
 
   if (!transferServer || !anchor.capabilities.sep24) {
@@ -754,7 +757,7 @@ export async function initiateDeposit(
       ...assetParams,
       amount,
       account,
-      lang: 'en',
+      lang: lang ?? 'en',
       // A first-deposit wallet has no trustline yet. Saying it can take a
       // claimable balance lets the anchor pay out that way instead of leaving the
       // deposit stuck in pending_trust. SEP-24 request params are strings.
@@ -791,6 +794,43 @@ export async function initiateDeposit(
     url: data['url'] as string,
     id: data['id'] as string,
   };
+}
+
+/**
+ * Starts an interactive SEP-24 deposit and returns what the caller needs to send
+ * the user to the anchor.
+ *
+ * The preconditions are checked before anything is fetched: the anchor must
+ * support SEP-24 and the amount must be a positive decimal. It then calls
+ * {@link initiateDeposit} (which sends the language, default `en`) and, when a
+ * `callbackUrl` is given, adds it to the anchor's URL as `callback` without
+ * dropping the query parameters the anchor already put there. With no callback
+ * the anchor's URL is returned exactly as issued.
+ */
+export async function startDepositFlow(
+  anchor: ResolvedAnchor,
+  params: DepositFlowParams,
+  signal?: AbortSignal
+): Promise<DepositFlowSession> {
+  const transferServer = anchor.TRANSFER_SERVER_SEP0024;
+  if (!transferServer || !anchor.capabilities.sep24) {
+    throw new Error(`Anchor "${anchor.homeDomain}" does not support SEP-24 deposits.`);
+  }
+  if (!AMOUNT_PATTERN.test(params.amount) || Number(params.amount) <= 0) {
+    throw new Error('Deposit amount must be a positive decimal string.');
+  }
+
+  const { callbackUrl, ...request } = params;
+  const issued = await initiateDeposit(anchor, request, signal);
+
+  let depositUrl = issued.url;
+  if (callbackUrl) {
+    const url = new URL(issued.url);
+    url.searchParams.set('callback', callbackUrl);
+    depositUrl = url.toString();
+  }
+
+  return { transactionId: issued.id, depositUrl, transferServer };
 }
 
 /** The fields of a SEP-24 `/transaction` record the withdraw flow reads. */

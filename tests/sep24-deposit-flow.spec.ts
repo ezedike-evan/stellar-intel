@@ -1,7 +1,5 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest';
-import * as sep24 from '@/lib/stellar/sep24';
-import { Sep24DepositError } from '@/lib/stellar/sep24';
-import type { ResolvedAnchor } from '@/types';
+import { Sep24DepositError, startDepositFlow } from '@/lib/stellar/sep24';
 import {
   DEPOSIT_INTERACTIVE_URL,
   DEPOSIT_INTERACTIVE_URL_WITH_QUERY,
@@ -19,70 +17,12 @@ import {
 } from './fixtures/sep24-deposit';
 
 /**
- * Specification for the SEP-24 interactive deposit flow, written ahead of the
- * implementation (#1092) so the feature has something to build against.
+ * The SEP-24 interactive deposit flow.
  *
- * `initiateDeposit` already covers a single call to the anchor. What is missing
- * is the orchestration around it: the preconditions that must be checked before
- * a request is made, and the deposit URL the user is actually sent to once the
- * anchor has issued one. `startDepositFlow` is that orchestration.
- *
- * THE SUITE IS SKIPPED until `startDepositFlow` lands in `lib/stellar/sep24.ts`,
- * next to `initiateDeposit`. Remove the `.skip` below — nothing else — once it
- * exports the contract described by `StartDepositFlow` and `DepositFlowSession`.
+ * `initiateDeposit` covers a single call to the anchor. `startDepositFlow` is the
+ * orchestration around it: the preconditions checked before any request is made,
+ * and the deposit URL the user is actually sent to once the anchor has issued one.
  */
-
-// ─── Contract under specification ─────────────────────────────────────────────
-
-/** Everything the caller supplies to start a deposit. */
-interface DepositFlowParams {
-  /** SEP-10 session token for the anchor. */
-  jwt: string;
-  assetCode: string;
-  assetIssuer: string;
-  amount: string;
-  /** Stellar account credited when the deposit completes. */
-  account: string;
-  /** Where the anchor should return the user after the interactive step. */
-  callbackUrl?: string;
-  /** BCP 47 language tag for the interactive UI. Defaults to `en`. */
-  lang?: string;
-}
-
-/** What the caller needs in order to hand the user off to the anchor. */
-interface DepositFlowSession {
-  /** Anchor-issued transaction id, used for subsequent status polling. */
-  transactionId: string;
-  /** The URL to open, with the callback and language applied. */
-  depositUrl: string;
-  /** Transfer server the session was opened against. */
-  transferServer: string;
-}
-
-type StartDepositFlow = (
-  anchor: ResolvedAnchor,
-  params: DepositFlowParams,
-  signal?: AbortSignal
-) => Promise<DepositFlowSession>;
-
-/**
- * Resolved through the module namespace rather than a named import: the export
- * does not exist yet, and a named import would stop this file from compiling
- * and loading while the suite is skipped.
- */
-function startDepositFlow(
-  anchor: ResolvedAnchor,
-  params: DepositFlowParams,
-  signal?: AbortSignal
-): Promise<DepositFlowSession> {
-  const fn = (sep24 as unknown as Record<string, unknown>)['startDepositFlow'];
-  if (typeof fn !== 'function') {
-    return Promise.reject(
-      new Error('startDepositFlow is not implemented yet — un-skip this suite once it lands')
-    );
-  }
-  return (fn as StartDepositFlow)(anchor, params, signal);
-}
 
 // ─── Helpers ──────────────────────────────────────────────────────────────────
 
@@ -111,7 +51,7 @@ beforeEach(() => {
   vi.unstubAllGlobals();
 });
 
-describe.skip('startDepositFlow', () => {
+describe('startDepositFlow', () => {
   // ─── Preconditions ──────────────────────────────────────────────────────────
 
   describe('preconditions', () => {
