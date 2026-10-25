@@ -146,10 +146,12 @@ beforeEach(() => {
   vi.stubGlobal('open', vi.fn());
   mockUseWallet.mockReturnValue(connectedWallet());
   mockUseDepositRates.mockReturnValue({
-    comparison: COMPARISON,
+    rates: COMPARISON,
+    anchorErrors: [],
     isLoading: false,
     error: undefined,
     mutate: vi.fn(),
+    lastFetchedAt: null,
   });
   mockGetResolvedAnchorById.mockResolvedValue(RESOLVED_ANCHOR);
   mockAuthenticate.mockResolvedValue({

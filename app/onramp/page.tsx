@@ -82,7 +82,7 @@ function OnrampContent() {
 
   const { isConnected, publicKey, network } = useWallet();
   const corridor = getCorridorById(corridorId);
-  const { comparison, isLoading, error, mutate } = useDepositRates(corridorId, amount);
+  const { rates: comparison, isLoading, error, mutate } = useDepositRates(corridorId, amount);
 
   const depositStatus = useWithdrawStatus(
     trackingTransferServer,
