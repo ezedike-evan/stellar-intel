@@ -53,6 +53,13 @@ const LIVE_RATES: Record<string, { anchorId: string; totalReceived: (amount: num
 /** Sentinel amount that makes the stub simulate the routed anchor being unquotable. */
 const RATE_UNAVAILABLE_AMOUNT = '999999';
 
+/** Sentinel amounts that make the stub answer with an estimate instead of a firm quote. */
+const INDICATIVE_SOURCES: Record<string, 'sep24-fee' | 'sep6-info' | 'sep6-fee'> = {
+  '777': 'sep24-fee',
+  '778': 'sep6-info',
+  '779': 'sep6-fee',
+};
+
 vi.mock('@/lib/stellar/server-rates', () => ({
   fetchCorridorRates: vi.fn(async (id: string, amount: string): Promise<ServerRatesResult> => {
     if (amount === RATE_UNAVAILABLE_AMOUNT) {
@@ -77,7 +84,7 @@ vi.mock('@/lib/stellar/server-rates', () => ({
           feeType: 'flat',
           exchangeRate: 0,
           totalReceived: route.totalReceived(Number(amount)),
-          source: 'sep38',
+          source: INDICATIVE_SOURCES[amount] ?? 'sep38',
           updatedAt: new Date(),
         },
       ],
@@ -124,6 +131,38 @@ describe('intel.offramp.quote (#135)', () => {
     // live-rate stub: (100 - 2 fee) * 1600 = 156800
     expect(quote.netReceived).toBe('156800');
     expect(new Date(quote.expiresAt).getTime()).toBeGreaterThan(Date.now());
+  });
+
+  describe('firm or indicative (#1516)', () => {
+    it('labels a SEP-38 quote as firm', async () => {
+      const quote = await getQuote({ from: 'NGNT', to: 'NGN', amount: '100' });
+
+      expect(quote.source).toBe('sep38');
+      expect(quote.indicative).toBe(false);
+    });
+
+    it.each([
+      ['777', 'sep24-fee'],
+      ['778', 'sep6-info'],
+      ['779', 'sep6-fee'],
+    ] as const)('labels a %s (%s) estimate as indicative', async (amount, source) => {
+      const quote = await getQuote({ from: 'NGNT', to: 'NGN', amount });
+
+      expect(quote.source).toBe(source);
+      expect(quote.indicative).toBe(true);
+      expect(() => QuoteOutputSchema.parse(quote)).not.toThrow();
+    });
+
+    it('rejects an output that omits the flag', () => {
+      expect(() =>
+        QuoteOutputSchema.parse({
+          anchor: 'cowrie',
+          quoteId: 'a'.repeat(64),
+          netReceived: '1',
+          expiresAt: '2026-10-25T00:00:00.000Z',
+        })
+      ).toThrow();
+    });
   });
 
   it('computes net received for a second corridor', async () => {

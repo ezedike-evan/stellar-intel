@@ -98,8 +98,12 @@ describe('MCP server round-trip via subprocess (#137)', () => {
       quoteId: string;
       netReceived: string;
       expiresAt: string;
+      source: string;
+      indicative: boolean;
     };
     expect(structured.anchor).toBe('cowrie');
+    expect(typeof structured.indicative).toBe('boolean');
+    expect(structured.indicative).toBe(structured.source !== 'sep38');
     expect(structured.quoteId).toMatch(/^[0-9a-f]{64}$/);
     expect(Number(structured.netReceived)).toBeGreaterThan(0);
     expect(new Date(structured.expiresAt).getTime()).toBeGreaterThan(Date.now());

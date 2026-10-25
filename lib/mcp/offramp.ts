@@ -18,6 +18,7 @@ import { verifyIntentSignature } from '@/lib/intent/verify';
 import { HORIZON_URL, NETWORK_PASSPHRASE } from '@/lib/config';
 import { STELLAR_PUBKEY_PATTERN, AMOUNT_7DP_PATTERN } from '@/lib/patterns';
 import { fetchCorridorRates } from '@/lib/stellar/server-rates';
+import { isIndicativeRateSource } from '@/types';
 import {
   registeredAnchorsForCorridor,
   routingTargetsForCorridor,
@@ -85,6 +86,13 @@ export const QuoteOutputSchema = z.object({
   quoteId: z.string(),
   netReceived: z.string(),
   expiresAt: z.string(),
+  /** Where the rate came from. Only `sep38` is a quote the anchor commits to. */
+  source: z.enum(['sep38', 'sep24-fee', 'sep6-info', 'sep6-fee']),
+  /**
+   * True for every source but `sep38`: `netReceived` is an estimate the anchor may
+   * move before the payout, and must not be presented to a user as a guarantee.
+   */
+  indicative: z.boolean(),
 });
 export type QuoteOutput = z.infer<typeof QuoteOutputSchema>;
 
@@ -270,6 +278,8 @@ export async function getQuote(
     quoteId,
     netReceived,
     expiresAt: new Date(now() + QUOTE_TTL_SECONDS * 1000).toISOString(),
+    source: anchorRate.source,
+    indicative: isIndicativeRateSource(anchorRate.source),
   });
 }
 
