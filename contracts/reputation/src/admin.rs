@@ -22,7 +22,7 @@
 use soroban_sdk::{Address, Env};
 
 use crate::storage::DataKey;
-use crate::Error;
+use crate::{events, Error};
 
 /// Store the admin on first initialization. Returns `AlreadyInitialized` if an
 /// admin is already set.
@@ -71,6 +71,7 @@ pub fn propose_admin(env: &Env, caller: &Address, candidate: &Address) -> Result
     env.storage()
         .instance()
         .set(&DataKey::PendingAdmin, candidate);
+    events::admin_proposed(env, caller, candidate);
     Ok(())
 }
 
@@ -96,6 +97,7 @@ pub fn accept_admin(env: &Env, candidate: &Address) -> Result<(), Error> {
     candidate.require_auth();
     env.storage().instance().set(&DataKey::Admin, candidate);
     env.storage().instance().remove(&DataKey::PendingAdmin);
+    events::admin_accepted(env, candidate);
     Ok(())
 }
 
@@ -107,7 +109,10 @@ pub fn accept_admin(env: &Env, candidate: &Address) -> Result<(), Error> {
 /// Returns `Unauthorized` if `caller` is not the current admin.
 pub fn cancel_admin_proposal(env: &Env, caller: &Address) -> Result<(), Error> {
     require_admin(env, caller)?;
-    env.storage().instance().remove(&DataKey::PendingAdmin);
+    if let Some(candidate) = get_pending_admin(env) {
+        env.storage().instance().remove(&DataKey::PendingAdmin);
+        events::admin_proposal_cancelled(env, caller, &candidate);
+    }
     Ok(())
 }
 

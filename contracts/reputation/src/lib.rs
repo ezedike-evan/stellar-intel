@@ -68,8 +68,9 @@ impl ReputationContract {
 
     pub fn register_anchor(env: Env, caller: Address, anchor_id: String) -> Result<(), Error> {
         admin::require_admin(&env, &caller)?;
-        anchors::register(&env, anchor_id)?;
+        anchors::register(&env, anchor_id.clone())?;
         storage::extend_instance(&env);
+        events::anchor_registered(&env, &caller, &anchor_id);
         Ok(())
     }
 
@@ -119,8 +120,9 @@ impl ReputationContract {
 
     pub fn add_publisher(env: Env, caller: Address, publisher: Address) -> Result<(), Error> {
         admin::require_admin(&env, &caller)?;
-        publishers::add(&env, publisher)?;
+        publishers::add(&env, publisher.clone())?;
         storage::extend_instance(&env);
+        events::publisher_added(&env, &caller, &publisher);
         Ok(())
     }
 
@@ -161,8 +163,9 @@ impl ReputationContract {
 
     pub fn revoke_publisher(env: Env, caller: Address, publisher: Address) -> Result<(), Error> {
         admin::require_admin(&env, &caller)?;
-        publishers::revoke(&env, publisher)?;
+        publishers::revoke(&env, publisher.clone())?;
         storage::extend_instance(&env);
+        events::publisher_revoked(&env, &caller, &publisher);
         Ok(())
     }
 
@@ -177,13 +180,15 @@ impl ReputationContract {
     ) -> Result<(), Error> {
         admin::require_admin(&env, &caller)?;
         aggregate::reset(&env, &anchor_id, &corridor);
+        events::aggregate_reset(&env, &caller, &anchor_id, &corridor);
         Ok(())
     }
 
     /// Admin-only. Clear a corridor's cumulative volume/savings totals.
     pub fn reset_volume_savings(env: Env, caller: Address, corridor: String) -> Result<(), Error> {
         admin::require_admin(&env, &caller)?;
-        volume_savings::reset(&env, corridor);
+        volume_savings::reset(&env, corridor.clone());
+        events::volume_reset(&env, &caller, &corridor);
         Ok(())
     }
 

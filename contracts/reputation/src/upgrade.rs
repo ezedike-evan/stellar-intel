@@ -15,7 +15,7 @@
 
 use soroban_sdk::{contracttype, Address, BytesN, Env};
 
-use crate::Error;
+use crate::{events, Error};
 
 /// Instance-storage keys owned by this module.
 ///
@@ -67,6 +67,8 @@ pub fn apply(env: &Env, new_wasm_hash: BytesN<32>) {
     let next = current_version(env) + 1;
     storage.set(&UpgradeKey::Version, &next);
 
+    // Before the swap: after it, this invocation is running on the new code.
+    events::upgraded(env, &admin, &new_wasm_hash, next);
     env.deployer().update_current_contract_wasm(new_wasm_hash);
 }
 
@@ -128,6 +130,7 @@ pub fn propose_upgrade_admin(
     env.storage()
         .instance()
         .set(&UpgradeKey::PendingUpgradeAdmin, candidate);
+    events::upgrade_admin_proposed(env, caller, candidate);
     Ok(())
 }
 
@@ -154,15 +157,19 @@ pub fn accept_upgrade_admin(env: &Env, candidate: &Address) -> Result<(), Error>
     env.storage()
         .instance()
         .remove(&UpgradeKey::PendingUpgradeAdmin);
+    events::upgrade_admin_accepted(env, candidate);
     Ok(())
 }
 
 /// Withdraw a pending proposal. Current upgrade admin only.
 pub fn cancel_upgrade_proposal(env: &Env, caller: &Address) -> Result<(), Error> {
     require_upgrade_admin(env, caller)?;
-    env.storage()
-        .instance()
-        .remove(&UpgradeKey::PendingUpgradeAdmin);
+    if let Some(candidate) = get_pending_upgrade_admin(env) {
+        env.storage()
+            .instance()
+            .remove(&UpgradeKey::PendingUpgradeAdmin);
+        events::upgrade_proposal_cancelled(env, caller, &candidate);
+    }
     Ok(())
 }
 
