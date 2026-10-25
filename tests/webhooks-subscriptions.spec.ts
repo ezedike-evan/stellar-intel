@@ -4,6 +4,7 @@ import { POST, GET } from '@/app/api/webhooks/subscriptions/route';
 import { DELETE } from '@/app/api/webhooks/subscriptions/[id]/route';
 import { GET as getFailures } from '@/app/api/webhooks/failures/route';
 import { InMemoryWebhookStore, _setWebhookStore } from '@/lib/webhooks/store';
+import { clearRateLimitStore } from '@/lib/api/rate-limit';
 import type { DeliveryRecord } from '@/lib/webhooks/types';
 
 const ADMIN_KEY = 'test-admin-key';
@@ -11,6 +12,7 @@ const ADMIN_KEY = 'test-admin-key';
 beforeEach(() => {
   process.env.ADMIN_SECRET_KEY = ADMIN_KEY;
   _setWebhookStore(new InMemoryWebhookStore());
+  clearRateLimitStore();
 });
 
 afterEach(() => {
@@ -141,6 +143,21 @@ describe('GET /api/webhooks/subscriptions', () => {
     });
     const res = await GET(req);
     expect(res.status).toBe(403);
+  });
+
+  it('rate-limits the list: the 31st GET in a window is 429, even with a wrong admin key', async () => {
+    const guess = () =>
+      new NextRequest('http://localhost/api/webhooks/subscriptions', {
+        method: 'GET',
+        headers: { 'x-admin-key': 'a-wrong-guess', 'x-forwarded-for': '198.51.100.40' },
+      });
+
+    for (let i = 0; i < 30; i += 1) {
+      expect((await GET(guess())).status).toBe(403);
+    }
+    const throttled = await GET(guess());
+    expect(throttled.status).toBe(429);
+    expect(throttled.headers.get('Retry-After')).not.toBeNull();
   });
 });
 
