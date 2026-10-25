@@ -104,6 +104,14 @@ export interface BatchConfig {
    */
   loadCorridorRates?: () => Promise<readonly CorridorRateInput[]>;
   /**
+   * Per-anchor corridor metrics to publish after the corridor rates (#1400).
+   * Optional: omit it and the batch behaves exactly as before.
+   *
+   * A thunk, like `loadCorridorRates`, so the derivation is not computed for a
+   * tick that publishes nothing and can read the rows the batch just wrote.
+   */
+  loadCorridorMetrics?: () => Promise<readonly CorridorMetricsInput[]>;
+  /**
    * Probe-derived signals to publish alongside outcomes (#D070 / #785).
    * Optional: omitting it publishes exactly as before (outcomes only).
    *
@@ -176,6 +184,8 @@ export interface BatchResult {
   gate?: GateDecision;
   /** Corridor rates written on-chain this tick (#961). */
   corridorRatesPublished?: number;
+  /** Anchor/corridor metric records written on-chain this tick (#1400). */
+  corridorMetricsPublished?: number;
   /** Probe-derived signals written on-chain this tick (#D070). */
   probeSignalsPublished?: number;
   /** Whether probe signals were skipped due to empty probe data (#D070). */
@@ -591,6 +601,22 @@ interface OracleSubmitClient {
   }): AssembledTx;
 
   /**
+   * Per-(anchor, corridor) performance metrics, from which the contract derives
+   * the composite score (#1400). Before this had a caller, only the contract's
+   * own tests ever wrote metrics, so `get_score_for_corridor` returned zeros for
+   * every anchor on-chain.
+   */
+  set_corridor_metrics(args: {
+    publisher: string;
+    anchor_id: string;
+    corridor: string;
+    fill_rate_bps: bigint;
+    slippage_bps: bigint;
+    settle_seconds_p50: bigint;
+    n: number;
+  }): AssembledTx;
+
+  /**
    * Probe-derived signals for one anchor (D070 / #785, typed in #1399).
    *
    * Not every deployment's contract has this entrypoint yet — the publisher
@@ -621,6 +647,27 @@ export interface CorridorRateInput {
   rate: bigint;
   decimals: number;
   sampleCount: number;
+}
+
+/**
+ * Performance metrics for one anchor on one corridor, ready to publish (#1400).
+ *
+ * Structural, matching what `deriveCorridorMetrics` in
+ * `lib/oracle/corridor-metrics.ts` produces, for the same reason as
+ * {@link CorridorRateInput}: the app consumes this package, so importing app
+ * types back into it would invert the dependency.
+ */
+export interface CorridorMetricsInput {
+  anchorId: string;
+  corridor: string;
+  /** Share of outcomes that completed, in basis points. */
+  fillRateBps: number;
+  /** Median shortfall of delivered against quoted, in basis points. */
+  slippageBps: number;
+  /** Median settle time of completed outcomes, in seconds. */
+  settleSecondsP50: number;
+  /** How many outcomes the figures are derived from. */
+  n: number;
 }
 
 /**
@@ -764,6 +811,72 @@ export async function publishCorridorRates(
     } catch {
       // withRetry has already alerted. Keep going: one unwritable corridor
       // should not stop the others.
+    }
+  }
+
+  return published;
+}
+
+/**
+ * Publishes per-anchor corridor metrics (#1400).
+ *
+ * Modelled on {@link publishCorridorRates} and run as its own phase after it,
+ * for the same reason: a failure here cannot un-mark an outcome that already
+ * landed. Entries with `n === 0` are skipped (nothing to derive a score from),
+ * and the rates are clamped to 0..10000 and rounded to integers because the
+ * contract refuses anything outside that range.
+ *
+ * Returns the number written. Never throws — metrics are overwritten on the
+ * next tick, and failing the batch over one would strand outcomes that did
+ * publish.
+ */
+export async function publishCorridorMetrics(
+  metrics: readonly CorridorMetricsInput[],
+  config: Pick<
+    BatchConfig,
+    'oracleContractId' | 'networkPassphrase' | 'publisherSecret' | 'rpcUrl' | 'retry' | 'onAlert'
+  >
+): Promise<number> {
+  const publishable = metrics.filter((m) => m.n > 0);
+  if (publishable.length === 0) return 0;
+
+  const { contract, Keypair } = await import('@stellar/stellar-sdk');
+  const publisherKeypair = Keypair.fromSecret(config.publisherSecret);
+  const { signTransaction } = contract.basicNodeSigner(publisherKeypair, config.networkPassphrase);
+
+  const client = (await contract.Client.from({
+    contractId: config.oracleContractId,
+    rpcUrl: config.rpcUrl,
+    networkPassphrase: config.networkPassphrase,
+    publicKey: publisherKeypair.publicKey(),
+    signTransaction,
+  })) as unknown as OracleSubmitClient;
+
+  const clampBps = (value: number): bigint =>
+    BigInt(Math.min(10_000, Math.max(0, Math.round(value))));
+
+  let published = 0;
+  for (const metric of publishable) {
+    try {
+      const assembled = await withRetry(
+        async () => {
+          const tx = await client.set_corridor_metrics({
+            publisher: publisherKeypair.publicKey(),
+            anchor_id: metric.anchorId,
+            corridor: metric.corridor,
+            fill_rate_bps: clampBps(metric.fillRateBps),
+            slippage_bps: clampBps(metric.slippageBps),
+            settle_seconds_p50: BigInt(Math.max(0, Math.round(metric.settleSecondsP50))),
+            n: Math.max(0, Math.round(metric.n)),
+          });
+          return tx.signAndSend();
+        },
+        { onAlert: config.onAlert, options: config.retry }
+      );
+      if (assembled.sendTransactionResponse?.hash) published += 1;
+    } catch {
+      // withRetry has already alerted. Keep going: one unwritable pair should
+      // not stop the others.
     }
   }
 
@@ -1009,6 +1122,14 @@ export async function runBatch(config: BatchConfig): Promise<BatchResult> {
     corridorRatesPublished = await publishCorridorRates(rates, config);
   }
 
+  // Corridor metrics phase (#1400), after rates and likewise its own phase, so
+  // a metrics failure cannot un-mark an outcome that already landed.
+  let corridorMetricsPublished: number | undefined;
+  if (config.loadCorridorMetrics) {
+    const metrics = await config.loadCorridorMetrics();
+    corridorMetricsPublished = await publishCorridorMetrics(metrics, config);
+  }
+
   // Third phase — probe-derived signals (D070 / #785). Best-effort and never
   // throws: a probe publish failure must not un-mark outcomes that already
   // landed, and an empty probe ledger must not block the outcome batch.
@@ -1069,6 +1190,7 @@ export async function runBatch(config: BatchConfig): Promise<BatchResult> {
     txHash,
     ...(gateDecision ? { gate: gateDecision } : {}),
     ...(corridorRatesPublished !== undefined ? { corridorRatesPublished } : {}),
+    ...(corridorMetricsPublished !== undefined ? { corridorMetricsPublished } : {}),
     ...(probeSignalsPublished !== undefined ? { probeSignalsPublished } : {}),
     ...(probeSignalsSkipped !== undefined ? { probeSignalsSkipped } : {}),
     ...(probePayload !== undefined ? { probePayload } : {}),
