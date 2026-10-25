@@ -1,7 +1,10 @@
 #![cfg(test)]
 
 use reputation::{Error, ReputationContract, ReputationContractClient};
-use soroban_sdk::{testutils::Address as _, Address, Env, String};
+use soroban_sdk::{
+    testutils::{Address as _, Ledger},
+    Address, Env, String,
+};
 
 fn setup(env: &Env) -> (ReputationContractClient<'_>, Address, Address) {
     let admin = Address::generate(env);
@@ -90,4 +93,72 @@ fn unknown_corridor_reads_none() {
         client.get_corridor_rate(&String::from_str(&env, "usdc-xxx")),
         None
     );
+}
+
+// ── Freshness-checked read (#1382) ───────────────────────────────────────────
+
+#[test]
+fn fresh_read_returns_a_recent_rate() {
+    let env = Env::default();
+    env.mock_all_auths();
+    let (client, _admin, publisher) = setup(&env);
+    let c = String::from_str(&env, "usdc-ngn");
+
+    client.publish_corridor_rate(&publisher, &c, &1650_0000000i128, &7u32);
+    env.ledger().with_mut(|l| l.timestamp += 60);
+
+    let fresh = client.get_corridor_rate_fresh(&c, &120u64);
+    assert_eq!(fresh.unwrap().rate, 1650_0000000i128);
+}
+
+#[test]
+fn fresh_read_hides_a_stale_rate() {
+    let env = Env::default();
+    env.mock_all_auths();
+    let (client, _admin, publisher) = setup(&env);
+    let c = String::from_str(&env, "usdc-ngn");
+
+    client.publish_corridor_rate(&publisher, &c, &1650_0000000i128, &7u32);
+    env.ledger().with_mut(|l| l.timestamp += 121);
+
+    assert_eq!(client.get_corridor_rate_fresh(&c, &120u64), None);
+    // The plain read is unchanged: it still returns the old rate.
+    assert!(client.get_corridor_rate(&c).is_some());
+}
+
+#[test]
+fn fresh_read_accepts_a_rate_exactly_at_the_limit() {
+    let env = Env::default();
+    env.mock_all_auths();
+    let (client, _admin, publisher) = setup(&env);
+    let c = String::from_str(&env, "usdc-ngn");
+
+    client.publish_corridor_rate(&publisher, &c, &1650_0000000i128, &7u32);
+    env.ledger().with_mut(|l| l.timestamp += 120);
+
+    assert!(client.get_corridor_rate_fresh(&c, &120u64).is_some());
+}
+
+#[test]
+fn fresh_read_of_unknown_corridor_is_none() {
+    let env = Env::default();
+    env.mock_all_auths();
+    let (client, _admin, _publisher) = setup(&env);
+    let c = String::from_str(&env, "usdc-xyz");
+
+    assert_eq!(client.get_corridor_rate_fresh(&c, &u64::MAX), None);
+}
+
+#[test]
+fn max_age_zero_accepts_only_same_timestamp() {
+    let env = Env::default();
+    env.mock_all_auths();
+    let (client, _admin, publisher) = setup(&env);
+    let c = String::from_str(&env, "usdc-ngn");
+
+    client.publish_corridor_rate(&publisher, &c, &1650_0000000i128, &7u32);
+    assert!(client.get_corridor_rate_fresh(&c, &0u64).is_some());
+
+    env.ledger().with_mut(|l| l.timestamp += 1);
+    assert_eq!(client.get_corridor_rate_fresh(&c, &0u64), None);
 }

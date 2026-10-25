@@ -56,3 +56,18 @@ pub fn get(env: &Env, corridor: String) -> Option<CorridorRate> {
         .persistent()
         .get(&DataKey::CorridorRate(corridor))
 }
+
+/// Read the rate for `corridor` only if it was published within the last
+/// `max_age_seconds`. A consumer that settles against the rate cannot otherwise
+/// tell one from five minutes ago from one five weeks old without doing its own
+/// timestamp arithmetic (audit P3, rate staleness). A rate stamped in the
+/// future (clock skew between ledgers) counts as age zero rather than failing.
+pub fn get_fresh(env: &Env, corridor: String, max_age_seconds: u64) -> Option<CorridorRate> {
+    let rate = get(env, corridor)?;
+    let age = env.ledger().timestamp().saturating_sub(rate.updated_at);
+    if age <= max_age_seconds {
+        Some(rate)
+    } else {
+        None
+    }
+}

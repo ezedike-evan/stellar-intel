@@ -275,6 +275,18 @@ impl ReputationContract {
         corridor_rate::get(&env, corridor)
     }
 
+    /// Like `get_corridor_rate`, but only returns a rate published within the
+    /// last `max_age_seconds`. `None` covers both "never published" and "too
+    /// old": a consumer that cannot use a stale rate does not need to tell the
+    /// two apart, and a consumer that does can call `get_corridor_rate`.
+    pub fn get_corridor_rate_fresh(
+        env: Env,
+        corridor: String,
+        max_age_seconds: u64,
+    ) -> Option<corridor_rate::CorridorRate> {
+        corridor_rate::get_fresh(&env, corridor, max_age_seconds)
+    }
+
     // ── V2 entrypoints (multi-corridor expansion, issue #825) ────────────
 
     /// Migrate a single (anchor_id, corridor) pair from v1 to v2 storage.
