@@ -45,6 +45,10 @@ export default defineConfig({
         extends: true,
         test: {
           name: 'unit',
+          // Vitest refuses to start when two projects have different
+          // `maxWorkers` but the same `sequence.groupOrder`, so give each project
+          // its own. Without this a plain `npx vitest run <file>` aborts.
+          sequence: { groupOrder: 0 },
           pool: 'forks',
           maxWorkers: 4,
           environment: 'happy-dom',
@@ -91,6 +95,9 @@ export default defineConfig({
         extends: true,
         test: {
           name: 'live-anchors',
+          // A unique group order is required because `maxWorkers` differs from
+          // the unit project's; see the note on that project.
+          sequence: { groupOrder: 1 },
           pool: 'forks',
           maxWorkers: 2,
           environment: 'node',
