@@ -130,4 +130,46 @@ describe('GET /api/v1/onramp/quote (#1471)', () => {
     expect(body.error.code).toBe('upstream_unavailable');
     expect(JSON.stringify(body)).not.toContain('boom');
   });
+
+  // Cases carried over from the retired tests/onramp-quote-api.spec.ts (#1472).
+  describe('row semantics', () => {
+    const rows = [
+      rate({ anchorId: 'anchor-a', totalReceived: 6.4 }),
+      rate({
+        anchorId: 'anchor-b',
+        source: 'unavailable',
+        fee: null,
+        exchangeRate: null,
+        totalReceived: null,
+      }),
+    ];
+
+    beforeEach(() => {
+      fetchDepositRates.mockResolvedValue(comparison(rows));
+    });
+
+    it('bestRateId names an anchor present in rates', async () => {
+      const body = await (await call(OK)).json();
+      expect(body.rates.map((r: DepositRate) => r.anchorId)).toContain(body.bestRateId);
+    });
+
+    it('reachable rows have a positive totalReceived', async () => {
+      const body = await (await call(OK)).json();
+      const reachable = body.rates.filter((r: DepositRate) => r.source !== 'unavailable');
+      expect(reachable.length).toBeGreaterThan(0);
+      for (const r of reachable) expect(r.totalReceived).toBeGreaterThan(0);
+    });
+
+    it('unavailable rows have a null totalReceived', async () => {
+      const body = await (await call(OK)).json();
+      const unavailable = body.rates.filter((r: DepositRate) => r.source === 'unavailable');
+      expect(unavailable.length).toBeGreaterThan(0);
+      for (const r of unavailable) expect(r.totalReceived).toBeNull();
+    });
+
+    it.each(['bank_account', 'mobile_money', 'cash'])('accepts type=%s', async (type) => {
+      const res = await call({ ...OK, type });
+      expect(res.status).toBe(200);
+    });
+  });
 });
