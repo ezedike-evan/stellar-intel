@@ -16,7 +16,7 @@
 use soroban_sdk::{contracttype, Address, Env, String};
 
 use crate::storage::{self, DataKey};
-use crate::{publishers, Error};
+use crate::{corridors, publishers, Error};
 
 /// Most decimals a rate may be scaled by; beyond this `10^decimals` overflows
 /// `i128` arithmetic in consumers.
@@ -44,6 +44,9 @@ pub fn publish(
     publisher.require_auth();
     if !publishers::is_authorized(env, publisher) {
         return Err(Error::PublisherUnauthorized);
+    }
+    if !corridors::is_registered(env, &corridor) {
+        return Err(Error::CorridorNotRegistered);
     }
     if rate <= 0 || decimals > MAX_DECIMALS {
         return Err(Error::InvalidCorridorRate);

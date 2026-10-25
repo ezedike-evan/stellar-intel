@@ -17,7 +17,7 @@
 use soroban_sdk::{contracttype, Address, Env, String};
 
 use crate::storage::{self, DataKey};
-use crate::{publishers, Error};
+use crate::{corridors, publishers, Error};
 
 /// Upper bound on a single volume/savings delta (in microUSDC): 1e18 µUSDC =
 /// 1e12 USDC. Any real settlement is far below this; the cap keeps the
@@ -52,6 +52,9 @@ pub fn add_volume_savings(
     publisher.require_auth();
     if !publishers::is_authorized(env, publisher) {
         return Err(Error::PublisherUnauthorized);
+    }
+    if !corridors::is_registered(env, &corridor) {
+        return Err(Error::CorridorNotRegistered);
     }
     if volume_delta < 0 || savings_delta < 0 {
         return Err(Error::InvalidCorridorRate);

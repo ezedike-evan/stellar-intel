@@ -5,6 +5,7 @@ pub mod admin;
 pub mod aggregate;
 pub mod anchors;
 pub mod corridor_rate;
+pub mod corridors;
 pub mod history;
 pub mod migration;
 pub mod outcome;
@@ -29,6 +30,8 @@ pub enum Error {
     OutOfRange = 10,
     RateJumpTooLarge = 11,
     AnchorNotRegistered = 12,
+    CorridorExists = 13,
+    CorridorNotRegistered = 14,
 }
 
 #[contract]
@@ -66,6 +69,19 @@ impl ReputationContract {
         anchors::register(&env, anchor_id)?;
         storage::extend_instance(&env);
         Ok(())
+    }
+
+    /// Admin-only. Adds `corridor` to the registry that `publish_corridor_rate`
+    /// and `add_volume_savings` check.
+    pub fn register_corridor(env: Env, caller: Address, corridor: String) -> Result<(), Error> {
+        admin::require_admin(&env, &caller)?;
+        corridors::register(&env, corridor)?;
+        storage::extend_instance(&env);
+        Ok(())
+    }
+
+    pub fn list_corridors(env: Env) -> Vec<String> {
+        corridors::list(&env)
     }
 
     pub fn list_anchors(env: Env) -> Vec<String> {

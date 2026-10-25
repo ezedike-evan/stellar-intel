@@ -4,9 +4,9 @@
 //!
 //! | Tier       | Keys stored here                              | Rationale                                           |
 //! |------------|-----------------------------------------------|-----------------------------------------------------|
-//! | Instance   | `Admin`, `Anchors`, `Publishers`              | Tiny hot metadata; always loaded with the instance  |
-//! | Persistent | `AnchorTag`, `Publisher`, `OutcomeHead`,      | Large / per-entity blobs; pay only on access        |
-//! |            | `OutcomePage`, `Corridor`                     |                                                     |
+//! | Instance   | `Admin`, `Anchors`, `Corridors`, `Publishers` | Tiny hot metadata; always loaded with the instance  |
+//! | Persistent | `AnchorTag`, `CorridorTag`, `Publisher`,      | Large / per-entity blobs; pay only on access        |
+//! |            | `OutcomeHead`, `OutcomePage`, `Corridor`      |                                                     |
 //!
 //! ### Hot-keyed writes (`OutcomePage`)
 //! Outcome history is split into fixed-size pages of [`PAGE_SIZE`] entries.
@@ -17,12 +17,12 @@
 //! ### Bounded reads (`OutcomePage`)
 //! `recent_outcomes(n)` reads at most `ceil(n / PAGE_SIZE)` pages.
 //!
-//! ### Membership checks (`Publisher`, `AnchorTag`)
-//! Each publisher and anchor has its own persistent entry (a single bool).
+//! ### Membership checks (`Publisher`, `AnchorTag`, `CorridorTag`)
+//! Each publisher, anchor and corridor has its own persistent entry (a single bool).
 //! `is_authorized` and duplicate detection each cost one persistent read
 //! instead of scanning a `Vec` loaded from instance storage.
 //!
-//! `Anchors` and `Publishers` remain in instance storage solely to serve the
+//! `Anchors`, `Corridors` and `Publishers` remain in instance storage solely to serve the
 //! admin list-view functions; they are never touched by the hot write paths.
 
 use soroban_sdk::{contracttype, Address, Env, String};
@@ -78,6 +78,8 @@ pub enum DataKey {
     PendingAdmin,
     /// Ordered list of registered anchor ids (admin list-view only).
     Anchors,
+    /// Ordered list of registered corridor ids (admin list-view only).
+    Corridors,
     /// Ordered list of publisher addresses (admin list-view only).
     Publishers,
 
@@ -85,6 +87,9 @@ pub enum DataKey {
     /// Existence flag for a single anchor id.  Checked on every `register_anchor`
     /// to avoid a full `Anchors` Vec scan.
     AnchorTag(String),
+    /// Existence flag for a single corridor id.  Checked on every rate and
+    /// volume write so an invented corridor cannot create storage.
+    CorridorTag(String),
     /// Membership flag for a single publisher address.  Checked on every
     /// `submit_outcome` to avoid a full `Publishers` Vec scan.
     Publisher(Address),

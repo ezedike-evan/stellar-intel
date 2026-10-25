@@ -12,6 +12,10 @@ fn setup(env: &Env) -> (ReputationContractClient<'_>, Address, Address) {
     let client = ReputationContractClient::new(env, &contract_id);
     let publisher = Address::generate(env);
     client.add_publisher(&admin, &publisher);
+    // Rate writes only accept registered corridors (#1385).
+    for corridor in ["usdc-ngn", "usdc-kes", "usdc-mxn", "usdc-php"] {
+        client.register_corridor(&admin, &String::from_str(env, corridor));
+    }
     (client, admin, publisher)
 }
 
