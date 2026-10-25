@@ -33,6 +33,7 @@
 //! | `("upg_cncl", candidate)`              | `caller`                          |
 //! | `("agg_rst", anchor_id, corridor)`     | `caller`                          |
 //! | `("vol_rst", corridor)`                | `caller`                          |
+//! | `("hist_rst", anchor_id)`               | `caller`                          |
 //! | `("upgrade", upgrade_admin)`           | `(new_wasm_hash, new_version)`    |
 //!
 //! `adm_cncl` and `upg_cncl` are emitted only when a proposal was actually
@@ -197,6 +198,14 @@ pub fn aggregate_reset(env: &Env, caller: &Address, anchor_id: &String, corridor
 pub fn volume_reset(env: &Env, caller: &Address, corridor: &String) {
     env.events()
         .publish((symbol_short!("vol_rst"), corridor.clone()), caller.clone());
+}
+
+/// An anchor's outcome history was reset.
+pub fn history_reset(env: &Env, caller: &Address, anchor_id: &String) {
+    env.events().publish(
+        (symbol_short!("hist_rst"), anchor_id.clone()),
+        caller.clone(),
+    );
 }
 
 /// The contract is about to be upgraded to `new_wasm_hash`, at `new_version`.

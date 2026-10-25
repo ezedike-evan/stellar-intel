@@ -81,3 +81,24 @@ pub fn submit_outcome(
     );
     Ok(())
 }
+
+/// Hide an anchor's existing outcome history without touching it.
+///
+/// Moves the head to a fresh, empty page one past the current one and raises
+/// the anchor's floor to that page, so [`crate::history::recent_outcomes`] stops
+/// before the old pages. Nothing is iterated or deleted, so the cost is O(1)
+/// however deep the history. This is the recovery path for a page polluted by a
+/// since-revoked publisher, or jammed before the hash-length cap (audit M-4).
+/// Aggregates have their own reset.
+pub fn reset_history(env: &Env, anchor_id: &String) {
+    let head_key = DataKey::OutcomeHead(anchor_id.clone());
+    let (page, _len): (u32, u32) = env.storage().persistent().get(&head_key).unwrap_or((0, 0));
+    let fresh = page + 1;
+
+    env.storage().persistent().set(&head_key, &(fresh, 0u32));
+    storage::extend_persistent(env, &head_key);
+
+    let floor_key = DataKey::OutcomeFloor(anchor_id.clone());
+    env.storage().persistent().set(&floor_key, &fresh);
+    storage::extend_persistent(env, &floor_key);
+}

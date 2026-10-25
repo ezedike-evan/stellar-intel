@@ -101,6 +101,10 @@ pub enum DataKey {
     PublisherScope(Address),
     /// Current outcome-page pointer for an anchor: `(page_num, page_len)`.
     OutcomeHead(String),
+    /// Lowest outcome page `recent_outcomes` may read for an anchor (`u32`,
+    /// default 0). `reset_outcome_history` raises it past the current head so
+    /// older pages are hidden without being iterated or deleted.
+    OutcomeFloor(String),
     /// One page of outcome entries for an anchor: at most [`PAGE_SIZE`] items.
     OutcomePage(String, u32),
     /// Corridor performance metrics: `(fill_rate_bps, slippage_bps, settle_seconds_p50, n)`.

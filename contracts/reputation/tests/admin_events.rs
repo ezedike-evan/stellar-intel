@@ -232,3 +232,19 @@ fn failed_add_publisher_from_a_non_admin_emits_nothing() {
     assert!(res.is_err());
     assert_eq!(env.events().all(), vec![&env]);
 }
+
+#[test]
+fn reset_outcome_history_emits_hist_rst() {
+    let env = Env::default();
+    let (client, admin) = setup(&env);
+    let anchor = String::from_str(&env, "cowrie");
+
+    client.reset_outcome_history(&admin, &anchor);
+
+    only_event(
+        &env,
+        &client,
+        (symbol_short!("hist_rst"), anchor).into_val(&env),
+        admin.into_val(&env),
+    );
+}

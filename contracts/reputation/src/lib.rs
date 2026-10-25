@@ -196,6 +196,22 @@ impl ReputationContract {
         Ok(())
     }
 
+    /// Admin-only. Hide an anchor's outcome history from `recent_outcomes`: the
+    /// recovery path for a page polluted by a since-revoked publisher. O(1) -
+    /// old pages are skipped, not iterated or deleted. Aggregates are reset
+    /// separately with `reset_corridor_aggregate`.
+    pub fn reset_outcome_history(
+        env: Env,
+        caller: Address,
+        anchor_id: String,
+    ) -> Result<(), Error> {
+        admin::require_admin(&env, &caller)?;
+        outcome::reset_history(&env, &anchor_id);
+        storage::extend_instance(&env);
+        events::history_reset(&env, &caller, &anchor_id);
+        Ok(())
+    }
+
     /// Admin-only. Clear a corridor's cumulative volume/savings totals.
     pub fn reset_volume_savings(env: Env, caller: Address, corridor: String) -> Result<(), Error> {
         admin::require_admin(&env, &caller)?;
