@@ -737,7 +737,7 @@ export async function initiateDeposit(
   params: Sep24DepositRequest,
   signal?: AbortSignal
 ): Promise<Sep24DepositResponse> {
-  const { jwt, assetCode, assetIssuer, amount, account, lang } = params;
+  const { jwt, assetCode, assetIssuer, amount, account, lang, quoteId } = params;
   const transferServer = anchor.TRANSFER_SERVER_SEP0024;
 
   if (!transferServer || !anchor.capabilities.sep24) {
@@ -762,6 +762,7 @@ export async function initiateDeposit(
       // claimable balance lets the anchor pay out that way instead of leaving the
       // deposit stuck in pending_trust. SEP-24 request params are strings.
       claimable_balance_supported: 'true',
+      ...(quoteId ? { quote_id: quoteId } : {}),
     }),
     ...(signal ? { signal } : {}),
   });

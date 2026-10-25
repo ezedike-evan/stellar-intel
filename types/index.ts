@@ -401,6 +401,8 @@ export interface Sep24DepositRequest {
   jwt: string;
   /** BCP 47 language tag for the anchor's interactive UI. Defaults to `en`. */
   lang?: string | undefined;
+  /** SEP-38 firm quote id, when the anchor supports quote-bound deposits. */
+  quoteId?: string;
 }
 
 /** Everything the caller supplies to start a SEP-24 deposit (`startDepositFlow`). */
@@ -416,6 +418,8 @@ export interface DepositFlowParams {
   callbackUrl?: string;
   /** BCP 47 language tag for the interactive UI. Defaults to `en`. */
   lang?: string;
+  /** SEP-38 firm quote id, when the anchor supports quote-bound deposits. */
+  quoteId?: string;
 }
 
 /** What the caller needs in order to hand the user off to the anchor. */
