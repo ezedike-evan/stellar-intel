@@ -3,7 +3,6 @@ import { ANCHORS } from './anchors';
 import { getCachedToml, setCachedToml, invalidateCachedToml, clearTomlCache } from './toml-cache';
 import { sleep } from '@/lib/utils';
 import { parseAllowedTransferServer } from '@/lib/api/anchor-allowlist';
-import { getLogger } from '@/lib/logger';
 
 // ─── Result type ──────────────────────────────────────────────────────────────
 
@@ -72,7 +71,11 @@ function safeServerUrl(domain: string, raw: Record<string, unknown>, key: string
   if (value === null) return null;
   if (parseAllowedTransferServer(value) !== null) return value;
 
-  getLogger('stellar.sep1').warn({ event: 'sep1_server_url_rejected', domain, key });
+  // console, not lib/logger: this module is bundled into client components (the
+  // on-ramp and off-ramp pages reach it through sep24), and the logger pulls in
+  // pino and node:async_hooks, which the browser bundle cannot resolve.
+  // eslint-disable-next-line no-console
+  console.warn('[sep1] server URL rejected', { event: 'sep1_server_url_rejected', domain, key });
   return null;
 }
 
