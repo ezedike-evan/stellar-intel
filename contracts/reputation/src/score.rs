@@ -71,16 +71,10 @@ pub fn set_corridor_metrics(
     settle_seconds_p50: u64,
     n: u32,
 ) -> Result<(), Error> {
-    publisher.require_auth();
-
-    if !publishers::is_authorized(env, publisher) {
-        return Err(Error::PublisherUnauthorized);
-    }
+    publishers::require_publisher(env, publisher)?;
     publishers::require_in_scope(env, publisher, &corridor)?;
 
-    if !anchors::is_registered(env, &anchor_id) {
-        return Err(Error::AnchorNotRegistered);
-    }
+    anchors::require_registered(env, &anchor_id)?;
 
     // Refuse out-of-range input at write time, before anything is stored, as
     // submit_outcome does for settle_seconds. Otherwise every reader gets the

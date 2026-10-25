@@ -10,7 +10,7 @@
 
 use soroban_sdk::{Env, String, Vec};
 
-use crate::storage::DataKey;
+use crate::storage::{self, DataKey};
 use crate::Error;
 
 /// Load the current anchor list (empty if none registered yet).
@@ -33,6 +33,7 @@ pub fn register(env: &Env, anchor_id: String) -> Result<(), Error> {
     }
 
     env.storage().persistent().set(&tag_key, &true);
+    storage::extend_persistent(env, &tag_key);
 
     let mut anchors = list(env);
     anchors.push_back(anchor_id);
@@ -46,4 +47,17 @@ pub fn is_registered(env: &Env, anchor_id: &String) -> bool {
     env.storage()
         .persistent()
         .has(&DataKey::AnchorTag(anchor_id.clone()))
+}
+
+/// The write-path gate: succeeds when `anchor_id` is registered, and extends the
+/// tag's TTL so an anchor that is still being written for does not archive out
+/// from under the publisher (audit P2, contract TTL). [`is_registered`] stays
+/// for read-only use.
+pub fn require_registered(env: &Env, anchor_id: &String) -> Result<(), Error> {
+    let tag_key = DataKey::AnchorTag(anchor_id.clone());
+    if !env.storage().persistent().has(&tag_key) {
+        return Err(Error::AnchorNotRegistered);
+    }
+    storage::extend_persistent(env, &tag_key);
+    Ok(())
 }

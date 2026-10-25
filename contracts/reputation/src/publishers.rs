@@ -34,6 +34,7 @@ pub fn add(env: &Env, publisher: Address) -> Result<(), Error> {
     }
 
     env.storage().persistent().set(&flag_key, &true);
+    storage::extend_persistent(env, &flag_key);
 
     let mut publishers = list(env);
     publishers.push_back(publisher);
@@ -77,6 +78,25 @@ pub fn is_authorized(env: &Env, publisher: &Address) -> bool {
         .has(&DataKey::Publisher(publisher.clone()))
 }
 
+/// The gate every publisher write goes through: the caller must have authorised
+/// this invocation and be whitelisted.
+///
+/// Also extends the whitelist flag's TTL. The flag is read on every publisher
+/// write and was otherwise written once and never extended, so after it
+/// archived every write stalled until someone restored it (audit P2, contract
+/// TTL). A publisher that is writing therefore keeps its own flag alive.
+/// [`is_authorized`] stays for read-only use, which must not write.
+pub fn require_publisher(env: &Env, publisher: &Address) -> Result<(), Error> {
+    publisher.require_auth();
+
+    let flag_key = DataKey::Publisher(publisher.clone());
+    if !env.storage().persistent().has(&flag_key) {
+        return Err(Error::PublisherUnauthorized);
+    }
+    storage::extend_persistent(env, &flag_key);
+    Ok(())
+}
+
 /// Restrict `publisher` to the listed corridors. Replaces any earlier scope.
 pub fn set_scope(env: &Env, publisher: Address, corridors: Vec<String>) {
     let key = DataKey::PublisherScope(publisher);
@@ -105,6 +125,11 @@ pub fn get_scope(env: &Env, publisher: &Address) -> Option<Vec<String>> {
 pub fn require_in_scope(env: &Env, publisher: &Address, corridor: &String) -> Result<(), Error> {
     match get_scope(env, publisher) {
         Some(scope) if !scope.contains(corridor) => Err(Error::PublisherOutOfScope),
-        _ => Ok(()),
+        Some(_) => {
+            // Keep a scope that is being used alive, like the publisher flag.
+            storage::extend_persistent(env, &DataKey::PublisherScope(publisher.clone()));
+            Ok(())
+        }
+        None => Ok(()),
     }
 }

@@ -49,14 +49,9 @@ pub fn add_volume_savings(
     volume_delta: i128,
     savings_delta: i128,
 ) -> Result<(), Error> {
-    publisher.require_auth();
-    if !publishers::is_authorized(env, publisher) {
-        return Err(Error::PublisherUnauthorized);
-    }
+    publishers::require_publisher(env, publisher)?;
     publishers::require_in_scope(env, publisher, &corridor)?;
-    if !corridors::is_registered(env, &corridor) {
-        return Err(Error::CorridorNotRegistered);
-    }
+    corridors::require_registered(env, &corridor)?;
     if volume_delta < 0 || savings_delta < 0 {
         return Err(Error::InvalidCorridorRate);
     }

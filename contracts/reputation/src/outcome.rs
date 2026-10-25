@@ -17,19 +17,13 @@ pub fn submit_outcome(
     settle_seconds: u64,
     success: bool,
 ) -> Result<(), Error> {
-    publisher.require_auth();
-
-    if !publishers::is_authorized(env, publisher) {
-        return Err(Error::PublisherUnauthorized);
-    }
+    publishers::require_publisher(env, publisher)?;
     publishers::require_in_scope(env, publisher, &corridor)?;
 
     // The registry is what list_anchors reports; without this gate a publisher
     // key could create history and scores for ids that were never registered
     // (audit M-5).
-    if !anchors::is_registered(env, &anchor_id) {
-        return Err(Error::AnchorNotRegistered);
-    }
+    anchors::require_registered(env, &anchor_id)?;
 
     if settle_seconds > MAX_SETTLE_SECONDS {
         return Err(Error::OutOfRange);

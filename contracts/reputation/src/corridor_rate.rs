@@ -41,14 +41,9 @@ pub fn publish(
     rate: i128,
     decimals: u32,
 ) -> Result<(), Error> {
-    publisher.require_auth();
-    if !publishers::is_authorized(env, publisher) {
-        return Err(Error::PublisherUnauthorized);
-    }
+    publishers::require_publisher(env, publisher)?;
     publishers::require_in_scope(env, publisher, &corridor)?;
-    if !corridors::is_registered(env, &corridor) {
-        return Err(Error::CorridorNotRegistered);
-    }
+    corridors::require_registered(env, &corridor)?;
     if rate <= 0 || decimals > MAX_DECIMALS {
         return Err(Error::InvalidCorridorRate);
     }

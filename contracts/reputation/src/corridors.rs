@@ -46,3 +46,15 @@ pub fn is_registered(env: &Env, corridor: &String) -> bool {
         .persistent()
         .has(&DataKey::CorridorTag(corridor.clone()))
 }
+
+/// The write-path gate: succeeds when `corridor` is registered, and extends the
+/// tag's TTL so a corridor that is still being written for does not archive out
+/// from under the publisher. [`is_registered`] stays for read-only use.
+pub fn require_registered(env: &Env, corridor: &String) -> Result<(), Error> {
+    let tag_key = DataKey::CorridorTag(corridor.clone());
+    if !env.storage().persistent().has(&tag_key) {
+        return Err(Error::CorridorNotRegistered);
+    }
+    crate::storage::extend_persistent(env, &tag_key);
+    Ok(())
+}
