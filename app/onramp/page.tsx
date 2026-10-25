@@ -1,5 +1,5 @@
 'use client';
-import { Suspense, useCallback, useEffect, useMemo, useState } from 'react';
+import { Suspense, useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import dynamic from 'next/dynamic';
 import { useRouter, useSearchParams } from 'next/navigation';
 import { WalletButton } from '@/components/ui/WalletButton';
@@ -12,6 +12,7 @@ import { useDepositRates } from '@/hooks/useDepositRates';
 import { useTransferStatus, type OutcomeAppendContext } from '@/hooks/useWithdrawStatus';
 import { VISIBLE_CORRIDORS } from '@/constants/anchors';
 import { getCorridorById } from '@/lib/stellar/anchors';
+import { ONRAMP_FUNNEL_EVENTS, amountBucket, trackFunnelEvent } from '@/lib/analytics';
 import { signIntent } from '@/lib/intent/sign';
 import {
   buildTrackingSearch,
@@ -155,6 +156,43 @@ function OnrampContent() {
     router.replace(`?${sp.toString()}`, { scroll: false });
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [corridorId, amount, activeAssetId, trackingTransactionId]);
+
+  // Estimates were shown for a corridor: once per corridor, not per refresh.
+  const viewedCorridorRef = useRef<string | null>(null);
+  useEffect(() => {
+    if (!comparison || comparison.rates.length === 0) return;
+    if (viewedCorridorRef.current === comparison.corridorId) return;
+    viewedCorridorRef.current = comparison.corridorId;
+    trackFunnelEvent(ONRAMP_FUNNEL_EVENTS.onrampRateTableViewed, {
+      direction: 'onramp',
+      corridor: comparison.corridorId,
+      amount_bucket: amountBucket(amount),
+    });
+    // The bucket of the amount typed at that moment is enough; re-typing is not a new view.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [comparison]);
+
+  // How the deposit ended: once per transaction. Anything terminal but `completed`
+  // is a failure, named by its status (a fixed vocabulary, never free text).
+  const endedRef = useRef<string | null>(null);
+  useEffect(() => {
+    const status = depositStatus.status;
+    if (!status || !trackingTransactionId || !TERMINAL_STATES.has(status)) return;
+    if (endedRef.current === trackingTransactionId) return;
+    endedRef.current = trackingTransactionId;
+    const props = {
+      direction: 'onramp' as const,
+      corridor: corridorId,
+      amount_bucket: amountBucket(amount),
+    };
+    if (status === 'completed') {
+      trackFunnelEvent(ONRAMP_FUNNEL_EVENTS.onrampDepositCompleted, props);
+    } else {
+      trackFunnelEvent(ONRAMP_FUNNEL_EVENTS.onrampDepositFailed, { ...props, error_class: status });
+    }
+    // Fires on the status reaching a terminal state, not on later edits to the inputs.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [depositStatus.status, trackingTransactionId]);
 
   useEffect(() => {
     if (depositStatus.status && TERMINAL_STATES.has(depositStatus.status) && trackingNonce) {

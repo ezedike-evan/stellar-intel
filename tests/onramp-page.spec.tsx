@@ -74,12 +74,18 @@ vi.mock('@/lib/stellar/sep24', async () => {
   return { ...actual, getSep24Transaction: vi.fn() };
 });
 
+vi.mock('@/lib/analytics', async (importOriginal) => ({
+  ...(await importOriginal<typeof import('@/lib/analytics')>()),
+  trackFunnelEvent: vi.fn(),
+}));
+
 vi.mock('@/lib/intent/sign', async () => {
   const actual = await vi.importActual<typeof import('@/lib/intent/sign')>('@/lib/intent/sign');
   return { ...actual, signIntent: vi.fn() };
 });
 
 import { useWallet } from '@/contexts/WalletContext';
+import { trackFunnelEvent } from '@/lib/analytics';
 import { useDepositRates } from '@/hooks/useDepositRates';
 import * as sep24 from '@/lib/stellar/sep24';
 import * as sign from '@/lib/intent/sign';
@@ -457,5 +463,79 @@ describe('/onramp page tracking resume (#1480)', () => {
     await screen.findByText('Deposit status');
     await waitFor(() => expect(mockGetSep24Transaction).toHaveBeenCalled());
     expect(sessionStorage.getItem(`si_jwt_${NONCE}`)).toBe('restored-jwt');
+  });
+});
+
+describe('/onramp page analytics (#1491)', () => {
+  const track = vi.mocked(trackFunnelEvent);
+
+  it('records the estimates being shown once for the corridor', async () => {
+    const { rerender } = renderPage();
+    rerender(
+      createElement(SWRConfig, { value: { provider: () => new Map() } }, createElement(OnrampPage))
+    );
+
+    const views = track.mock.calls.filter(([name]) => name === 'onramp_rate_table_viewed');
+    expect(views).toHaveLength(1);
+    expect(views[0]![1]).toEqual({
+      direction: 'onramp',
+      corridor: 'usdc-ngn',
+      amount_bucket: '100-500',
+    });
+  });
+
+  it('records a completed deposit once', async () => {
+    stubAppendFetch();
+    const user = userEvent.setup();
+    renderPage();
+    await startDeposit(user);
+
+    await waitFor(() =>
+      expect(track).toHaveBeenCalledWith('onramp_deposit_completed', {
+        direction: 'onramp',
+        corridor: 'usdc-ngn',
+        amount_bucket: '100-500',
+      })
+    );
+    expect(track.mock.calls.filter(([n]) => n === 'onramp_deposit_completed')).toHaveLength(1);
+    expect(track).not.toHaveBeenCalledWith('onramp_deposit_failed', expect.anything());
+  });
+
+  it.each(['error', 'expired', 'refunded'] as const)(
+    'records a %s deposit as failed, named by its status',
+    async (status) => {
+      mockGetSep24Transaction.mockResolvedValue({
+        id: 'deposit-tx-1',
+        status,
+        updatedAt: new Date(),
+      });
+      stubAppendFetch();
+      const user = userEvent.setup();
+      renderPage();
+      await startDeposit(user);
+
+      await waitFor(() =>
+        expect(track).toHaveBeenCalledWith('onramp_deposit_failed', {
+          direction: 'onramp',
+          corridor: 'usdc-ngn',
+          amount_bucket: '100-500',
+          error_class: status,
+        })
+      );
+      expect(track).not.toHaveBeenCalledWith('onramp_deposit_completed', expect.anything());
+    }
+  );
+
+  it('never sends the account or the raw amount', async () => {
+    stubAppendFetch();
+    const user = userEvent.setup();
+    renderPage();
+    await startDeposit(user);
+    await waitFor(() =>
+      expect(track).toHaveBeenCalledWith('onramp_deposit_completed', expect.anything())
+    );
+
+    const sent = JSON.stringify(track.mock.calls);
+    expect(sent).not.toContain(PUBLIC_KEY);
   });
 });

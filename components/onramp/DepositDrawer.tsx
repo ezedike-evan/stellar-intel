@@ -7,6 +7,7 @@ import { getResolvedAnchorById } from '@/lib/stellar/anchors';
 import { classifyExecuteError, isRetryableExecuteError } from '@/lib/errors/messages';
 import { acceptTerms, hasAcceptedTerms } from '@/lib/consent';
 import { Button } from '@/components/ui/Button';
+import { ONRAMP_FUNNEL_EVENTS, amountBucket, trackFunnelEvent } from '@/lib/analytics';
 import { ConsentModal } from '@/components/offramp/ConsentModal';
 import { KycIframe } from '@/components/offramp/KycIframe';
 import { TrustlinePreflight } from './TrustlinePreflight';
@@ -239,6 +240,12 @@ export function DepositDrawer({
       // Step 4 — the anchor's window, where KYC and the fiat payment happen.
       setInteractive({ url: session.depositUrl, origin: new URL(session.depositUrl).origin });
       setStep('interactive');
+      trackFunnelEvent(ONRAMP_FUNNEL_EVENTS.onrampDepositStarted, {
+        direction: 'onramp',
+        corridor: rate.corridorId,
+        anchor: rate.anchorId,
+        amount_bucket: amountBucket(amount),
+      });
       const transactionId = await new Promise<string>((resolve, reject) => {
         kycResolveRef.current = resolve;
         kycRejectRef.current = reject;
@@ -375,6 +382,7 @@ export function DepositDrawer({
                 publicKey={publicKey}
                 asset={asset}
                 onReady={() => preflightResolveRef.current?.()}
+                amount={amount}
               />
             </div>
           )}

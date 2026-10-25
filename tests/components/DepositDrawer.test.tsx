@@ -17,6 +17,11 @@ vi.mock('@/lib/stellar/sep24', async () => {
 
 vi.mock('@/lib/stellar/anchors', () => ({ getResolvedAnchorById: vi.fn() }));
 
+vi.mock('@/lib/analytics', async (importOriginal) => ({
+  ...(await importOriginal<typeof import('@/lib/analytics')>()),
+  trackFunnelEvent: vi.fn(),
+}));
+
 vi.mock('@/lib/consent', () => ({ hasAcceptedTerms: vi.fn(), acceptTerms: vi.fn() }));
 
 // The preflight and the anchor's window are driven by buttons, so each test
@@ -61,6 +66,7 @@ import * as sep10 from '@/lib/stellar/sep10';
 import * as sep24 from '@/lib/stellar/sep24';
 import * as anchors from '@/lib/stellar/anchors';
 import * as consent from '@/lib/consent';
+import { trackFunnelEvent } from '@/lib/analytics';
 
 const mockAuthenticate = vi.mocked(sep10.authenticate);
 const mockStartDepositFlow = vi.mocked(sep24.startDepositFlow);
@@ -277,6 +283,47 @@ describe('DepositDrawer (#1478)', () => {
     const alert = await screen.findByRole('alert');
     expect(alert.textContent).toBeTruthy();
     expect(mockStartDepositFlow).not.toHaveBeenCalled();
+  });
+});
+
+describe('DepositDrawer analytics (#1491)', () => {
+  const track = vi.mocked(trackFunnelEvent);
+
+  it('records the deposit starting once the anchor window opens, and not before', async () => {
+    renderDrawer();
+    fireEvent.click(screen.getByRole('button', { name: 'Start deposit' }));
+    await screen.findByTestId('preflight');
+    expect(track).not.toHaveBeenCalledWith('onramp_deposit_started', expect.anything());
+
+    fireEvent.click(screen.getByRole('button', { name: 'Wallet ready' }));
+    await screen.findByTestId('kyc-iframe');
+
+    expect(track).toHaveBeenCalledWith('onramp_deposit_started', {
+      direction: 'onramp',
+      corridor: 'usdc-ngn',
+      anchor: 'cowrie',
+      amount_bucket: '1000+',
+    });
+  });
+
+  it('never sends the raw amount or the account', async () => {
+    renderDrawer();
+    await startAndPassPreflight();
+    await screen.findByTestId('kyc-iframe');
+
+    const sent = JSON.stringify(track.mock.calls);
+    expect(sent).not.toContain('150000');
+    expect(sent).not.toContain(PUBLIC_KEY);
+  });
+
+  it('records nothing when the deposit is cancelled before the window opens', async () => {
+    renderDrawer();
+    fireEvent.click(screen.getByRole('button', { name: 'Start deposit' }));
+    await screen.findByTestId('preflight');
+    fireEvent.click(screen.getByRole('button', { name: 'Cancel deposit' }));
+    await screen.findByRole('button', { name: 'Start deposit' });
+
+    expect(track).not.toHaveBeenCalledWith('onramp_deposit_started', expect.anything());
   });
 });
 
