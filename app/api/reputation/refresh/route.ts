@@ -9,6 +9,7 @@ import {
   probeAllAnchors,
   probeAllAnchorQuotes,
   probeAllAnchorIssuers,
+  probeAllAnchorDeposits,
   probeAllAnchorIntegrity,
   probeAllAnchorSep31,
   probeSep38Prices,
@@ -30,6 +31,8 @@ interface ProbeSweepCounts {
   issuerMismatch: number;
   tomlIntegrity: number;
   sep31Info: number;
+  /** SEP-24 deposit-availability samples, one per deposit asset (ONR029). */
+  deposit: number;
   /** SEP-38 indicative price rows recorded into quote_history (#1509). */
   sep38Prices: number;
 }
@@ -45,6 +48,7 @@ async function runProbeSweep(): Promise<ProbeSweepCounts> {
   const issuerSink = new DurableProbeStore(store, 'issuer-mismatch');
   const integritySink = new DurableProbeStore(store, 'toml-integrity');
   const sep31Sink = new DurableProbeStore(store, 'sep31-info');
+  const depositSink = new DurableProbeStore(store, 'deposit');
 
   const [
     uptimeSamples,
@@ -52,6 +56,7 @@ async function runProbeSweep(): Promise<ProbeSweepCounts> {
     issuerSamples,
     integritySamples,
     sep31Samples,
+    depositSamples,
     sep38PriceRows,
   ] = await Promise.all([
     probeAllAnchors(uptimeSink),
@@ -59,10 +64,11 @@ async function runProbeSweep(): Promise<ProbeSweepCounts> {
     probeAllAnchorIssuers(issuerSink),
     probeAllAnchorIntegrity(integritySink),
     probeAllAnchorSep31(sep31Sink),
+    probeAllAnchorDeposits(depositSink),
     probeSep38Prices(ANCHORS, store),
   ]);
 
-  const sinks = [uptimeSink, quoteSink, issuerSink, integritySink, sep31Sink];
+  const sinks = [uptimeSink, quoteSink, issuerSink, integritySink, sep31Sink, depositSink];
   await Promise.all(sinks.map((sink) => sink.drain()));
 
   return {
@@ -71,6 +77,7 @@ async function runProbeSweep(): Promise<ProbeSweepCounts> {
     issuerMismatch: issuerSamples.length,
     tomlIntegrity: integritySamples.length,
     sep31Info: sep31Samples.length,
+    deposit: depositSamples.length,
     sep38Prices: sep38PriceRows.length,
     // Counted rather than assumed: `DurableProbeStore.record()` swallows a
     // rejected write, so sample counts above say what was *probed*, not what

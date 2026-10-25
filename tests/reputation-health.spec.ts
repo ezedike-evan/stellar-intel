@@ -57,6 +57,7 @@ function signals(partial: Partial<Record<HealthSignalKey, HealthSignal>>) {
     quoteAvailability: signal(),
     issuerMatch: signal(),
     tomlIntegrity: signal(),
+    depositAvailability: signal(),
     ...partial,
   };
 }
@@ -277,8 +278,18 @@ describe('toHealthSummary', () => {
       quoteAvailability: 0,
       issuerMatchRate: null,
       tomlIntegrityRate: null,
+      depositAvailabilityRate: null,
       probeSamples: 30,
     });
+  });
+
+  it('reports no deposit rate when no deposit sweep has run', () => {
+    const health = computeAnchorHealth(rows('uptime', 20), {
+      anchorId: 'ngnc',
+      domain: 'ngnc.online',
+      now: NOW,
+    });
+    expect(toHealthSummary(health).depositAvailabilityRate).toBeNull();
   });
 });
 
@@ -363,5 +374,99 @@ describe('a check that could not complete is not a failure by the anchor', () =>
     expect(health.incompleteChecks).toBe(600);
     expect(health.state).toBe('insufficient_data');
     expect(health.healthScore).toBeNull();
+  });
+});
+
+describe('deposit availability is its own signal (#1488)', () => {
+  const input = { anchorId: 'ngnc', domain: 'ngnc.online', now: NOW };
+
+  function depositRows(count: number, enabled: boolean, over: Partial<ProbeLedgerRow> = {}) {
+    return Array.from({ length: count }, (_, i) =>
+      row({
+        kind: 'deposit',
+        corridor: 'deposit:USDC',
+        reachable: enabled,
+        failureType: enabled ? null : 'unknown',
+        error: enabled ? null : 'deposit disabled for USDC',
+        latencyMs: 80,
+        probedAt: new Date(NOW.getTime() - i * 60_000).toISOString(),
+        ...over,
+      })
+    );
+  }
+
+  it('maps the deposit kind to depositAvailability and nothing else', () => {
+    const health = computeAnchorHealth(depositRows(10, true), input);
+
+    expect(health.signals.depositAvailability).toMatchObject({ samples: 10, successRate: 1 });
+    expect(health.signals.uptime.samples).toBe(0);
+    expect(health.signals.quoteAvailability.samples).toBe(0);
+    expect(health.signals.issuerMatch.samples).toBe(0);
+    expect(health.signals.tomlIntegrity.samples).toBe(0);
+  });
+
+  it('counts a disabled deposit as a failure the anchor is responsible for', () => {
+    const health = computeAnchorHealth([...depositRows(3, true), ...depositRows(1, false)], input);
+
+    expect(health.signals.depositAvailability.samples).toBe(4);
+    expect(health.signals.depositAvailability.successRate).toBeCloseTo(0.75, 10);
+    expect(health.signals.depositAvailability.lastFailureType).toBe('unknown');
+  });
+
+  it.each([
+    ['an unknown failure that is not "deposit disabled"', 'unknown', 'info parse error'],
+    ['a timeout', 'timeout', 'timed out'],
+    ['a DNS failure', 'dns', 'ENOTFOUND'],
+  ] as const)('does not count %s as a verdict', (_label, failureType, error) => {
+    const health = computeAnchorHealth(
+      [
+        ...depositRows(5, true),
+        ...depositRows(3, false, { failureType: failureType as never, error }),
+      ],
+      input
+    );
+
+    expect(health.signals.depositAvailability.samples).toBe(5);
+    expect(health.signals.depositAvailability.incomplete).toBe(3);
+    expect(health.signals.depositAvailability.successRate).toBe(1);
+  });
+
+  it('gives the signal no weight in the health score', () => {
+    expect(HEALTH_WEIGHTS.depositAvailability).toBe(0);
+    expect(Object.values(HEALTH_WEIGHTS).reduce((a, b) => a + b, 0)).toBeCloseTo(1, 10);
+  });
+
+  it('leaves the health score, counts and streak unchanged when deposit rows are present', () => {
+    const base = [...rows('uptime', 20), ...rows('quote', 10, false)];
+    const withoutDeposit = computeAnchorHealth(base, input);
+    const withDeposit = computeAnchorHealth(
+      [...base, ...depositRows(40, false), ...depositRows(40, true)],
+      input
+    );
+
+    expect(withDeposit.healthScore).toBe(withoutDeposit.healthScore);
+    expect(withDeposit.state).toBe(withoutDeposit.state);
+    expect(withDeposit.sampleSize).toBe(withoutDeposit.sampleSize);
+    expect(withDeposit.incompleteChecks).toBe(withoutDeposit.incompleteChecks);
+    expect(withDeposit.observedDays).toBe(withoutDeposit.observedDays);
+    expect(withDeposit.continuousDays).toBe(withoutDeposit.continuousDays);
+    expect(withDeposit.signals.uptime).toEqual(withoutDeposit.signals.uptime);
+    expect(withDeposit.signals.depositAvailability.samples).toBe(80);
+  });
+
+  it('does not release a score on deposit rows alone', () => {
+    const health = computeAnchorHealth(depositRows(MIN_HEALTH_SAMPLES + 5, true), input);
+
+    expect(health.state).toBe('insufficient_data');
+    expect(health.healthScore).toBeNull();
+    expect(probeHealthScore(health.signals)).toBeNull();
+  });
+
+  it('publishes the rate in the summary', () => {
+    const health = computeAnchorHealth(
+      [...rows('uptime', 20), ...depositRows(1, true), ...depositRows(1, false)],
+      input
+    );
+    expect(toHealthSummary(health).depositAvailabilityRate).toBe(0.5);
   });
 });

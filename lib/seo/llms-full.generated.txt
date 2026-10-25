@@ -3761,11 +3761,20 @@ sampled**, with the weights renormalised across exactly those:
 healthScore = Σ wᵢ · successRateᵢ ÷ Σ wᵢ      (over signals with samples > 0)
 
 HEALTH_WEIGHTS = { uptime: 0.4, quoteAvailability: 0.2,
-                   issuerMatch: 0.2, tomlIntegrity: 0.2 }
+                   issuerMatch: 0.2, tomlIntegrity: 0.2,
+                   depositAvailability: 0 }
 ```
 
 Uptime carries the most weight because it is the signal a user feels first: an
 anchor that does not answer cannot be used at any price.
+
+`depositAvailability` is reported next to the four scored signals and has weight 0:
+the SEP-24 deposit probe (one sample per deposit asset, stored as kind `deposit`)
+says whether an anchor has switched deposits off while withdrawals keep working, which
+is a different question from whether it is healthy to withdraw through today. Its rows
+are also left out of the sample count, the score threshold and the probing streak, so
+the withdraw-side numbers read the same with or without a deposit sweep. A disabled
+deposit is a verdict about the anchor; a deposit probe that could not complete is not.
 
 ### A check that could not complete is not a failure by the anchor
 

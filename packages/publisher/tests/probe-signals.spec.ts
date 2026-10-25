@@ -221,6 +221,35 @@ describe('aggregateProbeSignals', () => {
     expect(anclap.uptimeRatio).toBe(1);
   });
 
+  it('ignores deposit-availability rows, so a deposit sweep cannot move the oracle signals', () => {
+    const base: ProbeLedgerRow[] = [
+      makeProbeRow({ domain: 'anclap.com', kind: 'uptime', reachable: true, probedAt: within }),
+      makeProbeRow({
+        domain: 'anclap.com',
+        kind: 'quote',
+        reachable: true,
+        latencyMs: 120,
+        probedAt: within,
+      }),
+    ];
+    const deposit: ProbeLedgerRow[] = Array.from({ length: 5 }, () =>
+      makeProbeRow({
+        domain: 'anclap.com',
+        kind: 'deposit',
+        corridor: 'deposit:USDC',
+        reachable: false,
+        latencyMs: 900,
+        error: 'deposit disabled for USDC',
+        probedAt: within,
+      })
+    );
+    const opts = { domainToAnchorId: { 'anclap.com': 'anclap' } };
+
+    expect(aggregateProbeSignals([...base, ...deposit], opts)).toEqual(
+      aggregateProbeSignals(base, opts)
+    );
+  });
+
   it('returns null uptimeRatio when no uptime samples', () => {
     const rows: ProbeLedgerRow[] = [
       makeProbeRow({
