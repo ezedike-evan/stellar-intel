@@ -116,6 +116,19 @@ describe('MCP tool registry (#1052)', () => {
     }
   );
 
+  it('has no on-ramp execute tool: KYC and the fiat payment are browser-only (#1485)', () => {
+    const names = tools.map((t) => t.name);
+
+    expect(names).toContain('intel.onramp.prepare');
+    expect(names).not.toContain('intel.onramp.execute');
+  });
+
+  it('states in the on-ramp prepare description that it does not execute (#1485)', () => {
+    const prepare = tools.find((t) => t.name === 'intel.onramp.prepare');
+
+    expect(prepare?.description).toContain('Does not execute.');
+  });
+
   it('describes the on-ramp quote as an estimate (#1484)', () => {
     const quote = tools.find((t) => t.name === 'intel.onramp.quote');
 
