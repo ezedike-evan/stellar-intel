@@ -452,6 +452,12 @@ export interface Sep24Refunds {
 }
 
 /** The live record of a SEP-24 withdrawal transaction returned by the anchor. */
+/** One way to pay the anchor, from a SEP-24 deposit's `instructions` map. */
+export interface Sep24DepositInstruction {
+  value: string;
+  description: string;
+}
+
 export interface Sep24Transaction {
   id: string;
   status: WithdrawStatusValue;
@@ -464,6 +470,17 @@ export interface Sep24Transaction {
   stellarTransactionId?: string | undefined;
   externalTransactionId?: string | undefined;
   refunds?: Sep24Refunds | undefined;
+  /** How to pay the anchor, keyed by the anchor's own labels. Deposits only. */
+  instructions?: Record<string, Sep24DepositInstruction> | undefined;
+  /** An https link to the anchor's own page about this transaction. */
+  moreInfoUrl?: string | undefined;
+  /** A human-readable status note from the anchor. */
+  message?: string | undefined;
+  /** Set when the anchor paid a deposit out as a claimable balance. */
+  claimableBalanceId?: string | undefined;
+  from?: string | undefined;
+  to?: string | undefined;
+  kind?: 'deposit' | 'withdrawal' | undefined;
 }
 
 // ─── Intent schema ────────────────────────────────────────────────────────────

@@ -81,7 +81,53 @@ async function fetchSep24TransactionOnce(
     ...(tx['refunds'] !== undefined && {
       refunds: tx['refunds'] as Sep24Transaction['refunds'],
     }),
+    ...(parseInstructions(tx['instructions']) !== undefined && {
+      instructions: parseInstructions(tx['instructions']),
+    }),
+    ...(parseHttpsUrl(tx['more_info_url']) !== undefined && {
+      moreInfoUrl: parseHttpsUrl(tx['more_info_url']),
+    }),
+    ...(typeof tx['message'] === 'string' && { message: tx['message'] }),
+    ...(typeof tx['claimable_balance_id'] === 'string' && {
+      claimableBalanceId: tx['claimable_balance_id'],
+    }),
+    ...(typeof tx['from'] === 'string' && { from: tx['from'] }),
+    ...(typeof tx['to'] === 'string' && { to: tx['to'] }),
+    ...((tx['kind'] === 'deposit' || tx['kind'] === 'withdrawal') && { kind: tx['kind'] }),
   };
+}
+
+/**
+ * The deposit `instructions` map, keeping only entries whose `value` is a string
+ * (an anchor sends arbitrary JSON; a non-string value cannot be shown to a user as
+ * a payment instruction). A missing `description` becomes `''`. `undefined` when
+ * nothing usable is left, so the field is simply absent.
+ */
+function parseInstructions(raw: unknown): Sep24Transaction['instructions'] {
+  if (typeof raw !== 'object' || raw === null || Array.isArray(raw)) return undefined;
+
+  const parsed: Record<string, { value: string; description: string }> = {};
+  for (const [key, entry] of Object.entries(raw)) {
+    if (typeof entry !== 'object' || entry === null) continue;
+    const { value, description } = entry as { value?: unknown; description?: unknown };
+    if (typeof value !== 'string') continue;
+    parsed[key] = { value, description: typeof description === 'string' ? description : '' };
+  }
+  return Object.keys(parsed).length > 0 ? parsed : undefined;
+}
+
+/**
+ * `more_info_url`, kept only when it is a parseable https URL. It is rendered as a
+ * link, so a `javascript:` or `data:` URL from a hostile anchor must never get
+ * through.
+ */
+function parseHttpsUrl(raw: unknown): string | undefined {
+  if (typeof raw !== 'string') return undefined;
+  try {
+    return new URL(raw).protocol === 'https:' ? raw : undefined;
+  } catch {
+    return undefined;
+  }
 }
 
 /**
