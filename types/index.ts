@@ -810,6 +810,19 @@ export interface Sep6WithdrawParams {
   account?: string;
 }
 
+/** Parameters for the SEP-6 GET /deposit request. */
+export interface Sep6DepositParams {
+  asset_code: string;
+  /** Stellar account credited when the deposit completes. */
+  account: string;
+  amount?: string;
+  type?: string;
+  email_address?: string;
+  memo_type?: string;
+  memo?: string;
+  lang?: string;
+}
+
 /** SEP-6 /withdraw interactive response. */
 export interface Sep6WithdrawInteractive {
   type: 'interactive_customer_info_needed';
@@ -839,6 +852,13 @@ export interface Sep6WithdrawNeedsInfo {
 /** Union of all three SEP-6 /withdraw response shapes. */
 export type Sep6WithdrawResponse =
   Sep6WithdrawInteractive | Sep6WithdrawNonInteractive | Sep6WithdrawNeedsInfo;
+
+/**
+ * SEP-6 GET /deposit response. SEP-6 gives deposit and withdraw the same three
+ * shapes (interactive, non-interactive, customer-info-needed), so this is the
+ * withdraw union under the name callers of the deposit builder look for.
+ */
+export type Sep6DepositResponse = Sep6WithdrawResponse;
 
 // ─── SEP-31 ───────────────────────────────────────────────────────────────────
 
