@@ -580,6 +580,92 @@ registry.registerPath({
     },
   },
 });
+const OnrampQuoteRateSchema = z.object({
+  anchorId: z.string(),
+  anchorName: z.string(),
+  corridorId: z.string(),
+  asset: z.string().describe('SEP-38 identifier of the credited asset'),
+  fiatAmount: z.number().describe('Fiat the user pays'),
+  fee: z.number().nullable().describe('Flat fee in units of the credited asset'),
+  feeType: z.enum(['flat', 'percent', 'combined']),
+  exchangeRate: z.number().nullable().describe('Asset credited per 1 fiat unit, net of fees'),
+  totalReceived: z.number().nullable(),
+  minAmount: z.number().optional(),
+  maxAmount: z.number().optional(),
+  source: z.enum(['sep38', 'sep24-fee', 'unavailable']),
+  referenceSource: z.string().optional(),
+  updatedAt: z.string().describe('ISO 8601 timestamp'),
+});
+
+registry.registerPath({
+  method: 'get',
+  path: '/api/v1/onramp/quote',
+  summary: 'Get indicative deposit (on-ramp) quotes',
+  description:
+    'Returns an indicative estimate per anchor for depositing a fiat amount into a Stellar asset. SEP-24 publishes deposit fees but the anchor sets the final conversion inside its interactive deposit window, so every figure is an estimate.',
+  tags: ['On-ramp'],
+  request: {
+    query: z.object({
+      corridor: z.string().openapi({
+        param: { name: 'corridor', in: 'query' },
+        description: 'Corridor id, for example usdc-ngn',
+        example: 'usdc-ngn',
+      }),
+      amount: z.string().openapi({
+        param: { name: 'amount', in: 'query' },
+        description: 'Fiat amount to deposit: a positive decimal with at most 7 decimal places',
+        example: '10000',
+      }),
+      asset: z
+        .string()
+        .optional()
+        .openapi({
+          param: { name: 'asset', in: 'query' },
+          description: 'Restrict rows to one SEP-38 asset (stellar:CODE:ISSUER)',
+        }),
+      type: z
+        .enum(['bank_account', 'cash', 'mobile_money'])
+        .optional()
+        .openapi({
+          param: { name: 'type', in: 'query' },
+          description: 'Funding method (default bank_account)',
+        }),
+    }),
+  },
+  responses: {
+    200: {
+      description: 'Deposit estimates per anchor',
+      content: {
+        'application/json': {
+          schema: z.object({
+            corridorId: z.string(),
+            direction: z.literal('deposit'),
+            rates: z.array(OnrampQuoteRateSchema),
+            bestRateId: z.string(),
+            errors: z.array(
+              z.object({ anchorId: z.string(), anchorName: z.string(), reason: z.string() })
+            ),
+            indicative: z.literal(true),
+            disclaimer: z.string(),
+          }),
+        },
+      },
+    },
+    400: {
+      description: 'Unknown corridor or invalid amount, asset or type',
+      content: { 'application/json': { schema: ApiErrorSchema } },
+    },
+    429: {
+      description: 'Rate limit exceeded',
+      content: { 'application/json': { schema: ApiErrorSchema } },
+    },
+    502: {
+      description: 'Anchor rate lookup failed',
+      content: { 'application/json': { schema: ApiErrorSchema } },
+    },
+  },
+});
+
 registry.registerPath({
   method: 'get',
   path: '/api/reputation/{anchor}',

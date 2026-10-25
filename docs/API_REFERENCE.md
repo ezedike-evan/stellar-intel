@@ -38,6 +38,8 @@ the hardening contract (see `lib/api/v1.ts`):
   - [`POST /api/intent`](#post-apiintent)
   - [`POST /api/intent/offramp`](#post-apiintentofframp)
   - [`POST /api/v1/intent/offramp`](#post-apiv1intentofframp)
+- **On-ramp**
+  - [`GET /api/v1/onramp/quote`](#get-apiv1onrampquote)
 - **Rates**
   - [`GET /api/deposit-rates/{corridor}`](#get-apideposit-ratescorridor)
   - [`GET /api/rates/{corridor}`](#get-apiratescorridor)
@@ -284,6 +286,34 @@ The public v1 intent endpoint. Honours `Idempotency-Key`: a retried request repl
 | `200` | Intent accepted | `application/json` | `OfframpIntentResponse` |
 | `400` | Validation error | `application/json` | `ApiError` |
 | `429` | Rate limited | `application/json` | `ApiError` |
+
+---
+
+## On-ramp
+
+### `GET /api/v1/onramp/quote`
+
+**Summary:** Get indicative deposit (on-ramp) quotes  
+
+Returns an indicative estimate per anchor for depositing a fiat amount into a Stellar asset. SEP-24 publishes deposit fees but the anchor sets the final conversion inside its interactive deposit window, so every figure is an estimate.
+
+#### Parameters
+
+| Name | In | Type | Required | Description |
+| :--- | :--- | :--- | :--- | :--- |
+| `corridor` | `query` | `string` | **Yes** | Corridor id, for example usdc-ngn |
+| `amount` | `query` | `string` | **Yes** | Fiat amount to deposit: a positive decimal with at most 7 decimal places |
+| `asset` | `query` | `string` | No | Restrict rows to one SEP-38 asset (stellar:CODE:ISSUER) |
+| `type` | `query` | `"bank_account" | "cash" | "mobile_money"` | No | Funding method (default bank_account) |
+
+#### Responses
+
+| Status | Description | Content-Type | Schema |
+| :--- | :--- | :--- | :--- |
+| `200` | Deposit estimates per anchor | `application/json` | `object` |
+| `400` | Unknown corridor or invalid amount, asset or type | `application/json` | `ApiError` |
+| `429` | Rate limit exceeded | `application/json` | `ApiError` |
+| `502` | Anchor rate lookup failed | `application/json` | `ApiError` |
 
 ---
 
