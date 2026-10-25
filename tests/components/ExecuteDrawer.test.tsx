@@ -9,8 +9,10 @@ import { acceptTerms, clearAcceptance } from '@/lib/consent';
 // loaded runner that transform alone can exceed testing-library's default 1000 ms
 // `waitFor` limit, which made tests here fail intermittently (about 1 run in 8
 // locally) with "expected vi.fn() to be called" or "Unable to find an element".
-// The default test timeout is 15 s, so there is plenty of headroom.
-configure({ asyncUtilTimeout: 5000 });
+// 5 s was not enough on a busy CI runner either (a run failed at 5053 ms on node
+// 22 while node 20 passed), so this is 12 s: still under the 15 s test timeout, so
+// a real failure is reported by `waitFor`, not by the test timing out.
+configure({ asyncUtilTimeout: 12_000 });
 
 // ─── Module mocks ─────────────────────────────────────────────────────────────
 
