@@ -590,8 +590,12 @@ const OnrampQuoteRateSchema = z.object({
   feeType: z.enum(['flat', 'percent', 'combined']),
   exchangeRate: z.number().nullable().describe('Asset credited per 1 fiat unit, net of fees'),
   totalReceived: z.number().nullable(),
-  minAmount: z.number().optional(),
-  maxAmount: z.number().optional(),
+  assetAmount: z
+    .number()
+    .optional()
+    .describe('Asset units the fiat buys before fees; the figure minAmount/maxAmount apply to'),
+  minAmount: z.number().optional().describe('Anchor deposit minimum, in asset units'),
+  maxAmount: z.number().optional().describe('Anchor deposit maximum, in asset units'),
   source: z.enum(['sep38', 'sep24-fee', 'unavailable']),
   referenceSource: z.string().optional(),
   updatedAt: z.string().describe('ISO 8601 timestamp'),

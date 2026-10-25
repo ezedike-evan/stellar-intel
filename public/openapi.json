@@ -1729,11 +1729,17 @@
                               "null"
                             ]
                           },
+                          "assetAmount": {
+                            "type": "number",
+                            "description": "Asset units the fiat buys before fees; the figure minAmount/maxAmount apply to"
+                          },
                           "minAmount": {
-                            "type": "number"
+                            "type": "number",
+                            "description": "Anchor deposit minimum, in asset units"
                           },
                           "maxAmount": {
-                            "type": "number"
+                            "type": "number",
+                            "description": "Anchor deposit maximum, in asset units"
                           },
                           "source": {
                             "type": "string",

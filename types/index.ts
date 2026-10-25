@@ -218,6 +218,11 @@ export interface DepositRate {
   /** Effective asset credited per 1 fiat unit, net of fees; null when unreachable. */
   exchangeRate: number | null;
   totalReceived: number | null;
+  /**
+   * Asset units the fiat buys before fees (fiat ÷ reference price). SEP-24 deposit
+   * bounds are in asset units, so this is the figure `depositLimitStatus` checks.
+   */
+  assetAmount?: number;
   /** Deposit bounds from the anchor's SEP-24 /info, in asset units, when published. */
   minAmount?: number;
   maxAmount?: number;

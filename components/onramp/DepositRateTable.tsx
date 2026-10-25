@@ -6,6 +6,7 @@ import { Badge } from '@/components/ui/Badge';
 import { Button } from '@/components/ui/Button';
 import { QuotePill } from '@/components/ui/QuotePill';
 import { Skeleton } from '@/components/ui/Skeleton';
+import { depositLimitStatus } from '@/lib/stellar/deposit-rates';
 
 interface DepositRateTableProps {
   rates: DepositRateComparison | undefined;
@@ -52,7 +53,11 @@ export function DepositRateTable({
   executeDisabled,
   onRefresh,
 }: DepositRateTableProps) {
-  const rows = rates?.rates ?? [];
+  // Rows outside the anchor's limits go last; Array.prototype.sort is stable, so the
+  // order within each group stays the order fetchDepositRates returned.
+  const rows = [...(rates?.rates ?? [])].sort(
+    (a, b) => Number(depositLimitStatus(a) !== 'ok') - Number(depositLimitStatus(b) !== 'ok')
+  );
   const showSkeleton = isLoading && rows.length === 0;
   const showError = !showSkeleton && Boolean(error);
   const showEmpty = !showSkeleton && !error && rows.length === 0;
@@ -127,6 +132,7 @@ export function DepositRateTable({
                   const isBest = rows.length >= 2 && rate.anchorId === rates?.bestRateId;
                   const isUnavailable =
                     rate.source === 'unavailable' || rate.totalReceived === null;
+                  const limit = depositLimitStatus(rate);
 
                   return (
                     <tr
@@ -155,6 +161,13 @@ export function DepositRateTable({
                         {rate.totalReceived === null
                           ? '—'
                           : `≈ ${rate.totalReceived.toFixed(2)} ${code}`}
+                        {limit !== 'ok' && (
+                          <span className="text-status-down block text-xs font-normal">
+                            {limit === 'below_min'
+                              ? `Min ${rate.minAmount} ${code}`
+                              : `Max ${rate.maxAmount} ${code}`}
+                          </span>
+                        )}
                       </td>
                       <td className="text-secondary-text px-4 py-3 text-right tabular-nums">
                         {rate.fee === null ? '—' : `${rate.fee} ${code}`}
@@ -164,7 +177,7 @@ export function DepositRateTable({
                           variant="secondary"
                           size="sm"
                           onClick={() => onSelectAnchor(rate)}
-                          disabled={isUnavailable || executeDisabled}
+                          disabled={isUnavailable || limit !== 'ok' || executeDisabled}
                           aria-label={`Deposit with ${rate.anchorName}`}
                         >
                           Deposit

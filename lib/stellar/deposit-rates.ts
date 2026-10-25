@@ -134,6 +134,23 @@ function resolveAssetIssuer(
   return null;
 }
 
+export type DepositLimitStatus = 'ok' | 'below_min' | 'above_max';
+
+/**
+ * Whether the deposit sits inside the anchor's published SEP-24 limits. The
+ * limits are in asset units, so they are checked against `assetAmount` (what the
+ * fiat buys before fees), not the fiat figure: comparing NGN to USDC bounds
+ * would block deposits the anchor accepts. A row with no limits, or with no
+ * `assetAmount` to measure, is `ok`; the boundaries themselves are in range.
+ */
+export function depositLimitStatus(rate: DepositRate): DepositLimitStatus {
+  const amount = rate.assetAmount;
+  if (amount === undefined) return 'ok';
+  if (rate.minAmount !== undefined && amount < rate.minAmount) return 'below_min';
+  if (rate.maxAmount !== undefined && amount > rate.maxAmount) return 'above_max';
+  return 'ok';
+}
+
 /**
  * Builds one (anchor, asset) row: fiat → asset through the reference mid
  * price, minus the anchor's published SEP-24 deposit fees (asset units, the
@@ -192,6 +209,7 @@ async function buildDepositRow(
     feeType,
     exchangeRate,
     totalReceived,
+    assetAmount: grossAsset,
     ...(assetInfo?.min_amount !== undefined ? { minAmount: assetInfo.min_amount } : {}),
     ...(assetInfo?.max_amount !== undefined ? { maxAmount: assetInfo.max_amount } : {}),
     source: 'sep24-fee',

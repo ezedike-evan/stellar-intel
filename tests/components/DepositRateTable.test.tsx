@@ -168,3 +168,69 @@ describe('DepositRateTable (#1476)', () => {
     expect(screen.queryByText(/Unavailable anchors/)).toBeNull();
   });
 });
+
+describe('DepositRateTable limits (#1477)', () => {
+  const inRange = rate({ anchorId: 'in', anchorName: 'In Range', assetAmount: 100, minAmount: 5 });
+  const tooSmall = rate({
+    anchorId: 'small',
+    anchorName: 'Too Small',
+    assetAmount: 100,
+    minAmount: 250,
+  });
+  const tooBig = rate({
+    anchorId: 'big',
+    anchorName: 'Too Big',
+    assetAmount: 100,
+    maxAmount: 50,
+  });
+
+  it('disables Deposit and shows the minimum for a row below it', () => {
+    render(<DepositRateTable {...BASE} rates={comparison([tooSmall])} />);
+
+    expect(screen.getByText('Min 250 USDC')).toBeTruthy();
+    expect(
+      (screen.getByRole('button', { name: 'Deposit with Too Small' }) as HTMLButtonElement).disabled
+    ).toBe(true);
+  });
+
+  it('disables Deposit and shows the maximum for a row above it', () => {
+    render(<DepositRateTable {...BASE} rates={comparison([tooBig])} />);
+
+    expect(screen.getByText('Max 50 USDC')).toBeTruthy();
+    expect(
+      (screen.getByRole('button', { name: 'Deposit with Too Big' }) as HTMLButtonElement).disabled
+    ).toBe(true);
+  });
+
+  it('leaves an in-range row enabled with no limit text', () => {
+    render(<DepositRateTable {...BASE} rates={comparison([inRange])} />);
+
+    expect(screen.queryByText(/^(Min|Max) /)).toBeNull();
+    expect(
+      (screen.getByRole('button', { name: 'Deposit with In Range' }) as HTMLButtonElement).disabled
+    ).toBe(false);
+  });
+
+  it('sorts out-of-range rows last, keeping the order within each group', () => {
+    const rows = comparison(
+      [
+        tooSmall,
+        rate({ anchorId: 'in-2', anchorName: 'In Two', assetAmount: 100 }),
+        tooBig,
+        inRange,
+      ],
+      'in-2'
+    );
+    render(<DepositRateTable {...BASE} rates={rows} />);
+
+    const order = screen
+      .getAllByRole('button', { name: /^Deposit with/ })
+      .map((b) => b.getAttribute('aria-label'));
+    expect(order).toEqual([
+      'Deposit with In Two',
+      'Deposit with In Range',
+      'Deposit with Too Small',
+      'Deposit with Too Big',
+    ]);
+  });
+});
