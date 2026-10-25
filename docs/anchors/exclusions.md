@@ -2,6 +2,8 @@
 
 **Last reviewed:** 2026-10-17
 
+Anchors that once had rails and were removed live in [`delisted.md`](./delisted.md).
+
 The machine-readable list of issuer-only and crypto-only operators, with exact assets, lives in [`constants/listed-anchors/`](../../constants/listed-anchors/) and is used to mark the matching rows on the Anchor Directory (`/anchors/directory`).
 
 Some domains in the [stellar.expert anchor directory](https://api.stellar.expert/explorer/public/directory?tag[]=anchor&limit=200)
