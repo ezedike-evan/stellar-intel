@@ -8,6 +8,19 @@ use crate::{aggregate, anchors, events, publishers, Error};
 /// overflow; any real settlement is far below this.
 pub const MAX_SETTLE_SECONDS: u64 = 1_000_000;
 
+/// Longest accepted `outcome_hash`, in characters. The publisher always sends a
+/// 64-character hex SHA-256 (`buildOutcomeHash` in packages/publisher), so this
+/// leaves no slack for anything else. Without a bound a compromised publisher
+/// could submit oversized hashes until a 25-entry outcome page exceeds the
+/// ledger-entry size limit, after which every later `submit_outcome` for that
+/// anchor would trap (audit M-4).
+pub const MAX_OUTCOME_HASH_LEN: u32 = 64;
+
+/// Record one settlement outcome for an anchor on a corridor. Publisher-only.
+///
+/// `outcome_hash` must be 1 to [`MAX_OUTCOME_HASH_LEN`] (64) characters, and
+/// `settle_seconds` at most [`MAX_SETTLE_SECONDS`]; otherwise `OutOfRange`,
+/// before anything is read from or written to the history.
 pub fn submit_outcome(
     env: &Env,
     publisher: &Address,
@@ -26,6 +39,9 @@ pub fn submit_outcome(
     anchors::require_registered(env, &anchor_id)?;
 
     if settle_seconds > MAX_SETTLE_SECONDS {
+        return Err(Error::OutOfRange);
+    }
+    if outcome_hash.is_empty() || outcome_hash.len() > MAX_OUTCOME_HASH_LEN {
         return Err(Error::OutOfRange);
     }
 
