@@ -78,9 +78,9 @@ jobs:
             fi
           } >> "$GITHUB_STEP_SUMMARY"
 
-  # Runs the `live-anchors` vitest project when it contains tagged tests.
-  # Currently a no-op scaffold; see vitest.config.mts for how to tag a test
-  # `{ tags: ['live-anchor'] }` and have it run here instead of in CI.
+  # Runs the `live-anchors` vitest project, which collects `tests/live/**`.
+  # See vitest.config.mts for the directory convention; these tests are never
+  # run in CI.
   live-anchor-vitest:
     name: Vitest live-anchors project
     runs-on: ubuntu-latest
@@ -97,12 +97,11 @@ jobs:
 
       - run: npm ci
 
-      - name: Run live-anchor tagged tests
+      - name: Run live-anchor tests (tests/live/**)
         id: run
-        # `--project live-anchors` targets only the live-anchors vitest project.
-        # If the project has no test files the command exits 0 (vitest skips empty
-        # projects silently). When tests are present they run without the
-        # `--mock-network` flag that CI uses.
+        # `--project live-anchors` targets only the live-anchors vitest project,
+        # which runs `tests/live/**`. With no test files it exits 0
+        # (`passWithNoTests`).
         run: npm run test:live -- --reporter=default
 
   open-issue-on-failure:
