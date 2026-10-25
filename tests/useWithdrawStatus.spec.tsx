@@ -260,14 +260,19 @@ const OUTCOME_CONTEXT = {
 /** Mock fetch that answers both the SEP-24 poll and the reputation append POST. */
 function mockFetchWithAppend(
   status: string,
-  opts: { amountOut?: string | null; stellarTxId?: string | null } = {}
+  opts: {
+    amountOut?: string | null;
+    stellarTxId?: string | null;
+    amountIn?: string | null;
+  } = {}
 ) {
   const fn = vi.fn(async (input: unknown) => {
     const url = typeof input === 'string' ? input : String((input as Request)?.url ?? '');
     if (url.includes('/api/reputation/append')) {
       return { ok: true, json: async () => ({ ok: true }) };
     }
-    const tx: Record<string, unknown> = { id: TXN_ID, status, amount_in: '100', amount_fee: '2.5' };
+    const tx: Record<string, unknown> = { id: TXN_ID, status, amount_fee: '2.5' };
+    if (opts.amountIn !== null) tx.amount_in = opts.amountIn ?? '100';
     if (opts.amountOut !== null) tx.amount_out = opts.amountOut ?? '97.5';
     if (opts.stellarTxId !== null) tx.stellar_transaction_id = opts.stellarTxId ?? 'stellar-tx-1';
     return { ok: true, json: async () => ({ transaction: tx }) };
@@ -300,6 +305,39 @@ describe('useWithdrawStatus — reputation recording (#799)', () => {
       stellarTransactionId: 'stellar-tx-1',
     });
     expect(typeof body.settleSeconds).toBe('number');
+  });
+
+  it('sends the all-in delivered rate for a completed outcome (#1498)', async () => {
+    const fn = mockFetchWithAppend('completed'); // 97.5 out for 100 in
+    renderHook(() => useWithdrawStatus(TRANSFER_SERVER, TXN_ID, JWT, OUTCOME_CONTEXT), { wrapper });
+    await waitFor(() => expect(findAppend(fn)).toBeDefined());
+
+    expect(appendBody(fn).deliveredRate).toBe('0.97500000');
+  });
+
+  it('leaves deliveredRate out when the anchor reported no amount_out (#1498)', async () => {
+    const fn = mockFetchWithAppend('completed', { amountOut: null });
+    renderHook(() => useWithdrawStatus(TRANSFER_SERVER, TXN_ID, JWT, OUTCOME_CONTEXT), { wrapper });
+    await waitFor(() => expect(findAppend(fn)).toBeDefined());
+
+    expect(appendBody(fn)).not.toHaveProperty('deliveredRate');
+  });
+
+  it('leaves deliveredRate out when the anchor reported no amount_in (#1498)', async () => {
+    const fn = mockFetchWithAppend('completed', { amountIn: null });
+    renderHook(() => useWithdrawStatus(TRANSFER_SERVER, TXN_ID, JWT, OUTCOME_CONTEXT), { wrapper });
+    await waitFor(() => expect(findAppend(fn)).toBeDefined());
+
+    expect(appendBody(fn)).not.toHaveProperty('deliveredRate');
+  });
+
+  it('never sends deliveredRate for a failed outcome, even with amounts (#1498)', async () => {
+    const fn = mockFetchWithAppend('error'); // amounts present
+    renderHook(() => useWithdrawStatus(TRANSFER_SERVER, TXN_ID, JWT, OUTCOME_CONTEXT), { wrapper });
+    await waitFor(() => expect(findAppend(fn)).toBeDefined());
+
+    expect(appendBody(fn).outcome).toBe('error');
+    expect(appendBody(fn)).not.toHaveProperty('deliveredRate');
   });
 
   it('records a rollback outcome (error, no delivery) when the anchor leg fails after signing', async () => {
@@ -367,6 +405,7 @@ describe('useWithdrawStatus — reputation recording (#799)', () => {
       'quotedAmount',
       'outcome',
       'deliveredAmount',
+      'deliveredRate',
       'settleSeconds',
       'stellarTransactionId',
       // Transfer direction (ONR031/ONR032).

@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { realizedRate, realizedRateFromSep6 } from '@/lib/stellar/realized-rate';
+import { quotedAllInRate, realizedRate, realizedRateFromSep6 } from '@/lib/stellar/realized-rate';
 import type { Sep6Transaction } from '@/lib/stellar/sep6';
 
 describe('realizedRate', () => {
@@ -151,5 +151,36 @@ describe('realizedRateFromSep6', () => {
       netRate: (75000 / 49).toFixed(8),
       fee: '1',
     });
+  });
+});
+
+describe('quotedAllInRate (#1498)', () => {
+  it('quotes totalReceived over the amount sent, to 8 decimals', () => {
+    // 100 USDC shown as 155,000 NGN after fees: 1550 per USDC all-in.
+    expect(quotedAllInRate({ totalReceived: 155000, exchangeRate: 1600 }, '100')).toBe(
+      '1550.00000000'
+    );
+  });
+
+  it('is comparable with the realized all-in rate of an exact delivery', () => {
+    const quoted = quotedAllInRate({ totalReceived: 97.5, exchangeRate: 1 }, '100');
+    const landed = realizedRate({ amountIn: '100', amountOut: '97.5' })!.allInRate;
+    expect(quoted).toBe(landed);
+  });
+
+  it('is not the pre-fee exchange rate', () => {
+    expect(quotedAllInRate({ totalReceived: 97.5, exchangeRate: 1 }, '100')).not.toBe('1');
+  });
+
+  it('falls back to the exchange rate with no total', () => {
+    expect(quotedAllInRate({ totalReceived: null, exchangeRate: 1550.5 }, '100')).toBe('1550.5');
+  });
+
+  it.each(['0', '-5', 'abc', ''])('falls back to the exchange rate for the amount "%s"', (a) => {
+    expect(quotedAllInRate({ totalReceived: 100, exchangeRate: 2 }, a)).toBe('2');
+  });
+
+  it('is null when neither is available', () => {
+    expect(quotedAllInRate({ totalReceived: null, exchangeRate: null }, '100')).toBeNull();
   });
 });

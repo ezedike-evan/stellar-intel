@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
 import useSWR from 'swr';
 import { TERMINAL_STATES, getSep24Transaction } from '@/lib/stellar/sep24';
+import { realizedRate } from '@/lib/stellar/realized-rate';
 import type { Sep24Transaction, WithdrawStatusValue } from '@/types';
 import type { OutcomeDirection, OutcomeStatus } from '@/types/reputation';
 
@@ -162,6 +163,16 @@ export function useWithdrawStatus(
     appendedRef.current = true;
 
     const settleSeconds = Math.max(0, Math.round((Date.now() - startMsRef.current) / 1000));
+    // The landed rate, on the same all-in basis as the quote: only a completed
+    // transaction has one, and only when the anchor reported both amounts.
+    const delivered =
+      status === 'completed'
+        ? realizedRate({
+            amountIn: data?.amountIn,
+            amountOut: data?.amountOut,
+            amountFee: data?.amountFee,
+          })
+        : null;
     void fetch('/api/reputation/append', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
@@ -169,6 +180,7 @@ export function useWithdrawStatus(
         ...outcomeContext,
         outcome: outcomeFromStatus(status),
         deliveredAmount: data?.amountOut ?? null,
+        ...(delivered ? { deliveredRate: delivered.allInRate } : {}),
         settleSeconds,
         stellarTransactionId: data?.stellarTransactionId ?? null,
       }),
@@ -176,7 +188,14 @@ export function useWithdrawStatus(
     }).catch(() => {
       // Best-effort: a failed append must not disrupt the user's status view.
     });
-  }, [status, outcomeContext, data?.amountOut, data?.stellarTransactionId]);
+  }, [
+    status,
+    outcomeContext,
+    data?.amountIn,
+    data?.amountOut,
+    data?.amountFee,
+    data?.stellarTransactionId,
+  ]);
 
   return {
     status: data?.status,

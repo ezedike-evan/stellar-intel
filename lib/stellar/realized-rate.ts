@@ -85,6 +85,28 @@ export function realizedRate(tx: RealizedRateInput): RealizedRateResult | null {
 }
 
 /**
+ * The rate shown to the user before they execute, on the same all-in basis as
+ * {@link realizedRate}'s `allInRate`.
+ *
+ * `exchangeRate` is quoted before the anchor's fees come out, but the delivered
+ * amount has had them taken, so comparing the two would book every fee as
+ * slippage. `totalReceived / amount` is what the table promised end to end, which
+ * is what the delivered amount can honestly be measured against. Falls back to
+ * `exchangeRate` when there is no total or no usable amount.
+ */
+export function quotedAllInRate(
+  rate: { totalReceived: number | null; exchangeRate: number | null },
+  amount: string
+): string | null {
+  const sent = Number(amount);
+  if (rate.totalReceived !== null && Number.isFinite(sent) && sent > 0) {
+    const allIn = rate.totalReceived / sent;
+    if (Number.isFinite(allIn) && allIn > 0) return allIn.toFixed(RATE_DECIMALS);
+  }
+  return rate.exchangeRate === null ? null : String(rate.exchangeRate);
+}
+
+/**
  * Maps a SEP-6 transaction (either normalized {@link Sep6Transaction} or raw
  * snake_case `/transaction` fields) into {@link realizedRate}.
  */
