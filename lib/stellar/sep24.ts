@@ -709,6 +709,10 @@ export async function initiateDeposit(
       amount,
       account,
       lang: 'en',
+      // A first-deposit wallet has no trustline yet. Saying it can take a
+      // claimable balance lets the anchor pay out that way instead of leaving the
+      // deposit stuck in pending_trust. SEP-24 request params are strings.
+      claimable_balance_supported: 'true',
     }),
     ...(signal ? { signal } : {}),
   });
