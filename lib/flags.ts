@@ -1,5 +1,10 @@
 export type FlagName =
-  'intentFlow' | 'reputationWrites' | 'mcpAdvertisement' | 'v11Corridors' | 'recurringIntents';
+  | 'intentFlow'
+  | 'reputationWrites'
+  | 'mcpAdvertisement'
+  | 'v11Corridors'
+  | 'recurringIntents'
+  | 'firmQuoteBonus';
 
 export const flags: Record<FlagName, boolean> = {
   // Default to enabled unless explicitly set to 'off'
@@ -13,6 +18,10 @@ export const flags: Record<FlagName, boolean> = {
   // Recurring intents: sign-once execution engine. Default OFF — gated behind
   // the signed-intent flow. Opt in with NEXT_PUBLIC_RECURRING_INTENTS=on.
   recurringIntents: (process.env.NEXT_PUBLIC_RECURRING_INTENTS || 'off') === 'on',
+  // Ranking bonus for firm (SEP-38) quotes over estimates of nearly the same size.
+  // Default OFF; opt in with NEXT_PUBLIC_FIRM_QUOTE_BONUS=on. It reorders rows and
+  // never changes a displayed amount.
+  firmQuoteBonus: (process.env.NEXT_PUBLIC_FIRM_QUOTE_BONUS || 'off') === 'on',
 };
 
 export function isFlag(name: FlagName) {
