@@ -5,6 +5,9 @@
  *   - getOnrampQuote:      best indicative deposit estimate for a corridor + amount
  *   - prepareOnrampIntent: unsigned on-ramp intent + hash, and the app handoff URL
  *
+ * Failures a caller can act on are thrown as `OnrampToolError`; `fromOnrampError`
+ * (lib/mcp/errors.ts) maps them onto the MCP error taxonomy.
+ *
  * There is deliberately no execute counterpart. A SEP-24 deposit starts with a
  * SEP-10 login signed by the user's own wallet, and the fiat leg is paid by the
  * user to the anchor, so an agent can quote and prepare but never complete a
@@ -12,7 +15,7 @@
  */
 import { z } from 'zod';
 import { CORRIDORS } from '@/constants';
-import { hashIntent, type Intent } from '@/lib/intent/hash';
+import { createOnrampIntent, type OnrampIntentDeps } from '@/lib/intent/onramp';
 import { OnrampIntentSchema } from '@/lib/intent/onramp-schema';
 import { AMOUNT_PATTERN } from '@/lib/patterns';
 import {
@@ -20,9 +23,32 @@ import {
   InvalidDepositAmountError,
   NoDepositRateError,
 } from '@/lib/stellar/deposit-rates';
-import { anchorUnavailable, badInput, upstreamTimeout } from '@/lib/mcp/errors';
+import { badInput, upstreamTimeout } from '@/lib/mcp/errors';
 
 const SITE_URL = process.env['NEXT_PUBLIC_SITE_URL'] ?? 'https://stellar-intel.vercel.app';
+
+/**
+ * How long an agent should treat a quote as current. Matches the `max-age` of the
+ * public GET /api/v1/onramp/quote, and says nothing about the anchor's own rate.
+ */
+const ESTIMATE_TTL_MS = 15_000;
+
+const PREPARE_NOTE =
+  'Open handoffUrl in a browser to complete KYC and the deposit. Agents cannot complete this step.';
+
+export type OnrampToolErrorCode =
+  'NO_ROUTE' | 'RATE_UNAVAILABLE' | 'ACCOUNT_NOT_FOUND' | 'TX_BUILD_FAILED';
+
+/** A route-level on-ramp failure. Map it with `fromOnrampError` before returning it to an agent. */
+export class OnrampToolError extends Error {
+  constructor(
+    message: string,
+    public readonly code: OnrampToolErrorCode
+  ) {
+    super(message);
+    this.name = 'OnrampToolError';
+  }
+}
 
 /** Most alternatives returned next to the best row. */
 const MAX_ALTERNATIVES = 4;
@@ -37,6 +63,14 @@ export const OnrampQuoteInputSchema = z.object({
     .string()
     .regex(AMOUNT_PATTERN, 'amount must be a positive decimal string')
     .refine((v) => parseFloat(v) > 0, 'amount must be greater than zero'),
+  /** Restrict the quote to one asset, as a SEP-38 identifier (`stellar:CODE:ISSUER`). */
+  asset: z
+    .string()
+    .regex(
+      /^stellar:(native|[A-Za-z0-9]{1,12}:G[A-Z2-7]{55})$/,
+      'asset must be a SEP-38 identifier'
+    )
+    .optional(),
 });
 export type OnrampQuoteInput = z.infer<typeof OnrampQuoteInputSchema>;
 
@@ -49,6 +83,8 @@ const OnrampQuoteRowSchema = z.object({
   estimatedReceived: z.string(),
   /** Asset units credited per 1 unit of fiat, net of fees. */
   exchangeRate: z.string(),
+  /** Flat fee in asset units; null when the anchor publishes none. */
+  fee: z.string().nullable(),
 });
 
 /** Output schema for intel.onramp.quote. */
@@ -60,6 +96,8 @@ export const OnrampQuoteOutputSchema = OnrampQuoteRowSchema.extend({
   /** `sep38` when a quote server priced it, `sep24-fee` when built from published fees. */
   source: z.enum(['sep38', 'sep24-fee']),
   alternatives: z.array(OnrampQuoteRowSchema),
+  /** ISO time after which to re-fetch: estimates move, and this one is never firm. */
+  expiresAt: z.string(),
 });
 export type OnrampQuoteOutput = z.infer<typeof OnrampQuoteOutputSchema>;
 
@@ -71,9 +109,11 @@ export const OnrampPrepareOutputSchema = z.object({
     intentHash: z.string().regex(/^[0-9a-f]{64}$/),
   }),
   corridorId: z.string(),
-  /** Where the user completes the deposit with their own wallet and the anchor. */
+  /** Base64 changeTrust transaction to sign, or null when the wallet already has the trustline. */
+  unsignedChangeTrustXdr: z.string().nullable(),
+  /** Absolute URL where the user completes the deposit with their own wallet and the anchor. */
   handoffUrl: z.string().url(),
-  nextStep: z.string(),
+  note: z.string(),
 });
 export type OnrampPrepareOutput = z.infer<typeof OnrampPrepareOutputSchema>;
 
@@ -83,7 +123,7 @@ export type OnrampPrepareOutput = z.infer<typeof OnrampPrepareOutputSchema>;
 function resolveCorridorId(fiat: string, asset: string): string {
   const corridor = CORRIDORS.find((c) => c.to === fiat && c.from === asset);
   if (!corridor) {
-    throw badInput(`No on-ramp corridor for ${fiat} → ${asset}`, 'NO_ROUTE');
+    throw new OnrampToolError(`No on-ramp corridor for ${fiat} → ${asset}`, 'NO_ROUTE');
   }
   return corridor.id;
 }
@@ -99,19 +139,26 @@ function formatUnits(value: number): string {
  * Rows are already sorted by credited amount; anchors that could not be priced
  * are skipped, and the call fails only when none could.
  */
-export async function getOnrampQuote(input: OnrampQuoteInput): Promise<OnrampQuoteOutput> {
+export async function getOnrampQuote(
+  input: OnrampQuoteInput,
+  now: Date = new Date()
+): Promise<OnrampQuoteOutput> {
   const parsed = OnrampQuoteInputSchema.safeParse(input);
   if (!parsed.success) throw badInput(parsed.error.issues[0]?.message ?? 'Invalid input');
-  const { sourceAsset, destinationAsset, amount } = parsed.data;
+  const { sourceAsset, destinationAsset, amount, asset } = parsed.data;
 
   const corridorId = resolveCorridorId(sourceAsset, destinationAsset);
 
   let comparison;
   try {
-    comparison = await fetchDepositRates(corridorId, amount);
+    comparison = await (asset
+      ? fetchDepositRates(corridorId, amount, { asset })
+      : fetchDepositRates(corridorId, amount));
   } catch (err) {
     if (err instanceof InvalidDepositAmountError) throw badInput(err.message, 'INVALID_AMOUNT');
-    if (err instanceof NoDepositRateError) throw anchorUnavailable(err.message, 'RATE_UNAVAILABLE');
+    if (err instanceof NoDepositRateError) {
+      throw new OnrampToolError(err.message, 'RATE_UNAVAILABLE');
+    }
     throw upstreamTimeout(err instanceof Error ? err.message : 'Unknown error', 'UNKNOWN_ERROR');
   }
 
@@ -121,7 +168,7 @@ export async function getOnrampQuote(input: OnrampQuoteInput): Promise<OnrampQuo
   const [best, ...rest] = priced;
   if (!best) {
     const detail = comparison.errors.map((e) => `${e.anchorId}: ${e.reason}`).join('; ');
-    throw anchorUnavailable(
+    throw new OnrampToolError(
       `No anchor could price ${sourceAsset} → ${destinationAsset}${detail ? ` (${detail})` : ''}`,
       'RATE_UNAVAILABLE'
     );
@@ -133,6 +180,7 @@ export async function getOnrampQuote(input: OnrampQuoteInput): Promise<OnrampQuo
     asset: r.asset,
     estimatedReceived: formatUnits(r.totalReceived!),
     exchangeRate: formatUnits(r.exchangeRate!),
+    fee: r.fee === null ? null : formatUnits(r.fee),
   });
 
   return OnrampQuoteOutputSchema.parse({
@@ -142,35 +190,40 @@ export async function getOnrampQuote(input: OnrampQuoteInput): Promise<OnrampQuo
     indicative: true,
     source: best.source,
     alternatives: rest.slice(0, MAX_ALTERNATIVES).map(row),
+    expiresAt: new Date(now.getTime() + ESTIMATE_TTL_MS).toISOString(),
   });
 }
 
 /**
- * Validates an on-ramp intent, hashes it, and returns it unsigned together
- * with the app URL where the user finishes the deposit. Nothing is submitted
- * and no anchor is contacted: the SEP-10 login that opens a deposit has to be
- * signed by the user's own wallet.
+ * Validates an on-ramp intent and resolves it through `createOnrampIntent`: the
+ * best anchor, the intent hash, and an unsigned changeTrust when the destination
+ * lacks the trustline. Returns the unsigned envelope together with an absolute
+ * URL where the user finishes the deposit. Nothing is submitted and no anchor
+ * session is opened: the SEP-10 login that starts a deposit has to be signed by
+ * the user's own wallet, in a browser.
  */
-export async function prepareOnrampIntent(input: unknown): Promise<OnrampPrepareOutput> {
+export async function prepareOnrampIntent(
+  input: unknown,
+  deps?: OnrampIntentDeps
+): Promise<OnrampPrepareOutput> {
   const parsed = OnrampIntentSchema.safeParse(input);
   if (!parsed.success) throw badInput(parsed.error.issues[0]?.message ?? 'Invalid intent');
   const intent = parsed.data;
 
-  const corridorId = resolveCorridorId(intent.sourceAsset, intent.destinationAsset);
-  // The canonical hash only needs a plain object; `Intent` is typed for the
-  // off-ramp shape, which an on-ramp intent (no `recipient`) deliberately lacks.
-  const intentHash = await hashIntent(intent as unknown as Intent);
-
-  const handoff = new URL('/onramp', SITE_URL);
-  handoff.searchParams.set('corridor', corridorId);
-  handoff.searchParams.set('amount', intent.amount);
+  const result = await createOnrampIntent(intent, deps);
+  if (!result.ok) {
+    // Only the codes an agent can act on are passed through; a Horizon outage
+    // while checking the wallet is transient, like any other upstream failure.
+    if (result.code === 'PREFLIGHT_FAILED') throw upstreamTimeout(result.message, result.code);
+    throw new OnrampToolError(result.message, result.code);
+  }
+  const { route, intentHash, handoffUrl, unsignedChangeTrustXdr } = result.response;
 
   return OnrampPrepareOutputSchema.parse({
     unsignedEnvelope: { intent, intentHash },
-    corridorId,
-    handoffUrl: handoff.toString(),
-    nextStep:
-      'Open handoffUrl in a browser with the sender wallet connected. The user signs in to the ' +
-      'anchor and pays the fiat themselves; Stellar Intel never holds keys or fiat.',
+    corridorId: route.corridorId,
+    unsignedChangeTrustXdr,
+    handoffUrl: new URL(handoffUrl, SITE_URL).toString(),
+    note: PREPARE_NOTE,
   });
 }
