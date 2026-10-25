@@ -34,6 +34,9 @@ pub enum Error {
     CorridorExists = 13,
     CorridorNotRegistered = 14,
     PublisherOutOfScope = 15,
+    NoPendingUpgrade = 16,
+    UpgradeNotReady = 17,
+    UpgradeHashMismatch = 18,
 }
 
 #[contract]
@@ -236,8 +239,36 @@ impl ReputationContract {
     /// Admin-signed contract upgrade. Replaces the contract WASM with the code
     /// at `new_wasm_hash` while preserving all stored state, following Soroban's
     /// standard upgrade pattern.
-    pub fn upgrade(env: Env, new_wasm_hash: BytesN<32>) {
-        upgrade::apply(&env, new_wasm_hash);
+    ///
+    /// Time-locked: `propose_upgrade(new_wasm_hash)` must have been called at
+    /// least `UPGRADE_DELAY_SECONDS` (7 days) earlier, and `new_wasm_hash` must
+    /// match it. Returns `NoPendingUpgrade`, `UpgradeHashMismatch` or
+    /// `UpgradeNotReady` otherwise.
+    pub fn upgrade(env: Env, new_wasm_hash: BytesN<32>) -> Result<(), Error> {
+        upgrade::apply(&env, new_wasm_hash)
+    }
+
+    /// Upgrade-admin only. Announce a WASM upgrade; it can be applied with
+    /// `upgrade` once `UPGRADE_DELAY_SECONDS` (7 days) have passed. Replaces any
+    /// earlier proposal and restarts the clock.
+    pub fn propose_upgrade(
+        env: Env,
+        caller: Address,
+        new_wasm_hash: BytesN<32>,
+    ) -> Result<(), Error> {
+        upgrade::propose_upgrade(&env, &caller, new_wasm_hash)?;
+        storage::extend_instance(&env);
+        Ok(())
+    }
+
+    /// Upgrade-admin only. Withdraw the pending upgrade proposal, if any.
+    pub fn cancel_upgrade(env: Env, caller: Address) -> Result<(), Error> {
+        upgrade::cancel_upgrade(&env, &caller)
+    }
+
+    /// The pending upgrade as `(wasm_hash, earliest_execution_timestamp)`, if any.
+    pub fn pending_upgrade(env: Env) -> Option<(BytesN<32>, u64)> {
+        upgrade::get_pending_upgrade(&env)
     }
 
     /// Return the live contract version (`0` before `init_upgrade`).

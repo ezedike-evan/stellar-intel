@@ -487,7 +487,7 @@ See [`docs/ORACLE_SPEC.md`](ORACLE_SPEC.md) for full function signatures, argume
 
 - **Admin** — an M-of-N Stellar multisig account (target threshold in docs/GOVERNANCE.md). The admin can enable/disable publishers;
   it cannot rewrite outcomes.
-- **Upgradability** — `upgrade(new_wasm_hash)` is gated by a separate upgrade admin (rotatable via `propose_upgrade_admin`/`accept_upgrade_admin`); there is **no** time-lock today (a 7-day on-chain time-lock is not implemented).
+- **Upgradability** — `upgrade(new_wasm_hash)` is gated by a separate upgrade admin (rotatable via `propose_upgrade_admin`/`accept_upgrade_admin`) and time-locked: the hash must first be announced with `propose_upgrade`, and can be applied only after 7 days (`UPGRADE_DELAY_SECONDS`) and only with that exact hash. The pending upgrade is readable via `pending_upgrade`, and `cancel_upgrade` withdraws it.
 - **Publisher whitelist** — starts at one (Stellar Intel's publisher). Over
   time, third-party publishers onboard; governance lives in
   `docs/ORACLE_SPEC.md`.
