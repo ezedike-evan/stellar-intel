@@ -3,6 +3,7 @@ import { act, renderHook, waitFor } from '@testing-library/react';
 import { createElement } from 'react';
 import { SWRConfig } from 'swr';
 import {
+  useTransferStatus,
   useWithdrawStatus,
   computeNextWithdrawPollIntervalMs,
   WITHDRAW_POLL_INITIAL_MS,
@@ -378,5 +379,59 @@ describe('useWithdrawStatus — reputation recording (#799)', () => {
     const serialized = JSON.stringify(body).toLowerCase();
     expect(serialized).not.toContain('secret');
     expect(serialized).not.toContain('privatekey');
+  });
+});
+
+describe('deposit fields and the useTransferStatus alias (#1467)', () => {
+  it('exposes instructions, moreInfoUrl, message and claimableBalanceId from a deposit', async () => {
+    vi.stubGlobal(
+      'fetch',
+      vi.fn(async () => ({
+        ok: true,
+        json: async () => ({
+          transaction: {
+            id: TXN_ID,
+            status: 'pending_user_transfer_start',
+            kind: 'deposit',
+            message: 'Send the transfer to continue',
+            more_info_url: 'https://anchor.example/tx/1',
+            claimable_balance_id: '00000000abc',
+            instructions: {
+              organization_bank_number: { value: '121122676', description: 'Routing number' },
+            },
+          },
+        }),
+      }))
+    );
+
+    const { result } = renderHook(() => useTransferStatus(TRANSFER_SERVER, TXN_ID, JWT), {
+      wrapper,
+    });
+    await waitFor(() => expect(result.current.isLoading).toBe(false));
+
+    expect(result.current.status).toBe('pending_user_transfer_start');
+    expect(result.current.instructions).toEqual({
+      organization_bank_number: { value: '121122676', description: 'Routing number' },
+    });
+    expect(result.current.moreInfoUrl).toBe('https://anchor.example/tx/1');
+    expect(result.current.message).toBe('Send the transfer to continue');
+    expect(result.current.claimableBalanceId).toBe('00000000abc');
+  });
+
+  it('leaves the deposit fields undefined for a withdrawal', async () => {
+    mockFetch('pending_external');
+    const { result } = renderHook(() => useWithdrawStatus(TRANSFER_SERVER, TXN_ID, JWT), {
+      wrapper,
+    });
+    await waitFor(() => expect(result.current.isLoading).toBe(false));
+
+    expect(result.current.instructions).toBeUndefined();
+    expect(result.current.moreInfoUrl).toBeUndefined();
+    expect(result.current.message).toBeUndefined();
+    expect(result.current.claimableBalanceId).toBeUndefined();
+  });
+
+  it('useTransferStatus is the very same hook as useWithdrawStatus', () => {
+    expect(useTransferStatus).toBe(useWithdrawStatus);
   });
 });
