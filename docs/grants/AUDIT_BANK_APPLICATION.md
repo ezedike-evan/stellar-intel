@@ -36,6 +36,25 @@ in the same repository.
 
 ## 2. Scope
 
+**1,429 lines of Rust across 14 modules**, one contract, **34 public
+entrypoints**.
+
+| Module              | Lines | What it owns                                   |
+| ------------------- | ----- | ---------------------------------------------- |
+| `lib.rs`            | 374   | `#[contractimpl]` surface — all 34 entrypoints |
+| `admin.rs`          | 117   | Admin identity, two-step transfer              |
+| `score.rs`          | 112   | Composite score computation                    |
+| `upgrade.rs`        | 178   | WASM replacement, separate upgrade admin       |
+| `volume_savings.rs` | 109   | Cumulative volume + savings accumulator        |
+| `migration.rs`      | 81    | v1 → v2 corridor storage migration             |
+| `publishers.rs`     | 76    | Publisher authorization set                    |
+| `storage.rs`        | 106   | `DataKey` variants, TTL handling               |
+| `corridor_rate.rs`  | 58    | Corridor rate publish/read                     |
+| `history.rs`        | 54    | Bounded outcome history per anchor             |
+| `outcome.rs`        | 57    | Outcome submission and hashing                 |
+| `anchors.rs`        | 41    | Anchor registry                                |
+| `aggregate.rs`      | 55    | Per-corridor counters                          |
+| `error.rs`          | 11    | Error enum                                     |
 **2,353 lines of Rust across 16 modules**, one contract, **47 public
 entrypoints**.
 

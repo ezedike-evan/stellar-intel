@@ -617,6 +617,8 @@ describe('ExecuteDrawer', () => {
 
       fireEvent.click(screen.getByText('Start Off-ramp'));
 
+      fireEvent.click(screen.getByText('Start Off-ramp'));
+
       await waitFor(() => expect(screen.getByTestId('kyc-iframe-mock')).toBeInTheDocument());
 
       // Let the quote's expiry timer fire before the (human-driven) KYC step completes.
@@ -664,10 +666,32 @@ describe('ExecuteDrawer', () => {
       />
     );
 
-    fireEvent.click(screen.getByText('Start Off-ramp'));
+      await waitFor(() => expect(screen.getByTestId('kyc-iframe-mock')).toBeInTheDocument());
 
-    await waitFor(() => expect(screen.getByTestId('kyc-iframe-mock')).toBeInTheDocument());
+      // Let the quote's expiry timer fire before the (human-driven) KYC step completes.
+      await act(async () => {
+        await vi.advanceTimersByTimeAsync(61_000);
+      });
 
+      act(() => {
+        window.dispatchEvent(
+          new MessageEvent('message', {
+            data: { type: 'stellar_transaction_created', transaction_id: 'txn-123' },
+            origin: 'https://anchor.example',
+          })
+        );
+      });
+
+      await waitFor(() =>
+        expect(
+          screen.getByText(/Your firm quote expired before the transaction/)
+        ).toBeInTheDocument()
+      );
+      expect(mockBuildWithdrawPayment).not.toHaveBeenCalled();
+      expect(screen.getByRole('button', { name: 'Retry' })).toBeInTheDocument();
+    } finally {
+      vi.useRealTimers();
+    }
     act(() => {
       window.dispatchEvent(
         new MessageEvent('message', {

@@ -8,8 +8,7 @@ import {
   maxRootFieldsRule,
 } from '@/lib/graphql/security';
 
-// The schema is built with `buildSchema(typeDefs)` so that `validate` uses the
-// same graphql instance.
+// The schema is built directly from SDL using the core `graphql` package, matching lib/graphql/schema.ts which avoids graphql-yoga and ensures validation uses the same instance without requiring resolvers.
 const schema = buildSchema(typeDefs);
 
 describe('graphql depth limit', () => {

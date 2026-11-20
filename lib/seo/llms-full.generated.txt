@@ -684,6 +684,7 @@ See [`docs/ORACLE_SPEC.md`](ORACLE_SPEC.md) for full function signatures, argume
 
 - **Admin** — an M-of-N Stellar multisig account (target threshold in docs/GOVERNANCE.md). The admin can enable/disable publishers;
   it cannot rewrite outcomes.
+- **Upgradability** — `upgrade(new_wasm_hash)` is gated by a separate upgrade admin (rotatable via `propose_upgrade_admin`/`accept_upgrade_admin`); there is **no** time-lock today (a 7-day on-chain time-lock is not implemented).
 - **Upgradability** — `upgrade(new_wasm_hash)` is gated by a separate upgrade admin (rotatable via `propose_upgrade_admin`/`accept_upgrade_admin`) and time-locked: the hash must first be announced with `propose_upgrade`, and can be applied only after 7 days (`UPGRADE_DELAY_SECONDS`) and only with that exact hash. The pending upgrade is readable via `pending_upgrade`, and `cancel_upgrade` withdraws it.
 - **Publisher whitelist** — starts at one (Stellar Intel's publisher). Over
   time, third-party publishers onboard; governance lives in
@@ -1975,6 +1976,28 @@ The route accepts a **flat JSON object** containing the intent fields above, plu
 3. **Sign** the hex hash — sign the hex string via Freighter's `signMessage` ([`lib/intent/sign.ts`](../lib/intent/sign.ts)), which returns a base64 signature and the signer's public key.
 4. **Submit** the flat payload containing the intent fields together with `signature` and `publicKey`.
 
+
+- `nonce` (optional string): exactly 32 hex characters (`/^[0-9a-f]{32}$/i`), providing 128 bits of randomness.
+- `deadline` (optional string): ISO 8601 datetime string (`z.iso.datetime()`).
+
+Both fields are part of the canonical intent schema and covered by the signature when present.
+
+## Signed envelope — Wire format
+
+The route accepts a **flat JSON object** containing the intent fields above, plus optional top-level `signature` and `publicKey` attestation fields. Both attestation fields must be supplied together:
+
+| Field       | Type   | Rule                                                            |
+| ----------- | ------ | --------------------------------------------------------------- |
+| `signature` | string | Optional base64-encoded Ed25519 signature over the intent hash. |
+| `publicKey` | string | Optional Stellar public key (`G…`, 56 chars).                   |
+
+### Construction
+
+1. **Canonicalize** the intent — sort keys recursively, then serialize with `canonicalJson` (in [`lib/intent/hash.ts`](../lib/intent/hash.ts); see [`docs/CANONICAL_JSON.md`](CANONICAL_JSON.md)).
+2. **Hash** the canonical JSON bytes — compute SHA-256 via `hashIntent` ([`lib/intent/hash.ts`](../lib/intent/hash.ts)) to produce `intentHash` (a 64-character lowercase hex string).
+3. **Sign** the hex hash — sign the hex string via Freighter's `signMessage` ([`lib/intent/sign.ts`](../lib/intent/sign.ts)), which returns a base64 signature and the signer's public key.
+4. **Submit** the flat payload containing the intent fields together with `signature` and `publicKey`.
+
 ### Verification
 
 On the server, `verifyOptionalIntentAttestation` in [`lib/intent/verify.ts`](../lib/intent/verify.ts) reads `signature` and `publicKey` off the root of the raw request body:
@@ -2036,6 +2059,9 @@ Idempotency-Key: <optional-unique-string>
 
 Request body:
 
+
+Request body:
+
 ```jsonc
 {
   "type": "offramp",
@@ -2070,6 +2096,65 @@ curl -sX POST https://stellar-intel.vercel.app/api/intent/offramp \
     "sender": "GBBD67IFNZMSW54QOX7SZOCBWW5HDKG54G7QOWPHNHOC4YDTQG2Z4O2U",
     "recipient": "08012345678"
   }'
+```
+
+## On-ramp — `POST /api/v1/intent/onramp`
+
+> **Status.** The `OnrampIntent` schema below is shipped
+> (`OnrampIntentSchema` in [`types/intent.ts`](../types/intent.ts), re-exported
+> from [`lib/intent/onramp-schema.ts`](../lib/intent/onramp-schema.ts)). The
+> endpoint itself is **not live yet**; the request body is final, the response
+> fields are the planned contract. The full deposit flow — preflight/trustline,
+> SEP-10, interactive deposit, payment, tracking — is in
+> [`docs/ONRAMP.md`](ONRAMP.md).
+
+The on-ramp intent is the mirror image of the off-ramp intent: the user pays in
+fiat and the anchor credits a Stellar asset. It is a distinct schema with
+`type: "onramp"` (not a `CanonicalIntentV1` `kind`), and it carries the
+Stellar `destination` that the anchor credits, which the off-ramp's free-form
+`recipient` does not.
+
+### Payload — `OnrampIntent`
+
+| Field              | Type   | Required | Rule                                                                   |
+| ------------------ | ------ | -------- | ---------------------------------------------------------------------- |
+| `type`             | string | yes      | Literal `"onramp"` — the off-ramp discriminator is rejected.           |
+| `sourceAsset`      | string | yes      | Non-empty; the fiat paid in (e.g. `NGN`).                              |
+| `destinationAsset` | string | yes      | Non-empty; the Stellar asset bought (e.g. `USDC`).                     |
+| `amount`           | string | yes      | Positive decimal string (`/^\d+(\.\d+)?$/`, `parseFloat > 0`).         |
+| `sender`           | string | yes      | Non-empty; the fiat rail's reference (bank account, wallet, agent id). |
+| `destination`      | string | yes      | Stellar public key (`G…`, 56 chars); rejects muxed `M…` accounts.      |
+| `depositMethod`    | enum   | yes      | `bank_transfer`, `cash`, `mobile_money` or `card`.                     |
+| `memo`             | string | no       | Non-empty when present; attributing memo for pooled-account anchors.   |
+| `memoType`         | enum   | no       | `text`, `id` or `hash`; required together with `memo`.                 |
+
+Memo rules (enforced by `superRefine`): `memo` and `memoType` must be supplied
+together; a `text` memo must be at most 28 bytes once UTF-8 encoded; an `id`
+memo must be an unsigned 64-bit integer; a `hash` memo must be 64 lowercase
+hex characters. A `type` of `"offramp"` is rejected, as is a non-`G…`
+`destination`.
+
+```jsonc
+// request
+{
+  "type": "onramp",
+  "sourceAsset": "NGN",
+  "destinationAsset": "USDC",
+  "amount": "150000.00",
+  "sender": "NG123456789012345678",
+  "destination": "GA5ZSEJYB37JRC5AVCIA5MOP4RHTM335X2KGX3IHOJAPP5RE34K4KZVN",
+  "depositMethod": "bank_transfer",
+}
+// response (planned)
+{
+  "intentId": "onramp_intent_9a4f21",
+  "status": "pending_trustline",
+  "unsignedChangeTrustXdr": "AAAAAgAAAABn...",
+  "handoffUrl": "https://cowrie.exchange/sep24/deposit?transaction_id=...",
+  "createdAt": "2026-10-17T12:05:00Z",
+}
+```
+
 ```
 
 ## On-ramp — `POST /api/v1/intent/onramp`
@@ -2788,6 +2873,10 @@ the fiat, never holds the asset, and never holds a key. It resolves an anchor,
 prepares the pieces the user signs, and tracks the anchor's own SEP flow.
 
 > **Status.** The on-ramp intent schema and the SEP-24 deposit primitives are
+> shipped. The `GET /api/v1/onramp/quote` and `POST /api/v1/intent/onramp`
+> endpoints and the `intel.onramp.*` MCP tools are **planned and not live
+> yet** — the planned contract is recorded here so the implementation has a
+> target. The in-app guide at `/docs/onramp` carries the same status.
 > shipped, and the `intel.onramp.quote` and `intel.onramp.prepare` MCP tools
 > are live on the hosted `/api/mcp` endpoint. The `GET /api/v1/onramp/quote`
 > and `POST /api/v1/intent/onramp` endpoints are **planned and not live yet** —
@@ -2801,6 +2890,7 @@ prepares the pieces the user signs, and tracks the anchor's own SEP flow.
 | SEP-6 deposit request — `buildSep6DepositRequest`                                                                                   | **Not implemented** |
 | `GET /api/v1/onramp/quote`                                                                                                          | **Planned**         |
 | `POST /api/v1/intent/onramp`                                                                                                        | **Planned**         |
+| MCP `intel.onramp.quote`, `intel.onramp.prepare`                                                                                    | **Planned**         |
 | MCP `intel.onramp.quote`, `intel.onramp.prepare` ([`lib/mcp/onramp.ts`](../lib/mcp/onramp.ts))                                      | Shipped             |
 
 ## Flow
@@ -3163,6 +3253,10 @@ The entry points expose the full tool set:
 The on-ramp tools are registered by the shared `lib/mcp` server, so every
 entry point has them. See [On-ramp tools](#on-ramp-tools) below.
 
+The on-ramp tools `intel.onramp.quote` and `intel.onramp.prepare` are
+specified but **not registered on any transport** — see
+[Planned: on-ramp tools](#planned-on-ramp-tools) below.
+
 **Scope:** Stellar Intel abstracts anchors, not chains. These tools answer
 "what's my best fiat exit price, and which Stellar anchor should I trust to
 execute it" — not "move this value across chains." For cross-chain pay/bridge
@@ -3488,6 +3582,21 @@ Flag-gated corridors hidden in the UI are omitted.
 - **Input:** none
 - **Output:** `{ count: number, corridors: CorridorSummary[] }`
 
+### Planned: on-ramp tools
+
+Two on-ramp tools are specified but not yet registered on any transport. Both
+would be annotated `readOnlyHint: true` and both take an on-ramp intent
+([`docs/INTENT_API.md`](INTENT_API.md)) rather than an off-ramp one.
+
+- **`intel.onramp.quote`** — an indicative quote across anchors.
+  **Input:** `{ sourceAsset, destinationAsset, amount, depositMethod }`.
+  **Output:** `{ anchor, quoteId, sourceAmount, destinationAmount, rate, fee, expiresAt }`,
+  an estimate derived from the anchor's published fee schedule — never a firm
+  quote. See [docs/ONRAMP.md](ONRAMP.md) for what "indicative" means.
+- **`intel.onramp.prepare`** — the unsigned on-ramp intent plus the anchor
+  handoff URL. **Input:** an `OnrampIntent` without a signature.
+  **Output:** `{ unsignedEnvelope: { intent, intentHash }, handoffUrl }`, where
+  `handoffUrl` is the anchor's hosted SEP-24 deposit page.
 ### On-ramp tools
 
 Both on-ramp tools are annotated `readOnlyHint: true` and use the same
