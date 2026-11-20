@@ -27,7 +27,7 @@ import { StdioClientTransport } from '@modelcontextprotocol/sdk/client/stdio.js'
 import { pathToFileURL } from 'node:url';
 import { Keypair } from '@stellar/stellar-sdk';
 
-// Any valid public key works as the sender: prepare never touches the network.
+// Any valid public key works as the sender: prepare reads its account from a stubbed Horizon.
 const SENDER = Keypair.random().publicKey();
 
 // The server has no built-in payout accounts; routing needs a verified one in
@@ -98,8 +98,12 @@ describe('MCP server round-trip via subprocess (#137)', () => {
       quoteId: string;
       netReceived: string;
       expiresAt: string;
+      source: string;
+      indicative: boolean;
     };
     expect(structured.anchor).toBe('cowrie');
+    expect(typeof structured.indicative).toBe('boolean');
+    expect(structured.indicative).toBe(structured.source !== 'sep38');
     expect(structured.quoteId).toMatch(/^[0-9a-f]{64}$/);
     expect(Number(structured.netReceived)).toBeGreaterThan(0);
     expect(new Date(structured.expiresAt).getTime()).toBeGreaterThan(Date.now());

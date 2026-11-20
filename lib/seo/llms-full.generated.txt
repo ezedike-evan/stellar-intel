@@ -685,6 +685,7 @@ See [`docs/ORACLE_SPEC.md`](ORACLE_SPEC.md) for full function signatures, argume
 - **Admin** — an M-of-N Stellar multisig account (target threshold in docs/GOVERNANCE.md). The admin can enable/disable publishers;
   it cannot rewrite outcomes.
 - **Upgradability** — `upgrade(new_wasm_hash)` is gated by a separate upgrade admin (rotatable via `propose_upgrade_admin`/`accept_upgrade_admin`); there is **no** time-lock today (a 7-day on-chain time-lock is not implemented).
+- **Upgradability** — `upgrade(new_wasm_hash)` is gated by a separate upgrade admin (rotatable via `propose_upgrade_admin`/`accept_upgrade_admin`) and time-locked: the hash must first be announced with `propose_upgrade`, and can be applied only after 7 days (`UPGRADE_DELAY_SECONDS`) and only with that exact hash. The pending upgrade is readable via `pending_upgrade`, and `cancel_upgrade` withdraws it.
 - **Publisher whitelist** — starts at one (Stellar Intel's publisher). Over
   time, third-party publishers onboard; governance lives in
   `docs/ORACLE_SPEC.md`.
@@ -851,6 +852,7 @@ cross-reference for reviewers and contributors.
 | `NEXT_PUBLIC_MCP_ADVERTISE`       | No                     | on                                                      | `lib/flags.ts`                                    | Controls the MCP install banner in the UI. Set to `'off'` to hide.                                                                                                                          |
 | `NEXT_PUBLIC_V11_CORRIDORS`       | No                     | off                                                     | `lib/flags.ts`                                    | Enables v1.1 corridors (ZAR, XOF). Must be `'on'`; a corridor still stays hidden until at least one anchor serves it.                                                                       |
 | `NEXT_PUBLIC_RECURRING_INTENTS`   | No                     | off                                                     | `lib/flags.ts`                                    | Enables the sign-once recurring-intent engine. Must be `'on'`; effective only when `NEXT_PUBLIC_INTENT_FLOW` is also enabled.                                                               |
+| `NEXT_PUBLIC_FIRM_QUOTE_BONUS`    | No                     | off                                                     | `lib/flags.ts`                                    | Ranks a firm SEP-38 quote above an estimate that is up to 0.5% better (`FIRM_QUOTE_BONUS_PCT`). Must be `'on'`. Changes ordering only, never a displayed amount.                            |
 | `NEXT_PUBLIC_MIN_OUTCOMES`        | No                     | `30`                                                    | `lib/reputation/thresholds.ts`                    | Minimum recorded outcomes before a reputation score is considered statistically meaningful.                                                                                                 |
 | `ADMIN_SECRET_KEY`                | Yes (admin routes)     | —                                                       | `lib/auth/admin.ts`                               | Bearer secret for `/admin/*` API routes and the dispute management surface.                                                                                                                 |
 | `CRON_SECRET`                     | Yes (cron routes)      | —                                                       | `lib/api/cron-auth.ts`                            | Bearer secret for cron-triggered routes (publisher tick, reconcile, refresh).                                                                                                               |
@@ -936,11 +938,18 @@ the hardening contract (see `lib/api/v1.ts`):
   - [`GET /api/v1/anchor-health/ledger`](#get-apiv1anchor-healthledger)
   - [`GET /api/v1/anchors/census`](#get-apiv1anchorscensus)
   - [`GET /api/v1/anchors/{id}/health`](#get-apiv1anchorsidhealth)
+  - [`GET /api/v1/anchors/{id}/price-history`](#get-apiv1anchorsidprice-history)
+  - [`GET /api/v1/anchors/{id}/quote-gap`](#get-apiv1anchorsidquote-gap)
+  - [`GET /api/v1/sep38/readiness`](#get-apiv1sep38readiness)
 - **Intent**
   - [`POST /api/intent`](#post-apiintent)
   - [`POST /api/intent/offramp`](#post-apiintentofframp)
   - [`POST /api/v1/intent/offramp`](#post-apiv1intentofframp)
+  - [`POST /api/v1/intent/onramp`](#post-apiv1intentonramp)
+- **On-ramp**
+  - [`GET /api/v1/onramp/quote`](#get-apiv1onrampquote)
 - **Rates**
+  - [`GET /api/deposit-rates/{corridor}`](#get-apideposit-ratescorridor)
   - [`GET /api/rates/{corridor}`](#get-apiratescorridor)
   - [`GET /api/snapshot`](#get-apisnapshot)
   - [`GET /api/v1/corridors/{corridor}/volume-savings`](#get-apiv1corridorscorridorvolume-savings)
@@ -1090,6 +1099,72 @@ Returns the anchor's current health status, last-probe timestamp, and score brea
 
 ---
 
+### `GET /api/v1/anchors/{id}/price-history`
+
+**Summary:** Get anchor SEP-38 price history  
+
+Returns recorded SEP-38 price observations for an anchor corridor, downsampled to at most 500 points (evenly spaced; first and last retained).
+
+#### Parameters
+
+| Name | In | Type | Required | Description |
+| :--- | :--- | :--- | :--- | :--- |
+| `id` | `path` | `string` | **Yes** | Anchor identifier |
+| `corridor` | `query` | `string` | No | Corridor id served by the anchor (default: first corridor) |
+| `days` | `query` | `integer` | No | Lookback window in days, 1–90 (default 7) |
+
+#### Responses
+
+| Status | Description | Content-Type | Schema |
+| :--- | :--- | :--- | :--- |
+| `200` | Price history series | `application/json` | `object` |
+| `400` | Invalid params or corridor not served | `application/json` | `ApiError` |
+| `404` | Unknown anchor | `application/json` | `ApiError` |
+| `429` | Rate limit exceeded | `application/json` | `ApiError` |
+| `503` | Quote store unavailable | `application/json` | `ApiError` |
+
+---
+
+### `GET /api/v1/anchors/{id}/quote-gap`
+
+**Summary:** Get how far an anchor lands from the rate it quoted  
+
+Signed gap between the rate shown before execution and the rate that landed, over completed, undisputed withdrawals in the window. Negative means users received less than quoted. Stands in for SEP-38 firm quotes, which most anchors do not offer. Null statistics mean no samples.
+
+#### Parameters
+
+| Name | In | Type | Required | Description |
+| :--- | :--- | :--- | :--- | :--- |
+| `id` | `path` | `string` | **Yes** | Anchor identifier |
+| `window` | `query` | `object` | No | Lookback window in days: 7, 30 or 90 (default 30) |
+
+#### Responses
+
+| Status | Description | Content-Type | Schema |
+| :--- | :--- | :--- | :--- |
+| `200` | Quote-gap statistics | `application/json` | `object` |
+| `400` | Invalid window | `application/json` | `ApiError` |
+| `404` | Unknown anchor | `application/json` | `ApiError` |
+| `429` | Rate limit exceeded | `application/json` | `ApiError` |
+| `503` | Reputation store unavailable | `application/json` | `ApiError` |
+
+---
+
+### `GET /api/v1/sep38/readiness`
+
+**Summary:** Get SEP-38 firm-quote readiness per anchor  
+
+For each registered anchor: whether the operator declares SEP-38, whether its stellar.toml advertises a quote server, whether that server’s /info answers, and whether it lists the anchor’s registered asset. Checked live and cached for ten minutes.
+
+#### Responses
+
+| Status | Description | Content-Type | Schema |
+| :--- | :--- | :--- | :--- |
+| `200` | Readiness per anchor | `application/json` | `object` |
+| `429` | Rate limit exceeded | `application/json` | `ApiError` |
+
+---
+
 ## Intent
 
 ### `POST /api/intent`
@@ -1162,7 +1237,104 @@ The public v1 intent endpoint. Honours `Idempotency-Key`: a retried request repl
 
 ---
 
+### `POST /api/v1/intent/onramp`
+
+**Summary:** Submit an on-ramp intent (v1)  
+
+Routes a deposit intent to the best indicative anchor and returns the /onramp handoff URL, plus an unsigned changeTrust XDR when the destination account has no trustline. No anchor session is opened: KYC and the interactive deposit run in the browser. Honours `Idempotency-Key` like the off-ramp endpoint.
+
+#### Parameters
+
+| Name | In | Type | Required | Description |
+| :--- | :--- | :--- | :--- | :--- |
+| `Idempotency-Key` | `header` | `string` | No | Client-generated key. A repeated value replays the original response. |
+
+#### Request Body
+
+**Content-Type:** `application/json`
+
+| Field | Type | Required | Description |
+| :--- | :--- | :--- | :--- |
+| `type` | `"onramp"` | **Yes** | - |
+| `sourceAsset` | `string` | **Yes** | Fiat currency paid in, for example NGN |
+| `destinationAsset` | `string` | **Yes** | Stellar asset bought, for example USDC |
+| `amount` | `string` | **Yes** | Amount of sourceAsset to spend |
+| `sender` | `string` | **Yes** | Payer reference on the fiat rail (not a Stellar account) |
+| `destination` | `string` | **Yes** | Stellar public key credited when the deposit completes |
+| `depositMethod` | `"bank_transfer" | "cash" | "mobile_money" | "card"` | **Yes** | - |
+| `memo` | `string` | No | Memo for pooled-account anchors; needs memoType |
+| `memoType` | `"text" | "id" | "hash"` | No | - |
+| `signature` | `string` | No | Optional attestation; send with publicKey |
+| `publicKey` | `string` | No | Signer of the optional attestation |
+
+#### Responses
+
+| Status | Description | Content-Type | Schema |
+| :--- | :--- | :--- | :--- |
+| `200` | Route resolved | `application/json` | `OnrampIntentResponse` |
+| `400` | Validation error | `application/json` | `ApiError` |
+| `401` | Attestation signature did not verify | `application/json` | `ApiError` |
+| `404` | No anchor serves this corridor | `application/json` | `ApiError` |
+| `422` | The destination account does not exist on Stellar | `application/json` | `ApiError` |
+| `429` | Rate limited | `application/json` | `ApiError` |
+| `503` | No deposit rate is available right now | `application/json` | `ApiError` |
+
+---
+
+## On-ramp
+
+### `GET /api/v1/onramp/quote`
+
+**Summary:** Get indicative deposit (on-ramp) quotes  
+
+Returns an indicative estimate per anchor for depositing a fiat amount into a Stellar asset. SEP-24 publishes deposit fees but the anchor sets the final conversion inside its interactive deposit window, so every figure is an estimate.
+
+#### Parameters
+
+| Name | In | Type | Required | Description |
+| :--- | :--- | :--- | :--- | :--- |
+| `corridor` | `query` | `string` | **Yes** | Corridor id, for example usdc-ngn |
+| `amount` | `query` | `string` | **Yes** | Fiat amount to deposit: a positive decimal with at most 7 decimal places |
+| `asset` | `query` | `string` | No | Restrict rows to one SEP-38 asset (stellar:CODE:ISSUER) |
+| `type` | `query` | `"bank_account" | "cash" | "mobile_money"` | No | Funding method (default bank_account) |
+
+#### Responses
+
+| Status | Description | Content-Type | Schema |
+| :--- | :--- | :--- | :--- |
+| `200` | Deposit estimates per anchor | `application/json` | `object` |
+| `400` | Unknown corridor or invalid amount, asset or type | `application/json` | `ApiError` |
+| `429` | Rate limit exceeded | `application/json` | `ApiError` |
+| `502` | Anchor rate lookup failed | `application/json` | `ApiError` |
+
+---
+
 ## Rates
+
+### `GET /api/deposit-rates/{corridor}`
+
+**Summary:** Get indicative deposit (on-ramp) estimates for a corridor  
+
+Returns per-anchor SEP-24 deposit estimates for the given corridor: fiat in, asset credited net of published fees, with per-anchor failures isolated into `errors`. Every figure is indicative; the anchor sets the firm conversion inside its interactive deposit flow.
+
+#### Parameters
+
+| Name | In | Type | Required | Description |
+| :--- | :--- | :--- | :--- | :--- |
+| `corridor` | `path` | `string` | **Yes** | Corridor ID (e.g. usdc-ngn, usdc-kes) |
+| `amount` | `query` | `string` | No | Fiat amount to deposit (positive decimal); defaults to 100 |
+| `asset` | `query` | `string` | No | SEP-38 asset identifier to credit; defaults to the corridor's asset |
+
+#### Responses
+
+| Status | Description | Content-Type | Schema |
+| :--- | :--- | :--- | :--- |
+| `200` | Deposit estimates for the corridor | `application/json` | `DepositRateComparison` |
+| `400` | Unknown corridor or invalid amount | `application/json` | `ApiError` |
+| `429` | Rate limited | `application/json` | `ApiError` |
+| `502` | The deposit estimate could not be computed | `application/json` | `ApiError` |
+
+---
 
 ### `GET /api/rates/{corridor}`
 
@@ -1804,6 +1976,28 @@ The route accepts a **flat JSON object** containing the intent fields above, plu
 3. **Sign** the hex hash — sign the hex string via Freighter's `signMessage` ([`lib/intent/sign.ts`](../lib/intent/sign.ts)), which returns a base64 signature and the signer's public key.
 4. **Submit** the flat payload containing the intent fields together with `signature` and `publicKey`.
 
+
+- `nonce` (optional string): exactly 32 hex characters (`/^[0-9a-f]{32}$/i`), providing 128 bits of randomness.
+- `deadline` (optional string): ISO 8601 datetime string (`z.iso.datetime()`).
+
+Both fields are part of the canonical intent schema and covered by the signature when present.
+
+## Signed envelope — Wire format
+
+The route accepts a **flat JSON object** containing the intent fields above, plus optional top-level `signature` and `publicKey` attestation fields. Both attestation fields must be supplied together:
+
+| Field       | Type   | Rule                                                            |
+| ----------- | ------ | --------------------------------------------------------------- |
+| `signature` | string | Optional base64-encoded Ed25519 signature over the intent hash. |
+| `publicKey` | string | Optional Stellar public key (`G…`, 56 chars).                   |
+
+### Construction
+
+1. **Canonicalize** the intent — sort keys recursively, then serialize with `canonicalJson` (in [`lib/intent/hash.ts`](../lib/intent/hash.ts); see [`docs/CANONICAL_JSON.md`](CANONICAL_JSON.md)).
+2. **Hash** the canonical JSON bytes — compute SHA-256 via `hashIntent` ([`lib/intent/hash.ts`](../lib/intent/hash.ts)) to produce `intentHash` (a 64-character lowercase hex string).
+3. **Sign** the hex hash — sign the hex string via Freighter's `signMessage` ([`lib/intent/sign.ts`](../lib/intent/sign.ts)), which returns a base64 signature and the signer's public key.
+4. **Submit** the flat payload containing the intent fields together with `signature` and `publicKey`.
+
 ### Verification
 
 On the server, `verifyOptionalIntentAttestation` in [`lib/intent/verify.ts`](../lib/intent/verify.ts) reads `signature` and `publicKey` off the root of the raw request body:
@@ -1865,6 +2059,9 @@ Idempotency-Key: <optional-unique-string>
 
 Request body:
 
+
+Request body:
+
 ```jsonc
 {
   "type": "offramp",
@@ -1899,6 +2096,65 @@ curl -sX POST https://stellar-intel.vercel.app/api/intent/offramp \
     "sender": "GBBD67IFNZMSW54QOX7SZOCBWW5HDKG54G7QOWPHNHOC4YDTQG2Z4O2U",
     "recipient": "08012345678"
   }'
+```
+
+## On-ramp — `POST /api/v1/intent/onramp`
+
+> **Status.** The `OnrampIntent` schema below is shipped
+> (`OnrampIntentSchema` in [`types/intent.ts`](../types/intent.ts), re-exported
+> from [`lib/intent/onramp-schema.ts`](../lib/intent/onramp-schema.ts)). The
+> endpoint itself is **not live yet**; the request body is final, the response
+> fields are the planned contract. The full deposit flow — preflight/trustline,
+> SEP-10, interactive deposit, payment, tracking — is in
+> [`docs/ONRAMP.md`](ONRAMP.md).
+
+The on-ramp intent is the mirror image of the off-ramp intent: the user pays in
+fiat and the anchor credits a Stellar asset. It is a distinct schema with
+`type: "onramp"` (not a `CanonicalIntentV1` `kind`), and it carries the
+Stellar `destination` that the anchor credits, which the off-ramp's free-form
+`recipient` does not.
+
+### Payload — `OnrampIntent`
+
+| Field              | Type   | Required | Rule                                                                   |
+| ------------------ | ------ | -------- | ---------------------------------------------------------------------- |
+| `type`             | string | yes      | Literal `"onramp"` — the off-ramp discriminator is rejected.           |
+| `sourceAsset`      | string | yes      | Non-empty; the fiat paid in (e.g. `NGN`).                              |
+| `destinationAsset` | string | yes      | Non-empty; the Stellar asset bought (e.g. `USDC`).                     |
+| `amount`           | string | yes      | Positive decimal string (`/^\d+(\.\d+)?$/`, `parseFloat > 0`).         |
+| `sender`           | string | yes      | Non-empty; the fiat rail's reference (bank account, wallet, agent id). |
+| `destination`      | string | yes      | Stellar public key (`G…`, 56 chars); rejects muxed `M…` accounts.      |
+| `depositMethod`    | enum   | yes      | `bank_transfer`, `cash`, `mobile_money` or `card`.                     |
+| `memo`             | string | no       | Non-empty when present; attributing memo for pooled-account anchors.   |
+| `memoType`         | enum   | no       | `text`, `id` or `hash`; required together with `memo`.                 |
+
+Memo rules (enforced by `superRefine`): `memo` and `memoType` must be supplied
+together; a `text` memo must be at most 28 bytes once UTF-8 encoded; an `id`
+memo must be an unsigned 64-bit integer; a `hash` memo must be 64 lowercase
+hex characters. A `type` of `"offramp"` is rejected, as is a non-`G…`
+`destination`.
+
+```jsonc
+// request
+{
+  "type": "onramp",
+  "sourceAsset": "NGN",
+  "destinationAsset": "USDC",
+  "amount": "150000.00",
+  "sender": "NG123456789012345678",
+  "destination": "GA5ZSEJYB37JRC5AVCIA5MOP4RHTM335X2KGX3IHOJAPP5RE34K4KZVN",
+  "depositMethod": "bank_transfer",
+}
+// response (planned)
+{
+  "intentId": "onramp_intent_9a4f21",
+  "status": "pending_trustline",
+  "unsignedChangeTrustXdr": "AAAAAgAAAABn...",
+  "handoffUrl": "https://cowrie.exchange/sep24/deposit?transaction_id=...",
+  "createdAt": "2026-10-17T12:05:00Z",
+}
+```
+
 ```
 
 ## On-ramp — `POST /api/v1/intent/onramp`
@@ -2597,8 +2853,9 @@ node scripts/anchor-survey.mjs --sources registry,sdf-anchor-directory
                                          # limit candidate sources (default: all)
 ```
 
-Builds the candidate set from every source (the anchor registry, the full
-stellar.expert directory, top asset home domains and the SDF Anchor Directory),
+Builds the candidate set from every source (the anchor registry, the hand-curated
+listed operators in `constants/listed-anchors/`, the full stellar.expert directory,
+top asset home domains and the SDF Anchor Directory),
 then classifies each domain by SEP support — see
 [`docs/SEP_COMPLIANCE.md`](SEP_COMPLIANCE.md).
 
@@ -2620,6 +2877,10 @@ prepares the pieces the user signs, and tracks the anchor's own SEP flow.
 > endpoints and the `intel.onramp.*` MCP tools are **planned and not live
 > yet** — the planned contract is recorded here so the implementation has a
 > target. The in-app guide at `/docs/onramp` carries the same status.
+> shipped, and the `intel.onramp.quote` and `intel.onramp.prepare` MCP tools
+> are live on the hosted `/api/mcp` endpoint. The `GET /api/v1/onramp/quote`
+> and `POST /api/v1/intent/onramp` endpoints are **planned and not live yet** —
+> the planned contract is recorded here so the implementation has a target. The in-app guide at `/docs/onramp` carries the same status.
 
 | Piece                                                                                                                               | State               |
 | ----------------------------------------------------------------------------------------------------------------------------------- | ------------------- |
@@ -2630,6 +2891,7 @@ prepares the pieces the user signs, and tracks the anchor's own SEP flow.
 | `GET /api/v1/onramp/quote`                                                                                                          | **Planned**         |
 | `POST /api/v1/intent/onramp`                                                                                                        | **Planned**         |
 | MCP `intel.onramp.quote`, `intel.onramp.prepare`                                                                                    | **Planned**         |
+| MCP `intel.onramp.quote`, `intel.onramp.prepare` ([`lib/mcp/onramp.ts`](../lib/mcp/onramp.ts))                                      | Shipped             |
 
 ## Flow
 
@@ -2857,7 +3119,7 @@ until the maintainer wires up a `CARGO_REGISTRY_TOKEN`, depend on it directly:
 ```toml
 [dependencies]
 stellar-intel-reputation = { git = "https://github.com/ezedike-evan/stellar-intel", package = "stellar-intel-reputation" }
-# once published: stellar-intel-reputation = "0.3"
+# once published: stellar-intel-reputation = "0.4"
 ```
 
 ```rust,ignore
@@ -2964,7 +3226,7 @@ remain valid as the underlying transport.
 
 # Stellar Intel — MCP Server
 
-**Last reviewed:** 2026-09-26
+**Last reviewed:** 2026-10-25
 
 The MCP server exposes Stellar Intel's off-ramp routing and anchor
 intelligence to MCP-capable agents over stdio or streamable HTTP. It lives in
@@ -2985,6 +3247,11 @@ The entry points expose the full tool set:
 | `intel.probe.coverage`    | ✓                   | ✓              | ✓                             |
 | `intel.leaderboard`       | ✓                   | ✓              | ✓                             |
 | `intel.corridors`         | ✓                   | ✓              | ✓                             |
+| `intel.onramp.quote`      | ✓                   | ✓              | ✓                             |
+| `intel.onramp.prepare`    | ✓                   | ✓              | ✓                             |
+
+The on-ramp tools are registered by the shared `lib/mcp` server, so every
+entry point has them. See [On-ramp tools](#on-ramp-tools) below.
 
 The on-ramp tools `intel.onramp.quote` and `intel.onramp.prepare` are
 specified but **not registered on any transport** — see
@@ -3029,8 +3296,9 @@ which builds its server from the canonical `createServer()` in
 and the `@stellarintel/mcp` package, so they cannot drift apart. Requests are
 rate-limited to 60 per minute per IP.
 
-**It serves the full eight-tool suite** alongside prompts and the anchor health
-ledger resource across all transports.
+**It serves ten tools** — the eight off-ramp and discovery tools plus the two
+on-ramp tools — alongside prompts and the anchor health ledger resource across
+all transports.
 
 ## Running it yourself
 
@@ -3093,7 +3361,13 @@ Returns the best net-received quote for a corridor + amount. Annotated
 `readOnlyHint: true` — it never submits anything.
 
 - **Input:** `{ from: string, to: string, amount: string }`
-- **Output:** `{ anchor, quoteId, netReceived, expiresAt }`
+- **Output:** `{ anchor, quoteId, netReceived, expiresAt, source, indicative }`
+
+`source` says where the rate came from: `sep38` is a firm quote the anchor commits
+to; `sep24-fee`, `sep6-info` and `sep6-fee` are estimates built from the anchor's
+published fees. `indicative` is `false` only for `sep38`. When it is `true`,
+`netReceived` can move before the payout, so do not present it to a user as a
+guarantee.
 
 ```jsonc
 // input
@@ -3103,7 +3377,9 @@ Returns the best net-received quote for a corridor + amount. Annotated
   "anchor": "cowrie",
   "quoteId": "<64-hex sha256>",
   "netReceived": "156800",
-  "expiresAt": "2026-…Z"
+  "expiresAt": "2026-…Z",
+  "source": "sep24-fee",
+  "indicative": true
 }
 ```
 
@@ -3117,6 +3393,13 @@ Annotated `readOnlyHint: true` — nothing is submitted on-chain until
 - **Input:** an off-ramp intent without a signature
   `{ type: "offramp", sourceAsset, destinationAsset, amount, sender, recipient }`
 - **Output:** `{ unsignedEnvelope: { intent, intentHash }, unsignedTx }`
+
+`unsignedTx` is built from the sender's real account, so its sequence number is
+the network's current one plus one and it can be signed and submitted as
+returned; it is valid for five minutes. That means `prepare` reads the
+sender's account from Horizon. A sender with no account on the network is
+rejected with `SENDER_NOT_FOUND`; any other failure to read it is
+`TX_BUILD_FAILED`.
 
 #### Routing and payment accounts
 
@@ -3151,23 +3434,30 @@ prepared for, then submits the transaction to Horizon.
 
 Verification, in order: the `intentHash` is recomputed from `intent` and must
 match; `signature` must verify against `intentHash` under `intent.sender`'s
-public key; the decoded `signedTx` must be signed, sourced from
+public key (see the accepted signature forms below); the decoded `signedTx` must be signed, sourced from
 `intent.sender`, carry exactly one payment operation to the routed anchor
 account for `intent.amount`/`intent.sourceAsset`, and memo-hash `intentHash`.
-Any mismatch is rejected before anything reaches Horizon.
+Its fee must be at most 100,000 stroops, and it must carry an expiry
+(`timeBounds.maxTime`) that has not passed and is no more than 15 minutes away.
+Any mismatch is rejected (`TX_MISMATCH`) before anything reaches Horizon.
 
 - **Input:**
   `{ unsignedEnvelope: { intent, intentHash }, signature, signedTx }` — the
   exact `unsignedEnvelope` from `intel.offramp.prepare`, a base64 ed25519
   signature over `intentHash` from the sender's key, and the base64 XDR of
-  `unsignedTx` after the sender has signed it.
+  `unsignedTx` after the sender has signed it. The signature is accepted in
+  the same two forms as the web app: over the 32 raw bytes the hex
+  `intentHash` decodes to (`Keypair.sign`), or SEP-53 (`Keypair.signMessage`,
+  which is what a wallet's `signMessage` produces). A signature over the
+  hash's UTF-8 bytes is deprecated; it is still accepted, and each use is
+  logged as `mcp_legacy_signature_format`.
 - **Output:** `{ status: "submitted", hash, ledger, corridorId, anchorId }`
 
 ```jsonc
 // input
 {
   "unsignedEnvelope": { "intent": { "type": "offramp", "..." }, "intentHash": "<64-hex>" },
-  "signature": "<base64 ed25519 sig over intentHash>",
+  "signature": "<base64 ed25519 sig over intentHash (raw bytes or SEP-53)>",
   "signedTx": "<base64 signed transaction XDR>"
 }
 // output
@@ -3307,6 +3597,32 @@ would be annotated `readOnlyHint: true` and both take an on-ramp intent
   handoff URL. **Input:** an `OnrampIntent` without a signature.
   **Output:** `{ unsignedEnvelope: { intent, intentHash }, handoffUrl }`, where
   `handoffUrl` is the anchor's hosted SEP-24 deposit page.
+### On-ramp tools
+
+Both on-ramp tools are annotated `readOnlyHint: true` and use the same
+field names as an on-ramp intent ([`docs/INTENT_API.md`](INTENT_API.md)).
+They are implemented in [`lib/mcp/onramp.ts`](../lib/mcp/onramp.ts).
+
+- **`intel.onramp.quote`** — the best indicative deposit estimate across the
+  anchors that serve the corridor.
+  **Input:** `{ sourceAsset, destinationAsset, amount }`, where `sourceAsset`
+  is the fiat the user pays (e.g. `NGN`), `destinationAsset` the Stellar asset
+  code received (e.g. `USDC`) and `amount` the fiat amount. There is no
+  `depositMethod` argument: published SEP-24 fees do not vary by method.
+  **Output:** `{ anchor, anchorName, asset, estimatedReceived, exchangeRate,
+corridorId, fiatAmount, indicative: true, source, alternatives }`, where
+  `source` is `sep38` or `sep24-fee`. The figure is an estimate from the
+  anchor's published fees and a reference price — never a firm quote, so there
+  is no `quoteId` or `expiresAt`. See [docs/ONRAMP.md](ONRAMP.md) for what
+  "indicative" means. Errors: `NO_ROUTE` (no corridor serves the pair),
+  `INVALID_AMOUNT`, and `RATE_UNAVAILABLE` (no anchor could be priced).
+- **`intel.onramp.prepare`** — the unsigned on-ramp intent, its hash, and
+  where the user finishes the deposit. **Input:** an `OnrampIntent` without a
+  signature. **Output:** `{ unsignedEnvelope: { intent, intentHash },
+corridorId, handoffUrl, nextStep }`. `handoffUrl` is the Stellar Intel
+  `/onramp` page for the corridor and amount, not the anchor's own deposit
+  page: that page only exists after a SEP-10 login signed by the user's wallet,
+  which an agent cannot do. No anchor is contacted.
 
 **There is no on-ramp execute tool, by design: on-ramp KYC is browser-only.**
 Unlike the off-ramp `intel.execute`, an on-ramp cannot be completed by signing
@@ -3350,7 +3666,7 @@ npm run test -- tests/mcp-offramp.spec.ts tests/mcp-e2e.spec.ts tests/mcp-http-e
 
 # Webhooks
 
-**Last reviewed:** 2026-08-26
+**Last reviewed:** 2026-10-24
 
 Stellar Intel can push real-time event notifications to your HTTPS endpoint instead of requiring you to poll the API. Each delivery is HMAC-SHA256 signed so you can verify authenticity before acting on the payload.
 
@@ -3363,6 +3679,27 @@ Stellar Intel can push real-time event notifications to your HTTPS endpoint inst
 | `intent.failed`                | An intent reaches a terminal `failed` state                          |
 | `reputation.event_written`     | A new outcome row is appended to the reputation log                  |
 | `anchor.health_status_changed` | An anchor's health status transitions (e.g. `healthy` to `degraded`) |
+
+### `anchor.health_status_changed`
+
+Emitted by the publisher tick (every five minutes) when an anchor's `degraded` flag in
+the nightly health ledger (`constants/anchor-health.json`) differs from the last
+snapshot it notified, so a change arrives within a tick of the deploy that carries
+it. One event per anchor, in anchor-id order:
+
+```json
+{
+  "anchorId": "cowrie",
+  "from": "healthy",
+  "to": "degraded",
+  "lastCheckedAt": "2026-10-25T00:00:00.000Z",
+  "lastError": "stellar.toml returned HTTP 503"
+}
+```
+
+`from` and `to` are `healthy` or `degraded`. The first run only records a baseline and
+emits nothing, and without a database there is no baseline to keep, so nothing is
+emitted. `lastCheckedAt` and `lastError` are `null` when the ledger has none.
 
 ## Payload envelope
 
@@ -3431,7 +3768,7 @@ function verify(secret: string, header: string, rawBody: string): boolean {
 
 ## Retry and dead-letter
 
-If your endpoint does not respond with a 2xx status code, Stellar Intel retries up to 5 times with exponential backoff (1 s, 2 s, 4 s, 8 s between attempts). After all attempts are exhausted the delivery is moved to the dead-letter log, visible via `GET /api/webhooks/failures` (admin key required).
+If your endpoint does not respond with a 2xx status code, Stellar Intel makes up to 5 delivery attempts (the first plus 4 retries) with exponential backoff (1 s, 2 s, 4 s, 8 s between attempts). After all attempts are exhausted the delivery is moved to the dead-letter log, visible via `GET /api/webhooks/failures` (admin key required).
 
 Your endpoint should return `200` (or any 2xx) as quickly as possible and process the event asynchronously to avoid triggering retries due to slow processing.
 
@@ -3555,11 +3892,20 @@ sampled**, with the weights renormalised across exactly those:
 healthScore = Σ wᵢ · successRateᵢ ÷ Σ wᵢ      (over signals with samples > 0)
 
 HEALTH_WEIGHTS = { uptime: 0.4, quoteAvailability: 0.2,
-                   issuerMatch: 0.2, tomlIntegrity: 0.2 }
+                   issuerMatch: 0.2, tomlIntegrity: 0.2,
+                   depositAvailability: 0 }
 ```
 
 Uptime carries the most weight because it is the signal a user feels first: an
 anchor that does not answer cannot be used at any price.
+
+`depositAvailability` is reported next to the four scored signals and has weight 0:
+the SEP-24 deposit probe (one sample per deposit asset, stored as kind `deposit`)
+says whether an anchor has switched deposits off while withdrawals keep working, which
+is a different question from whether it is healthy to withdraw through today. Its rows
+are also left out of the sample count, the score threshold and the probing streak, so
+the withdraw-side numbers read the same with or without a deposit sweep. A disabled
+deposit is a verdict about the anchor; a deposit probe that could not complete is not.
 
 ### A check that could not complete is not a failure by the anchor
 
@@ -4009,7 +4355,7 @@ governance action.
 | **Publisher** (`publishers::is_authorized` + `require_auth`) | `submit_outcome`, `set_corridor_metrics`, `publish_corridor_rate`, `add_volume_savings`                                                                                                       |
 | **Admin** (`admin::require_admin`)                           | `register_anchor`, `add_publisher`, `revoke_publisher`, `reset_corridor_aggregate`, `reset_volume_savings`, `propose_admin`, `cancel_admin_proposal`, `migrate_corridor_v2`, `migrate_all_v2` |
 | **Candidate self-auth**                                      | `accept_admin`                                                                                                                                                                                |
-| **Upgrade admin**                                            | `upgrade`, `propose_upgrade_admin`, `cancel_upgrade_proposal`                                                                                                                                 |
+| **Upgrade admin**                                            | `propose_upgrade`, `cancel_upgrade`, `upgrade` (7 days after `propose_upgrade`), `propose_upgrade_admin`, `cancel_upgrade_proposal`                                                           |
 | **Upgrade candidate self-auth**                              | `accept_upgrade_admin`                                                                                                                                                                        |
 
 `set_corridor_metrics`, `migrate_corridor_v2` and `migrate_all_v2` were
@@ -4204,7 +4550,7 @@ derived from on-chain evidence that any third party can audit.
 
 # SEP Compliance Matrix
 
-**Last reviewed:** 2026-09-26
+**Last reviewed:** 2026-10-24
 
 Stellar Intel integrates with Stellar anchors that implement various Stellar Ecosystem Proposals (SEPs). SEP-6 enables programmatic deposit/withdraw — the anchor exposes a machine-readable API rather than hosting an iframe — allowing Stellar Intel to collect KYC fields natively and surface indicative rates for SEP-6-only anchors. Anchors that advertise SEP-6 but not SEP-24 receive an **Indicative** badge in the comparison UI, since their rates are derived from the SEP-6 `/info` fee schedule rather than a live quote.
 
@@ -4263,6 +4609,29 @@ Registered anchors ([`constants/anchors.ts`](../constants/anchors.ts)). Capabili
 > SEP-6 and SEP-24 call to it fails to connect. The TOML itself still returns 200, which is why a
 > capability read that stops at the TOML kept scoring it as supported. EUR has no anchor now and
 > the `usdc-eur` corridor is hidden from selectors until one serves it.
+
+### SEP-38 quote gap
+
+The SEP-38 column records whether an anchor advertises a quote server, not whether it can serve a
+firm quote for a given corridor. A corridor is only firm-quoted when the quote server's `/info`
+lists both the asset and the fiat pair; otherwise the corridor falls back to indicative pricing
+(Tier 2 or Tier 3 above). Today no registered anchor serves a firm quote for NGN, so the USDC→NGN
+flow is indicative pricing plus SEP-24 execution and is labelled as such in the UI.
+
+### Min-receive guard
+
+Before the wallet is asked to sign a SEP-24 withdrawal, Stellar Intel compares the anchor's own
+`amount_out` estimate with the minimum-receive floor: the selected rate's expected net amount less
+`MIN_RECEIVE_TOLERANCE` (2%). If the anchor now estimates less than the floor, the payment is
+blocked and the user sees both figures. If the anchor gives no estimate, the flow continues.
+
+### SEP-38 readiness
+
+An anchor is SEP-38 ready when its `stellar.toml` publishes `ANCHOR_QUOTE_SERVER` and the quote
+server's `/info` lists the asset and fiat pair of the corridor. Readiness decides whether a
+corridor can show a **firm** quote or only an **indicative** estimate (fees plus a reference
+price). The per-anchor result is the SEP-38 column in the matrix above and the one-line summary
+below; there is no separate readiness page or endpoint yet.
 
 ### SEP-38 availability, in one line
 
@@ -4960,7 +5329,7 @@ the system is [non-custodial](NON_CUSTODY.md) and never holds either.
 | **Intent replay**                | Re-submitting a previously-signed envelope                          | `lib/intent/replay.ts` treats each signed envelope as single-use; server recomputes the canonical hash and verifies the signature.                                                                                                                                                                                               |
 | **Intent tampering**             | Altering amount/anchor after signing                                | Server recomputes SHA-256 over the canonical intent and verifies the Ed25519 signature; `publicKey` must match. Any change invalidates the signature.                                                                                                                                                                            |
 | **Reputation poisoning**         | Forged or spam outcomes to skew scores                              | Append needs the sender's signature over the intent hash, is insert-only and registry-checked; scores and the publisher read attested rows only. On-chain writes gated by publisher authorization.                                                                                                                               |
-| **Oracle tampering**             | Unauthorized contract writes                                        | Publisher gate (`publishers::is_authorized` + `require_auth`) on `submit_outcome`; admin gate on `register_anchor`; multi-signer admin + time-locked upgrade are roadmap hardening.                                                                                                                                              |
+| **Oracle tampering**             | Unauthorized contract writes                                        | Publisher gate (`publishers::is_authorized` + `require_auth`) on `submit_outcome`; admin gate on `register_anchor`; the upgrade is time-locked (7 days between `propose_upgrade` and `upgrade`); a multi-signer admin is roadmap hardening.                                                                                      |
 | **Admin-route abuse**            | Hitting `/admin/disputes` or admin reputation routes                | Gated by server-only `ADMIN_SECRET_KEY` (not a `NEXT_PUBLIC_*` var).                                                                                                                                                                                                                                                             |
 | **Agent misuse**                 | An AI agent tries to drain a wallet via MCP                         | MCP surface is advisory + user-signed: every executing call must be signed by the user's wallet. No held keys, no autonomous spend.                                                                                                                                                                                              |
 | **Griefing / DoS on rates**      | Hammering `/api/rates` or anchors                                   | Per-anchor timeouts + isolation (`server-rates.ts`); API rate limiting (`lib/api/rate-limit.ts`).                                                                                                                                                                                                                                |

@@ -1,68 +1,143 @@
 /**
- * #1097 — Golden-path onramp end-to-end: corridor selection through deposit
- * instructions, browser-level.
+ * /onramp in a browser, against a mocked anchor and a mocked quote API.
  *
- * Skipped for two independent reasons, both still open when this scaffold was
- * written:
- *
- * 1. No onramp UI exists yet. There is no `/onramp` route, no deposit form, no
- *    "start deposit" action anywhere in `app/` or `components/` — only
- *    router-internal deposit plumbing (`lib/router/connectors/on-ramp.ts`,
- *    which wraps `lib/stellar/sep24.ts`'s `initiateDeposit` for multi-hop
- *    routing, not a page a user visits) and the still-unimplemented SEP-6
- *    deposit scaffold (#1093). There is nothing in a browser to walk through.
- * 2. Even once there is, `tests/e2e` mixes Playwright specs with vitest files
- *    (#1027) and the preview-deploy smoke job still needs pointing at a real
- *    Playwright spec (#1028) before this directory reliably runs at all.
- *
- * The steps below are a best-effort forward guess at the golden path, grounded
- * in the equivalent `/offramp` flow's actual current UI (CorridorSelector,
- * `getByLabel('Amount (USDC)')`, an execute action, a status/result region —
- * see tests/e2e/keyboard-nav.spec.ts and tests/e2e/sep6-withdraw.spec.ts for
- * the real selectors those use today) rather than an invented shape. Update
- * every TODO against the real onramp UI once it ships, rather than assuming
- * this scaffold got it right on the first pass.
+ * The quote endpoint, the reputation append and the anchor's SEP-24 /transaction
+ * are all stubbed with page.route, so nothing leaves the machine. Freighter is not
+ * installed in these runs, which is the no-wallet case the page has to handle.
  */
 import { test, expect } from '@playwright/test';
+import {
+  ONRAMP_E2E_BANK_REFERENCE,
+  ONRAMP_E2E_JWT,
+  ONRAMP_E2E_NONCE,
+  ONRAMP_E2E_STELLAR_TX,
+  ONRAMP_E2E_TRANSACTION_ID,
+  ONRAMP_E2E_TRANSFER_SERVER,
+  depositPollSequence,
+  onrampQuoteResponse,
+} from '../fixtures/onramp/deposit-e2e';
 
-test.describe.skip('[#1097] Golden-path onramp: corridor selection to deposit instructions', () => {
-  test('selects a corridor, enters an amount, and reaches deposit instructions', async ({
+const CAPTION =
+  'Estimates only. Each anchor sets its final rate and fees inside its deposit window.';
+
+function trackingUrl(): string {
+  const params = new URLSearchParams({
+    tx: ONRAMP_E2E_TRANSACTION_ID,
+    server: ONRAMP_E2E_TRANSFER_SERVER,
+    nonce: ONRAMP_E2E_NONCE,
+  });
+  return `/onramp?${params.toString()}`;
+}
+
+// Every call is stubbed, but SWR still pauses while the browser reports itself offline,
+// which a runner without a working default route does. Pin it online so the spec
+// depends on its own mocks and not on the host's network.
+const FORCE_ONLINE = `Object.defineProperty(navigator, 'onLine', { get: () => true });`;
+
+// Under `next dev` the first request to a route compiles it; give the first
+// assertion on a fresh page room for that.
+const FIRST_PAINT = { timeout: 30_000 };
+
+test.describe('/onramp', () => {
+  test.beforeEach(async ({ page }) => {
+    await page.addInitScript(FORCE_ONLINE);
+    await page.route('**/api/v1/onramp/quote**', (route) =>
+      route.fulfill({
+        status: 200,
+        contentType: 'application/json',
+        body: JSON.stringify(onrampQuoteResponse),
+      })
+    );
+    await page.route('**/api/reputation/append', (route) =>
+      route.fulfill({ status: 201, body: '{}' })
+    );
+  });
+
+  test('renders the estimate table with the indicative caption', async ({ page }) => {
+    await page.goto('/onramp?corridor=usdc-ngn&amount=10000');
+
+    await expect(page.getByRole('heading', { name: 'On-ramp Comparator' })).toBeVisible(
+      FIRST_PAINT
+    );
+    await expect(page.getByText(CAPTION)).toBeVisible();
+
+    // Two anchors, each an estimate, best first.
+    await expect(page.getByRole('link', { name: 'Cowrie' })).toBeVisible(FIRST_PAINT);
+    await expect(page.getByRole('link', { name: 'MoneyGram' })).toBeVisible();
+    await expect(page.getByText('≈ 5.95 USDC')).toBeVisible();
+    await expect(page.getByText('≈ 5.25 USDC')).toBeVisible();
+    await expect(page.getByText('Best estimate')).toBeVisible();
+  });
+
+  test('shows the connect prompt and disables Deposit when no wallet is connected', async ({
     page,
   }) => {
-    // TODO: confirm the real route once the onramp page ships — mirrors
-    // /offramp's naming, but that is an assumption, not a confirmed contract.
-    await page.goto('/onramp');
+    await page.goto('/onramp?corridor=usdc-ngn&amount=10000');
 
-    // ── Step 1: corridor selection ──────────────────────────────────────────
-    // TODO: replace with the real corridor selector once it exists. /offramp's
-    // CorridorSelector (components/offramp/CorridorSelector.tsx) is the closest
-    // existing analogue — an onramp selector would plausibly expose the same
-    // fiat-in / asset-out shape, just reversed.
-    await page.getByRole('button', { name: /select corridor/i }).click();
-    await page.getByRole('option', { name: /NGN.*USDC/i }).click();
+    await expect(page.getByText('Connect your Freighter wallet to deposit.')).toBeVisible(
+      FIRST_PAINT
+    );
+    await expect(page.getByRole('button', { name: 'Deposit with Cowrie' })).toBeDisabled(
+      FIRST_PAINT
+    );
+    await expect(page.getByRole('button', { name: 'Deposit with MoneyGram' })).toBeDisabled();
+  });
 
-    // ── Step 2: amount entry ────────────────────────────────────────────────
-    // TODO: confirm the real label. /offramp uses exactly 'Amount (USDC)'
-    // (tests/e2e/keyboard-nav.spec.ts) for the asset being withdrawn; an
-    // onramp amount is more likely denominated in the fiat currency going in.
-    await page.getByLabel(/Amount \(NGN\)/i).fill('50000');
+  test('resumes a tracked deposit: instructions first, then the credited amount', async ({
+    page,
+  }) => {
+    // Each state is served for two polls, as in the withdraw spec: the tracker's
+    // first paint carries a status but not every field.
+    test.setTimeout(150_000);
+    await page.addInitScript(
+      `sessionStorage.setItem('si_jwt_${ONRAMP_E2E_NONCE}', '${ONRAMP_E2E_JWT}');`
+    );
+    let polls = 0;
+    await page.route(`${ONRAMP_E2E_TRANSFER_SERVER}/transaction**`, (route) => {
+      const step = Math.floor(polls++ / 2);
+      route.fulfill({
+        status: 200,
+        contentType: 'application/json',
+        body: JSON.stringify(depositPollSequence[Math.min(step, depositPollSequence.length - 1)]),
+      });
+    });
 
-    // ── Step 3: start the deposit ───────────────────────────────────────────
-    await page.getByRole('button', { name: /deposit|start deposit/i }).click();
+    await page.goto(trackingUrl());
 
-    // ── Step 4: deposit instructions render ─────────────────────────────────
-    // The golden path ends at instructions, not completion — this spec covers
-    // getting a user to "here is what to do next", not polling a transaction
-    // through to a terminal state (that belongs with the SEP-6/SEP-24 status-
-    // tracker coverage the withdraw side already has).
-    //
-    // TODO: the actual shape depends on which SEP the onramp UI ends up using:
-    //   - SEP-24: an interactive_customer_info_needed redirect URL/iframe
-    //     (mirrors lib/stellar/sep24.ts's initiateDeposit shape).
-    //   - SEP-6 non-interactive: on-page instructions (a destination account,
-    //     memo, min/max, ETA) once #1093's buildSep6DepositRequest lands.
-    // Assert on whichever the shipped UI actually renders — this placeholder
-    // checks only that *some* instructions region appears.
-    await expect(page.getByTestId('deposit-instructions')).toBeVisible();
+    // The user still has to pay: the status says so and the anchor's details are
+    // there to copy.
+    await expect(page.getByText('Send payment to anchor', { exact: true })).toBeVisible({
+      timeout: 45_000,
+    });
+    await expect(page.getByText('0123456789')).toBeVisible();
+    await expect(page.getByText(ONRAMP_E2E_BANK_REFERENCE)).toBeVisible();
+    await expect(page.getByRole('button', { name: 'Copy Bank account number' })).toBeVisible();
+    await expect(page.getByRole('button', { name: 'Copy Payment reference' })).toBeVisible();
+
+    // Completed: the amount credited and the Stellar transaction.
+    await expect(page.getByText('You received 5.95 USDC')).toBeVisible({ timeout: 90_000 });
+    await expect(page.getByText('Deposit complete')).toBeVisible();
+    await expect(page.getByRole('link', { name: /view transaction/i })).toHaveAttribute(
+      'href',
+      new RegExp(`/tx/${ONRAMP_E2E_STELLAR_TX}$`)
+    );
+
+    // Once paid there is nothing left to copy.
+    await expect(page.getByRole('button', { name: 'Copy Payment reference' })).toHaveCount(0);
+  });
+
+  test('renders no tracker when the session no longer holds the JWT', async ({ page }) => {
+    await page.route(`${ONRAMP_E2E_TRANSFER_SERVER}/transaction**`, (route) =>
+      route.fulfill({
+        status: 200,
+        contentType: 'application/json',
+        body: JSON.stringify(depositPollSequence[0]),
+      })
+    );
+
+    await page.goto(trackingUrl());
+
+    await expect(page.getByRole('heading', { name: 'On-ramp Comparator' })).toBeVisible();
+    await expect(page.getByText('Deposit status')).toHaveCount(0);
   });
 });

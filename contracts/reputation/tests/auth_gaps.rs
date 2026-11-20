@@ -44,6 +44,7 @@ fn set_corridor_metrics_accepts_a_registered_publisher() {
     client.add_publisher(&admin, &publisher);
 
     let anchor = String::from_str(&env, "anchor-bitso");
+    client.register_anchor(&admin, &anchor);
     let corridor = String::from_str(&env, "usdc-ngn");
 
     client.set_corridor_metrics(
@@ -139,6 +140,7 @@ fn migrated_metrics_survive_the_guard() {
     client.add_publisher(&admin, &publisher);
 
     let anchor = String::from_str(&env, "anchor-bitso");
+    client.register_anchor(&admin, &anchor);
     let corridor = String::from_str(&env, "usdc-ngn");
 
     client.set_corridor_metrics(

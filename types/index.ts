@@ -159,6 +159,10 @@ export interface AnchorRate {
    * live /info; see Anchor.unverifiedCorridors.
    */
   unverifiedPayout?: boolean;
+  /** Reference source for indicative estimates ('fx' for fiat peg, 'sdex+fx' for SDEX mid converted via FX). */
+  referenceSource?: 'fx' | 'sdex+fx';
+  /** Human-readable explanation of how the reference price was derived. */
+  referenceDetail?: string;
 }
 
 /**
@@ -192,6 +196,49 @@ export interface RateComparison {
   bestRateId: string; // anchorId of the anchor with the highest totalReceived
 
   errors?: AnchorRateError[];
+}
+
+/**
+ * One (anchor, asset) on-ramp estimate: "for `fiatAmount` of fiat, this anchor
+ * would credit about `totalReceived` of `asset`". Always indicative — SEP-24
+ * sets the firm fiat→asset conversion only inside the anchor's interactive
+ * deposit flow. Built by `lib/stellar/deposit-rates.ts`.
+ */
+export interface DepositRate {
+  anchorId: string;
+  anchorName: string;
+  corridorId: string;
+  /** SEP-38 identifier of the credited asset: `stellar:CODE:ISSUER` or `stellar:native`. */
+  asset: string;
+  /** Fiat the user pays, in units of the corridor's fiat currency. */
+  fiatAmount: number;
+  /** Flat fee in units of the credited asset; null when none is published. */
+  fee: number | null;
+  feeType: AnchorRate['feeType'];
+  /** Effective asset credited per 1 fiat unit, net of fees; null when unreachable. */
+  exchangeRate: number | null;
+  totalReceived: number | null;
+  /**
+   * Asset units the fiat buys before fees (fiat ÷ reference price). SEP-24 deposit
+   * bounds are in asset units, so this is the figure `depositLimitStatus` checks.
+   */
+  assetAmount?: number;
+  /** Deposit bounds from the anchor's SEP-24 /info, in asset units, when published. */
+  minAmount?: number;
+  maxAmount?: number;
+  source: 'sep38' | 'sep24-fee' | 'unavailable';
+  /** Names the reference price behind the estimate (see `referenceMidPrice`). */
+  referenceSource?: string;
+  updatedAt: Date;
+}
+
+/** All deposit estimates for one corridor, with per-anchor failures isolated. */
+export interface DepositRateComparison {
+  corridorId: string;
+  direction: 'deposit';
+  rates: DepositRate[];
+  bestRateId: string;
+  errors: AnchorRateError[];
 }
 
 // ─── Wallet ───────────────────────────────────────────────────────────────────
@@ -348,9 +395,41 @@ export interface Sep24WithdrawResponse {
 export interface Sep24DepositRequest {
   assetCode: string;
   assetIssuer: string;
-  amount: string;
+  /** Asset units to deposit. Omit to let the anchor's interactive flow collect it. */
+  amount?: string | undefined;
   account: string; // user's Stellar public key, credited on deposit completion
   jwt: string;
+  /** BCP 47 language tag for the anchor's interactive UI. Defaults to `en`. */
+  lang?: string | undefined;
+  /** SEP-38 firm quote id, when the anchor supports quote-bound deposits. */
+  quoteId?: string;
+}
+
+/** Everything the caller supplies to start a SEP-24 deposit (`startDepositFlow`). */
+export interface DepositFlowParams {
+  /** SEP-10 session token for the anchor. */
+  jwt: string;
+  assetCode: string;
+  assetIssuer: string;
+  amount: string;
+  /** Stellar account credited when the deposit completes. */
+  account: string;
+  /** Where the anchor should return the user after the interactive step. */
+  callbackUrl?: string;
+  /** BCP 47 language tag for the interactive UI. Defaults to `en`. */
+  lang?: string;
+  /** SEP-38 firm quote id, when the anchor supports quote-bound deposits. */
+  quoteId?: string;
+}
+
+/** What the caller needs in order to hand the user off to the anchor. */
+export interface DepositFlowSession {
+  /** Anchor-issued transaction id, used for subsequent status polling. */
+  transactionId: string;
+  /** The URL to open, with the callback applied. */
+  depositUrl: string;
+  /** Transfer server the session was opened against. */
+  transferServer: string;
 }
 
 /** Response from POST /transactions/deposit/interactive. */
@@ -409,6 +488,12 @@ export interface Sep24Refunds {
 }
 
 /** The live record of a SEP-24 withdrawal transaction returned by the anchor. */
+/** One way to pay the anchor, from a SEP-24 deposit's `instructions` map. */
+export interface Sep24DepositInstruction {
+  value: string;
+  description: string;
+}
+
 export interface Sep24Transaction {
   id: string;
   status: WithdrawStatusValue;
@@ -421,6 +506,17 @@ export interface Sep24Transaction {
   stellarTransactionId?: string | undefined;
   externalTransactionId?: string | undefined;
   refunds?: Sep24Refunds | undefined;
+  /** How to pay the anchor, keyed by the anchor's own labels. Deposits only. */
+  instructions?: Record<string, Sep24DepositInstruction> | undefined;
+  /** An https link to the anchor's own page about this transaction. */
+  moreInfoUrl?: string | undefined;
+  /** A human-readable status note from the anchor. */
+  message?: string | undefined;
+  /** Set when the anchor paid a deposit out as a claimable balance. */
+  claimableBalanceId?: string | undefined;
+  from?: string | undefined;
+  to?: string | undefined;
+  kind?: 'deposit' | 'withdrawal' | undefined;
 }
 
 // ─── Intent schema ────────────────────────────────────────────────────────────
@@ -718,6 +814,19 @@ export interface Sep6WithdrawParams {
   account?: string;
 }
 
+/** Parameters for the SEP-6 GET /deposit request. */
+export interface Sep6DepositParams {
+  asset_code: string;
+  /** Stellar account credited when the deposit completes. */
+  account: string;
+  amount?: string;
+  type?: string;
+  email_address?: string;
+  memo_type?: string;
+  memo?: string;
+  lang?: string;
+}
+
 /** SEP-6 /withdraw interactive response. */
 export interface Sep6WithdrawInteractive {
   type: 'interactive_customer_info_needed';
@@ -747,6 +856,13 @@ export interface Sep6WithdrawNeedsInfo {
 /** Union of all three SEP-6 /withdraw response shapes. */
 export type Sep6WithdrawResponse =
   Sep6WithdrawInteractive | Sep6WithdrawNonInteractive | Sep6WithdrawNeedsInfo;
+
+/**
+ * SEP-6 GET /deposit response. SEP-6 gives deposit and withdraw the same three
+ * shapes (interactive, non-interactive, customer-info-needed), so this is the
+ * withdraw union under the name callers of the deposit builder look for.
+ */
+export type Sep6DepositResponse = Sep6WithdrawResponse;
 
 // ─── SEP-31 ───────────────────────────────────────────────────────────────────
 

@@ -1,5 +1,10 @@
-import { describe, it, expect, afterEach } from 'vitest';
+import { describe, it, expect, afterEach, vi } from 'vitest';
 import { render, screen, cleanup } from '@testing-library/react';
+// The census cases below are about the census table. Keep the listed registry out of
+// them, so adding an operator can never change what they find on the page; the
+// listed section has its own spec (tests/anchors-directory-listed.spec.tsx).
+vi.mock('@/constants/listed-anchors', () => ({ LISTED_ANCHORS: [] }));
+
 import AnchorDirectoryPage, { metadata } from '@/app/anchors/directory/page';
 import type { AnchorCensus } from '@/types';
 

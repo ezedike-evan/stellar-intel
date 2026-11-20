@@ -85,6 +85,27 @@ describe('initiateWithdraw — POST /transactions/withdraw/interactive', () => {
     expect(body['account']).toBe('GABCDEFGHIJKLMNOPQRSTUVWXYZ');
   });
 
+  it('does not send claimable_balance_supported, which only applies to deposits', async () => {
+    let body: Record<string, unknown> = {};
+    vi.stubGlobal(
+      'fetch',
+      vi.fn(async (_url: string, opts: RequestInit) => {
+        body = JSON.parse(opts.body as string) as Record<string, unknown>;
+        return {
+          ok: true,
+          json: async () => ({
+            type: 'interactive_customer_info_needed',
+            url: 'https://u',
+            id: 'id1',
+          }),
+        };
+      })
+    );
+
+    await initiateWithdraw(RESOLVED_ANCHOR, PARAMS);
+    expect(body).not.toHaveProperty('claimable_balance_supported');
+  });
+
   it('sends Authorization: Bearer <jwt> header', async () => {
     let headers: Record<string, string> = {};
     vi.stubGlobal(

@@ -60,8 +60,13 @@ fn migrate_corridor_unchecked(env: &Env, anchor_id: String, corridor: String) {
 
 /// Default corridor list for v2 migration. Expand this list as new corridors
 /// are added (issue #825).
+/// Exactly the corridor ids of `CORRIDORS` in `constants/anchors.ts`, in the same
+/// order. `tests/oracle-v2-corridors.spec.ts` fails if either list changes
+/// without the other.
 const V2_CORRIDORS: &[&str] = &[
-    "usdc-ngn", "usdc-kes", "usdc-mxn", "usdc-php", "usdc-brl", "usdc-ars",
+    "usdc-ngn", "ngnt-ngn", "usdc-kes", "usdc-ghs", "usdc-mxn", "usdc-brl", "usdc-ars", "usdc-pen",
+    "usdc-eur", "usdc-clp", "usdc-usd", "brl-brl", "ars-ars", "pen-pen", "ngnc-ngn", "dzt-dzd",
+    "arst-ars", "brlt-brl", "usdc-zar", "usdc-xof", "usdc-php", "clpx-clp",
 ];
 
 /// Migrate all known (anchor, corridor) pairs that have v1 metrics stored.

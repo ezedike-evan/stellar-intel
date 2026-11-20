@@ -16,6 +16,12 @@ import MethodologyOg, {
   contentType as methodologyType,
 } from '@/app/methodology/opengraph-image';
 import DocsOg, { size as docsSize, contentType as docsType } from '@/app/docs/opengraph-image';
+import OnrampOg, {
+  alt as onrampAlt,
+  size as onrampSize,
+  contentType as onrampType,
+} from '@/app/onramp/opengraph-image';
+import { metadata as onrampMetadata } from '@/app/onramp/layout';
 
 const PNG_SIGNATURE = [0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a];
 
@@ -69,5 +75,39 @@ describe('Route OpenGraph images (#1065)', () => {
     expect(docsType).toBe('image/png');
     const res = DocsOg();
     await assertValidPng(res);
+  });
+
+  it('serves /onramp OG image with standard dimensions', async () => {
+    expect(onrampSize).toEqual({ width: 1200, height: 630 });
+    expect(onrampType).toBe('image/png');
+    const res = OnrampOg();
+    await assertValidPng(res);
+  });
+});
+
+describe('/onramp metadata (#1481)', () => {
+  it('has its own title and description', () => {
+    expect(onrampMetadata.title).toBe('Stellar on-ramp estimates — Stellar Intel');
+    expect(onrampMetadata.description).toBe(
+      'Compare deposit estimates across Stellar anchors and deposit straight to your own wallet.'
+    );
+    expect(onrampAlt).toBe(onrampMetadata.title);
+  });
+
+  it('points Open Graph at /onramp and its image route', () => {
+    const og = onrampMetadata.openGraph!;
+    expect(String(og.url)).toMatch(/\/onramp$/);
+    const image = (og.images as Array<{ url: string; width: number; height: number }>)[0]!;
+    expect(image.url).toMatch(/\/onramp\/opengraph-image$/);
+    expect(image).toMatchObject({ width: 1200, height: 630 });
+  });
+
+  it('uses a large-image twitter card', () => {
+    expect((onrampMetadata.twitter as { card: string }).card).toBe('summary_large_image');
+  });
+
+  it('never claims a firm rate', () => {
+    const text = [onrampMetadata.title, onrampMetadata.description].join(' ');
+    expect(text).not.toMatch(/\b(firm|guaranteed|live rates?)\b/i);
   });
 });

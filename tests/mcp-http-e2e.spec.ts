@@ -14,10 +14,27 @@ import { StreamableHTTPClientTransport } from '@modelcontextprotocol/sdk/client/
 import { InMemoryTransport } from '@modelcontextprotocol/sdk/inMemory.js';
 import type { Transport } from '@modelcontextprotocol/sdk/shared/transport.js';
 import { createServer } from '../packages/mcp/src/server.js';
+
+// prepare reads the sender's account from Horizon for its sequence number
+// (#1364). Only that read is stubbed, so the test still makes no network call.
+vi.mock('@stellar/stellar-sdk', async (importOriginal) => {
+  const actual = await importOriginal<typeof import('@stellar/stellar-sdk')>();
+  return {
+    ...actual,
+    Horizon: {
+      ...actual.Horizon,
+      Server: vi.fn().mockImplementation(function MockHorizonServer(this: {
+        loadAccount: (publicKey: string) => Promise<unknown>;
+      }) {
+        this.loadAccount = async (publicKey: string) => new actual.Account(publicKey, '0');
+      }),
+    },
+  };
+});
 import { startStreamableHttpServer } from '../packages/mcp/src/transports/streamable-http.js';
 import type { StreamableHttpHandle } from '../packages/mcp/src/transports/streamable-http.js';
 
-// Any valid public key works as the sender: prepare never touches the network.
+// Any valid public key works as the sender: prepare reads its account from a stubbed Horizon.
 const SENDER = Keypair.random().publicKey();
 
 describe('MCP server round-trip over streamable HTTP (#1049)', () => {

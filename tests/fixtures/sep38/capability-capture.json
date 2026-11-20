@@ -50,11 +50,6 @@
       "tomlHttp": 200,
       "anchorQuoteServer": null
     },
-    "bitnovo": {
-      "homeDomain": "stellar.bitnovo.com",
-      "tomlHttp": 200,
-      "anchorQuoteServer": null
-    },
     "perahub": {
       "homeDomain": "stellar.perahub.com.ph",
       "tomlHttp": 200,
@@ -67,11 +62,6 @@
     },
     "sofizpay": {
       "homeDomain": "sofizpay.com",
-      "tomlHttp": 200,
-      "anchorQuoteServer": null
-    },
-    "finclusive": {
-      "homeDomain": "finclusive.com",
       "tomlHttp": 200,
       "anchorQuoteServer": null
     }

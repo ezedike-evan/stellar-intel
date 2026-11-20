@@ -1,4 +1,5 @@
 import { hasSharedBackend, incrementRateLimitCount, pruneRateLimitBuckets } from './shared-state';
+import { getLogger } from '@/lib/logger';
 
 interface RateLimitEntry {
   count: number;
@@ -16,6 +17,13 @@ const DEFAULT_MAX_REQUESTS = 60;
 const PRUNE_EVERY = 500;
 
 let checksSincePrune = 0;
+
+// The in-process path makes the effective limit `limit x instance count`, and
+// nothing said so. These keep the warnings to one per process (no backend) and
+// one per minute (backend errors), so a hot route cannot flood the log.
+const BACKEND_ERROR_WARN_INTERVAL_MS = 60_000;
+let warnedNoSharedBackend = false;
+let lastBackendErrorWarnAt = 0;
 
 export interface RateLimitOptions {
   windowMs?: number;
@@ -109,6 +117,11 @@ export async function checkRateLimit(
   const now = Date.now();
 
   if (!hasSharedBackend()) {
+    // Only production is worth a warning: local dev and tests have no database.
+    if (process.env.NODE_ENV === 'production' && !warnedNoSharedBackend) {
+      warnedNoSharedBackend = true;
+      getLogger('api.rate-limit').warn({ event: 'rate_limit_no_shared_backend' });
+    }
     return checkInProcess(key, windowMs, maxRequests, now);
   }
 
@@ -126,8 +139,15 @@ export async function checkRateLimit(
       // DELETE on the request path.
       void pruneRateLimitBuckets(windowStart - windowMs).catch(() => {});
     }
-  } catch {
+  } catch (err) {
     count = null;
+    if (now - lastBackendErrorWarnAt >= BACKEND_ERROR_WARN_INTERVAL_MS) {
+      lastBackendErrorWarnAt = now;
+      getLogger('api.rate-limit').warn({
+        event: 'rate_limit_shared_backend_error',
+        error: String(err),
+      });
+    }
   }
 
   if (count === null) {
@@ -158,4 +178,6 @@ export async function checkRateLimit(
 export function clearRateLimitStore(): void {
   store.clear();
   checksSincePrune = 0;
+  warnedNoSharedBackend = false;
+  lastBackendErrorWarnAt = 0;
 }

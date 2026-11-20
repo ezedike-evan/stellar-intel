@@ -9,9 +9,20 @@
  */
 
 import { getResolvedAnchorById } from '@/lib/stellar/anchors';
-import { fetchAnchorFee, initiateDeposit } from '@/lib/stellar/sep24';
-import { computeTotalReceived } from '@/lib/utils';
-import type { Hop, HopAsset, HopExecutionResult, HopPlanResult, HopStep } from '@/types';
+import {
+  estimateDepositForAnchor,
+  InvalidDepositAmountError,
+  NoDepositRateError,
+} from '@/lib/stellar/deposit-rates';
+import { initiateDeposit } from '@/lib/stellar/sep24';
+import type {
+  DepositRate,
+  Hop,
+  HopAsset,
+  HopExecutionResult,
+  HopPlanResult,
+  HopStep,
+} from '@/types';
 
 export interface OnRampHopParams {
   /** Anchor id from constants/anchors.ts, e.g. 'moneygram'. */
@@ -28,14 +39,16 @@ export interface OnRampHopParams {
  * Builds an on-ramp Hop for a single anchor.
  *
  * `plan` estimates the on-chain asset the user will receive for a fiat input
- * using the anchor's published SEP-24 deposit fee schedule -- an estimate,
- * not a firm quote, exactly like the existing sep24-fee rate path.
+ * through `estimateDepositForAnchor` -- the same engine behind
+ * `fetchDepositRates`, so the hop and the deposit comparison produce
+ * identical figures for identical inputs (#1496). An estimate, not a firm
+ * quote, exactly like the existing sep24-fee rate path.
  *
  * `execute` opens the anchor's interactive deposit session. Deposit
  * completion (KYC, payment, on-chain credit) always happens out of band in
  * the anchor's hosted UI, so `execute` succeeds once that session has been
  * created, not once funds have actually landed -- the same handoff shape as
- * the existing withdraw flow (initiateWithdraw / openWithdrawPopup).
+ * the existing withdraw flow (initiateWithdraw).
  */
 export function createOnRampHop(params: OnRampHopParams): Hop {
   const hopId = `${params.anchorId}-on-ramp`;
@@ -58,18 +71,38 @@ export function createOnRampHop(params: OnRampHopParams): Hop {
         };
       }
 
-      let fee: string;
-      let exchangeRate: number;
+      // `iso4217:NGN` is the documented HopAsset fiat form; accept a bare code
+      // leniently since the estimate only needs the currency.
+      const fiatCode = input.asset.startsWith('iso4217:')
+        ? input.asset.slice('iso4217:'.length)
+        : input.asset;
+
+      let rate: DepositRate;
       try {
-        ({ fee, exchangeRate } = await fetchAnchorFee({
-          anchorDomain: anchor.homeDomain,
-          operation: 'deposit',
-          assetCode: anchor.assetCode,
-          assetIssuer: anchor.assetIssuer,
-          amount: input.amount,
-          type: feeType,
-        }));
+        rate = await estimateDepositForAnchor(
+          anchor,
+          { code: anchor.assetCode, issuer: anchor.assetIssuer },
+          fiatCode,
+          input.amount,
+          { type: feeType }
+        );
       } catch (err) {
+        if (err instanceof InvalidDepositAmountError) {
+          return {
+            ok: false,
+            hopId,
+            error: 'amount_too_small',
+            details: err.message,
+          };
+        }
+        if (err instanceof NoDepositRateError) {
+          return {
+            ok: false,
+            hopId,
+            error: 'no_exchange_rate',
+            details: `${anchor.name} has no usable exchange rate for a ${input.asset} deposit: ${err.message}`,
+          };
+        }
         return {
           ok: false,
           hopId,
@@ -78,17 +111,8 @@ export function createOnRampHop(params: OnRampHopParams): Hop {
         };
       }
 
-      if (exchangeRate <= 0) {
-        return {
-          ok: false,
-          hopId,
-          error: 'no_exchange_rate',
-          details: `${anchor.name} returned a zero or missing exchange rate for a ${input.asset} deposit`,
-        };
-      }
-
-      const received = computeTotalReceived(Number(input.amount), Number(fee), 0, exchangeRate);
-      if (!Number.isFinite(received) || received <= 0) {
+      const received = rate.totalReceived;
+      if (received === null || !Number.isFinite(received) || received <= 0) {
         return {
           ok: false,
           hopId,
@@ -102,10 +126,16 @@ export function createOnRampHop(params: OnRampHopParams): Hop {
         hopId,
         input,
         output: {
-          asset: `stellar:${anchor.assetCode}:${anchor.assetIssuer}`,
+          asset: rate.asset,
           amount: received.toFixed(7),
         },
-        details: { anchorId: anchor.id, fee, exchangeRate },
+        details: {
+          anchorId: anchor.id,
+          fee: rate.fee ?? 0,
+          exchangeRate: rate.exchangeRate ?? 0,
+          source: rate.source,
+          ...(rate.referenceSource !== undefined ? { referenceSource: rate.referenceSource } : {}),
+        },
       };
       return { ok: true, step };
     },

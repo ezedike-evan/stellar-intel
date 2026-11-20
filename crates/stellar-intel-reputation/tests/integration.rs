@@ -1,7 +1,11 @@
 use soroban_sdk::{
-    contract, contractimpl, contracttype, testutils::Address as _, Address, Env, String, Vec,
+    contract, contractimpl, contracttype,
+    testutils::{Address as _, Ledger},
+    Address, Env, String, Vec,
 };
-use stellar_intel_reputation::{CorridorRate, ReputationReader, VolumeSavings};
+use stellar_intel_reputation::{
+    CorridorAggregate, CorridorRate, ProbeSignals, ReputationReader, VolumeSavings,
+};
 
 /// Storage keys for the extra mock entrypoints below (`list_anchors`,
 /// `get_corridor_aggregate`, `get_score_for_corridor`). Mirrors the
@@ -13,6 +17,8 @@ enum MockKey {
     Anchors,
     Aggregate(String, String),
     Score(String, String),
+    ScoreV2(String, String),
+    Probe(String),
     Rate(String),
     Volume(String),
 }
@@ -131,6 +137,56 @@ impl MockReputationContract {
             .unwrap_or((0i128, 0i128, 0u64, 0u32))
     }
 
+    /// `(composite_bps, fill_rate_bps, slippage_bps, settle_seconds_p50, n)`,
+    /// as one tuple: separate arguments would be more than clippy allows.
+    pub fn set_corridor_score_v2(
+        env: Env,
+        anchor_id: String,
+        corridor: String,
+        score: (i128, i128, i128, u64, u32),
+    ) {
+        let key = MockKey::ScoreV2(anchor_id, corridor);
+        env.storage().persistent().set(&key, &score);
+    }
+
+    pub fn get_score_for_corridor_v2(
+        env: Env,
+        anchor_id: String,
+        corridor: String,
+    ) -> (i128, i128, i128, u64, u32) {
+        let key = MockKey::ScoreV2(anchor_id, corridor);
+        env.storage()
+            .persistent()
+            .get(&key)
+            .unwrap_or((0i128, 0i128, 0i128, 0u64, 0u32))
+    }
+
+    pub fn publish_probe_signals(
+        env: Env,
+        publisher: Address,
+        anchor_id: String,
+        uptime_bps: u32,
+        p50_latency_ms: u32,
+        p95_latency_ms: u32,
+        drift_flag_count: u32,
+    ) {
+        let value = ProbeSignals {
+            uptime_bps,
+            p50_latency_ms,
+            p95_latency_ms,
+            drift_flag_count,
+            updated_at: env.ledger().timestamp(),
+            publisher,
+        };
+        env.storage()
+            .persistent()
+            .set(&MockKey::Probe(anchor_id), &value);
+    }
+
+    pub fn get_probe_signals(env: Env, anchor_id: String) -> Option<ProbeSignals> {
+        env.storage().persistent().get(&MockKey::Probe(anchor_id))
+    }
+
     pub fn publish_corridor_rate(
         env: Env,
         publisher: Address,
@@ -151,6 +207,20 @@ impl MockReputationContract {
 
     pub fn get_corridor_rate(env: Env, corridor: String) -> Option<CorridorRate> {
         env.storage().persistent().get(&MockKey::Rate(corridor))
+    }
+
+    pub fn get_corridor_rate_fresh(
+        env: Env,
+        corridor: String,
+        max_age_seconds: u64,
+    ) -> Option<CorridorRate> {
+        let rate: CorridorRate = env.storage().persistent().get(&MockKey::Rate(corridor))?;
+        let age = env.ledger().timestamp().saturating_sub(rate.updated_at);
+        if age <= max_age_seconds {
+            Some(rate)
+        } else {
+            None
+        }
     }
 
     pub fn add_volume_savings(
@@ -409,4 +479,182 @@ fn unrecorded_volume_savings_is_none() {
     assert!(reader
         .volume_savings(String::from_str(&env, "usdc-brl"))
         .is_none());
+}
+
+// ─── v2 score, probe signals and the exact success rate (#1402) ───────────────
+
+#[test]
+fn success_rate_is_exact_above_saturation() {
+    // successes * 10_000 is 5_000_000_000 here, past u32::MAX: the old
+    // saturating multiply clamped it to 4_294_967_295 and reported 4294.
+    let aggregate = CorridorAggregate {
+        total: 1_000_000,
+        successes: 500_000,
+        settle_seconds_sum: 0,
+    };
+    assert_eq!(aggregate.success_rate_bps(), 5_000);
+
+    let all = CorridorAggregate {
+        total: u32::MAX,
+        successes: u32::MAX,
+        settle_seconds_sum: 0,
+    };
+    assert_eq!(all.success_rate_bps(), 10_000);
+
+    let none = CorridorAggregate {
+        total: 0,
+        successes: 0,
+        settle_seconds_sum: 0,
+    };
+    assert_eq!(none.success_rate_bps(), 0);
+}
+
+#[test]
+fn reads_corridor_score_v2() {
+    let env = Env::default();
+    env.mock_all_auths();
+    let (contract_id, _) = setup(&env);
+    let reader = ReputationReader::new(&env, contract_id.clone());
+    let anchor = String::from_str(&env, "cowrie");
+    let corridor = String::from_str(&env, "usdc-ngn");
+
+    let client = MockReputationContractClient::new(&env, &contract_id);
+    client.set_corridor_score_v2(&anchor, &corridor, &(9_000, 9_700, 110, 42, 1_240));
+
+    let score = reader.corridor_score_v2(anchor, corridor);
+    assert_eq!(score.composite_bps, 9_000);
+    assert_eq!(score.fill_rate_bps, 9_700);
+    assert_eq!(score.slippage_bps, 110);
+    assert_eq!(score.settle_seconds_p50, 42);
+    assert_eq!(score.sample_size, 1_240);
+}
+
+#[test]
+fn unpublished_corridor_score_v2_is_all_zero() {
+    let env = Env::default();
+    env.mock_all_auths();
+    let (contract_id, _) = setup(&env);
+    let reader = ReputationReader::new(&env, contract_id);
+
+    let score = reader.corridor_score_v2(
+        String::from_str(&env, "nobody"),
+        String::from_str(&env, "usdc-ngn"),
+    );
+    assert_eq!(score.sample_size, 0);
+    assert_eq!(score.composite_bps, 0);
+}
+
+#[test]
+fn reads_probe_signals() {
+    let env = Env::default();
+    env.mock_all_auths();
+    let (contract_id, publisher) = setup(&env);
+    let reader = ReputationReader::new(&env, contract_id.clone());
+    let anchor = String::from_str(&env, "cowrie");
+
+    let client = MockReputationContractClient::new(&env, &contract_id);
+    client.publish_probe_signals(&publisher, &anchor, &9_800, &120, &450, &2);
+
+    let signals = reader.probe_signals(anchor).unwrap();
+    assert_eq!(signals.uptime_bps, 9_800);
+    assert_eq!(signals.p50_latency_ms, 120);
+    assert_eq!(signals.p95_latency_ms, 450);
+    assert_eq!(signals.drift_flag_count, 2);
+    assert_eq!(signals.publisher, publisher);
+    assert_eq!(signals.updated_at, env.ledger().timestamp());
+}
+
+#[test]
+fn unpublished_probe_signals_is_none() {
+    let env = Env::default();
+    env.mock_all_auths();
+    let (contract_id, _) = setup(&env);
+    let reader = ReputationReader::new(&env, contract_id);
+
+    assert_eq!(
+        reader.probe_signals(String::from_str(&env, "never-probed")),
+        None
+    );
+}
+
+#[test]
+fn a_probed_but_unreachable_anchor_is_some_with_zero_latency() {
+    let env = Env::default();
+    env.mock_all_auths();
+    let (contract_id, publisher) = setup(&env);
+    let reader = ReputationReader::new(&env, contract_id.clone());
+    let anchor = String::from_str(&env, "dark");
+
+    let client = MockReputationContractClient::new(&env, &contract_id);
+    client.publish_probe_signals(&publisher, &anchor, &0, &0, &0, &3);
+
+    let signals = reader.probe_signals(anchor).unwrap();
+    assert_eq!(signals.uptime_bps, 0);
+    assert_eq!((signals.p50_latency_ms, signals.p95_latency_ms), (0, 0));
+}
+
+// ─── Freshness-checked rate read (#1403) ──────────────────────────────────────
+
+fn publish_rate(env: &Env, contract_id: &Address, publisher: &Address, corridor: &String) {
+    let client = MockReputationContractClient::new(env, contract_id);
+    client.publish_corridor_rate(publisher, corridor, &16_500_000_000, &7);
+}
+
+#[test]
+fn fresh_rate_within_window() {
+    let env = Env::default();
+    env.mock_all_auths();
+    let (contract_id, publisher) = setup(&env);
+    let reader = ReputationReader::new(&env, contract_id.clone());
+    let corridor = String::from_str(&env, "usdc-ngn");
+    publish_rate(&env, &contract_id, &publisher, &corridor);
+
+    env.ledger().with_mut(|l| l.timestamp += 60);
+
+    let rate = reader.corridor_rate_fresh(corridor, 120).unwrap();
+    assert_eq!(rate.rate, 16_500_000_000);
+    assert_eq!(rate.decimals, 7);
+}
+
+#[test]
+fn stale_rate_is_none() {
+    let env = Env::default();
+    env.mock_all_auths();
+    let (contract_id, publisher) = setup(&env);
+    let reader = ReputationReader::new(&env, contract_id.clone());
+    let corridor = String::from_str(&env, "usdc-ngn");
+    publish_rate(&env, &contract_id, &publisher, &corridor);
+
+    env.ledger().with_mut(|l| l.timestamp += 121);
+
+    assert_eq!(reader.corridor_rate_fresh(corridor.clone(), 120), None);
+    // The plain read still returns it, which is the whole reason to prefer the fresh one.
+    assert!(reader.corridor_rate(corridor).is_some());
+}
+
+#[test]
+fn fresh_rate_unknown_corridor_is_none() {
+    let env = Env::default();
+    env.mock_all_auths();
+    let (contract_id, _) = setup(&env);
+    let reader = ReputationReader::new(&env, contract_id);
+
+    assert_eq!(
+        reader.corridor_rate_fresh(String::from_str(&env, "usdc-xyz"), u64::MAX),
+        None
+    );
+}
+
+#[test]
+fn a_rate_exactly_at_the_limit_is_still_fresh() {
+    let env = Env::default();
+    env.mock_all_auths();
+    let (contract_id, publisher) = setup(&env);
+    let reader = ReputationReader::new(&env, contract_id.clone());
+    let corridor = String::from_str(&env, "usdc-ngn");
+    publish_rate(&env, &contract_id, &publisher, &corridor);
+
+    env.ledger().with_mut(|l| l.timestamp += 120);
+
+    assert!(reader.corridor_rate_fresh(corridor, 120).is_some());
 }

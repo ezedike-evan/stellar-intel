@@ -4,7 +4,12 @@ import { withRequestLogger } from '@/lib/logger';
 import { STELLAR_PUBKEY_PATTERN } from '@/lib/patterns';
 import type { ApiError } from '@/types';
 import { checkRateLimit, clearRateLimitStore } from '@/lib/api/rate-limit';
+import { _setDisputeStore, getDisputeStore } from '@/lib/reputation/disputes';
 import { verifyIntentSignature } from '@/lib/intent/verify';
+import { enforceRateLimit } from '@/lib/api/response';
+import { checkDurableStore } from '@/lib/api/store-guard';
+import { getReputationStore } from '@/lib/reputation/store';
+import { ANCHORS } from '@/constants/anchors';
 
 const DisputeBodySchema = z.object({
   intentHash: z.string().regex(/^[0-9a-f]{64}$/, {
@@ -14,8 +19,15 @@ const DisputeBodySchema = z.object({
     message: 'publicKey must be a valid Stellar public key (G…, 56 chars)',
   }),
   signature: z.string().min(1, { message: 'signature is required' }),
-  anchorId: z.string().min(1, { message: 'anchorId is required' }),
-  reason: z.string().min(1, { message: 'reason is required' }),
+  anchorId: z
+    .string()
+    .min(1, { message: 'anchorId is required' })
+    .max(64)
+    .refine((id) => ANCHORS.some((a) => a.id === id), 'Unknown anchorId'),
+  reason: z
+    .string()
+    .min(1, { message: 'reason is required' })
+    .max(1000, { message: 'reason must be at most 1000 characters' }),
 });
 
 export type DisputeBody = z.infer<typeof DisputeBodySchema>;
@@ -29,10 +41,6 @@ export interface DisputeRecord {
   disputed: true;
   createdAt: string;
 }
-
-// ─── In-memory stores (replace with DB for production) ───────────────────────
-
-const disputes = new Map<string, DisputeRecord>();
 
 const DISPUTE_WINDOW_MS = 86_400_000; // 24 hours
 const DISPUTE_MAX = 10;
@@ -55,7 +63,7 @@ async function checkDisputeRateLimit(publicKey: string): Promise<boolean> {
 }
 
 export function clearDisputeStores(): void {
-  disputes.clear();
+  _setDisputeStore(null);
   clearRateLimitStore();
 }
 
@@ -63,6 +71,14 @@ export function clearDisputeStores(): void {
 
 export async function POST(request: NextRequest): Promise<NextResponse> {
   return withRequestLogger(request, 'api.reputation.dispute', async (logger) => {
+    // The per-signer quota below is free to dodge with freshly generated keys, so
+    // there is also a per-IP limit, checked before anything is parsed.
+    const limited = await enforceRateLimit(request, {
+      bucket: 'api.reputation.dispute.ip',
+      maxRequests: 10,
+    });
+    if (limited) return limited;
+
     let body: unknown;
     try {
       body = await request.json();
@@ -101,6 +117,30 @@ export async function POST(request: NextRequest): Promise<NextResponse> {
       );
     }
 
+    // Only the account that attested the outcome may dispute it. Without this,
+    // anyone could dispute any intent hash by signing it with a key of their own.
+    const unavailable = checkDurableStore();
+    if (unavailable) return unavailable;
+
+    const [outcome] = await getReputationStore().query({ intentHash, includeUnattested: true });
+    if (!outcome) {
+      logger.warn({ event: 'dispute_unknown_outcome', intentHash });
+      return NextResponse.json<ApiError>(
+        { code: 'NOT_FOUND', message: 'No outcome recorded for this intentHash' },
+        { status: 404 }
+      );
+    }
+    if (outcome.signerAccount !== publicKey) {
+      logger.warn({ event: 'dispute_signer_mismatch', publicKey, intentHash });
+      return NextResponse.json<ApiError>(
+        {
+          code: 'FORBIDDEN',
+          message: 'Only the account that attested the outcome can dispute it',
+        },
+        { status: 403 }
+      );
+    }
+
     if (!(await checkDisputeRateLimit(publicKey))) {
       logger.warn({ event: 'rate_limited', publicKey });
       return NextResponse.json<ApiError>(
@@ -118,7 +158,16 @@ export async function POST(request: NextRequest): Promise<NextResponse> {
       disputed: true,
       createdAt: new Date().toISOString(),
     };
-    disputes.set(record.id, record);
+    await getDisputeStore().create({
+      id: record.id,
+      intentHash,
+      publicKey,
+      anchorId,
+      reason,
+      status: 'open',
+      createdAt: record.createdAt,
+      resolvedAt: null,
+    });
 
     logger.info({ event: 'dispute_created', disputeId: record.id });
     return NextResponse.json(record, { status: 201 });

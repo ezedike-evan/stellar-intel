@@ -57,6 +57,73 @@ export interface OfframpIntentResponse {
   quoteId: string;
 }
 
+export type OnrampFundingType = 'bank_account' | 'cash' | 'mobile_money';
+
+export interface OnrampQuoteRate {
+  anchorId: string;
+  anchorName: string;
+  corridorId: string;
+  /** SEP-38 identifier of the credited asset. */
+  asset: string;
+  fiatAmount: number;
+  fee: number | null;
+  feeType: 'flat' | 'percent' | 'combined';
+  exchangeRate: number | null;
+  totalReceived: number | null;
+  /** Asset units the fiat buys before fees; the figure minAmount/maxAmount apply to. */
+  assetAmount?: number;
+  minAmount?: number;
+  maxAmount?: number;
+  source: 'sep38' | 'sep24-fee' | 'unavailable';
+  /** ISO 8601. */
+  updatedAt: string;
+}
+
+/** Indicative deposit estimates per anchor. Never a firm quote. */
+export interface OnrampQuote {
+  corridorId: string;
+  direction: 'deposit';
+  rates: OnrampQuoteRate[];
+  bestRateId: string;
+  errors: { anchorId: string; anchorName: string; reason: string }[];
+  indicative: true;
+  disclaimer: string;
+}
+
+export interface OnrampIntentRequest {
+  type: 'onramp';
+  /** Fiat currency paid in, e.g. NGN. */
+  sourceAsset: string;
+  /** Stellar asset bought, e.g. USDC. */
+  destinationAsset: string;
+  amount: string;
+  /** Payer reference on the fiat rail (not a Stellar account). */
+  sender: string;
+  /** Stellar public key credited when the deposit completes. */
+  destination: string;
+  depositMethod: 'bank_transfer' | 'cash' | 'mobile_money' | 'card';
+  memo?: string;
+  memoType?: 'text' | 'id' | 'hash';
+}
+
+export interface OnrampIntentResponse {
+  route: {
+    anchorId: string;
+    anchorDomain: string;
+    corridorId: string;
+    asset: string;
+    estimatedFee: string;
+    estimatedReceived: string;
+    indicative: true;
+  };
+  /** Hex-encoded SHA-256 of the canonical intent. */
+  intentHash: string;
+  /** Relative path into /onramp, where the interactive deposit runs in a browser. */
+  handoffUrl: string;
+  /** Base64 changeTrust transaction to sign, or null when a trustline already exists. */
+  unsignedChangeTrustXdr: string | null;
+}
+
 export interface AnchorHealth {
   anchorId: string;
   status: 'ok' | 'fail' | 'unknown' | 'stale';
@@ -65,6 +132,60 @@ export interface AnchorHealth {
   lastCheckedAt: string | null;
   lastError: string | null;
   stale: boolean;
+}
+
+/** One recorded SEP-38 indicative price. Amounts are decimal strings. */
+export interface AnchorPricePoint {
+  observedAt: string;
+  price: string;
+  totalPrice: string;
+  source: string;
+}
+
+/**
+ * How far an anchor's landed rate drifts from the rate it showed, over completed
+ * withdrawals. Gaps are percentages and signed: negative means users received less
+ * than quoted. Every statistic is null when `sampleCount` is 0.
+ */
+export interface AnchorQuoteGap {
+  anchorId: string;
+  /** How the two rates are defined. */
+  basis: string;
+  sampleCount: number;
+  meanGapPct: number | null;
+  p50GapPct: number | null;
+  /** 95% of transactions landed within this absolute gap. */
+  p95AbsGapPct: number | null;
+  worseCount: number;
+  betterCount: number;
+  windowDays: 7 | 30 | 90;
+}
+
+/** Whether one anchor is ready to give firm (SEP-38) quotes. */
+export interface Sep38Readiness {
+  anchorId: string;
+  /** The operator declares SEP-38 support. */
+  declared: boolean;
+  /** `ANCHOR_QUOTE_SERVER` from the anchor's stellar.toml, or null. */
+  quoteServer: string | null;
+  infoReachable: boolean;
+  /** SEP-38 asset identifiers the quote server lists. */
+  assets: string[];
+  sellsRegisteredAsset: boolean;
+  error: string | null;
+  checkedAt: string;
+}
+
+export interface Sep38ReadinessResponse {
+  anchors: Sep38Readiness[];
+  generatedAt: string;
+}
+
+export interface AnchorPriceHistory {
+  anchorId: string;
+  corridor: string;
+  /** Oldest first, at most 500 points. */
+  points: AnchorPricePoint[];
 }
 
 export interface CorridorVolumeSavings {
@@ -148,8 +269,13 @@ export interface AnchorCensusResponse {
 export const OPERATIONS = {
   getRates: 'GET /api/rates/{corridor}',
   submitOfframpIntent: 'POST /api/v1/intent/offramp',
+  submitOnrampIntent: 'POST /api/v1/intent/onramp',
+  getOnrampQuote: 'GET /api/v1/onramp/quote',
   getAnchorHealth: 'GET /api/v1/anchors/{id}/health',
   getAnchorHealthLedger: 'GET /api/v1/anchor-health/ledger',
+  getAnchorPriceHistory: 'GET /api/v1/anchors/{id}/price-history',
+  getAnchorQuoteGap: 'GET /api/v1/anchors/{id}/quote-gap',
+  getSep38Readiness: 'GET /api/v1/sep38/readiness',
   getAnchorCensus: 'GET /api/v1/anchors/census',
   getCorridorVolumeSavings: 'GET /api/v1/corridors/{corridor}/volume-savings',
   getHealth: 'GET /api/v1/health',

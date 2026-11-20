@@ -10,6 +10,7 @@ const FOOTER_COLUMNS = [
     links: [
       { href: '/', label: 'Home' },
       { href: '/offramp', label: 'Off-ramp' },
+      { href: '/onramp', label: 'On-ramp' },
       { href: '/anchors', label: 'Anchors' },
     ],
   },

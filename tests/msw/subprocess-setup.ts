@@ -21,6 +21,22 @@ ANCHOR_QUOTE_SERVER="https://cowrie.exchange/sep38"
     // For other anchors (e.g. moneygram), return empty to bail out quickly
     return HttpResponse.text('');
   }),
+  // Horizon account lookup: prepare builds from the sender's real sequence number.
+  http.get(/\/accounts\/G[A-Z0-9]{55}$/, ({ request }) => {
+    logReq(`Horizon account ${request.url}`);
+    const id = new URL(request.url).pathname.split('/').pop() ?? '';
+    return HttpResponse.json({
+      id,
+      account_id: id,
+      sequence: '100',
+      subentry_count: 0,
+      thresholds: { low_threshold: 0, med_threshold: 0, high_threshold: 0 },
+      flags: {},
+      balances: [],
+      signers: [],
+      data: {},
+    });
+  }),
   // FX reference rate
   http.get('https://open.er-api.com/v6/latest/USD', () => {
     logReq('FX open.er-api.com');

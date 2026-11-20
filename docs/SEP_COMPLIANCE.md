@@ -1,6 +1,6 @@
 # SEP Compliance Matrix
 
-**Last reviewed:** 2026-09-26
+**Last reviewed:** 2026-10-24
 
 Stellar Intel integrates with Stellar anchors that implement various Stellar Ecosystem Proposals (SEPs). SEP-6 enables programmatic deposit/withdraw — the anchor exposes a machine-readable API rather than hosting an iframe — allowing Stellar Intel to collect KYC fields natively and surface indicative rates for SEP-6-only anchors. Anchors that advertise SEP-6 but not SEP-24 receive an **Indicative** badge in the comparison UI, since their rates are derived from the SEP-6 `/info` fee schedule rather than a live quote.
 
@@ -59,6 +59,29 @@ Registered anchors ([`constants/anchors.ts`](../constants/anchors.ts)). Capabili
 > SEP-6 and SEP-24 call to it fails to connect. The TOML itself still returns 200, which is why a
 > capability read that stops at the TOML kept scoring it as supported. EUR has no anchor now and
 > the `usdc-eur` corridor is hidden from selectors until one serves it.
+
+### SEP-38 quote gap
+
+The SEP-38 column records whether an anchor advertises a quote server, not whether it can serve a
+firm quote for a given corridor. A corridor is only firm-quoted when the quote server's `/info`
+lists both the asset and the fiat pair; otherwise the corridor falls back to indicative pricing
+(Tier 2 or Tier 3 above). Today no registered anchor serves a firm quote for NGN, so the USDC→NGN
+flow is indicative pricing plus SEP-24 execution and is labelled as such in the UI.
+
+### Min-receive guard
+
+Before the wallet is asked to sign a SEP-24 withdrawal, Stellar Intel compares the anchor's own
+`amount_out` estimate with the minimum-receive floor: the selected rate's expected net amount less
+`MIN_RECEIVE_TOLERANCE` (2%). If the anchor now estimates less than the floor, the payment is
+blocked and the user sees both figures. If the anchor gives no estimate, the flow continues.
+
+### SEP-38 readiness
+
+An anchor is SEP-38 ready when its `stellar.toml` publishes `ANCHOR_QUOTE_SERVER` and the quote
+server's `/info` lists the asset and fiat pair of the corridor. Readiness decides whether a
+corridor can show a **firm** quote or only an **indicative** estimate (fees plus a reference
+price). The per-anchor result is the SEP-38 column in the matrix above and the one-line summary
+below; there is no separate readiness page or endpoint yet.
 
 ### SEP-38 availability, in one line
 

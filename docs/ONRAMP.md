@@ -14,6 +14,10 @@ prepares the pieces the user signs, and tracks the anchor's own SEP flow.
 > endpoints and the `intel.onramp.*` MCP tools are **planned and not live
 > yet** — the planned contract is recorded here so the implementation has a
 > target. The in-app guide at `/docs/onramp` carries the same status.
+> shipped, and the `intel.onramp.quote` and `intel.onramp.prepare` MCP tools
+> are live on the hosted `/api/mcp` endpoint. The `GET /api/v1/onramp/quote`
+> and `POST /api/v1/intent/onramp` endpoints are **planned and not live yet** —
+> the planned contract is recorded here so the implementation has a target. The in-app guide at `/docs/onramp` carries the same status.
 
 | Piece                                                                                                                               | State               |
 | ----------------------------------------------------------------------------------------------------------------------------------- | ------------------- |
@@ -24,6 +28,7 @@ prepares the pieces the user signs, and tracks the anchor's own SEP flow.
 | `GET /api/v1/onramp/quote`                                                                                                          | **Planned**         |
 | `POST /api/v1/intent/onramp`                                                                                                        | **Planned**         |
 | MCP `intel.onramp.quote`, `intel.onramp.prepare`                                                                                    | **Planned**         |
+| MCP `intel.onramp.quote`, `intel.onramp.prepare` ([`lib/mcp/onramp.ts`](../lib/mcp/onramp.ts))                                      | Shipped             |
 
 ## Flow
 

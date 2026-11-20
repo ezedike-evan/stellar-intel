@@ -10,7 +10,8 @@ and served over stdio (the default) or streamable HTTP.
 ## Status
 
 `createServer()` (`src/server.ts`) stands up the MCP server and registers
-eight tools, all backed directly by
+ten tools (the off-ramp and discovery tools plus `intel.onramp.quote` and
+`intel.onramp.prepare`), backed directly by
 [`lib/mcp/offramp.ts`](https://github.com/ezedike-evan/stellar-intel/blob/main/lib/mcp/offramp.ts)
 in the main app (imported at build time — see below), so this package and the
 in-repo dev server at
@@ -82,6 +83,19 @@ built. See
   ledger's `version` (`YYYY-MM-DD`, from its own `updatedAt`) alongside it: two
   reads returning the same version returned the same ledger.
 
+### HTTP transport safeguards
+
+The streamable HTTP transport binds to `127.0.0.1` by default and protects
+itself against a web page reaching it from the browser:
+
+- **DNS rebinding** — the `Host` header must be the address the server is
+  listening on (`<host>:<port>`, `localhost:<port>` or `127.0.0.1:<port>`), and
+  a request carrying an `Origin` header is refused with `403` unless that origin
+  was passed in `allowedOrigins`. Clients that are not browsers send no
+  `Origin` and are unaffected.
+- **Body size** — a request body over 1 MiB is answered `413`.
+- **Sessions** — at most 100 at once; an `initialize` beyond that gets `503`.
+
 ### Rate limiting
 
 Every tool call is counted against a per-client bucket before the handler runs,
@@ -149,7 +163,7 @@ https://stellar-intel.vercel.app/api/mcp
 }
 ```
 
-It serves the same eight tools, prompts and resources as this package — the
+It serves the same tools, prompts and resources as this package — the
 server is built from one shared implementation in `lib/mcp`. See
 [`docs/MCP.md`](https://github.com/ezedike-evan/stellar-intel/blob/main/docs/MCP.md#hosted-endpoint-nothing-to-install)
 for the tool list.

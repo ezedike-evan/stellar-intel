@@ -1,11 +1,10 @@
 /**
- * Fixtures for the SEP-6 GET /deposit request/response contract (#1093).
+ * Fixtures for the SEP-6 GET /deposit request/response contract.
  *
- * `buildSep6DepositRequest` does not exist in lib/stellar/sep6.ts yet — this
- * is the programmatic counterpart to `buildSep6WithdrawRequest`
- * (lib/stellar/sep6.ts), mirroring the SEP-6 spec's withdraw/deposit symmetry:
- * same three response shapes, `account` in place of `dest` as the required
- * destination parameter.
+ * `buildSep6DepositRequest` (lib/stellar/sep6.ts) is the programmatic
+ * counterpart to `buildSep6WithdrawRequest`, mirroring the SEP-6 spec's
+ * withdraw/deposit symmetry: same three response shapes, `account` in place of
+ * `dest` as the required destination parameter.
  *
  * The response shapes mirror the schemas actually enforced at the network
  * boundary in lib/stellar/sep6-schemas.ts (Sep6WithdrawInteractiveSchema,

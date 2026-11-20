@@ -6,19 +6,25 @@
  *   MAINNET_DEPLOYER_KEY - secret key for the funded mainnet deployer account
  *
  * Optional env:
- *   MAINNET_RPC_URL      - Soroban RPC endpoint
- *                          (default: https://mainnet.sorobanrpc.com)
- *   ORACLE_WASM_PATH     - path to the compiled reputation contract WASM
- *   ORACLE_WASM_HASH     - hex hash returned by a prior upload transaction
- *   ORACLE_DEPLOY_SALT   - 32-byte hex salt for deterministic deploys
+ *   MAINNET_RPC_URL        - Soroban RPC endpoint
+ *                            (default: https://mainnet.sorobanrpc.com)
+ *   ORACLE_WASM_PATH       - path to the compiled reputation contract WASM
+ *   ORACLE_WASM_HASH       - hex hash returned by a prior upload transaction
+ *   ORACLE_DEPLOY_SALT     - 32-byte hex salt for deterministic deploys
+ *   ORACLE_ADMIN           - operational admin (G...), bound by __constructor
+ *   ORACLE_UPGRADE_ADMIN   - upgrade admin (G...), bound by __constructor
+ *
+ * deploy-contract mode needs both admins, as flags or env, and they must be
+ * different accounts: the contract's __constructor(admin, upgrade_admin) binds
+ * them at deploy, and an instance deployed without them has neither authority.
  *
  * Examples:
  *   tsx --tsconfig tsconfig.scripts.json scripts/deploy-oracle-mainnet.ts --mode upload-wasm --dry-run
  *   tsx --tsconfig tsconfig.scripts.json scripts/deploy-oracle-mainnet.ts --mode upload-wasm --live
- *   tsx --tsconfig tsconfig.scripts.json scripts/deploy-oracle-mainnet.ts --mode deploy-contract --wasm-hash <64 hex> --live
+ *   tsx --tsconfig tsconfig.scripts.json scripts/deploy-oracle-mainnet.ts --mode deploy-contract --wasm-hash <64 hex> --admin <G...> --upgrade-admin <G...> --live
  */
 
-import { createHash, randomBytes } from 'node:crypto';
+import { createHash } from 'node:crypto';
 import { existsSync } from 'node:fs';
 import { readFile } from 'node:fs/promises';
 import path from 'node:path';
@@ -26,7 +32,6 @@ import readline from 'node:readline/promises';
 import { stdin as input, stdout as output } from 'node:process';
 
 import {
-  Address,
   BASE_FEE,
   Keypair,
   Networks,
@@ -37,119 +42,23 @@ import {
   type Transaction,
 } from '@stellar/stellar-sdk';
 
+import {
+  USAGE,
+  buildDeployOperation,
+  parseArgs,
+  readHash,
+  readSalt,
+  type CliArgs,
+  type Mode,
+} from './lib/oracle-deploy';
+
 const DEFAULT_RPC_URL = 'https://mainnet.sorobanrpc.com';
-const DEFAULT_WASM_PATH = path.join(
-  'contracts',
-  'reputation',
-  'target',
-  'wasm32-unknown-unknown',
-  'release',
-  'reputation.wasm'
-);
 const TX_TIMEOUT_SECONDS = 300;
 const POLL_ATTEMPTS = 30;
 const POLL_INTERVAL_MS = 2000;
 
-type Mode = 'upload-wasm' | 'deploy-contract';
-
-type CliArgs = {
-  dryRun: boolean;
-  live: boolean;
-  mode: Mode | null;
-  wasmHash: string | null;
-  wasmPath: string;
-  salt: string | null;
-};
-
-function parseArgs(argv: string[]): CliArgs {
-  const args: CliArgs = {
-    dryRun: false,
-    live: false,
-    mode: null,
-    wasmHash: process.env['ORACLE_WASM_HASH'] ?? null,
-    wasmPath: process.env['ORACLE_WASM_PATH'] ?? DEFAULT_WASM_PATH,
-    salt: process.env['ORACLE_DEPLOY_SALT'] ?? null,
-  };
-
-  for (let index = 0; index < argv.length; index += 1) {
-    const arg = argv[index];
-    if (arg === '--help' || arg === '-h') {
-      printUsage();
-      process.exit(0);
-    }
-    if (arg === '--dry-run') {
-      args.dryRun = true;
-      continue;
-    }
-    if (arg === '--live') {
-      args.live = true;
-      continue;
-    }
-    if (arg === '--mode') {
-      args.mode = parseMode(readRequiredValue(argv, index, arg));
-      index += 1;
-      continue;
-    }
-    if (arg === '--wasm-hash') {
-      args.wasmHash = readRequiredValue(argv, index, arg);
-      index += 1;
-      continue;
-    }
-    if (arg === '--wasm-path') {
-      args.wasmPath = readRequiredValue(argv, index, arg);
-      index += 1;
-      continue;
-    }
-    if (arg === '--salt') {
-      args.salt = readRequiredValue(argv, index, arg);
-      index += 1;
-      continue;
-    }
-    throw new Error(`Unknown argument: ${arg}`);
-  }
-
-  if (args.live && args.dryRun) {
-    throw new Error('Choose either --dry-run or --live, not both.');
-  }
-
-  if (!args.live) {
-    args.dryRun = true;
-  }
-
-  if (!args.mode) {
-    throw new Error('Missing --mode. Use "upload-wasm" or "deploy-contract".');
-  }
-
-  return args;
-}
-
-function parseMode(value: string): Mode {
-  if (value === 'upload-wasm' || value === 'deploy-contract') return value;
-  throw new Error(`Invalid --mode "${value}". Use "upload-wasm" or "deploy-contract".`);
-}
-
-function readRequiredValue(argv: string[], index: number, flag: string): string {
-  const value = argv[index + 1];
-  if (!value || value.startsWith('--')) {
-    throw new Error(`${flag} requires a value.`);
-  }
-  return value;
-}
-
 function printUsage(): void {
-  console.log(`Usage:
-  tsx --tsconfig tsconfig.scripts.json scripts/deploy-oracle-mainnet.ts --mode upload-wasm [--dry-run|--live]
-  tsx --tsconfig tsconfig.scripts.json scripts/deploy-oracle-mainnet.ts --mode deploy-contract --wasm-hash <64 hex> [--dry-run|--live]
-
-Options:
-  --mode upload-wasm       Build a Soroban WASM upload transaction.
-  --mode deploy-contract   Build a contract creation transaction from an uploaded WASM hash.
-  --dry-run                Print the prepared transaction XDR and exit. This is the default.
-  --live                   Require interactive "yes", then sign and submit.
-  --wasm-path <path>       Contract WASM path for upload mode.
-  --wasm-hash <64 hex>     Uploaded WASM hash for deploy mode.
-  --salt <64 hex>          Deterministic 32-byte deploy salt. Random when omitted.
-`);
+  console.log(USAGE);
 }
 
 function requireMainnetDeployer(): Keypair {
@@ -168,26 +77,6 @@ async function loadWasm(wasmPath: string): Promise<Buffer> {
     );
   }
   return readFile(resolvedPath);
-}
-
-function readHash(value: string | null): Buffer {
-  if (!value) {
-    throw new Error('deploy-contract mode requires --wasm-hash or ORACLE_WASM_HASH.');
-  }
-  if (!/^[0-9a-fA-F]{64}$/.test(value)) {
-    throw new Error('WASM hash must be a 64-character hex string.');
-  }
-  return Buffer.from(value, 'hex');
-}
-
-function readSalt(value: string | null): Buffer {
-  if (value === null) {
-    return randomBytes(32);
-  }
-  if (!/^[0-9a-fA-F]{64}$/.test(value)) {
-    throw new Error('Deploy salt must be a 64-character hex string.');
-  }
-  return Buffer.from(value, 'hex');
 }
 
 async function buildPreparedTransaction(
@@ -212,10 +101,13 @@ async function buildPreparedTransaction(
   } else {
     const salt = readSalt(args.salt);
     saltHex = salt.toString('hex');
-    operation = Operation.createCustomContract({
-      address: Address.fromString(deployer.publicKey()),
+    operation = buildDeployOperation({
+      deployer: deployer.publicKey(),
       wasmHash: readHash(args.wasmHash),
       salt,
+      // parseArgs guarantees both in deploy-contract mode.
+      admin: args.admin!,
+      upgradeAdmin: args.upgradeAdmin!,
     });
   }
 
@@ -241,6 +133,8 @@ function printPreparedTransaction(details: {
   dryRun: boolean;
   wasmSha256: string | null;
   saltHex: string | null;
+  admin: string | null;
+  upgradeAdmin: string | null;
 }): void {
   console.log(`Network:  mainnet`);
   console.log(`RPC:      ${details.rpcUrl}`);
@@ -249,6 +143,8 @@ function printPreparedTransaction(details: {
   console.log(`Fee:      ${details.tx.fee} stroops`);
   if (details.wasmSha256) console.log(`WASM SHA-256: ${details.wasmSha256}`);
   if (details.saltHex) console.log(`Deploy salt: ${details.saltHex}`);
+  if (details.admin) console.log(`Admin:         ${details.admin}`);
+  if (details.upgradeAdmin) console.log(`Upgrade admin: ${details.upgradeAdmin}`);
   console.log(`Dry-run:  ${details.dryRun ? 'yes' : 'no'}`);
   console.log('\nPrepared transaction XDR:');
   console.log(details.tx.toEnvelope().toXDR('base64').toString());
@@ -301,6 +197,10 @@ function sleep(ms: number): Promise<void> {
 
 async function main(): Promise<void> {
   const args = parseArgs(process.argv.slice(2));
+  if (args.help) {
+    printUsage();
+    return;
+  }
   const deployer = requireMainnetDeployer();
   const rpcUrl = process.env['MAINNET_RPC_URL'] ?? DEFAULT_RPC_URL;
   const server = new rpc.Server(rpcUrl);
@@ -314,6 +214,8 @@ async function main(): Promise<void> {
     dryRun: args.dryRun,
     wasmSha256,
     saltHex,
+    admin: args.mode === 'deploy-contract' ? args.admin : null,
+    upgradeAdmin: args.mode === 'deploy-contract' ? args.upgradeAdmin : null,
   });
 
   if (args.dryRun) {

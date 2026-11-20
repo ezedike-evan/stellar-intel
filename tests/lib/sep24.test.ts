@@ -213,6 +213,67 @@ describe('getWithdrawTransactionRecord', () => {
     expect(result.memoType).toBe('text');
   });
 
+  it('returns the anchor amount estimate fields when the record carries them', async () => {
+    vi.stubGlobal(
+      'fetch',
+      vi.fn(async () => ({
+        ok: true,
+        json: async () => ({
+          transaction: {
+            withdraw_anchor_account: 'GANCHOR',
+            memo: 'abc123',
+            memo_type: 'text',
+            amount_in: '100.0000000',
+            amount_out: '151743.20',
+            amount_out_asset: 'iso4217:NGN',
+            amount_fee: '1.5',
+          },
+        }),
+      }))
+    );
+
+    const result = await getWithdrawTransactionRecord(TRANSFER_SERVER, 'txn-1', 'jwt');
+    expect(result).toMatchObject({
+      amountIn: '100.0000000',
+      amountOut: '151743.20',
+      amountOutAsset: 'iso4217:NGN',
+      amountFee: '1.5',
+    });
+  });
+
+  it('falls back to fee_details.total when amount_fee is absent', async () => {
+    vi.stubGlobal(
+      'fetch',
+      vi.fn(async () => ({
+        ok: true,
+        json: async () => ({
+          transaction: {
+            withdraw_anchor_account: 'GANCHOR',
+            fee_details: { total: '2.25' },
+          },
+        }),
+      }))
+    );
+
+    const result = await getWithdrawTransactionRecord(TRANSFER_SERVER, 'txn-1', 'jwt');
+    expect(result.amountFee).toBe('2.25');
+  });
+
+  it('omits the amount fields when the record has none', async () => {
+    vi.stubGlobal(
+      'fetch',
+      vi.fn(async () => ({
+        ok: true,
+        json: async () => ({
+          transaction: { withdraw_anchor_account: 'GANCHOR', memo: 'abc123' },
+        }),
+      }))
+    );
+
+    const result = await getWithdrawTransactionRecord(TRANSFER_SERVER, 'txn-1', 'jwt');
+    expect(result).toEqual({ withdrawAnchorAccount: 'GANCHOR', memo: 'abc123', memoType: 'text' });
+  });
+
   it('throws when withdraw_anchor_account is absent', async () => {
     vi.stubGlobal(
       'fetch',

@@ -45,6 +45,27 @@ export function readIdempotencyKey(headers: Headers): string | null {
   return key && key.trim() ? key.trim() : null;
 }
 
+async function sha256Hex(input: string): Promise<string> {
+  const digest = await globalThis.crypto.subtle.digest('SHA-256', new TextEncoder().encode(input));
+  return Array.from(new Uint8Array(digest), (byte) => byte.toString(16).padStart(2, '0')).join('');
+}
+
+/**
+ * The store key for a client's `Idempotency-Key`, bound to the route (`scope`)
+ * and to the request body. A bare client key is a global string: reusing or
+ * guessing someone else's would replay their response, and the internal and v1
+ * routes would share one namespace. Scoping means the same key with a different
+ * body, or sent to a different route, misses the cache and executes normally.
+ */
+export async function scopedIdempotencyKey(
+  scope: string,
+  clientKey: string,
+  rawBody: string
+): Promise<string> {
+  const [keyHash, bodyHash] = await Promise.all([sha256Hex(clientKey), sha256Hex(rawBody)]);
+  return `${scope}:${keyHash}:${bodyHash}`;
+}
+
 export async function getIdempotentResponse(key: string): Promise<StoredIdempotentResponse | null> {
   const now = Date.now();
 

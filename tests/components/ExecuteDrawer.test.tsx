@@ -9,8 +9,10 @@ import { acceptTerms, clearAcceptance } from '@/lib/consent';
 // loaded runner that transform alone can exceed testing-library's default 1000 ms
 // `waitFor` limit, which made tests here fail intermittently (about 1 run in 8
 // locally) with "expected vi.fn() to be called" or "Unable to find an element".
-// The default test timeout is 15 s, so there is plenty of headroom.
-configure({ asyncUtilTimeout: 5000 });
+// 5 s was not enough on a busy CI runner either (a run failed at 5053 ms on node
+// 22 while node 20 passed), so this is 12 s: still under the 15 s test timeout, so
+// a real failure is reported by `waitFor`, not by the test timing out.
+configure({ asyncUtilTimeout: 12_000 });
 
 // ─── Module mocks ─────────────────────────────────────────────────────────────
 
@@ -27,7 +29,6 @@ vi.mock('@/lib/stellar/sep24', async () => {
   return {
     ...actual,
     initiateWithdraw: vi.fn(),
-    openWithdrawPopup: vi.fn(),
     getWithdrawTransactionRecord: vi.fn(),
   };
 });
@@ -94,10 +95,10 @@ import * as sep38 from '@/lib/stellar/sep38';
 import * as sep1 from '@/lib/stellar/sep1';
 import * as anchors from '@/lib/stellar/anchors';
 import * as horizon from '@/lib/stellar/horizon';
+import * as analytics from '@/lib/analytics';
 
 const mockAuthenticate = vi.mocked(sep10.authenticate);
 const mockInitiateWithdraw = vi.mocked(sep24.initiateWithdraw);
-const mockOpenWithdrawPopup = vi.mocked(sep24.openWithdrawPopup);
 const mockGetWithdrawTransactionRecord = vi.mocked(sep24.getWithdrawTransactionRecord);
 const mockPostSep38Quote = vi.mocked(sep38.postSep38Quote);
 const _mockGetTransferServer = vi.mocked(sep1.getTransferServer);
@@ -105,6 +106,7 @@ const mockGetAnchorById = vi.mocked(anchors.getAnchorById);
 const mockGetResolvedAnchorById = vi.mocked(anchors.getResolvedAnchorById);
 const mockBuildWithdrawPayment = vi.mocked(horizon.buildWithdrawPayment);
 const mockSignAndSubmitPayment = vi.mocked(horizon.signAndSubmitPayment);
+const mockTrackFunnelEvent = vi.spyOn(analytics, 'trackFunnelEvent');
 
 // ─── Fixtures ─────────────────────────────────────────────────────────────────
 
@@ -195,7 +197,6 @@ beforeEach(() => {
     url: 'https://anchor.example/kyc',
     id: 'txn-abc-123',
   });
-  mockOpenWithdrawPopup.mockResolvedValue('txn-abc-123');
   mockGetWithdrawTransactionRecord.mockResolvedValue({
     withdrawAnchorAccount: 'GANCHOR123',
     memo: 'TEST_MEMO',
@@ -616,6 +617,8 @@ describe('ExecuteDrawer', () => {
 
       fireEvent.click(screen.getByText('Start Off-ramp'));
 
+      fireEvent.click(screen.getByText('Start Off-ramp'));
+
       await waitFor(() => expect(screen.getByTestId('kyc-iframe-mock')).toBeInTheDocument());
 
       // Let the quote's expiry timer fire before the (human-driven) KYC step completes.
@@ -642,6 +645,198 @@ describe('ExecuteDrawer', () => {
     } finally {
       vi.useRealTimers();
     }
+  });
+
+  it('stops with error copy and does not sign when estimate is below the minReceive floor', async () => {
+    mockGetWithdrawTransactionRecord.mockResolvedValue({
+      withdrawAnchorAccount: 'GANCHOR123',
+      memo: 'TEST_MEMO',
+      memoType: 'text',
+      amountOut: '150000',
+    });
+
+    render(
+      <ExecuteDrawer
+        rate={RATE}
+        amount="100"
+        publicKey={PUBLIC_KEY}
+        minReceive="151743.20"
+        onClose={vi.fn()}
+        onExecuteStarted={vi.fn()}
+      />
+    );
+
+      await waitFor(() => expect(screen.getByTestId('kyc-iframe-mock')).toBeInTheDocument());
+
+      // Let the quote's expiry timer fire before the (human-driven) KYC step completes.
+      await act(async () => {
+        await vi.advanceTimersByTimeAsync(61_000);
+      });
+
+      act(() => {
+        window.dispatchEvent(
+          new MessageEvent('message', {
+            data: { type: 'stellar_transaction_created', transaction_id: 'txn-123' },
+            origin: 'https://anchor.example',
+          })
+        );
+      });
+
+      await waitFor(() =>
+        expect(
+          screen.getByText(/Your firm quote expired before the transaction/)
+        ).toBeInTheDocument()
+      );
+      expect(mockBuildWithdrawPayment).not.toHaveBeenCalled();
+      expect(screen.getByRole('button', { name: 'Retry' })).toBeInTheDocument();
+    } finally {
+      vi.useRealTimers();
+    }
+    act(() => {
+      window.dispatchEvent(
+        new MessageEvent('message', {
+          data: { type: 'stellar_transaction_created', transaction_id: 'txn-123' },
+          origin: 'https://anchor.example',
+        })
+      );
+    });
+
+    await waitFor(() =>
+      expect(
+        screen.getByText(
+          "Cowrie now estimates you'll receive 150000 NGN, below your minimum of 151743.20 NGN. Nothing has been sent. Choose another anchor or try again later."
+        )
+      ).toBeInTheDocument()
+    );
+
+    expect(mockSignAndSubmitPayment).not.toHaveBeenCalled();
+    expect(mockTrackFunnelEvent).toHaveBeenCalledWith('execution_failed', {
+      error_class: 'below_min_receive',
+    });
+    expect(screen.queryByRole('button', { name: 'Try Again' })).not.toBeInTheDocument();
+    expect(screen.getAllByRole('button', { name: 'Close' }).length).toBeGreaterThan(0);
+  });
+
+  it('proceeds to sign and submit payment when estimate meets the minReceive floor', async () => {
+    mockGetWithdrawTransactionRecord.mockResolvedValue({
+      withdrawAnchorAccount: 'GANCHOR123',
+      memo: 'TEST_MEMO',
+      memoType: 'text',
+      amountOut: '155000',
+    });
+
+    render(
+      <ExecuteDrawer
+        rate={RATE}
+        amount="100"
+        publicKey={PUBLIC_KEY}
+        minReceive="151743.20"
+        onClose={vi.fn()}
+        onExecuteStarted={vi.fn()}
+      />
+    );
+
+    fireEvent.click(screen.getByText('Start Off-ramp'));
+
+    await waitFor(() => expect(screen.getByTestId('kyc-iframe-mock')).toBeInTheDocument());
+
+    act(() => {
+      window.dispatchEvent(
+        new MessageEvent('message', {
+          data: { type: 'stellar_transaction_created', transaction_id: 'txn-123' },
+          origin: 'https://anchor.example',
+        })
+      );
+    });
+
+    await waitFor(() => expect(screen.getByText('Transaction submitted')).toBeInTheDocument());
+
+    expect(mockBuildWithdrawPayment).toHaveBeenCalled();
+    expect(mockSignAndSubmitPayment).toHaveBeenCalled();
+    expect(screen.queryByText(/below your minimum of/)).not.toBeInTheDocument();
+  });
+
+  it('proceeds to sign and displays the note when anchor does not provide an estimate', async () => {
+    mockGetWithdrawTransactionRecord.mockResolvedValue({
+      withdrawAnchorAccount: 'GANCHOR123',
+      memo: 'TEST_MEMO',
+      memoType: 'text',
+    });
+
+    render(
+      <ExecuteDrawer
+        rate={RATE}
+        amount="100"
+        publicKey={PUBLIC_KEY}
+        minReceive="151743.20"
+        onClose={vi.fn()}
+        onExecuteStarted={vi.fn()}
+      />
+    );
+
+    fireEvent.click(screen.getByText('Start Off-ramp'));
+
+    await waitFor(() => expect(screen.getByTestId('kyc-iframe-mock')).toBeInTheDocument());
+
+    act(() => {
+      window.dispatchEvent(
+        new MessageEvent('message', {
+          data: { type: 'stellar_transaction_created', transaction_id: 'txn-123' },
+          origin: 'https://anchor.example',
+        })
+      );
+    });
+
+    await waitFor(() => expect(screen.getByText('Transaction submitted')).toBeInTheDocument());
+
+    expect(
+      screen.getByText(
+        "This anchor didn't share an estimate before payment. The final amount is set by the anchor."
+      )
+    ).toBeInTheDocument();
+    expect(mockSignAndSubmitPayment).toHaveBeenCalled();
+  });
+
+  it('skips the minReceive check when a firm SEP-38 quote was locked', async () => {
+    mockGetResolvedAnchorById.mockResolvedValue(SEP38_ANCHOR);
+    mockPostSep38Quote.mockResolvedValue(FIRM_QUOTE);
+    mockGetWithdrawTransactionRecord.mockResolvedValue({
+      withdrawAnchorAccount: 'GANCHOR123',
+      memo: 'TEST_MEMO',
+      memoType: 'text',
+      amountOut: '100', // Below the floor if it were checked
+    });
+
+    render(
+      <ExecuteDrawer
+        rate={RATE}
+        amount="100"
+        publicKey={PUBLIC_KEY}
+        minReceive="151743.20"
+        onClose={vi.fn()}
+        onExecuteStarted={vi.fn()}
+      />
+    );
+
+    fireEvent.click(screen.getByText('Start Off-ramp'));
+
+    await waitFor(() => expect(screen.getByTestId('kyc-iframe-mock')).toBeInTheDocument());
+
+    act(() => {
+      window.dispatchEvent(
+        new MessageEvent('message', {
+          data: { type: 'stellar_transaction_created', transaction_id: 'txn-123' },
+          origin: 'https://anchor.example',
+        })
+      );
+    });
+
+    await waitFor(() => expect(screen.getByText('Transaction submitted')).toBeInTheDocument());
+
+    expect(mockPostSep38Quote).toHaveBeenCalled();
+    expect(mockSignAndSubmitPayment).toHaveBeenCalled();
+    expect(screen.queryByText(/below your minimum of/)).not.toBeInTheDocument();
+    expect(mockTrackFunnelEvent).not.toHaveBeenCalledWith('execution_failed', expect.anything());
   });
 });
 

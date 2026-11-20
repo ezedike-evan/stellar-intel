@@ -1,4 +1,4 @@
-import type { AnchorRate } from '@/types';
+import { isIndicativeRateSource, type AnchorRate } from '@/types';
 import { formatCurrency, formatRate } from '@/lib/utils';
 
 const FEE_TYPE_LABELS: Record<AnchorRate['feeType'], string> = {
@@ -69,6 +69,18 @@ export function RateRowDetail({ rate, currency, colSpan }: RateRowDetailProps) {
             <dt className="text-fg-muted">Last updated</dt>
             <dd className="font-medium text-primary-text">{rate.updatedAt.toLocaleTimeString()}</dd>
           </div>
+          {isIndicativeRateSource(rate.source) && (
+            <div className="col-span-full">
+              <dt className="text-fg-muted">How this estimate is built</dt>
+              <dd className="font-medium text-primary-text">
+                Anchor fee from its published schedule + reference price
+                {rate.referenceDetail ? ` (${rate.referenceDetail})` : ''}
+              </dd>
+              <dd className="text-secondary-text mt-0.5">
+                Estimate only. The anchor confirms the final rate before you pay.
+              </dd>
+            </div>
+          )}
         </dl>
       </td>
     </tr>

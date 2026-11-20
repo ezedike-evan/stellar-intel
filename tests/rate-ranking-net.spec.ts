@@ -20,7 +20,10 @@ import {
   bestRate,
   buildRateComparison,
   DEFAULT_FIAT_PRECISION,
+  FIRM_QUOTE_BONUS_PCT,
+  rankingScore,
 } from '@/lib/rate-ranking';
+import { flags } from '@/lib/flags';
 import type { AnchorRate } from '@/types';
 
 // ─── Helpers ──────────────────────────────────────────────────────────────────
@@ -334,5 +337,89 @@ describe('rankByNetReceived - property tests', () => {
         }
       )
     );
+  });
+});
+
+// ─── Firm-quote bonus (#1507) ─────────────────────────────────────────────────
+
+describe('firm-quote ranking bonus', () => {
+  const ON = { firmQuoteBonus: true };
+  const OFF = { firmQuoteBonus: false };
+  const estimate = makeRate('estimate', 100);
+  const firmPoint3Worse = makeRate('firm-0.3', 99.7, { source: 'sep38' });
+  const firm1Worse = makeRate('firm-1', 99, { source: 'sep38' });
+
+  it('defaults the bonus to 0.5%', () => {
+    expect(FIRM_QUOTE_BONUS_PCT).toBe(0.5);
+  });
+
+  it('ships OFF: the flag is not set in the default environment', () => {
+    expect(flags.firmQuoteBonus).toBe(false);
+  });
+
+  it('with the bonus off, orders by net received only', () => {
+    const ranked = rankByNetReceived([firmPoint3Worse, estimate], DEFAULT_FIAT_PRECISION, OFF);
+    expect(ranked.map((r) => r.anchorId)).toEqual(['estimate', 'firm-0.3']);
+    expect(bestRate([firmPoint3Worse, estimate], DEFAULT_FIAT_PRECISION, OFF)?.anchorId).toBe(
+      'estimate'
+    );
+  });
+
+  it('with the bonus on, a firm quote 0.3% worse ranks first', () => {
+    const ranked = rankByNetReceived([estimate, firmPoint3Worse], DEFAULT_FIAT_PRECISION, ON);
+    expect(ranked.map((r) => r.anchorId)).toEqual(['firm-0.3', 'estimate']);
+    expect(bestRate([estimate, firmPoint3Worse], DEFAULT_FIAT_PRECISION, ON)?.anchorId).toBe(
+      'firm-0.3'
+    );
+  });
+
+  it('with the bonus on, a firm quote 1% worse still ranks second', () => {
+    const ranked = rankByNetReceived([firm1Worse, estimate], DEFAULT_FIAT_PRECISION, ON);
+    expect(ranked.map((r) => r.anchorId)).toEqual(['estimate', 'firm-1']);
+    expect(bestRate([firm1Worse, estimate], DEFAULT_FIAT_PRECISION, ON)?.anchorId).toBe('estimate');
+  });
+
+  it('only changes the order, never a displayed amount', () => {
+    const input = [estimate, firmPoint3Worse];
+    const ranked = rankByNetReceived(input, DEFAULT_FIAT_PRECISION, ON);
+
+    expect(ranked.find((r) => r.anchorId === 'firm-0.3')?.totalReceived).toBe(99.7);
+    expect(ranked.find((r) => r.anchorId === 'estimate')?.totalReceived).toBe(100);
+    expect(input.map((r) => r.anchorId)).toEqual(['estimate', 'firm-0.3']);
+  });
+
+  it('gives no bonus to indicative sources', () => {
+    const sep6 = makeRate('sep6', 99.7, { source: 'sep6-fee' });
+    expect(rankingScore(sep6, DEFAULT_FIAT_PRECISION, ON)).toBe(99.7);
+    expect(rankingScore(firmPoint3Worse, DEFAULT_FIAT_PRECISION, ON)).toBeCloseTo(99.7 * 1.005, 9);
+  });
+
+  it('keeps unavailable rows last, even with the bonus on', () => {
+    const unavailable = makeRate('down', 0, {
+      source: 'sep38',
+      totalReceived: null,
+      exchangeRate: null,
+      fee: null,
+    });
+    const ranked = rankByNetReceived(
+      [unavailable, estimate, firm1Worse],
+      DEFAULT_FIAT_PRECISION,
+      ON
+    );
+
+    expect(ranked.map((r) => r.anchorId)).toEqual(['estimate', 'firm-1', 'down']);
+    expect(rankingScore(unavailable, DEFAULT_FIAT_PRECISION, ON)).toBe(-Infinity);
+  });
+
+  it('applies the bonus through buildRateComparison via the default options', () => {
+    // The flag is off here, so the plain order holds.
+    const result = buildRateComparison(
+      [
+        { status: 'fulfilled', value: estimate },
+        { status: 'fulfilled', value: firmPoint3Worse },
+      ],
+      'usdc-ngn'
+    );
+    expect(result.bestRateId).toBe('estimate');
   });
 });

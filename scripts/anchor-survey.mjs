@@ -48,7 +48,7 @@ import {
   parseAnchors as parseRegistryAnchors,
   ANCHORS_PATH,
 } from './check-registry.mjs';
-import { readListedAnchors } from './lib/listed-seeds.mjs';
+import { readListedAnchors, readListedDomains } from './lib/listed-seeds.mjs';
 
 // Kept as the JSON `source` field for older readers that expect one source URL.
 const DIRECTORY_URL = 'https://api.stellar.expert/explorer/public/directory?limit=200';
@@ -355,13 +355,14 @@ async function writeCensus(path, domains) {
 /** Every candidate source, in the order they are consulted. */
 export const SURVEY_SOURCES = [
   'registry',
+  'listed',
   'stellar.expert-directory',
   'stellar.expert-assets',
   'sdf-anchor-directory',
 ];
 
 // Sources that hit the network. When every selected remote source fails the
-// survey has no external data left and exits 1; `registry` is a local file.
+// survey has no external data left and exits 1; `registry` and `listed` are local files.
 const REMOTE_SOURCES = new Set([
   'stellar.expert-directory',
   'stellar.expert-assets',
@@ -386,6 +387,10 @@ async function fetchRegistryDomains() {
 
 const SOURCE_FETCHERS = {
   registry: fetchRegistryDomains,
+  // The hand-curated listed operators (constants/listed-anchors/*.json), so the
+  // monthly re-crawl re-probes their domains and a dead toml or a new transfer
+  // rail shows up in the diff.
+  listed: async () => readListedDomains(),
   'stellar.expert-directory': async () =>
     (await fetchDirectoryAll()).map((row) => ({
       domain: row.domain,

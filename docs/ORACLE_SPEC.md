@@ -107,7 +107,7 @@ governance action.
 | **Publisher** (`publishers::is_authorized` + `require_auth`) | `submit_outcome`, `set_corridor_metrics`, `publish_corridor_rate`, `add_volume_savings`                                                                                                       |
 | **Admin** (`admin::require_admin`)                           | `register_anchor`, `add_publisher`, `revoke_publisher`, `reset_corridor_aggregate`, `reset_volume_savings`, `propose_admin`, `cancel_admin_proposal`, `migrate_corridor_v2`, `migrate_all_v2` |
 | **Candidate self-auth**                                      | `accept_admin`                                                                                                                                                                                |
-| **Upgrade admin**                                            | `upgrade`, `propose_upgrade_admin`, `cancel_upgrade_proposal`                                                                                                                                 |
+| **Upgrade admin**                                            | `propose_upgrade`, `cancel_upgrade`, `upgrade` (7 days after `propose_upgrade`), `propose_upgrade_admin`, `cancel_upgrade_proposal`                                                           |
 | **Upgrade candidate self-auth**                              | `accept_upgrade_admin`                                                                                                                                                                        |
 
 `set_corridor_metrics`, `migrate_corridor_v2` and `migrate_all_v2` were

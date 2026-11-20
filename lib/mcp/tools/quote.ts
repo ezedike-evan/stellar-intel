@@ -20,7 +20,9 @@ export function registerQuoteTool(server: McpServer): void {
     {
       title: 'Off-ramp quote',
       description:
-        'Returns the live net-received quote for a corridor + amount (anchor, quoteId, netReceived, expiresAt).',
+        'Returns the live net-received quote for a corridor + amount (anchor, quoteId, netReceived, ' +
+        'expiresAt, source, indicative). When indicative is true, netReceived is an estimate the ' +
+        'anchor may move, not a guarantee; only indicative: false (a SEP-38 firm quote) is binding.',
       inputSchema: inputShape,
       outputSchema: QuoteOutputSchema,
       annotations: { readOnlyHint: true },

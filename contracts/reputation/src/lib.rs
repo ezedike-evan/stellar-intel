@@ -5,9 +5,12 @@ pub mod admin;
 pub mod aggregate;
 pub mod anchors;
 pub mod corridor_rate;
+pub mod corridors;
+pub mod events;
 pub mod history;
 pub mod migration;
 pub mod outcome;
+pub mod probe_signals;
 pub mod publishers;
 pub mod score;
 pub mod storage;
@@ -27,6 +30,15 @@ pub enum Error {
     InvalidCorridorRate = 8,
     ArithmeticOverflow = 9,
     OutOfRange = 10,
+    RateJumpTooLarge = 11,
+    AnchorNotRegistered = 12,
+    CorridorExists = 13,
+    CorridorNotRegistered = 14,
+    PublisherOutOfScope = 15,
+    NoPendingUpgrade = 16,
+    UpgradeNotReady = 17,
+    UpgradeHashMismatch = 18,
+    LimitReached = 19,
 }
 
 #[contract]
@@ -54,16 +66,32 @@ impl ReputationContract {
 
     /// Top up the contract instance's TTL. Callable by anyone — keeping the
     /// oracle alive is permissionless — so a dormant contract cannot silently
-    /// archive between writes. Persistent entries are bumped on every write.
+    /// archive between writes. Every mutating entrypoint also extends the
+    /// instance on its success path, and persistent entries are bumped on every
+    /// write, so this is only needed for a contract that sees no writes at all.
     pub fn bump(env: Env) {
         storage::extend_instance(&env);
     }
 
     pub fn register_anchor(env: Env, caller: Address, anchor_id: String) -> Result<(), Error> {
         admin::require_admin(&env, &caller)?;
-        anchors::register(&env, anchor_id)?;
+        anchors::register(&env, anchor_id.clone())?;
+        storage::extend_instance(&env);
+        events::anchor_registered(&env, &caller, &anchor_id);
+        Ok(())
+    }
+
+    /// Admin-only. Adds `corridor` to the registry that `publish_corridor_rate`
+    /// and `add_volume_savings` check.
+    pub fn register_corridor(env: Env, caller: Address, corridor: String) -> Result<(), Error> {
+        admin::require_admin(&env, &caller)?;
+        corridors::register(&env, corridor)?;
         storage::extend_instance(&env);
         Ok(())
+    }
+
+    pub fn list_corridors(env: Env) -> Vec<String> {
+        corridors::list(&env)
     }
 
     pub fn list_anchors(env: Env) -> Vec<String> {
@@ -77,19 +105,25 @@ impl ReputationContract {
     /// Step 1 of a safe admin handoff: nominate `candidate` as the next admin.
     /// The change is not live until `candidate` calls `accept_admin`.
     pub fn propose_admin(env: Env, caller: Address, candidate: Address) -> Result<(), Error> {
-        admin::propose_admin(&env, &caller, &candidate)
+        admin::propose_admin(&env, &caller, &candidate)?;
+        storage::extend_instance(&env);
+        Ok(())
     }
 
     /// Step 2 of a safe admin handoff: `candidate` accepts the pending proposal
     /// and becomes the new admin.
     pub fn accept_admin(env: Env, candidate: Address) -> Result<(), Error> {
-        admin::accept_admin(&env, &candidate)
+        admin::accept_admin(&env, &candidate)?;
+        storage::extend_instance(&env);
+        Ok(())
     }
 
     /// Cancel a pending admin proposal without transferring authority.
     /// Only the current admin may call this.
     pub fn cancel_admin_proposal(env: Env, caller: Address) -> Result<(), Error> {
-        admin::cancel_admin_proposal(&env, &caller)
+        admin::cancel_admin_proposal(&env, &caller)?;
+        storage::extend_instance(&env);
+        Ok(())
     }
 
     /// Return the pending admin candidate, if any.
@@ -99,15 +133,52 @@ impl ReputationContract {
 
     pub fn add_publisher(env: Env, caller: Address, publisher: Address) -> Result<(), Error> {
         admin::require_admin(&env, &caller)?;
-        publishers::add(&env, publisher)?;
+        publishers::add(&env, publisher.clone())?;
+        storage::extend_instance(&env);
+        events::publisher_added(&env, &caller, &publisher);
+        Ok(())
+    }
+
+    /// Admin-only. Limits `publisher` to the listed corridors, replacing any
+    /// earlier scope. A publisher with no scope may write every registered
+    /// corridor. Returns `PublisherNotFound` if it is not whitelisted.
+    pub fn set_publisher_scope(
+        env: Env,
+        caller: Address,
+        publisher: Address,
+        corridors: Vec<String>,
+    ) -> Result<(), Error> {
+        admin::require_admin(&env, &caller)?;
+        if !publishers::is_authorized(&env, &publisher) {
+            return Err(Error::PublisherNotFound);
+        }
+        publishers::set_scope(&env, publisher, corridors);
         storage::extend_instance(&env);
         Ok(())
     }
 
+    /// Admin-only. Removes `publisher`'s scope, restoring full access.
+    pub fn clear_publisher_scope(
+        env: Env,
+        caller: Address,
+        publisher: Address,
+    ) -> Result<(), Error> {
+        admin::require_admin(&env, &caller)?;
+        publishers::clear_scope(&env, publisher);
+        storage::extend_instance(&env);
+        Ok(())
+    }
+
+    /// The corridors `publisher` is limited to, or `None` if unscoped.
+    pub fn publisher_scope(env: Env, publisher: Address) -> Option<Vec<String>> {
+        publishers::get_scope(&env, &publisher)
+    }
+
     pub fn revoke_publisher(env: Env, caller: Address, publisher: Address) -> Result<(), Error> {
         admin::require_admin(&env, &caller)?;
-        publishers::revoke(&env, publisher)?;
+        publishers::revoke(&env, publisher.clone())?;
         storage::extend_instance(&env);
+        events::publisher_revoked(&env, &caller, &publisher);
         Ok(())
     }
 
@@ -122,13 +193,33 @@ impl ReputationContract {
     ) -> Result<(), Error> {
         admin::require_admin(&env, &caller)?;
         aggregate::reset(&env, &anchor_id, &corridor);
+        storage::extend_instance(&env);
+        events::aggregate_reset(&env, &caller, &anchor_id, &corridor);
+        Ok(())
+    }
+
+    /// Admin-only. Hide an anchor's outcome history from `recent_outcomes`: the
+    /// recovery path for a page polluted by a since-revoked publisher. O(1) -
+    /// old pages are skipped, not iterated or deleted. Aggregates are reset
+    /// separately with `reset_corridor_aggregate`.
+    pub fn reset_outcome_history(
+        env: Env,
+        caller: Address,
+        anchor_id: String,
+    ) -> Result<(), Error> {
+        admin::require_admin(&env, &caller)?;
+        outcome::reset_history(&env, &anchor_id);
+        storage::extend_instance(&env);
+        events::history_reset(&env, &caller, &anchor_id);
         Ok(())
     }
 
     /// Admin-only. Clear a corridor's cumulative volume/savings totals.
     pub fn reset_volume_savings(env: Env, caller: Address, corridor: String) -> Result<(), Error> {
         admin::require_admin(&env, &caller)?;
-        volume_savings::reset(&env, corridor);
+        volume_savings::reset(&env, corridor.clone());
+        storage::extend_instance(&env);
+        events::volume_reset(&env, &caller, &corridor);
         Ok(())
     }
 
@@ -153,7 +244,9 @@ impl ReputationContract {
             outcome_hash,
             settle_seconds,
             success,
-        )
+        )?;
+        storage::extend_instance(&env);
+        Ok(())
     }
 
     /// Return the rolling aggregate for an (anchor, corridor) pair:
@@ -176,11 +269,42 @@ impl ReputationContract {
     /// Admin-signed contract upgrade. Replaces the contract WASM with the code
     /// at `new_wasm_hash` while preserving all stored state, following Soroban's
     /// standard upgrade pattern.
-    pub fn upgrade(env: Env, new_wasm_hash: BytesN<32>) {
-        upgrade::apply(&env, new_wasm_hash);
+    ///
+    /// Time-locked: `propose_upgrade(new_wasm_hash)` must have been called at
+    /// least `UPGRADE_DELAY_SECONDS` (7 days) earlier, and `new_wasm_hash` must
+    /// match it. Returns `NoPendingUpgrade`, `UpgradeHashMismatch` or
+    /// `UpgradeNotReady` otherwise.
+    pub fn upgrade(env: Env, new_wasm_hash: BytesN<32>) -> Result<(), Error> {
+        upgrade::apply(&env, new_wasm_hash)
     }
 
-    /// Return the live contract version (`0` before `init_upgrade`).
+    /// Upgrade-admin only. Announce a WASM upgrade; it can be applied with
+    /// `upgrade` once `UPGRADE_DELAY_SECONDS` (7 days) have passed. Replaces any
+    /// earlier proposal and restarts the clock.
+    pub fn propose_upgrade(
+        env: Env,
+        caller: Address,
+        new_wasm_hash: BytesN<32>,
+    ) -> Result<(), Error> {
+        upgrade::propose_upgrade(&env, &caller, new_wasm_hash)?;
+        storage::extend_instance(&env);
+        Ok(())
+    }
+
+    /// Upgrade-admin only. Withdraw the pending upgrade proposal, if any.
+    pub fn cancel_upgrade(env: Env, caller: Address) -> Result<(), Error> {
+        upgrade::cancel_upgrade(&env, &caller)?;
+        storage::extend_instance(&env);
+        Ok(())
+    }
+
+    /// The pending upgrade as `(wasm_hash, earliest_execution_timestamp)`, if any.
+    pub fn pending_upgrade(env: Env) -> Option<(BytesN<32>, u64)> {
+        upgrade::get_pending_upgrade(&env)
+    }
+
+    /// Return the live contract version. The constructor stamps version 1 and
+    /// every upgrade increments it; `0` means the upgrade hook was never bound.
     pub fn contract_version(env: Env) -> u32 {
         upgrade::current_version(&env)
     }
@@ -196,15 +320,17 @@ impl ReputationContract {
 
     /// Nominate a new upgrade administrator (step 1 of 2, issue #963).
     ///
-    /// `init_upgrade` is one-shot, so before this the role could never be
-    /// changed once bound — a lost key meant the contract could never be
-    /// upgraded again, and a compromised one could not be revoked.
+    /// The constructor binds the upgrade admin exactly once, so without this the
+    /// role could never be changed — a lost key meant the contract could never
+    /// be upgraded again, and a compromised one could not be revoked.
     pub fn propose_upgrade_admin(
         env: Env,
         caller: Address,
         candidate: Address,
     ) -> Result<(), Error> {
-        upgrade::propose_upgrade_admin(&env, &caller, &candidate)
+        upgrade::propose_upgrade_admin(&env, &caller, &candidate)?;
+        storage::extend_instance(&env);
+        Ok(())
     }
 
     /// Accept a pending upgrade-admin proposal (step 2 of 2).
@@ -212,12 +338,16 @@ impl ReputationContract {
     /// The candidate must call this itself, so a mistyped address fails to
     /// complete rather than bricking the role.
     pub fn accept_upgrade_admin(env: Env, candidate: Address) -> Result<(), Error> {
-        upgrade::accept_upgrade_admin(&env, &candidate)
+        upgrade::accept_upgrade_admin(&env, &candidate)?;
+        storage::extend_instance(&env);
+        Ok(())
     }
 
     /// Withdraw a pending upgrade-admin proposal. Current upgrade admin only.
     pub fn cancel_upgrade_proposal(env: Env, caller: Address) -> Result<(), Error> {
-        upgrade::cancel_upgrade_proposal(&env, &caller)
+        upgrade::cancel_upgrade_proposal(&env, &caller)?;
+        storage::extend_instance(&env);
+        Ok(())
     }
 
     /// The address nominated to become upgrade admin, if any.
@@ -255,7 +385,9 @@ impl ReputationContract {
             slippage_bps,
             settle_seconds_p50,
             n,
-        )
+        )?;
+        storage::extend_instance(&env);
+        Ok(())
     }
 
     /// Publish (or overwrite) the block-level rate for a corridor (issue #810).
@@ -267,12 +399,67 @@ impl ReputationContract {
         rate: i128,
         decimals: u32,
     ) -> Result<(), Error> {
-        corridor_rate::publish(&env, &publisher, corridor, rate, decimals)
+        corridor_rate::publish(&env, &publisher, corridor, rate, decimals)?;
+        storage::extend_instance(&env);
+        Ok(())
+    }
+
+    /// Publisher-only. Write the latest probe signals for `anchor_id` (uptime in
+    /// basis points, p50/p95 latency in ms, current SEP drift flag count),
+    /// replacing any earlier record. `p50 == 0 && p95 == 0` means "no reachable
+    /// samples". `OutOfRange` if `uptime_bps` exceeds 10000 or p50 exceeds p95.
+    pub fn publish_probe_signals(
+        env: Env,
+        publisher: Address,
+        anchor_id: String,
+        uptime_bps: u32,
+        p50_latency_ms: u32,
+        p95_latency_ms: u32,
+        drift_flag_count: u32,
+    ) -> Result<(), Error> {
+        probe_signals::publish(
+            &env,
+            &publisher,
+            anchor_id,
+            uptime_bps,
+            p50_latency_ms,
+            p95_latency_ms,
+            drift_flag_count,
+        )?;
+        storage::extend_instance(&env);
+        Ok(())
+    }
+
+    /// The latest probe signals for `anchor_id`, or `None` if never published.
+    pub fn get_probe_signals(env: Env, anchor_id: String) -> Option<probe_signals::ProbeSignals> {
+        probe_signals::get(&env, anchor_id)
     }
 
     /// Read the latest published rate for `corridor`, or `None` if unset.
     pub fn get_corridor_rate(env: Env, corridor: String) -> Option<corridor_rate::CorridorRate> {
         corridor_rate::get(&env, corridor)
+    }
+
+    /// Admin-only. Removes the published rate for `corridor`, so the next
+    /// `publish_corridor_rate` is accepted at any value. This is the recovery
+    /// path for a real move of more than 2x, which publish refuses to follow.
+    pub fn reset_corridor_rate(env: Env, caller: Address, corridor: String) -> Result<(), Error> {
+        admin::require_admin(&env, &caller)?;
+        corridor_rate::reset(&env, corridor);
+        storage::extend_instance(&env);
+        Ok(())
+    }
+
+    /// Like `get_corridor_rate`, but only returns a rate published within the
+    /// last `max_age_seconds`. `None` covers both "never published" and "too
+    /// old": a consumer that cannot use a stale rate does not need to tell the
+    /// two apart, and a consumer that does can call `get_corridor_rate`.
+    pub fn get_corridor_rate_fresh(
+        env: Env,
+        corridor: String,
+        max_age_seconds: u64,
+    ) -> Option<corridor_rate::CorridorRate> {
+        corridor_rate::get_fresh(&env, corridor, max_age_seconds)
     }
 
     // ── V2 entrypoints (multi-corridor expansion, issue #825) ────────────
@@ -285,13 +472,17 @@ impl ReputationContract {
         anchor_id: String,
         corridor: String,
     ) -> Result<(), Error> {
-        migration::migrate_corridor(&env, &caller, anchor_id, corridor)
+        migration::migrate_corridor(&env, &caller, anchor_id, corridor)?;
+        storage::extend_instance(&env);
+        Ok(())
     }
 
     /// Migrate all registered anchors across all default corridors.
     /// Admin-only; idempotent, so it skips pairs already migrated.
     pub fn migrate_all_v2(env: Env, caller: Address) -> Result<(), Error> {
-        migration::migrate_all(&env, &caller)
+        migration::migrate_all(&env, &caller)?;
+        storage::extend_instance(&env);
+        Ok(())
     }
 
     /// V2 version of `get_corridor_aggregate`. The aggregate schema is
@@ -363,7 +554,15 @@ impl ReputationContract {
         volume_delta: i128,
         savings_delta: i128,
     ) -> Result<(), Error> {
-        volume_savings::add_volume_savings(&env, &publisher, corridor, volume_delta, savings_delta)
+        volume_savings::add_volume_savings(
+            &env,
+            &publisher,
+            corridor,
+            volume_delta,
+            savings_delta,
+        )?;
+        storage::extend_instance(&env);
+        Ok(())
     }
 
     /// Read the cumulative volume + savings for `corridor`, or `None` if

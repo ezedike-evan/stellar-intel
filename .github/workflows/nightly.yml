@@ -17,8 +17,8 @@ jobs:
     outputs:
       summary: ${{ steps.probe.outputs.summary }}
     steps:
-      - uses: actions/checkout@v7
-      - uses: actions/setup-node@v7
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
         with:
           node-version: '20'
           cache: 'npm'
@@ -173,8 +173,8 @@ jobs:
     outputs:
       ledger: ${{ steps.probe.outputs.ledger }}
     steps:
-      - uses: actions/checkout@v7
-      - uses: actions/setup-node@v7
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
         with:
           node-version: '20'
           cache: 'npm'
@@ -237,8 +237,8 @@ jobs:
     # directory plus the census roster, so give it room without hanging forever.
     timeout-minutes: 90
     steps:
-      - uses: actions/checkout@v7
-      - uses: actions/setup-node@v7
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
         with:
           node-version: '20'
           cache: 'npm'
@@ -265,7 +265,7 @@ jobs:
       # So: one committed snapshot, refreshed monthly by the re-crawl; this job
       # publishes a nightly artifact for inspection.
       - name: Upload anchors snapshot artifact
-        uses: actions/upload-artifact@v7
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
         with:
           name: anchors-snapshot-${{ github.run_id }}
           path: |
@@ -281,8 +281,8 @@ jobs:
     # branch that nobody can fix trains people to ignore the signal.
     continue-on-error: true
     steps:
-      - uses: actions/checkout@v7
-      - uses: actions/setup-node@v7
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
         with:
           node-version: '20'
           cache: 'npm'
@@ -294,8 +294,8 @@ jobs:
     name: Reputation aggregate integrity
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v7
-      - uses: actions/setup-node@v7
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
         with:
           node-version: '20'
           cache: 'npm'
@@ -314,7 +314,7 @@ jobs:
     needs: [anchor-domains, reputation-integrity, anchor-survey-snapshot, anchor-health-ledger]
     if: failure()
     steps:
-      - uses: actions/github-script@v9
+      - uses: actions/github-script@3a2844b7e9c422d3c10d287c895573f7108da1b3 # v9.0.0
         env:
           ANCHOR_SUMMARY: ${{ needs.anchor-domains.outputs.summary }}
           LEDGER_DIGEST: ${{ needs.anchor-health-ledger.outputs.ledger }}

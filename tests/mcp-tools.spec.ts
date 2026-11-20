@@ -53,8 +53,11 @@ vi.mock('@stellar/stellar-sdk', async (importOriginal) => {
       ...actual.Horizon,
       Server: vi.fn().mockImplementation(function MockHorizonServer(this: {
         submitTransaction: typeof submitTransaction;
+        loadAccount: (publicKey: string) => Promise<unknown>;
       }) {
         this.submitTransaction = submitTransaction;
+        // prepare reads the sender's account for its sequence number (#1364).
+        this.loadAccount = async (publicKey: string) => new actual.Account(publicKey, '0');
       }),
     },
   };

@@ -1,16 +1,20 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
 import useSWR from 'swr';
 import { TERMINAL_STATES, getSep24Transaction } from '@/lib/stellar/sep24';
+import { realizedRate } from '@/lib/stellar/realized-rate';
 import type { Sep24Transaction, WithdrawStatusValue } from '@/types';
-import type { OutcomeStatus } from '@/types/reputation';
+import type { OutcomeDirection, OutcomeStatus } from '@/types/reputation';
 
 /**
  * Context the page supplies so a terminal outcome can be logged (#129/#220).
  *
- * The append route only accepts signed outcomes: `signature` is the sender's
- * Freighter signature over `intentHash` (see `lib/intent/sign.ts`) and
- * `publicKey` the account that produced it. Both are public values — no key
- * material is ever part of this context.
+ * `signature` is the sender's Freighter signature over `intentHash` (see
+ * `lib/intent/sign.ts`) and `publicKey` the account that produced it. Both
+ * are public values — no key material is ever part of this context. Both are
+ * required: the append route rejects an unsigned outcome with 401 (#1267), so
+ * a caller with no signature must not set a context at all. `direction`
+ * separates on-ramp deposits from off-ramp withdrawals (ONR031); omitted, the
+ * server defaults it to 'withdraw'.
  */
 export interface OutcomeAppendContext {
   intentHash: string;
@@ -18,6 +22,7 @@ export interface OutcomeAppendContext {
   corridor: string;
   quotedRate: string;
   quotedAmount: string;
+  direction?: OutcomeDirection;
   publicKey: string;
   signature: string;
 }
@@ -61,6 +66,14 @@ export interface UseWithdrawStatusResult {
   stellarTransactionId: string | undefined;
   externalTransactionId: string | undefined;
   refunds: Sep24Transaction['refunds'] | undefined;
+  /** How to pay the anchor, for a deposit. Undefined for a withdrawal. */
+  instructions: Sep24Transaction['instructions'] | undefined;
+  /** An https link to the anchor's own page about the transaction. */
+  moreInfoUrl: string | undefined;
+  /** A human-readable status note from the anchor. */
+  message: string | undefined;
+  /** Set when the anchor paid a deposit out as a claimable balance. */
+  claimableBalanceId: string | undefined;
   updatedAt: Date | undefined;
   isLoading: boolean;
   error: string | undefined;
@@ -150,6 +163,16 @@ export function useWithdrawStatus(
     appendedRef.current = true;
 
     const settleSeconds = Math.max(0, Math.round((Date.now() - startMsRef.current) / 1000));
+    // The landed rate, on the same all-in basis as the quote: only a completed
+    // transaction has one, and only when the anchor reported both amounts.
+    const delivered =
+      status === 'completed'
+        ? realizedRate({
+            amountIn: data?.amountIn,
+            amountOut: data?.amountOut,
+            amountFee: data?.amountFee,
+          })
+        : null;
     void fetch('/api/reputation/append', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
@@ -157,6 +180,7 @@ export function useWithdrawStatus(
         ...outcomeContext,
         outcome: outcomeFromStatus(status),
         deliveredAmount: data?.amountOut ?? null,
+        ...(delivered ? { deliveredRate: delivered.allInRate } : {}),
         settleSeconds,
         stellarTransactionId: data?.stellarTransactionId ?? null,
       }),
@@ -164,7 +188,14 @@ export function useWithdrawStatus(
     }).catch(() => {
       // Best-effort: a failed append must not disrupt the user's status view.
     });
-  }, [status, outcomeContext, data?.amountOut, data?.stellarTransactionId]);
+  }, [
+    status,
+    outcomeContext,
+    data?.amountIn,
+    data?.amountOut,
+    data?.amountFee,
+    data?.stellarTransactionId,
+  ]);
 
   return {
     status: data?.status,
@@ -176,9 +207,22 @@ export function useWithdrawStatus(
     stellarTransactionId: data?.stellarTransactionId,
     externalTransactionId: data?.externalTransactionId,
     refunds: data?.refunds,
+    instructions: data?.instructions,
+    moreInfoUrl: data?.moreInfoUrl,
+    message: data?.message,
+    claimableBalanceId: data?.claimableBalanceId,
     updatedAt: data?.updatedAt,
     isLoading,
     error: error?.message,
     attemptCount,
   };
 }
+
+/**
+ * The same hook under a direction-neutral name. Nothing in it is specific to
+ * withdrawals apart from its name and the fields it returns, and a deposit tracker
+ * needs the same polling and backoff: aliasing it keeps one backoff implementation
+ * instead of two that drift apart. The original export is unchanged.
+ */
+export const useTransferStatus = useWithdrawStatus;
+export type UseTransferStatusResult = UseWithdrawStatusResult;

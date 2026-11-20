@@ -61,8 +61,11 @@ async function resolveRates(
     });
   }
 
+  // `forceRefresh` is accepted so existing queries still validate, but ignored:
+  // honouring it would let an unauthenticated caller bypass the shared cache and
+  // fan out to every anchor on each call.
   const { comparison } = await resolveCorridorRates(args.corridor, amount, {
-    forceRefresh: args.forceRefresh ?? false,
+    forceRefresh: false,
   });
 
   return { ...comparison, rates: comparison.rates.map(toGraphRate) };

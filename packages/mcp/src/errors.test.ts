@@ -7,8 +7,10 @@ import {
   rateLimited,
   fromHttpError,
   fromOfframpError,
+  fromOnrampError,
 } from './errors.js';
 import { OfframpToolError } from '@/lib/mcp/offramp';
+import { OnrampToolError } from '@/lib/mcp/onramp';
 
 describe('MCP Error Taxonomy', () => {
   it('asserts BAD_INPUT category', () => {
@@ -83,6 +85,31 @@ describe('MCP Error Taxonomy', () => {
     it('maps SIGNATURE_INVALID to BAD_INPUT', () => {
       const err = fromOfframpError(new OfframpToolError('msg', 'SIGNATURE_INVALID'));
       expect(err.category).toBe('BAD_INPUT');
+    });
+  });
+
+  describe('fromOnrampError mapper', () => {
+    it('maps NO_ROUTE and ACCOUNT_NOT_FOUND to BAD_INPUT', () => {
+      expect(fromOnrampError(new OnrampToolError('msg', 'NO_ROUTE')).category).toBe('BAD_INPUT');
+      expect(fromOnrampError(new OnrampToolError('msg', 'ACCOUNT_NOT_FOUND')).category).toBe(
+        'BAD_INPUT'
+      );
+    });
+
+    it('maps RATE_UNAVAILABLE to ANCHOR_UNAVAILABLE', () => {
+      const err = fromOnrampError(new OnrampToolError('msg', 'RATE_UNAVAILABLE'));
+      expect(err.category).toBe('ANCHOR_UNAVAILABLE');
+    });
+
+    it('maps TX_BUILD_FAILED to UPSTREAM_TIMEOUT', () => {
+      const err = fromOnrampError(new OnrampToolError('msg', 'TX_BUILD_FAILED'));
+      expect(err.category).toBe('UPSTREAM_TIMEOUT');
+    });
+
+    it('keeps the code and message', () => {
+      const err = fromOnrampError(new OnrampToolError('no anchor', 'NO_ROUTE'));
+      expect(err.code).toBe('NO_ROUTE');
+      expect(err.message).toBe('no anchor');
     });
   });
 });

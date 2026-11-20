@@ -4,18 +4,24 @@ on:
   push:
     branches: ['main']
 
+# The deploy only reads the repository. github-comment is false and
+# github-deployment is left at its default (false), so the action makes no
+# GitHub writes with GITHUB_TOKEN.
+permissions:
+  contents: read
+
 jobs:
   deploy:
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v7
-      - uses: actions/setup-node@v7
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
         with:
           node-version: '20'
           cache: 'npm'
       - run: npm ci
       - name: Deploy to Vercel
-        uses: amondnet/vercel-action@v42
+        uses: amondnet/vercel-action@de09aeac2ace6599ec9b11ef87558759a496bac4 # v42.3.0
         with:
           vercel-token: ${{ secrets.VERCEL_TOKEN }}
           vercel-org-id: ${{ secrets.VERCEL_ORG_ID }}

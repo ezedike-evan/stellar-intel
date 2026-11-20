@@ -58,10 +58,32 @@ pub trait ReputationOracle {
         corridor: String,
     ) -> (i128, i128, u64, u32);
 
+    /// V2 composite score for an (anchor, corridor) pair:
+    /// `(composite_bps, fill_rate_bps, slippage_bps, settle_seconds_p50, n)`.
+    /// Unlike `get_score_for_corridor` it carries slippage. Falls back to the
+    /// v1 metrics (with slippage `0`) for a pair that was never migrated.
+    fn get_score_for_corridor_v2(
+        env: Env,
+        anchor_id: String,
+        corridor: String,
+    ) -> (i128, i128, i128, u64, u32);
+
+    /// The latest probe signals published for an anchor, or `None` when none
+    /// have been.
+    fn get_probe_signals(env: Env, anchor_id: String) -> Option<ProbeSignals>;
+
     /// The latest published block-level rate for a corridor, or `None` when
     /// none has been published. `rate` is scaled by 10^`decimals` fiat units
     /// per 1 USDC.
     fn get_corridor_rate(env: Env, corridor: String) -> Option<CorridorRate>;
+
+    /// Like `get_corridor_rate`, but only a rate published within the last
+    /// `max_age_seconds`. `None` covers both "never published" and "too old".
+    fn get_corridor_rate_fresh(
+        env: Env,
+        corridor: String,
+        max_age_seconds: u64,
+    ) -> Option<CorridorRate>;
 
     /// Cumulative volume and estimated savings for a corridor, or `None` when
     /// nothing has been recorded. Both figures are in microUSDC.
@@ -72,8 +94,10 @@ pub trait ReputationOracle {
 ///
 /// Declared here rather than imported: the contract crate is a `cdylib` and is
 /// not a dependency of this one — that separation is the point of a thin read
-/// SDK. The `#[contracttype]` layout must match the contract's, and the
-/// integration tests deploy the real contract to check that it does.
+/// SDK. The `#[contracttype]` layout must match the contract's. The
+/// integration tests deploy a mock that stores and returns this type, so they
+/// check the type round-trips, not that it matches the real contract's layout;
+/// that is kept in step by hand.
 #[contracttype]
 #[derive(Clone, Debug, Eq, PartialEq)]
 pub struct CorridorRate {
@@ -95,6 +119,26 @@ pub struct VolumeSavings {
     /// Cumulative estimated savings vs baseline, in microUSDC.
     pub savings_usdc: i128,
     pub settlement_count: u32,
+    pub updated_at: u64,
+    pub publisher: Address,
+}
+
+/// The latest probe signals for one anchor, mirroring
+/// `contracts/reputation/src/probe_signals.rs` field for field.
+///
+/// `p50_latency_ms == 0 && p95_latency_ms == 0` means the anchor was probed
+/// and never answered, so there is no latency to report; that is distinct from
+/// `None`, which means it was never probed.
+#[contracttype]
+#[derive(Clone, Debug, Eq, PartialEq)]
+pub struct ProbeSignals {
+    /// Share of probes that reached the anchor, in basis points (0-10000).
+    pub uptime_bps: u32,
+    pub p50_latency_ms: u32,
+    pub p95_latency_ms: u32,
+    /// How many SEP drift flags the anchor currently has.
+    pub drift_flag_count: u32,
+    /// Ledger timestamp of the publish.
     pub updated_at: u64,
     pub publisher: Address,
 }
@@ -131,7 +175,10 @@ impl CorridorAggregate {
         if self.total == 0 {
             return 0;
         }
-        self.successes.saturating_mul(10_000) / self.total
+        // In u64: successes * 10_000 overflows u32 once successes passes about
+        // 429,496, and saturating there silently understated the rate. The
+        // result is at most 10_000 (successes <= total), so it fits u32.
+        ((self.successes as u64 * 10_000) / self.total as u64) as u32
     }
 }
 
@@ -144,6 +191,19 @@ pub struct CorridorScore {
     /// settlement latency. `0` when no metrics have been published.
     pub composite_bps: i128,
     pub fill_rate_bps: i128,
+    pub settle_seconds_p50: u64,
+    /// Sample size the published metrics were computed from.
+    pub sample_size: u32,
+}
+
+/// V2 composite score for a single (anchor, corridor) pair, as returned by
+/// `get_score_for_corridor_v2`. The same as [`CorridorScore`] plus slippage.
+#[derive(Clone, Debug, Eq, PartialEq)]
+pub struct CorridorScoreV2 {
+    /// Blended score in basis points. `0` when no metrics have been published.
+    pub composite_bps: i128,
+    pub fill_rate_bps: i128,
+    pub slippage_bps: i128,
     pub settle_seconds_p50: u64,
     /// Sample size the published metrics were computed from.
     pub sample_size: u32,
@@ -197,12 +257,53 @@ impl<'a> ReputationReader<'a> {
         }
     }
 
+    /// Read the v2 composite score for an (anchor, corridor) pair, which
+    /// includes slippage. Prefer it over [`corridor_score`](Self::corridor_score).
+    pub fn corridor_score_v2(&self, anchor_id: String, corridor: String) -> CorridorScoreV2 {
+        let (composite_bps, fill_rate_bps, slippage_bps, settle_seconds_p50, sample_size) =
+            self.client.get_score_for_corridor_v2(&anchor_id, &corridor);
+        CorridorScoreV2 {
+            composite_bps,
+            fill_rate_bps,
+            slippage_bps,
+            settle_seconds_p50,
+            sample_size,
+        }
+    }
+
+    /// Read the latest probe signals for an anchor.
+    ///
+    /// `None` means none have ever been published for it - distinct from an
+    /// anchor that was probed and never answered, which reads as `Some` with
+    /// `uptime_bps == 0` and both latencies `0`.
+    pub fn probe_signals(&self, anchor_id: String) -> Option<ProbeSignals> {
+        self.client.get_probe_signals(&anchor_id)
+    }
+
     /// Read the latest published rate for a corridor.
     ///
     /// `None` means no rate has ever been published for it — distinct from a
     /// rate of zero, which would be a real (and alarming) published value.
     pub fn corridor_rate(&self, corridor: String) -> Option<CorridorRate> {
         self.client.get_corridor_rate(&corridor)
+    }
+
+    /// Read the latest published rate for a corridor, but only if it was
+    /// published within the last `max_age_seconds`.
+    ///
+    /// `None` covers both "never published" and "too old", which a consumer
+    /// that cannot use a stale rate does not need to tell apart. **Prefer this
+    /// over [`corridor_rate`](Self::corridor_rate) for settlement decisions**:
+    /// the plain read returns whatever was last published, however old, so
+    /// using it means doing your own timestamp arithmetic. `max_age_seconds = 0`
+    /// accepts only a rate published in the current ledger timestamp.
+    pub fn corridor_rate_fresh(
+        &self,
+        corridor: String,
+        max_age_seconds: u64,
+    ) -> Option<CorridorRate> {
+        self.client
+            .get_corridor_rate_fresh(&corridor, &max_age_seconds)
     }
 
     /// Read cumulative volume and estimated savings for a corridor.

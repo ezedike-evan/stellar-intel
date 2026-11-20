@@ -22,6 +22,15 @@ describe('Footer legal links (#740)', () => {
     expect(faq).not.toHaveAttribute('target', '_blank');
   });
 
+  it('links to the On-ramp page, right after Off-ramp', () => {
+    render(<Footer />);
+    const onramp = screen.getByRole('link', { name: 'On-ramp' });
+    expect(onramp).toHaveAttribute('href', '/onramp');
+
+    const hrefs = screen.getAllByRole('link').map((a) => a.getAttribute('href'));
+    expect(hrefs.indexOf('/onramp')).toBe(hrefs.indexOf('/offramp') + 1);
+  });
+
   it('renders Terms as an internal link, not an external one', () => {
     render(<Footer />);
     const terms = screen.getByRole('link', { name: /terms/i });

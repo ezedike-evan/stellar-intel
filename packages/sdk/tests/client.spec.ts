@@ -190,6 +190,22 @@ describe('StellarIntelClient — requests', () => {
     expect(fetchMock.mock.calls[0]![0]).toBe('https://api.test/api/v1/anchors/a%2Fb/health');
   });
 
+  it('builds the price-history path with its optional corridor and days', async () => {
+    const fetchMock = vi.fn(async (_url: RequestInfo | URL, _init?: RequestInit) =>
+      jsonResponse(200, { anchorId: 'a/b', corridor: 'usdc-ngn', points: [] })
+    );
+
+    const history = await makeClient(fetchMock as never).getAnchorPriceHistory('a/b', {
+      corridor: 'usdc-ngn',
+      days: 30,
+    });
+
+    expect(history.points).toEqual([]);
+    expect(fetchMock.mock.calls[0]![0]).toBe(
+      'https://api.test/api/v1/anchors/a%2Fb/price-history?corridor=usdc-ngn&days=30'
+    );
+  });
+
   it('strips a trailing slash from baseUrl', async () => {
     const fetchMock = vi.fn(async (_url: RequestInfo | URL, _init?: RequestInit) =>
       jsonResponse(200, { ok: true })
@@ -216,5 +232,107 @@ describe('StellarIntelClient — requests', () => {
 
     const body = JSON.parse((fetchMock.mock.calls[0]![1] as RequestInit).body as string);
     expect(body).toEqual({ type: 'offramp', ...INTENT });
+  });
+});
+
+describe('StellarIntelClient — on-ramp', () => {
+  const ONRAMP_INTENT = {
+    sourceAsset: 'NGN',
+    destinationAsset: 'USDC',
+    amount: '10000',
+    sender: 'acct-001',
+    destination: 'GDESTINATION',
+    depositMethod: 'bank_transfer' as const,
+  };
+
+  it('posts an onramp intent with an idempotency key', async () => {
+    const ok = {
+      route: {},
+      intentHash: 'ab',
+      handoffUrl: '/onramp?corridor=usdc-ngn',
+      unsignedChangeTrustXdr: null,
+    };
+    const fetchMock = vi.fn(async (_url: RequestInfo | URL, _init?: RequestInit) =>
+      jsonResponse(200, ok)
+    );
+
+    const result = await makeClient(fetchMock as never).submitOnrampIntent(ONRAMP_INTENT);
+
+    const [url, init] = fetchMock.mock.calls[0]!;
+    expect(String(url)).toBe('https://api.test/api/v1/intent/onramp');
+    expect((init as RequestInit).method).toBe('POST');
+    expect(JSON.parse((init as RequestInit).body as string)).toEqual({
+      type: 'onramp',
+      ...ONRAMP_INTENT,
+    });
+    expect(
+      ((init as RequestInit).headers as Record<string, string>)['Idempotency-Key']
+    ).toBeTruthy();
+    expect(result).toEqual(ok);
+  });
+
+  it('reads an indicative quote from the query string', async () => {
+    const quote = { corridorId: 'usdc-ngn', indicative: true, rates: [], errors: [] };
+    const fetchMock = vi.fn(async (_url: RequestInfo | URL, _init?: RequestInit) =>
+      jsonResponse(200, quote)
+    );
+
+    const result = await makeClient(fetchMock as never).getOnrampQuote('usdc-ngn', '10000', {
+      asset: 'stellar:USDC:GISSUER',
+      type: 'mobile_money',
+    });
+
+    const url = new URL(String(fetchMock.mock.calls[0]![0]));
+    expect(url.pathname).toBe('/api/v1/onramp/quote');
+    expect(Object.fromEntries(url.searchParams)).toEqual({
+      corridor: 'usdc-ngn',
+      amount: '10000',
+      asset: 'stellar:USDC:GISSUER',
+      type: 'mobile_money',
+    });
+    expect((fetchMock.mock.calls[0]![1] as RequestInit).method).toBe('GET');
+    expect(result).toEqual(quote);
+  });
+
+  it('omits optional quote parameters that were not given', async () => {
+    const fetchMock = vi.fn(async (_url: RequestInfo | URL, _init?: RequestInit) =>
+      jsonResponse(200, {})
+    );
+
+    await makeClient(fetchMock as never).getOnrampQuote('usdc-ngn', '1');
+
+    expect(new URL(String(fetchMock.mock.calls[0]![0])).search).toBe('?corridor=usdc-ngn&amount=1');
+  });
+});
+
+describe('StellarIntelClient — quote gap', () => {
+  it('reads the gap for an anchor, with and without a window', async () => {
+    const gap = { anchorId: 'cowrie', sampleCount: 0, meanGapPct: null };
+    const fetchMock = vi.fn(async (_url: RequestInfo | URL, _init?: RequestInit) =>
+      jsonResponse(200, gap)
+    );
+    const client = makeClient(fetchMock as never);
+
+    expect(await client.getAnchorQuoteGap('cowrie')).toEqual(gap);
+    await client.getAnchorQuoteGap('cow rie', 90);
+
+    expect(String(fetchMock.mock.calls[0]![0])).toBe(
+      'https://api.test/api/v1/anchors/cowrie/quote-gap'
+    );
+    expect(String(fetchMock.mock.calls[1]![0])).toBe(
+      'https://api.test/api/v1/anchors/cow%20rie/quote-gap?window=90'
+    );
+  });
+});
+
+describe('StellarIntelClient — SEP-38 readiness', () => {
+  it('reads the readiness table', async () => {
+    const body = { anchors: [], generatedAt: '2026-10-25T08:00:00.000Z' };
+    const fetchMock = vi.fn(async (_url: RequestInfo | URL, _init?: RequestInit) =>
+      jsonResponse(200, body)
+    );
+
+    expect(await makeClient(fetchMock as never).getSep38Readiness()).toEqual(body);
+    expect(String(fetchMock.mock.calls[0]![0])).toBe('https://api.test/api/v1/sep38/readiness');
   });
 });

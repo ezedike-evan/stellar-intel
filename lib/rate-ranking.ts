@@ -10,6 +10,8 @@
  * All arithmetic uses explicit rounding to avoid sub-cent comparisons.
  */
 
+import { compareDecimals } from '@/lib/decimal';
+import { isFlag } from '@/lib/flags';
 import type { AnchorRate, RateComparison } from '@/types';
 
 // ─── Constants ────────────────────────────────────────────────────────────────
@@ -19,6 +21,21 @@ import type { AnchorRate, RateComparison } from '@/types';
  * Pass a higher value for currencies with sub-cent units (e.g. KWD = 3).
  */
 export const DEFAULT_FIAT_PRECISION = 2;
+
+/**
+ * How much better (in percent) an estimate must be to outrank a firm SEP-38 quote,
+ * when the `firmQuoteBonus` flag is on. A firm quote cannot slip; an estimate can.
+ */
+export const FIRM_QUOTE_BONUS_PCT = 0.5;
+
+export interface RankingOptions {
+  /** Let a firm quote beat an estimate that is only marginally better. */
+  firmQuoteBonus: boolean;
+}
+
+function defaultRankingOptions(): RankingOptions {
+  return { firmQuoteBonus: isFlag('firmQuoteBonus') };
+}
 
 // ─── Core computation ─────────────────────────────────────────────────────────
 
@@ -69,13 +86,29 @@ export function computeNetReceived(
  */
 export function rankByNetReceived(
   rates: AnchorRate[],
-  precision: number = DEFAULT_FIAT_PRECISION
+  precision: number = DEFAULT_FIAT_PRECISION,
+  opts: RankingOptions = defaultRankingOptions()
 ): AnchorRate[] {
-  return [...rates].sort((a, b) => {
-    const aVal = resolvedNetReceived(a, precision);
-    const bVal = resolvedNetReceived(b, precision);
-    return bVal - aVal;
-  });
+  return [...rates].sort(
+    (a, b) => rankingScore(b, precision, opts) - rankingScore(a, precision, opts)
+  );
+}
+
+/**
+ * The value rates are ordered by: the net received amount, scaled up by
+ * {@link FIRM_QUOTE_BONUS_PCT} for a firm (`sep38`) quote when the bonus is on.
+ * It is for ordering only; a row's displayed `totalReceived` is never modified.
+ * An unavailable row stays at `-Infinity`, so a bonus cannot lift it.
+ */
+export function rankingScore(
+  rate: AnchorRate,
+  precision: number = DEFAULT_FIAT_PRECISION,
+  opts: RankingOptions = defaultRankingOptions()
+): number {
+  const net = resolvedNetReceived(rate, precision);
+  return opts.firmQuoteBonus && rate.source === 'sep38'
+    ? net * (1 + FIRM_QUOTE_BONUS_PCT / 100)
+    : net;
 }
 
 /**
@@ -86,13 +119,14 @@ export function rankByNetReceived(
  */
 export function bestRate(
   rates: AnchorRate[],
-  precision: number = DEFAULT_FIAT_PRECISION
+  precision: number = DEFAULT_FIAT_PRECISION,
+  opts: RankingOptions = defaultRankingOptions()
 ): AnchorRate | null {
   if (rates.length === 0) return null;
 
   return rates.reduce((best, candidate) => {
-    const bestVal = resolvedNetReceived(best, precision);
-    const candVal = resolvedNetReceived(candidate, precision);
+    const bestVal = rankingScore(best, precision, opts);
+    const candVal = rankingScore(candidate, precision, opts);
     return candVal > bestVal ? candidate : best;
   });
 }
@@ -147,4 +181,42 @@ function resolvedNetReceived(rate: AnchorRate, precision: number): number {
   const raw = rate.totalReceived;
   const factor = 10 ** precision;
   return Math.round(raw * factor) / factor;
+}
+
+// ─── Min receive ─────────────────────────────────────────────────────────────
+
+/**
+ * Floor tolerance applied to the expected net received amount when verifying
+ * the anchor's own `amount_out` estimate before the user signs the payment (2%).
+ */
+export const MIN_RECEIVE_TOLERANCE = 0.02;
+
+export type MinReceiveCheck =
+  | { ok: true; reason: 'no_floor' | 'no_estimate' | 'meets_floor' }
+  | { ok: false; amountOut: string; minReceive: string };
+
+const DECIMAL_STRING = /^[+-]?(\d+(\.\d*)?|\.\d+)$/;
+
+function isDecimalString(value: string | undefined): value is string {
+  return value !== undefined && DECIMAL_STRING.test(value.trim());
+}
+
+/**
+ * Checks the anchor's own `amount_out` estimate against the minimum acceptable
+ * receive amount. Amounts are compared as exact decimals, never as floats.
+ *
+ * - No usable `minReceive`: `ok` with `no_floor`.
+ * - No usable `amountOut`: `ok` with `no_estimate`, so the caller can continue
+ *   and tell the user the final amount is set by the anchor.
+ * - `amountOut` below `minReceive`: not ok, with both figures for the message.
+ * - Otherwise: `ok` with `meets_floor`.
+ */
+export function checkMinReceive(
+  amountOut: string | undefined,
+  minReceive: string | undefined
+): MinReceiveCheck {
+  if (!isDecimalString(minReceive)) return { ok: true, reason: 'no_floor' };
+  if (!isDecimalString(amountOut)) return { ok: true, reason: 'no_estimate' };
+  if (compareDecimals(amountOut, minReceive) < 0) return { ok: false, amountOut, minReceive };
+  return { ok: true, reason: 'meets_floor' };
 }

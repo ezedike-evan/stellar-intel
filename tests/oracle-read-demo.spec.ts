@@ -1,4 +1,4 @@
-import { describe, it, expect, vi, beforeEach } from 'vitest';
+import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
 import { readFileSync } from 'fs';
 
 // #723 — "verify the testnet oracle read displays correctly in the demo".
@@ -12,6 +12,18 @@ import { readFileSync } from 'fs';
 // nightly.yml. What is asserted here is everything that can go wrong without
 // the network: which contract we point at, and whether the value reaches the
 // surface that displays it.
+
+// These tests are about the recorded *testnet* deployment, and the unit project
+// runs with NEXT_PUBLIC_STELLAR_NETWORK=mainnet. Since the oracle address and the
+// read defaults follow that variable (#1405), pin testnet here; the mainnet
+// behaviour is covered in oracle-deployment.spec.ts.
+beforeEach(() => {
+  vi.stubEnv('NEXT_PUBLIC_STELLAR_NETWORK', 'testnet');
+});
+
+afterEach(() => {
+  vi.unstubAllEnvs();
+});
 
 describe('oracle deployment address (#723)', () => {
   it('reads the contract id from the recorded deployment', async () => {

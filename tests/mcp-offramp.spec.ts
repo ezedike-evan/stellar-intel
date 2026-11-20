@@ -5,7 +5,15 @@
  * crypto for secure entropy, which jsdom does not provide.
  */
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
-import { Keypair, TransactionBuilder, Networks } from '@stellar/stellar-sdk';
+import {
+  Account,
+  Keypair,
+  Memo,
+  Networks,
+  Operation,
+  TransactionBuilder,
+  type Transaction,
+} from '@stellar/stellar-sdk';
 import { hashIntent } from '@/lib/intent/hash';
 import type { ServerRatesResult } from '@/lib/stellar/server-rates';
 
@@ -13,6 +21,9 @@ import type { ServerRatesResult } from '@/lib/stellar/server-rates';
 // so the real signature/tx-construction logic (Keypair, TransactionBuilder) is
 // still exercised, and no test hits the network.
 const submitTransaction = vi.fn();
+// prepare reads the sender's account for its sequence number (#1364); by
+// default every sender is a fresh account at sequence 0.
+const loadAccount = vi.fn();
 vi.mock('@stellar/stellar-sdk', async (importOriginal) => {
   const actual = await importOriginal<typeof import('@stellar/stellar-sdk')>();
   return {
@@ -21,8 +32,10 @@ vi.mock('@stellar/stellar-sdk', async (importOriginal) => {
       ...actual.Horizon,
       Server: vi.fn().mockImplementation(function MockHorizonServer(this: {
         submitTransaction: typeof submitTransaction;
+        loadAccount: typeof loadAccount;
       }) {
         this.submitTransaction = submitTransaction;
+        this.loadAccount = loadAccount;
       }),
     },
   };
@@ -39,6 +52,13 @@ const LIVE_RATES: Record<string, { anchorId: string; totalReceived: (amount: num
 
 /** Sentinel amount that makes the stub simulate the routed anchor being unquotable. */
 const RATE_UNAVAILABLE_AMOUNT = '999999';
+
+/** Sentinel amounts that make the stub answer with an estimate instead of a firm quote. */
+const INDICATIVE_SOURCES: Record<string, 'sep24-fee' | 'sep6-info' | 'sep6-fee'> = {
+  '777': 'sep24-fee',
+  '778': 'sep6-info',
+  '779': 'sep6-fee',
+};
 
 vi.mock('@/lib/stellar/server-rates', () => ({
   fetchCorridorRates: vi.fn(async (id: string, amount: string): Promise<ServerRatesResult> => {
@@ -64,7 +84,7 @@ vi.mock('@/lib/stellar/server-rates', () => ({
           feeType: 'flat',
           exchangeRate: 0,
           totalReceived: route.totalReceived(Number(amount)),
-          source: 'sep38',
+          source: INDICATIVE_SOURCES[amount] ?? 'sep38',
           updatedAt: new Date(),
         },
       ],
@@ -83,6 +103,8 @@ const COWRIE_ACCOUNT = Keypair.random().publicKey();
 const MONEYGRAM_ACCOUNT = Keypair.random().publicKey();
 beforeEach(() => {
   vi.stubEnv('ANCHOR_PAYMENT_ACCOUNTS', JSON.stringify({ cowrie: COWRIE_ACCOUNT }));
+  loadAccount.mockReset();
+  loadAccount.mockImplementation(async (publicKey: string) => new Account(publicKey, '0'));
 });
 afterEach(() => {
   vi.unstubAllEnvs();
@@ -109,6 +131,38 @@ describe('intel.offramp.quote (#135)', () => {
     // live-rate stub: (100 - 2 fee) * 1600 = 156800
     expect(quote.netReceived).toBe('156800');
     expect(new Date(quote.expiresAt).getTime()).toBeGreaterThan(Date.now());
+  });
+
+  describe('firm or indicative (#1516)', () => {
+    it('labels a SEP-38 quote as firm', async () => {
+      const quote = await getQuote({ from: 'NGNT', to: 'NGN', amount: '100' });
+
+      expect(quote.source).toBe('sep38');
+      expect(quote.indicative).toBe(false);
+    });
+
+    it.each([
+      ['777', 'sep24-fee'],
+      ['778', 'sep6-info'],
+      ['779', 'sep6-fee'],
+    ] as const)('labels a %s (%s) estimate as indicative', async (amount, source) => {
+      const quote = await getQuote({ from: 'NGNT', to: 'NGN', amount });
+
+      expect(quote.source).toBe(source);
+      expect(quote.indicative).toBe(true);
+      expect(() => QuoteOutputSchema.parse(quote)).not.toThrow();
+    });
+
+    it('rejects an output that omits the flag', () => {
+      expect(() =>
+        QuoteOutputSchema.parse({
+          anchor: 'cowrie',
+          quoteId: 'a'.repeat(64),
+          netReceived: '1',
+          expiresAt: '2026-10-25T00:00:00.000Z',
+        })
+      ).toThrow();
+    });
   });
 
   it('computes net received for a second corridor', async () => {
@@ -194,6 +248,52 @@ describe('intel.offramp.prepare (#136)', () => {
     expect((tx.operations[0] as { destination?: string }).destination).toBe(COWRIE_ACCOUNT);
     // Unsigned: no signatures attached yet.
     expect(tx.signatures.length).toBe(0);
+  });
+
+  describe('sender account and sequence number (#1364)', () => {
+    const senderIntent = () => ({ ...validIntent, sender: Keypair.random().publicKey() });
+    const sequenceOf = async (unsignedTx: string) => {
+      const { TransactionBuilder, Networks } = await import('@stellar/stellar-sdk');
+      return (TransactionBuilder.fromXDR(unsignedTx, Networks.PUBLIC) as Transaction).sequence;
+    };
+
+    it("builds from the sender's on-chain sequence number", async () => {
+      const intent = senderIntent();
+      const loader = vi.fn(async (publicKey: string) => new Account(publicKey, '12345'));
+
+      const { unsignedTx } = await prepareIntent(intent, loader);
+
+      expect(loader).toHaveBeenCalledWith(intent.sender);
+      expect(await sequenceOf(unsignedTx)).toBe('12346');
+    });
+
+    it('reads the account from the configured Horizon by default', async () => {
+      const intent = senderIntent();
+      loadAccount.mockResolvedValueOnce(new Account(intent.sender, '700'));
+
+      const { unsignedTx } = await prepareIntent(intent);
+
+      expect(loadAccount).toHaveBeenCalledWith(intent.sender);
+      expect(await sequenceOf(unsignedTx)).toBe('701');
+    });
+
+    it('throws SENDER_NOT_FOUND when the sender has no account (Horizon 404)', async () => {
+      const loader = vi.fn().mockRejectedValue({ response: { status: 404 } });
+
+      await expect(prepareIntent(senderIntent(), loader)).rejects.toMatchObject({
+        code: 'SENDER_NOT_FOUND',
+        message: 'sender account does not exist on the network',
+      });
+    });
+
+    it('throws TX_BUILD_FAILED for any other failure to load the account', async () => {
+      const loader = vi.fn().mockRejectedValue(new Error('Horizon timed out'));
+
+      await expect(prepareIntent(senderIntent(), loader)).rejects.toMatchObject({
+        code: 'TX_BUILD_FAILED',
+        message: expect.stringContaining('Horizon timed out'),
+      });
+    });
   });
 
   it('uses the canonical BRL corridor issuer in the prepared payment', async () => {
@@ -448,6 +548,169 @@ describe('intel.execute (#819)', () => {
     await expect(
       executeIntent({ unsignedEnvelope, signature: wrongSignature, signedTx })
     ).rejects.toMatchObject({ code: 'SIGNATURE_INVALID' });
+  });
+
+  describe('fee and validity bounds (#1363)', () => {
+    const horizonOk = {
+      hash: 'a'.repeat(64),
+      ledger: 12345,
+      successful: true,
+      envelope_xdr: '',
+      result_xdr: '',
+      result_meta_xdr: '',
+      paging_token: '',
+    };
+
+    /** The prepared payment, re-built with a chosen fee and time window, then signed. */
+    async function withBounds(opts: { fee: string; window: [number, number] }) {
+      const kp = Keypair.random();
+      const { unsignedEnvelope, unsignedTx } = await prepareIntent({
+        ...validIntent,
+        sender: kp.publicKey(),
+      });
+      const prepared = TransactionBuilder.fromXDR(unsignedTx, Networks.PUBLIC) as Transaction;
+      const payment = prepared.operations[0] as Operation.Payment;
+      const rebuilt = new TransactionBuilder(new Account(kp.publicKey(), '0'), {
+        fee: opts.fee,
+        networkPassphrase: Networks.PUBLIC,
+      })
+        .addOperation(
+          Operation.payment({
+            destination: payment.destination,
+            asset: payment.asset,
+            amount: payment.amount,
+          })
+        )
+        .addMemo(Memo.hash(Buffer.from(prepared.memo.value as Uint8Array).toString('hex')))
+        .setTimebounds(opts.window[0], opts.window[1])
+        .build();
+      rebuilt.sign(kp);
+
+      const signature = Buffer.from(
+        kp.sign(Buffer.from(unsignedEnvelope.intentHash, 'utf8'))
+      ).toString('base64');
+      return { unsignedEnvelope, signature, signedTx: rebuilt.toXDR() };
+    }
+
+    const nowSec = () => Math.floor(Date.now() / 1000);
+
+    it('accepts a fee of 100 stroops valid for 300 seconds', async () => {
+      submitTransaction.mockResolvedValueOnce(horizonOk);
+      const input = await withBounds({ fee: '100', window: [0, nowSec() + 300] });
+      await expect(executeIntent(input)).resolves.toMatchObject({ status: 'submitted' });
+    });
+
+    it('rejects a fee of 1,000,000 stroops', async () => {
+      const input = await withBounds({ fee: '1000000', window: [0, nowSec() + 300] });
+      await expect(executeIntent(input)).rejects.toMatchObject({ code: 'TX_MISMATCH' });
+      expect(submitTransaction).not.toHaveBeenCalled();
+    });
+
+    it('accepts a fee at exactly the cap', async () => {
+      submitTransaction.mockResolvedValueOnce(horizonOk);
+      const input = await withBounds({ fee: '100000', window: [0, nowSec() + 300] });
+      await expect(executeIntent(input)).resolves.toMatchObject({ status: 'submitted' });
+    });
+
+    it('rejects a transaction with no expiry (timeout 0)', async () => {
+      const input = await withBounds({ fee: '100', window: [0, 0] });
+      await expect(executeIntent(input)).rejects.toMatchObject({
+        code: 'TX_MISMATCH',
+        message: expect.stringContaining('no expiry'),
+      });
+      expect(submitTransaction).not.toHaveBeenCalled();
+    });
+
+    it('rejects a transaction valid for 3600 seconds', async () => {
+      const input = await withBounds({ fee: '100', window: [0, nowSec() + 3600] });
+      await expect(executeIntent(input)).rejects.toMatchObject({ code: 'TX_MISMATCH' });
+      expect(submitTransaction).not.toHaveBeenCalled();
+    });
+
+    it('rejects a transaction that has already expired', async () => {
+      const input = await withBounds({ fee: '100', window: [0, nowSec() - 10] });
+      await expect(executeIntent(input)).rejects.toMatchObject({
+        code: 'TX_MISMATCH',
+        message: expect.stringContaining('expired'),
+      });
+      expect(submitTransaction).not.toHaveBeenCalled();
+    });
+
+    it('measures validity against an injected clock', async () => {
+      const input = await withBounds({ fee: '100', window: [0, nowSec() + 300] });
+      // An hour later the same transaction is long expired.
+      await expect(executeIntent(input, Date.now() + 3_600_000)).rejects.toMatchObject({
+        code: 'TX_MISMATCH',
+      });
+      expect(submitTransaction).not.toHaveBeenCalled();
+    });
+  });
+
+  describe('signature formats (#1362)', () => {
+    const b64 = (bytes: Uint8Array) => Buffer.from(bytes).toString('base64');
+    const horizonOk = {
+      hash: 'a'.repeat(64),
+      ledger: 12345,
+      successful: true,
+      envelope_xdr: '',
+      result_xdr: '',
+      result_meta_xdr: '',
+      paging_token: '',
+    };
+
+    it.each([
+      [
+        'raw hex bytes (Keypair.sign)',
+        (kp: Keypair, hash: string) => kp.sign(Buffer.from(hash, 'hex')),
+      ],
+      ['SEP-53 (Keypair.signMessage)', (kp: Keypair, hash: string) => kp.signMessage(hash)],
+    ])('accepts a signature over the %s without a legacy warning', async (_label, sign) => {
+      const stderr = vi.spyOn(process.stderr, 'write').mockImplementation(() => true);
+      try {
+        const kp = Keypair.random();
+        const { unsignedEnvelope, signedTx } = await prepareAndSign(kp);
+        const signature = b64(sign(kp, unsignedEnvelope.intentHash));
+        submitTransaction.mockResolvedValueOnce(horizonOk);
+
+        const out = await executeIntent({ unsignedEnvelope, signature, signedTx });
+        expect(out.status).toBe('submitted');
+        expect(stderr).not.toHaveBeenCalledWith(
+          expect.stringContaining('mcp_legacy_signature_format')
+        );
+      } finally {
+        stderr.mockRestore();
+      }
+    });
+
+    it('still accepts the legacy UTF-8 form, and logs that it was used', async () => {
+      const stderr = vi.spyOn(process.stderr, 'write').mockImplementation(() => true);
+      try {
+        const kp = Keypair.random();
+        const { unsignedEnvelope, signedTx, signature } = await prepareAndSign(kp);
+        submitTransaction.mockResolvedValueOnce(horizonOk);
+
+        const out = await executeIntent({ unsignedEnvelope, signature, signedTx });
+        expect(out.status).toBe('submitted');
+        expect(stderr).toHaveBeenCalledWith(expect.stringContaining('mcp_legacy_signature_format'));
+      } finally {
+        stderr.mockRestore();
+      }
+    });
+
+    it.each([
+      ['raw hex bytes', (kp: Keypair, hash: string) => kp.sign(Buffer.from(hash, 'hex'))],
+      ['SEP-53', (kp: Keypair, hash: string) => kp.signMessage(hash)],
+      ['UTF-8 bytes', (kp: Keypair, hash: string) => kp.sign(Buffer.from(hash, 'utf8'))],
+    ])('rejects a %s signature made by another key', async (_label, sign) => {
+      const kp = Keypair.random();
+      const { unsignedEnvelope, signedTx } = await prepareAndSign(kp);
+      const signature = b64(sign(Keypair.random(), unsignedEnvelope.intentHash));
+
+      await expect(executeIntent({ unsignedEnvelope, signature, signedTx })).rejects.toMatchObject({
+        code: 'SIGNATURE_INVALID',
+      });
+      expect(submitTransaction).not.toHaveBeenCalled();
+    });
   });
 
   it('throws UNSIGNED_TX when signedTx still has no signatures', async () => {

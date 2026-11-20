@@ -1,6 +1,6 @@
 # Stellar Intel — MCP Server
 
-**Last reviewed:** 2026-09-26
+**Last reviewed:** 2026-10-25
 
 The MCP server exposes Stellar Intel's off-ramp routing and anchor
 intelligence to MCP-capable agents over stdio or streamable HTTP. It lives in
@@ -21,6 +21,11 @@ The entry points expose the full tool set:
 | `intel.probe.coverage`    | ✓                   | ✓              | ✓                             |
 | `intel.leaderboard`       | ✓                   | ✓              | ✓                             |
 | `intel.corridors`         | ✓                   | ✓              | ✓                             |
+| `intel.onramp.quote`      | ✓                   | ✓              | ✓                             |
+| `intel.onramp.prepare`    | ✓                   | ✓              | ✓                             |
+
+The on-ramp tools are registered by the shared `lib/mcp` server, so every
+entry point has them. See [On-ramp tools](#on-ramp-tools) below.
 
 The on-ramp tools `intel.onramp.quote` and `intel.onramp.prepare` are
 specified but **not registered on any transport** — see
@@ -65,8 +70,9 @@ which builds its server from the canonical `createServer()` in
 and the `@stellarintel/mcp` package, so they cannot drift apart. Requests are
 rate-limited to 60 per minute per IP.
 
-**It serves the full eight-tool suite** alongside prompts and the anchor health
-ledger resource across all transports.
+**It serves ten tools** — the eight off-ramp and discovery tools plus the two
+on-ramp tools — alongside prompts and the anchor health ledger resource across
+all transports.
 
 ## Running it yourself
 
@@ -129,7 +135,13 @@ Returns the best net-received quote for a corridor + amount. Annotated
 `readOnlyHint: true` — it never submits anything.
 
 - **Input:** `{ from: string, to: string, amount: string }`
-- **Output:** `{ anchor, quoteId, netReceived, expiresAt }`
+- **Output:** `{ anchor, quoteId, netReceived, expiresAt, source, indicative }`
+
+`source` says where the rate came from: `sep38` is a firm quote the anchor commits
+to; `sep24-fee`, `sep6-info` and `sep6-fee` are estimates built from the anchor's
+published fees. `indicative` is `false` only for `sep38`. When it is `true`,
+`netReceived` can move before the payout, so do not present it to a user as a
+guarantee.
 
 ```jsonc
 // input
@@ -139,7 +151,9 @@ Returns the best net-received quote for a corridor + amount. Annotated
   "anchor": "cowrie",
   "quoteId": "<64-hex sha256>",
   "netReceived": "156800",
-  "expiresAt": "2026-…Z"
+  "expiresAt": "2026-…Z",
+  "source": "sep24-fee",
+  "indicative": true
 }
 ```
 
@@ -153,6 +167,13 @@ Annotated `readOnlyHint: true` — nothing is submitted on-chain until
 - **Input:** an off-ramp intent without a signature
   `{ type: "offramp", sourceAsset, destinationAsset, amount, sender, recipient }`
 - **Output:** `{ unsignedEnvelope: { intent, intentHash }, unsignedTx }`
+
+`unsignedTx` is built from the sender's real account, so its sequence number is
+the network's current one plus one and it can be signed and submitted as
+returned; it is valid for five minutes. That means `prepare` reads the
+sender's account from Horizon. A sender with no account on the network is
+rejected with `SENDER_NOT_FOUND`; any other failure to read it is
+`TX_BUILD_FAILED`.
 
 #### Routing and payment accounts
 
@@ -187,23 +208,30 @@ prepared for, then submits the transaction to Horizon.
 
 Verification, in order: the `intentHash` is recomputed from `intent` and must
 match; `signature` must verify against `intentHash` under `intent.sender`'s
-public key; the decoded `signedTx` must be signed, sourced from
+public key (see the accepted signature forms below); the decoded `signedTx` must be signed, sourced from
 `intent.sender`, carry exactly one payment operation to the routed anchor
 account for `intent.amount`/`intent.sourceAsset`, and memo-hash `intentHash`.
-Any mismatch is rejected before anything reaches Horizon.
+Its fee must be at most 100,000 stroops, and it must carry an expiry
+(`timeBounds.maxTime`) that has not passed and is no more than 15 minutes away.
+Any mismatch is rejected (`TX_MISMATCH`) before anything reaches Horizon.
 
 - **Input:**
   `{ unsignedEnvelope: { intent, intentHash }, signature, signedTx }` — the
   exact `unsignedEnvelope` from `intel.offramp.prepare`, a base64 ed25519
   signature over `intentHash` from the sender's key, and the base64 XDR of
-  `unsignedTx` after the sender has signed it.
+  `unsignedTx` after the sender has signed it. The signature is accepted in
+  the same two forms as the web app: over the 32 raw bytes the hex
+  `intentHash` decodes to (`Keypair.sign`), or SEP-53 (`Keypair.signMessage`,
+  which is what a wallet's `signMessage` produces). A signature over the
+  hash's UTF-8 bytes is deprecated; it is still accepted, and each use is
+  logged as `mcp_legacy_signature_format`.
 - **Output:** `{ status: "submitted", hash, ledger, corridorId, anchorId }`
 
 ```jsonc
 // input
 {
   "unsignedEnvelope": { "intent": { "type": "offramp", "..." }, "intentHash": "<64-hex>" },
-  "signature": "<base64 ed25519 sig over intentHash>",
+  "signature": "<base64 ed25519 sig over intentHash (raw bytes or SEP-53)>",
   "signedTx": "<base64 signed transaction XDR>"
 }
 // output
@@ -343,6 +371,32 @@ would be annotated `readOnlyHint: true` and both take an on-ramp intent
   handoff URL. **Input:** an `OnrampIntent` without a signature.
   **Output:** `{ unsignedEnvelope: { intent, intentHash }, handoffUrl }`, where
   `handoffUrl` is the anchor's hosted SEP-24 deposit page.
+### On-ramp tools
+
+Both on-ramp tools are annotated `readOnlyHint: true` and use the same
+field names as an on-ramp intent ([`docs/INTENT_API.md`](INTENT_API.md)).
+They are implemented in [`lib/mcp/onramp.ts`](../lib/mcp/onramp.ts).
+
+- **`intel.onramp.quote`** — the best indicative deposit estimate across the
+  anchors that serve the corridor.
+  **Input:** `{ sourceAsset, destinationAsset, amount }`, where `sourceAsset`
+  is the fiat the user pays (e.g. `NGN`), `destinationAsset` the Stellar asset
+  code received (e.g. `USDC`) and `amount` the fiat amount. There is no
+  `depositMethod` argument: published SEP-24 fees do not vary by method.
+  **Output:** `{ anchor, anchorName, asset, estimatedReceived, exchangeRate,
+corridorId, fiatAmount, indicative: true, source, alternatives }`, where
+  `source` is `sep38` or `sep24-fee`. The figure is an estimate from the
+  anchor's published fees and a reference price — never a firm quote, so there
+  is no `quoteId` or `expiresAt`. See [docs/ONRAMP.md](ONRAMP.md) for what
+  "indicative" means. Errors: `NO_ROUTE` (no corridor serves the pair),
+  `INVALID_AMOUNT`, and `RATE_UNAVAILABLE` (no anchor could be priced).
+- **`intel.onramp.prepare`** — the unsigned on-ramp intent, its hash, and
+  where the user finishes the deposit. **Input:** an `OnrampIntent` without a
+  signature. **Output:** `{ unsignedEnvelope: { intent, intentHash },
+corridorId, handoffUrl, nextStep }`. `handoffUrl` is the Stellar Intel
+  `/onramp` page for the corridor and amount, not the anchor's own deposit
+  page: that page only exists after a SEP-10 login signed by the user's wallet,
+  which an agent cannot do. No anchor is contacted.
 
 **There is no on-ramp execute tool, by design: on-ramp KYC is browser-only.**
 Unlike the off-ramp `intel.execute`, an on-ramp cannot be completed by signing

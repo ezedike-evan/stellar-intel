@@ -3,6 +3,7 @@ import { act, renderHook, waitFor } from '@testing-library/react';
 import { createElement } from 'react';
 import { SWRConfig } from 'swr';
 import {
+  useTransferStatus,
   useWithdrawStatus,
   computeNextWithdrawPollIntervalMs,
   WITHDRAW_POLL_INITIAL_MS,
@@ -259,14 +260,19 @@ const OUTCOME_CONTEXT = {
 /** Mock fetch that answers both the SEP-24 poll and the reputation append POST. */
 function mockFetchWithAppend(
   status: string,
-  opts: { amountOut?: string | null; stellarTxId?: string | null } = {}
+  opts: {
+    amountOut?: string | null;
+    stellarTxId?: string | null;
+    amountIn?: string | null;
+  } = {}
 ) {
   const fn = vi.fn(async (input: unknown) => {
     const url = typeof input === 'string' ? input : String((input as Request)?.url ?? '');
     if (url.includes('/api/reputation/append')) {
       return { ok: true, json: async () => ({ ok: true }) };
     }
-    const tx: Record<string, unknown> = { id: TXN_ID, status, amount_in: '100', amount_fee: '2.5' };
+    const tx: Record<string, unknown> = { id: TXN_ID, status, amount_fee: '2.5' };
+    if (opts.amountIn !== null) tx.amount_in = opts.amountIn ?? '100';
     if (opts.amountOut !== null) tx.amount_out = opts.amountOut ?? '97.5';
     if (opts.stellarTxId !== null) tx.stellar_transaction_id = opts.stellarTxId ?? 'stellar-tx-1';
     return { ok: true, json: async () => ({ transaction: tx }) };
@@ -299,6 +305,39 @@ describe('useWithdrawStatus — reputation recording (#799)', () => {
       stellarTransactionId: 'stellar-tx-1',
     });
     expect(typeof body.settleSeconds).toBe('number');
+  });
+
+  it('sends the all-in delivered rate for a completed outcome (#1498)', async () => {
+    const fn = mockFetchWithAppend('completed'); // 97.5 out for 100 in
+    renderHook(() => useWithdrawStatus(TRANSFER_SERVER, TXN_ID, JWT, OUTCOME_CONTEXT), { wrapper });
+    await waitFor(() => expect(findAppend(fn)).toBeDefined());
+
+    expect(appendBody(fn).deliveredRate).toBe('0.97500000');
+  });
+
+  it('leaves deliveredRate out when the anchor reported no amount_out (#1498)', async () => {
+    const fn = mockFetchWithAppend('completed', { amountOut: null });
+    renderHook(() => useWithdrawStatus(TRANSFER_SERVER, TXN_ID, JWT, OUTCOME_CONTEXT), { wrapper });
+    await waitFor(() => expect(findAppend(fn)).toBeDefined());
+
+    expect(appendBody(fn)).not.toHaveProperty('deliveredRate');
+  });
+
+  it('leaves deliveredRate out when the anchor reported no amount_in (#1498)', async () => {
+    const fn = mockFetchWithAppend('completed', { amountIn: null });
+    renderHook(() => useWithdrawStatus(TRANSFER_SERVER, TXN_ID, JWT, OUTCOME_CONTEXT), { wrapper });
+    await waitFor(() => expect(findAppend(fn)).toBeDefined());
+
+    expect(appendBody(fn)).not.toHaveProperty('deliveredRate');
+  });
+
+  it('never sends deliveredRate for a failed outcome, even with amounts (#1498)', async () => {
+    const fn = mockFetchWithAppend('error'); // amounts present
+    renderHook(() => useWithdrawStatus(TRANSFER_SERVER, TXN_ID, JWT, OUTCOME_CONTEXT), { wrapper });
+    await waitFor(() => expect(findAppend(fn)).toBeDefined());
+
+    expect(appendBody(fn).outcome).toBe('error');
+    expect(appendBody(fn)).not.toHaveProperty('deliveredRate');
   });
 
   it('records a rollback outcome (error, no delivery) when the anchor leg fails after signing', async () => {
@@ -340,6 +379,18 @@ describe('useWithdrawStatus — reputation recording (#799)', () => {
     expect(appends).toHaveLength(1);
   });
 
+  it('forwards direction, signature and publicKey unchanged in the append body (ONR032)', async () => {
+    const fn = mockFetchWithAppend('completed');
+    const depositContext = { ...OUTCOME_CONTEXT, direction: 'deposit' as const };
+    renderHook(() => useWithdrawStatus(TRANSFER_SERVER, TXN_ID, JWT, depositContext), { wrapper });
+    await waitFor(() => expect(findAppend(fn)).toBeDefined());
+
+    const body = appendBody(fn);
+    expect(body.direction).toBe('deposit');
+    expect(body.signature).toBe(OUTCOME_CONTEXT.signature);
+    expect(body.publicKey).toBe(OUTCOME_CONTEXT.publicKey);
+  });
+
   it('never includes key material in the appended outcome (non-custodial)', async () => {
     const fn = mockFetchWithAppend('completed');
     renderHook(() => useWithdrawStatus(TRANSFER_SERVER, TXN_ID, JWT, OUTCOME_CONTEXT), { wrapper });
@@ -354,8 +405,11 @@ describe('useWithdrawStatus — reputation recording (#799)', () => {
       'quotedAmount',
       'outcome',
       'deliveredAmount',
+      'deliveredRate',
       'settleSeconds',
       'stellarTransactionId',
+      // Transfer direction (ONR031/ONR032).
+      'direction',
       // The attestation: a public key and a signature, never a secret.
       'publicKey',
       'signature',
@@ -364,5 +418,59 @@ describe('useWithdrawStatus — reputation recording (#799)', () => {
     const serialized = JSON.stringify(body).toLowerCase();
     expect(serialized).not.toContain('secret');
     expect(serialized).not.toContain('privatekey');
+  });
+});
+
+describe('deposit fields and the useTransferStatus alias (#1467)', () => {
+  it('exposes instructions, moreInfoUrl, message and claimableBalanceId from a deposit', async () => {
+    vi.stubGlobal(
+      'fetch',
+      vi.fn(async () => ({
+        ok: true,
+        json: async () => ({
+          transaction: {
+            id: TXN_ID,
+            status: 'pending_user_transfer_start',
+            kind: 'deposit',
+            message: 'Send the transfer to continue',
+            more_info_url: 'https://anchor.example/tx/1',
+            claimable_balance_id: '00000000abc',
+            instructions: {
+              organization_bank_number: { value: '121122676', description: 'Routing number' },
+            },
+          },
+        }),
+      }))
+    );
+
+    const { result } = renderHook(() => useTransferStatus(TRANSFER_SERVER, TXN_ID, JWT), {
+      wrapper,
+    });
+    await waitFor(() => expect(result.current.isLoading).toBe(false));
+
+    expect(result.current.status).toBe('pending_user_transfer_start');
+    expect(result.current.instructions).toEqual({
+      organization_bank_number: { value: '121122676', description: 'Routing number' },
+    });
+    expect(result.current.moreInfoUrl).toBe('https://anchor.example/tx/1');
+    expect(result.current.message).toBe('Send the transfer to continue');
+    expect(result.current.claimableBalanceId).toBe('00000000abc');
+  });
+
+  it('leaves the deposit fields undefined for a withdrawal', async () => {
+    mockFetch('pending_external');
+    const { result } = renderHook(() => useWithdrawStatus(TRANSFER_SERVER, TXN_ID, JWT), {
+      wrapper,
+    });
+    await waitFor(() => expect(result.current.isLoading).toBe(false));
+
+    expect(result.current.instructions).toBeUndefined();
+    expect(result.current.moreInfoUrl).toBeUndefined();
+    expect(result.current.message).toBeUndefined();
+    expect(result.current.claimableBalanceId).toBeUndefined();
+  });
+
+  it('useTransferStatus is the very same hook as useWithdrawStatus', () => {
+    expect(useTransferStatus).toBe(useWithdrawStatus);
   });
 });

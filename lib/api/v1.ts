@@ -4,9 +4,11 @@ import {
   clearIdempotencyStore,
   getIdempotentResponse as getStoredIdempotent,
   readIdempotencyKey,
+  scopedIdempotencyKey,
   storeIdempotentResponse as storeSharedIdempotentResponse,
 } from './idempotency';
 import { API_VERSION } from './response';
+import { getLogger } from '@/lib/logger';
 
 /**
  * lib/api/v1.ts
@@ -140,7 +142,13 @@ export async function withV1(
     return v1Error('rate_limited', 'Too many requests', requestId, 429, baseHeaders);
   }
 
-  const idempotencyKey = options.idempotent ? readIdempotencyKey(request.headers) : null;
+  // Scoped to this bucket and the exact body, so a key cannot replay another
+  // caller's response, or one from a different route or payload. The clone
+  // leaves the body unread for the handler.
+  const clientKey = options.idempotent ? readIdempotencyKey(request.headers) : null;
+  const idempotencyKey = clientKey
+    ? await scopedIdempotencyKey(options.bucket, clientKey, await request.clone().text())
+    : null;
   if (idempotencyKey) {
     const replay = await getIdempotentResponse(idempotencyKey, baseHeaders);
     if (replay) return replay;
@@ -159,8 +167,15 @@ export async function withV1(
   try {
     result = await handler(ctx);
   } catch (err) {
-    const message = err instanceof Error ? err.message : 'Internal error';
-    return v1Error('internal_error', message, requestId, 500, baseHeaders);
+    // The detail stays in the log, keyed by requestId; the caller only gets the
+    // envelope, which carries the same requestId for correlation.
+    getLogger('api.v1').error({
+      event: 'v1_unhandled_error',
+      requestId,
+      error: err instanceof Error ? err.message : String(err),
+      stack: err instanceof Error ? err.stack : undefined,
+    });
+    return v1Error('internal_error', 'Internal error', requestId, 500, baseHeaders);
   }
 
   // Only successful mutations are cached, so a client can safely retry a failure.

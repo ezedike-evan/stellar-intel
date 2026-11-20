@@ -1,5 +1,13 @@
 import { afterEach, beforeEach, describe, it, expect, vi } from 'vitest';
 import { StrKey } from '@stellar/stellar-sdk';
+
+// Wrap the real reader so one test can substitute the listed domains and the rest
+// keep reading constants/listed-anchors.
+vi.mock('../scripts/lib/listed-seeds.mjs', async (importOriginal) => {
+  const actual = await importOriginal();
+  return { ...actual, readListedDomains: vi.fn(actual.readListedDomains) };
+});
+import { readListedDomains } from '../scripts/lib/listed-seeds.mjs';
 import {
   PROBE_ACCOUNT,
   SURVEY_SOURCES,
@@ -477,7 +485,12 @@ describe('collectCandidates', () => {
     const { candidates, sources, failed } = await collectCandidates();
 
     expect(failed).toEqual(['sdf-anchor-directory']);
-    expect(sources).toEqual(['registry', 'stellar.expert-directory', 'stellar.expert-assets']);
+    expect(sources).toEqual([
+      'registry',
+      'listed',
+      'stellar.expert-directory',
+      'stellar.expert-assets',
+    ]);
     expect(candidates.map((c) => c.domain)).toEqual(
       expect.arrayContaining(['onlydirectory.example', 'onlyassets.example', 'cowrie.exchange'])
     );
@@ -507,6 +520,85 @@ describe('collectCandidates', () => {
     const warned = console.warn.mock.calls.flat().map(String).join('\n');
     expect(warned).toContain('source stellar.expert-directory failed');
     expect(warned).toContain('source sdf-anchor-directory failed');
+  });
+
+  describe('the listed source (#1586)', () => {
+    it('is a default source, consulted right after the registry', () => {
+      expect(SURVEY_SOURCES.slice(0, 2)).toEqual(['registry', 'listed']);
+    });
+
+    it('returns the listed domains with listed:<id> sources', async () => {
+      const fetchMock = vi.fn();
+      vi.stubGlobal('fetch', fetchMock);
+      vi.mocked(readListedDomains).mockReturnValueOnce([
+        { domain: 'issuer-a.example', sources: ['listed:issuer-a'] },
+        { domain: 'rails.example', sources: ['listed:rails-op', 'listed:rails-op-two'] },
+      ]);
+
+      const { candidates, sources, failed } = await collectCandidates({ sources: ['listed'] });
+
+      expect(fetchMock).not.toHaveBeenCalled();
+      expect(sources).toEqual(['listed']);
+      expect(failed).toEqual([]);
+      expect(candidates).toEqual([
+        { domain: 'issuer-a.example', sources: ['listed', 'listed:issuer-a'] },
+        { domain: 'rails.example', sources: ['listed', 'listed:rails-op', 'listed:rails-op-two'] },
+      ]);
+    });
+
+    it('merges a listed domain that is also in the registry', async () => {
+      vi.stubGlobal('fetch', vi.fn());
+      vi.mocked(readListedDomains).mockReturnValueOnce([
+        { domain: 'cowrie.exchange', sources: ['listed:cowrie-issuer'] },
+      ]);
+
+      const { candidates } = await collectCandidates({ sources: ['registry', 'listed'] });
+
+      const cowrie = candidates.find((c) => c.domain === 'cowrie.exchange');
+      expect(cowrie.sources).toEqual(
+        expect.arrayContaining(['registry', 'listed', 'listed:cowrie-issuer'])
+      );
+    });
+
+    it('drops an invalid listed hostname', async () => {
+      vi.stubGlobal('fetch', vi.fn());
+      vi.mocked(readListedDomains).mockReturnValueOnce([
+        { domain: 'localhost', sources: ['listed:bad'] },
+        { domain: 'ok.example', sources: ['listed:ok'] },
+      ]);
+
+      const { candidates } = await collectCandidates({ sources: ['listed'] });
+
+      expect(candidates.map((c) => c.domain)).toEqual(['ok.example']);
+    });
+
+    it('warns and skips the source when the listed files cannot be read', async () => {
+      vi.stubGlobal('fetch', vi.fn());
+      vi.mocked(readListedDomains).mockImplementationOnce(() => {
+        throw new Error('Failed to parse broken.json: Unexpected token');
+      });
+
+      const { candidates, sources, failed } = await collectCandidates({
+        sources: ['registry', 'listed'],
+      });
+
+      expect(failed).toEqual(['listed']);
+      expect(sources).toEqual(['registry']);
+      expect(candidates.length).toBeGreaterThan(0);
+      expect(console.warn).toHaveBeenCalledWith(expect.stringContaining('source listed failed'));
+    });
+
+    it('does not count as a remote source: its failure alone does not abort the survey', async () => {
+      vi.stubGlobal('fetch', vi.fn());
+      vi.mocked(readListedDomains).mockImplementationOnce(() => {
+        throw new Error('boom');
+      });
+
+      await expect(collectCandidates({ sources: ['listed'] })).resolves.toMatchObject({
+        candidates: [],
+        failed: ['listed'],
+      });
+    });
   });
 
   it('limits the run to the requested sources', async () => {

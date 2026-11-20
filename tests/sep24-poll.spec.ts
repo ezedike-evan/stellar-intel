@@ -1,6 +1,10 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest';
 import { act } from '@testing-library/react';
-import { getSep24Transaction, TERMINAL_STATES } from '@/lib/stellar/sep24';
+import {
+  getSep24Transaction,
+  getWithdrawTransactionRecord,
+  TERMINAL_STATES,
+} from '@/lib/stellar/sep24';
 
 const TRANSFER_SERVER = 'https://cowrie.exchange/sep24';
 const TRANSACTION_ID = 'txn-abc123';
@@ -35,6 +39,40 @@ describe('getSep24Transaction', () => {
 
     expect(capturedUrl).toBe(`${TRANSFER_SERVER}/transaction?id=${TRANSACTION_ID}`);
     expect(capturedHeaders['Authorization']).toBe(`Bearer ${JWT}`);
+  });
+
+  it('percent-encodes a transaction id so it cannot change the query', async () => {
+    let capturedUrl = '';
+    vi.stubGlobal(
+      'fetch',
+      vi.fn(async (url: string) => {
+        capturedUrl = url;
+        return {
+          ok: true,
+          json: async () => ({ transaction: { id: 'a&b#c', status: 'pending_external' } }),
+        };
+      })
+    );
+
+    await getSep24Transaction(TRANSFER_SERVER, 'a&b#c', JWT);
+
+    expect(capturedUrl.endsWith('id=a%26b%23c')).toBe(true);
+    expect(new URL(capturedUrl).searchParams.get('id')).toBe('a&b#c');
+  });
+
+  it('percent-encodes the id when fetching the withdraw transaction record too', async () => {
+    let capturedUrl = '';
+    vi.stubGlobal(
+      'fetch',
+      vi.fn(async (url: string) => {
+        capturedUrl = url;
+        return { ok: false, status: 500, json: async () => null };
+      })
+    );
+
+    await getWithdrawTransactionRecord(TRANSFER_SERVER, 'a&b#c', JWT).catch(() => undefined);
+
+    expect(capturedUrl.endsWith('id=a%26b%23c')).toBe(true);
   });
 
   it('returns a WithdrawStatus with all mapped fields on a well-formed response', async () => {

@@ -21,27 +21,27 @@ jobs:
     outputs:
       preview-url: ${{ steps.vercel.outputs.preview-url }}
     steps:
-      - uses: actions/checkout@v7
-      - uses: actions/setup-node@v7
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
         with:
           node-version: '20'
           cache: 'npm'
       - run: npm ci
 
       - name: Install Vercel CLI
-        run: npm install --global vercel@latest
+        run: npm install --global vercel@65.2.0
 
       - name: Pull Vercel environment
         env:
           VERCEL_TOKEN: ${{ secrets.VERCEL_TOKEN }}
         if: env.VERCEL_TOKEN != ''
-        run: vercel pull --yes --environment=preview --token=${{ secrets.VERCEL_TOKEN }}
+        run: vercel pull --yes --environment=preview
 
       - name: Build with Vercel
         env:
           VERCEL_TOKEN: ${{ secrets.VERCEL_TOKEN }}
         if: env.VERCEL_TOKEN != ''
-        run: vercel build --token=${{ secrets.VERCEL_TOKEN }}
+        run: vercel build
 
       - name: Deploy preview
         id: vercel
@@ -49,13 +49,13 @@ jobs:
           VERCEL_TOKEN: ${{ secrets.VERCEL_TOKEN }}
         if: env.VERCEL_TOKEN != ''
         run: |
-          URL=$(vercel deploy --prebuilt --token=${{ secrets.VERCEL_TOKEN }})
+          URL=$(vercel deploy --prebuilt)
           echo "preview-url=$URL" >> "$GITHUB_OUTPUT"
           echo "Preview URL: $URL"
 
       - name: Comment preview URL on PR
         if: github.event.pull_request.head.repo.full_name == github.repository && steps.vercel.outputs.preview-url != ''
-        uses: actions/github-script@v9
+        uses: actions/github-script@3a2844b7e9c422d3c10d287c895573f7108da1b3 # v9.0.0
         with:
           script: |
             const url = `${{ steps.vercel.outputs.preview-url }}`;
@@ -97,8 +97,8 @@ jobs:
     needs: deploy
     if: needs.deploy.outputs.preview-url != ''
     steps:
-      - uses: actions/checkout@v7
-      - uses: actions/setup-node@v7
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
         with:
           node-version: '20'
           cache: 'npm'

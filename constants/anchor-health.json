@@ -1,11 +1,13 @@
 {
   "thresholdNights": 3,
   "updatedAt": "2026-10-23T09:22:22.882Z",
+  "updatedAt": "2026-10-24T08:54:12.193Z",
   "anchors": {
     "moneygram": {
       "consecutiveFailures": 0,
       "degraded": false,
       "lastCheckedAt": "2026-10-23T09:22:22.882Z",
+      "lastCheckedAt": "2026-10-24T08:54:12.193Z",
       "lastStatus": "ok",
       "lastError": null
     },
@@ -13,6 +15,7 @@
       "consecutiveFailures": 0,
       "degraded": false,
       "lastCheckedAt": "2026-10-23T09:22:22.882Z",
+      "lastCheckedAt": "2026-10-24T08:54:12.193Z",
       "lastStatus": "ok",
       "lastError": null
     },
@@ -20,6 +23,7 @@
       "consecutiveFailures": 0,
       "degraded": false,
       "lastCheckedAt": "2026-10-23T09:22:22.882Z",
+      "lastCheckedAt": "2026-10-24T08:54:12.193Z",
       "lastStatus": "ok",
       "lastError": null
     },
@@ -27,6 +31,7 @@
       "consecutiveFailures": 0,
       "degraded": false,
       "lastCheckedAt": "2026-10-23T09:22:22.882Z",
+      "lastCheckedAt": "2026-10-24T08:54:12.193Z",
       "lastStatus": "ok",
       "lastError": null
     },
@@ -34,6 +39,7 @@
       "consecutiveFailures": 0,
       "degraded": false,
       "lastCheckedAt": "2026-10-23T09:22:22.882Z",
+      "lastCheckedAt": "2026-10-24T08:54:12.193Z",
       "lastStatus": "ok",
       "lastError": null
     },
@@ -41,6 +47,7 @@
       "consecutiveFailures": 0,
       "degraded": false,
       "lastCheckedAt": "2026-10-23T09:22:22.882Z",
+      "lastCheckedAt": "2026-10-24T08:54:12.193Z",
       "lastStatus": "ok",
       "lastError": null
     },
@@ -48,6 +55,7 @@
       "consecutiveFailures": 0,
       "degraded": false,
       "lastCheckedAt": "2026-10-23T09:22:22.882Z",
+      "lastCheckedAt": "2026-10-24T08:54:12.193Z",
       "lastStatus": "ok",
       "lastError": null
     },
@@ -55,6 +63,7 @@
       "consecutiveFailures": 0,
       "degraded": false,
       "lastCheckedAt": "2026-10-23T09:22:22.882Z",
+      "lastCheckedAt": "2026-10-24T08:54:12.193Z",
       "lastStatus": "ok",
       "lastError": null
     },
@@ -62,6 +71,9 @@
       "consecutiveFailures": 11,
       "degraded": true,
       "lastCheckedAt": "2026-10-23T09:22:22.882Z",
+      "consecutiveFailures": 12,
+      "degraded": true,
+      "lastCheckedAt": "2026-10-24T08:54:12.193Z",
       "lastStatus": "fail",
       "lastError": "HTTP 502"
     },
@@ -69,6 +81,7 @@
       "consecutiveFailures": 0,
       "degraded": false,
       "lastCheckedAt": "2026-10-23T09:22:22.882Z",
+      "lastCheckedAt": "2026-10-24T08:54:12.193Z",
       "lastStatus": "ok",
       "lastError": null
     },
@@ -76,6 +89,7 @@
       "consecutiveFailures": 0,
       "degraded": false,
       "lastCheckedAt": "2026-10-23T09:22:22.882Z",
+      "lastCheckedAt": "2026-10-24T08:54:12.193Z",
       "lastStatus": "ok",
       "lastError": null
     },
@@ -83,6 +97,7 @@
       "consecutiveFailures": 0,
       "degraded": false,
       "lastCheckedAt": "2026-10-23T09:22:22.882Z",
+      "lastCheckedAt": "2026-10-24T08:54:12.193Z",
       "lastStatus": "ok",
       "lastError": null
     },
@@ -90,6 +105,7 @@
       "consecutiveFailures": 0,
       "degraded": false,
       "lastCheckedAt": "2026-10-23T09:22:22.882Z",
+      "lastCheckedAt": "2026-10-24T08:54:12.193Z",
       "lastStatus": "ok",
       "lastError": null
     }

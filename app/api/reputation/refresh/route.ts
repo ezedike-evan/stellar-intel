@@ -9,9 +9,12 @@ import {
   probeAllAnchors,
   probeAllAnchorQuotes,
   probeAllAnchorIssuers,
+  probeAllAnchorDeposits,
   probeAllAnchorIntegrity,
   probeAllAnchorSep31,
+  probeSep38Prices,
 } from '@/lib/reputation/probe';
+import { ANCHORS } from '@/constants/anchors';
 
 const LOCK_KEY = 'reputation-refresh';
 const LOCK_TTL_MS = 5 * 60 * 1000;
@@ -28,6 +31,10 @@ interface ProbeSweepCounts {
   issuerMismatch: number;
   tomlIntegrity: number;
   sep31Info: number;
+  /** SEP-24 deposit-availability samples, one per deposit asset (ONR029). */
+  deposit: number;
+  /** SEP-38 indicative price rows recorded into quote_history (#1509). */
+  sep38Prices: number;
 }
 
 // Runs every registered anchor through all five probe dimensions (Issue
@@ -41,17 +48,27 @@ async function runProbeSweep(): Promise<ProbeSweepCounts> {
   const issuerSink = new DurableProbeStore(store, 'issuer-mismatch');
   const integritySink = new DurableProbeStore(store, 'toml-integrity');
   const sep31Sink = new DurableProbeStore(store, 'sep31-info');
+  const depositSink = new DurableProbeStore(store, 'deposit');
 
-  const [uptimeSamples, quoteSamples, issuerSamples, integritySamples, sep31Samples] =
-    await Promise.all([
-      probeAllAnchors(uptimeSink),
-      probeAllAnchorQuotes(quoteSink),
-      probeAllAnchorIssuers(issuerSink),
-      probeAllAnchorIntegrity(integritySink),
-      probeAllAnchorSep31(sep31Sink),
-    ]);
+  const [
+    uptimeSamples,
+    quoteSamples,
+    issuerSamples,
+    integritySamples,
+    sep31Samples,
+    depositSamples,
+    sep38PriceRows,
+  ] = await Promise.all([
+    probeAllAnchors(uptimeSink),
+    probeAllAnchorQuotes(quoteSink),
+    probeAllAnchorIssuers(issuerSink),
+    probeAllAnchorIntegrity(integritySink),
+    probeAllAnchorSep31(sep31Sink),
+    probeAllAnchorDeposits(depositSink),
+    probeSep38Prices(ANCHORS, store),
+  ]);
 
-  const sinks = [uptimeSink, quoteSink, issuerSink, integritySink, sep31Sink];
+  const sinks = [uptimeSink, quoteSink, issuerSink, integritySink, sep31Sink, depositSink];
   await Promise.all(sinks.map((sink) => sink.drain()));
 
   return {
@@ -60,6 +77,8 @@ async function runProbeSweep(): Promise<ProbeSweepCounts> {
     issuerMismatch: issuerSamples.length,
     tomlIntegrity: integritySamples.length,
     sep31Info: sep31Samples.length,
+    deposit: depositSamples.length,
+    sep38Prices: sep38PriceRows.length,
     // Counted rather than assumed: `DurableProbeStore.record()` swallows a
     // rejected write, so sample counts above say what was *probed*, not what
     // reached the ledger. Issue #906 was invisible for exactly that reason.

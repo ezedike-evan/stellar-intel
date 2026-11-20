@@ -26,6 +26,8 @@ export async function createServer(): Promise<McpServer> {
   const { registerAnchorHealthTool } = await import('./tools/anchor-health');
   const { registerLeaderboardTool } = await import('./tools/leaderboard');
   const { registerCorridorsTool } = await import('./tools/corridors');
+  const { registerOnrampQuoteTool } = await import('./tools/onramp-quote');
+  const { registerOnrampPrepareTool } = await import('./tools/onramp-prepare');
   const { registerPrompts } = await import('./prompts');
   const { registerAnchorHealthResource } = await import('./resources/anchor-health');
   const { applyToolRateLimit } = await import('./rate-limit');
@@ -46,6 +48,8 @@ export async function createServer(): Promise<McpServer> {
   registerAnchorHealthTool(server);
   registerLeaderboardTool(server);
   registerCorridorsTool(server);
+  registerOnrampQuoteTool(server);
+  registerOnrampPrepareTool(server);
   registerPrompts(server);
   registerAnchorHealthResource(server);
   return server;

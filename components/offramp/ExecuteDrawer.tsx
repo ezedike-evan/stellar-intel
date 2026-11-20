@@ -12,6 +12,7 @@ import {
 } from '@/lib/stellar/sep38';
 import { measureClient } from '@/lib/metrics';
 import { amountBucket, FUNNEL_EVENTS, trackFunnelEvent } from '@/lib/analytics';
+import { checkMinReceive } from '@/lib/rate-ranking';
 import { stepTimeEstimate } from '@/lib/stellar/step-estimates';
 import { classifyExecuteError, isRetryableExecuteError } from '@/lib/errors/messages';
 import type { AnchorRate, ExecuteDrawerStep, Sep38Quote } from '@/types';
@@ -46,6 +47,8 @@ interface ExecuteDrawerProps {
   rate: AnchorRate | null;
   amount: string;
   publicKey: string;
+  /** Floor for the anchor's own amount_out estimate; the payment is blocked below it. */
+  minReceive?: string | undefined;
   onClose: () => void;
   /** Called once the Stellar payment is submitted; closes the drawer and hands tracking data to the page. */
   onExecuteStarted: (
@@ -62,6 +65,7 @@ export function ExecuteDrawer({
   rate,
   amount,
   publicKey,
+  minReceive,
   onClose,
   onExecuteStarted,
 }: ExecuteDrawerProps) {
@@ -86,6 +90,7 @@ export function ExecuteDrawer({
         rate={rate}
         amount={amount}
         publicKey={publicKey}
+        minReceive={minReceive}
         onClose={onClose}
         onExecuteStarted={onExecuteStarted}
       />
@@ -97,12 +102,15 @@ function ExecuteDrawerContent({
   rate,
   amount,
   publicKey,
+  minReceive,
   onClose,
   onExecuteStarted,
 }: ExecuteDrawerProps) {
   const [step, setStep] = useState<ExecuteDrawerStep>('idle');
   const [errorMsg, setErrorMsg] = useState<string | null>(null);
   const [errorIsRetryable, setErrorIsRetryable] = useState(true);
+  const [isNonRetryable, setIsNonRetryable] = useState(false);
+  const [estimateNote, setEstimateNote] = useState<string | null>(null);
   const [txHash, setTxHash] = useState<string | null>(null);
   const [kycUrl, setKycUrl] = useState<string | null>(null);
   const [kycOrigin, setKycOrigin] = useState<string | null>(null);
@@ -279,6 +287,8 @@ function ExecuteDrawerContent({
 
     setStep('authenticating');
     setErrorMsg(null);
+    setIsNonRetryable(false);
+    setEstimateNote(null);
     setTxHash(null);
     setFirmQuote(null);
     quoteExpiredRef.current = false;
@@ -373,6 +383,29 @@ function ExecuteDrawerContent({
         auth.jwt,
         signal
       );
+
+      // Min-receive guard (#1503): compare the anchor's own amount_out estimate
+      // with the floor before the user signs. A firm SEP-38 quote (locked in
+      // step 1.5) is already binding, so it is not guarded again.
+      if (quoteId === undefined) {
+        const check = checkMinReceive(record.amountOut, minReceive);
+        if (check.ok && check.reason === 'no_estimate') {
+          setEstimateNote(
+            "This anchor didn't share an estimate before payment. The final amount is set by the anchor."
+          );
+        } else if (!check.ok) {
+          const anchorName = anchor.name ?? rate.anchorName ?? 'Anchor';
+          const currency = rate.corridorId.split('-')[1]?.toUpperCase() ?? '';
+          setErrorMsg(
+            `${anchorName} now estimates you'll receive ${check.amountOut} ${currency}, below your minimum of ${check.minReceive} ${currency}. Nothing has been sent. Choose another anchor or try again later.`
+          );
+          setIsNonRetryable(true);
+          setErrorIsRetryable(false);
+          setStep('error');
+          trackFunnelEvent(FUNNEL_EVENTS.executionFailed, { error_class: 'below_min_receive' });
+          return;
+        }
+      }
 
       // Step 5 — Build payment
       const tx = await buildWithdrawPayment({
@@ -506,6 +539,8 @@ function ExecuteDrawerContent({
 
   const handleStartOver = () => {
     setErrorMsg(null);
+    setIsNonRetryable(false);
+    setEstimateNote(null);
     setStep('idle');
   };
 
@@ -636,6 +671,13 @@ function ExecuteDrawerContent({
             </div>
           )}
 
+          {/* Estimate note (e.g. no estimate shared) */}
+          {estimateNote && (
+            <p className="mb-4 rounded-lg bg-bg-sunken px-3 py-2 text-xs text-secondary-text">
+              {estimateNote}
+            </p>
+          )}
+
           {/* Step indicator — hidden during KYC iframe and SEP-6 form */}
           {step !== 'kyc' && step !== 'form' && <StepIndicator step={step} />}
 
@@ -688,14 +730,22 @@ function ExecuteDrawerContent({
                   {STEP_LABELS[step]}
                 </button>
               )}
-              {step === 'error' && (
-                <button
-                  onClick={errorIsRetryable ? handleExecute : handleStartOver}
-                  className="w-full rounded-xl bg-accent py-3 text-sm font-semibold text-background transition-colors hover:opacity-90"
-                >
-                  {errorIsRetryable ? 'Retry' : 'Start Over'}
-                </button>
-              )}
+              {step === 'error' &&
+                (isNonRetryable ? (
+                  <button
+                    onClick={onClose}
+                    className="w-full rounded-xl bg-bg-sunken py-3 text-sm font-semibold text-primary-text transition-colors hover:bg-bg-sunken dark:hover:bg-bg-sunken"
+                  >
+                    Close
+                  </button>
+                ) : (
+                  <button
+                    onClick={errorIsRetryable ? handleExecute : handleStartOver}
+                    className="w-full rounded-xl bg-accent py-3 text-sm font-semibold text-background transition-colors hover:opacity-90"
+                  >
+                    {errorIsRetryable ? 'Retry' : 'Start Over'}
+                  </button>
+                ))}
               {step === 'done' && (
                 <button
                   onClick={onClose}

@@ -36,8 +36,13 @@ import {
 
 // ─── Shape ────────────────────────────────────────────────────────────────────
 
-/** The four probe signals, named as the product speaks about them. */
-export type HealthSignalKey = 'uptime' | 'quoteAvailability' | 'issuerMatch' | 'tomlIntegrity';
+/**
+ * The probe signals, named as the product speaks about them. Four of them make up
+ * the withdraw-side health score; `depositAvailability` is reported beside them and
+ * has weight 0, so it can never move the score.
+ */
+export type HealthSignalKey =
+  'uptime' | 'quoteAvailability' | 'issuerMatch' | 'tomlIntegrity' | 'depositAvailability';
 
 /**
  * Maps a stored `ProbeKind` to the signal it reports, or `null` for a kind
@@ -51,6 +56,7 @@ export const SIGNAL_BY_PROBE_KIND: Record<ProbeKind, HealthSignalKey | null> = {
   'issuer-mismatch': 'issuerMatch',
   'toml-integrity': 'tomlIntegrity',
   'sep31-info': null,
+  deposit: 'depositAvailability',
 };
 
 /**
@@ -71,17 +77,27 @@ export const SIGNAL_BY_PROBE_KIND: Record<ProbeKind, HealthSignalKey | null> = {
  * request that did not come back is the answer, whatever the transport reason,
  * so every failure type counts for those two.
  */
-const VERDICT_FAILURES: Record<HealthSignalKey, ReadonlySet<ProbeFailureType> | 'all'> = {
+const VERDICT_FAILURES: Record<
+  HealthSignalKey,
+  ReadonlySet<ProbeFailureType> | 'all' | ((row: ProbeLedgerRow) => boolean)
+> = {
   uptime: 'all',
   quoteAvailability: 'all',
   issuerMatch: new Set<ProbeFailureType>(['mismatch']),
   tomlIntegrity: new Set<ProbeFailureType>(['integrity']),
+  // The deposit probe records an anchor that turned deposits off as an `unknown`
+  // failure whose error starts "deposit disabled": that is the anchor's answer. An
+  // `unknown` failure with any other error, and every network failure, is a probe
+  // that did not complete, so it says nothing about deposit availability.
+  depositAvailability: (row) =>
+    row.failureType === 'unknown' && (row.error ?? '').startsWith('deposit disabled'),
 };
 
 function isVerdict(key: HealthSignalKey, row: ProbeLedgerRow): boolean {
   if (row.reachable) return true;
   const verdicts = VERDICT_FAILURES[key];
   if (verdicts === 'all') return true;
+  if (typeof verdicts === 'function') return verdicts(row);
   return row.failureType !== null && verdicts.has(row.failureType);
 }
 
@@ -146,6 +162,9 @@ export const HEALTH_WEIGHTS: Record<HealthSignalKey, number> = {
   quoteAvailability: 0.2,
   issuerMatch: 0.2,
   tomlIntegrity: 0.2,
+  // Reported, never scored: withdrawals can work while deposits are off, so this
+  // must not lower (or raise) the score a withdraw-side reader relies on.
+  depositAvailability: 0,
 };
 
 /**
@@ -176,6 +195,7 @@ function emptySignals(): Record<HealthSignalKey, HealthSignal> {
     quoteAvailability: { ...EMPTY_SIGNAL },
     issuerMatch: { ...EMPTY_SIGNAL },
     tomlIntegrity: { ...EMPTY_SIGNAL },
+    depositAvailability: { ...EMPTY_SIGNAL },
   };
 }
 
@@ -197,6 +217,7 @@ export function probeHealthScore(signals: Record<HealthSignalKey, HealthSignal>)
     const signal = signals[key];
     if (signal.successRate === null) continue;
     const weight = HEALTH_WEIGHTS[key];
+    if (weight === 0) continue;
     weighted += weight * signal.successRate;
     weightSum += weight;
   }
@@ -280,11 +301,17 @@ export function computeAnchorHealth(
     };
   }
 
-  const observedDays = new Set(windowed.map((row) => row.probedAt.slice(0, 10))).size;
+  // Deposit rows are reported in their own signal and kept out of everything
+  // below, so the withdraw-side counts, the threshold that releases a score and
+  // the probing streak read the same with or without a deposit sweep.
+  const withdrawSide = windowed.filter((row) => row.kind !== 'deposit');
+  const observedDays = new Set(withdrawSide.map((row) => row.probedAt.slice(0, 10))).size;
   // Only verdict rows count toward the threshold that releases a score: twelve
   // checks that never completed are not twelve observations of the anchor.
-  const sampleSize = Object.values(signals).reduce((total, s) => total + s.samples, 0);
-  const incompleteChecks = windowed.length - sampleSize;
+  const sampleSize = (Object.keys(signals) as HealthSignalKey[])
+    .filter((key) => key !== 'depositAvailability')
+    .reduce((total, key) => total + signals[key].samples, 0);
+  const incompleteChecks = withdrawSide.length - sampleSize;
   const state: AnchorHealth['state'] =
     sampleSize >= MIN_HEALTH_SAMPLES ? 'ok' : 'insufficient_data';
 
@@ -296,7 +323,7 @@ export function computeAnchorHealth(
     sampleSize,
     incompleteChecks,
     observedDays,
-    continuousDays: continuousDayStreak(windowed, now),
+    continuousDays: continuousDayStreak(withdrawSide, now),
     signals,
     healthScore: state === 'ok' ? probeHealthScore(signals) : null,
     computedAt: now.toISOString(),
@@ -417,6 +444,8 @@ export interface HealthSummary {
   quoteAvailability: number | null;
   issuerMatchRate: number | null;
   tomlIntegrityRate: number | null;
+  /** SEP-24 deposit availability. Reported beside the health score, never part of it. */
+  depositAvailabilityRate: number | null;
 }
 
 export function toHealthSummary(health: AnchorHealth): HealthSummary {
@@ -431,5 +460,6 @@ export function toHealthSummary(health: AnchorHealth): HealthSummary {
     quoteAvailability: health.signals.quoteAvailability.successRate,
     issuerMatchRate: health.signals.issuerMatch.successRate,
     tomlIntegrityRate: health.signals.tomlIntegrity.successRate,
+    depositAvailabilityRate: health.signals.depositAvailability.successRate,
   };
 }

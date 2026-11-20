@@ -7,6 +7,7 @@ import type { Anchor, Corridor } from '@/types';
 const FLAGGED_OFF_CORRIDORS = {
   'usdc-xof': 'v1.1 target corridor, gated behind v11Corridors until an anchor serves it.',
   'usdc-pen': 'Orphaned when anclap was corrected to its own tokens 2026-09-23.',
+  'usdc-usd': 'Orphaned when finclusive, its only anchor, was delisted 2026-10-25.',
   // perahub (#1303) serves usdc-php over SEP-31 only, and SEP-31 is never routed:
   // it needs a bilateral sending-anchor agreement. The corridor stays defined so the
   // lane is in the record, but it must not be treated as covered by registry `corridors`.

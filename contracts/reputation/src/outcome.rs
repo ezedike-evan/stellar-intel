@@ -1,13 +1,26 @@
 use soroban_sdk::{Address, Env, String, Vec};
 
 use crate::storage::{self, DataKey, PAGE_SIZE};
-use crate::{aggregate, publishers, Error};
+use crate::{aggregate, anchors, events, publishers, Error};
 
 /// Upper bound on a single outcome's settle time (~11.6 days). Rejects absurd
 /// values that would otherwise inflate the settle-seconds accumulator toward
 /// overflow; any real settlement is far below this.
 pub const MAX_SETTLE_SECONDS: u64 = 1_000_000;
 
+/// Longest accepted `outcome_hash`, in characters. The publisher always sends a
+/// 64-character hex SHA-256 (`buildOutcomeHash` in packages/publisher), so this
+/// leaves no slack for anything else. Without a bound a compromised publisher
+/// could submit oversized hashes until a 25-entry outcome page exceeds the
+/// ledger-entry size limit, after which every later `submit_outcome` for that
+/// anchor would trap (audit M-4).
+pub const MAX_OUTCOME_HASH_LEN: u32 = 64;
+
+/// Record one settlement outcome for an anchor on a corridor. Publisher-only.
+///
+/// `outcome_hash` must be 1 to [`MAX_OUTCOME_HASH_LEN`] (64) characters, and
+/// `settle_seconds` at most [`MAX_SETTLE_SECONDS`]; otherwise `OutOfRange`,
+/// before anything is read from or written to the history.
 pub fn submit_outcome(
     env: &Env,
     publisher: &Address,
@@ -17,13 +30,18 @@ pub fn submit_outcome(
     settle_seconds: u64,
     success: bool,
 ) -> Result<(), Error> {
-    publisher.require_auth();
+    publishers::require_publisher(env, publisher)?;
+    publishers::require_in_scope(env, publisher, &corridor)?;
 
-    if !publishers::is_authorized(env, publisher) {
-        return Err(Error::PublisherUnauthorized);
-    }
+    // The registry is what list_anchors reports; without this gate a publisher
+    // key could create history and scores for ids that were never registered
+    // (audit M-5).
+    anchors::require_registered(env, &anchor_id)?;
 
     if settle_seconds > MAX_SETTLE_SECONDS {
+        return Err(Error::OutOfRange);
+    }
+    if outcome_hash.is_empty() || outcome_hash.len() > MAX_OUTCOME_HASH_LEN {
         return Err(Error::OutOfRange);
     }
 
@@ -53,5 +71,34 @@ pub fn submit_outcome(
     storage::extend_persistent(env, &head_key);
 
     aggregate::record(env, &anchor_id, &corridor, settle_seconds, success)?;
+    events::outcome(
+        env,
+        publisher,
+        &anchor_id,
+        &corridor,
+        settle_seconds,
+        success,
+    );
     Ok(())
+}
+
+/// Hide an anchor's existing outcome history without touching it.
+///
+/// Moves the head to a fresh, empty page one past the current one and raises
+/// the anchor's floor to that page, so [`crate::history::recent_outcomes`] stops
+/// before the old pages. Nothing is iterated or deleted, so the cost is O(1)
+/// however deep the history. This is the recovery path for a page polluted by a
+/// since-revoked publisher, or jammed before the hash-length cap (audit M-4).
+/// Aggregates have their own reset.
+pub fn reset_history(env: &Env, anchor_id: &String) {
+    let head_key = DataKey::OutcomeHead(anchor_id.clone());
+    let (page, _len): (u32, u32) = env.storage().persistent().get(&head_key).unwrap_or((0, 0));
+    let fresh = page + 1;
+
+    env.storage().persistent().set(&head_key, &(fresh, 0u32));
+    storage::extend_persistent(env, &head_key);
+
+    let floor_key = DataKey::OutcomeFloor(anchor_id.clone());
+    env.storage().persistent().set(&floor_key, &fresh);
+    storage::extend_persistent(env, &floor_key);
 }

@@ -1,6 +1,6 @@
 'use client';
 import { useCallback, useEffect, useState } from 'react';
-import type { Dispute } from '@/app/api/admin/disputes/route';
+import type { Dispute } from '@/lib/reputation/disputes';
 
 type ActionState = 'idle' | 'loading' | 'error';
 
@@ -122,10 +122,10 @@ export default function AdminDisputesPage() {
                 </div>
                 <p className="mt-1 text-sm text-secondary-text">{d.reason}</p>
                 <p className="mt-1 text-xs text-secondary-text">
-                  {d.submittedBy} · {new Date(d.createdAt).toLocaleString()}
+                  {d.publicKey} · {new Date(d.createdAt).toLocaleString()}
                 </p>
               </div>
-              {d.status === 'pending' && (
+              {d.status === 'open' && (
                 <div className="flex shrink-0 gap-2">
                   <button
                     onClick={() => handleAction(d.id, 'accept')}
@@ -153,7 +153,7 @@ export default function AdminDisputesPage() {
 
 function StatusBadge({ status }: { status: Dispute['status'] }) {
   const styles = {
-    pending: 'bg-bg-sunken text-status-unknown  ',
+    open: 'bg-bg-sunken text-status-unknown  ',
     accepted: 'bg-accent-subtle text-status-up  ',
     rejected: 'bg-bg-sunken text-status-down  ',
   };

@@ -117,4 +117,24 @@ describe('admin cache invalidation endpoint', () => {
     const data = await res.json();
     expect(data).toMatchObject({ code: 'VALIDATION_ERROR' });
   });
+
+  it('returns 400, not 500, when anchorId is not a string', async () => {
+    for (const anchorId of [123, null, ['moneygram'], { id: 'moneygram' }]) {
+      const res = await POST(makeRequest({ anchorId }, { 'x-admin-key': 'secret' }));
+      expect(res.status).toBe(400);
+      expect(await res.json()).toMatchObject({ code: 'VALIDATION_ERROR' });
+    }
+  });
+
+  it('returns 400 when all is not a boolean, or the body is not an object', async () => {
+    for (const body of [{ all: 'yes' }, null, 'all', [1]]) {
+      const res = await POST(makeRequest(body, { 'x-admin-key': 'secret' }));
+      expect(res.status).toBe(400);
+    }
+  });
+
+  it('rejects an over-long anchorId', async () => {
+    const res = await POST(makeRequest({ anchorId: 'x'.repeat(65) }, { 'x-admin-key': 'secret' }));
+    expect(res.status).toBe(400);
+  });
 });

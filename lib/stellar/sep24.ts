@@ -3,6 +3,7 @@ import { getTransferServer } from './sep1';
 import { getAnchorsByCorridorId, getCorridorById } from './anchors';
 import { fetchWithTimeout } from './http';
 import { computeTotalReceived } from '@/lib/utils';
+import { AMOUNT_PATTERN } from '@/lib/patterns';
 import { normalizeStatus } from './sep24-status-map';
 import type {
   Sep24FeeParams,
@@ -12,6 +13,8 @@ import type {
   Sep24WithdrawResponse,
   Sep24DepositRequest,
   Sep24DepositResponse,
+  DepositFlowParams,
+  DepositFlowSession,
   Sep24Transaction,
   WithdrawStatusValue,
   ResolvedAnchor,
@@ -43,7 +46,7 @@ async function fetchSep24TransactionOnce(
   jwt: string,
   signal?: AbortSignal
 ): Promise<Sep24Transaction> {
-  const res = await fetch(`${transferServer}/transaction?id=${transactionId}`, {
+  const res = await fetch(`${transferServer}/transaction?id=${encodeURIComponent(transactionId)}`, {
     headers: { Authorization: `Bearer ${jwt}` },
     ...(signal ? { signal } : {}),
   });
@@ -81,7 +84,53 @@ async function fetchSep24TransactionOnce(
     ...(tx['refunds'] !== undefined && {
       refunds: tx['refunds'] as Sep24Transaction['refunds'],
     }),
+    ...(parseInstructions(tx['instructions']) !== undefined && {
+      instructions: parseInstructions(tx['instructions']),
+    }),
+    ...(parseHttpsUrl(tx['more_info_url']) !== undefined && {
+      moreInfoUrl: parseHttpsUrl(tx['more_info_url']),
+    }),
+    ...(typeof tx['message'] === 'string' && { message: tx['message'] }),
+    ...(typeof tx['claimable_balance_id'] === 'string' && {
+      claimableBalanceId: tx['claimable_balance_id'],
+    }),
+    ...(typeof tx['from'] === 'string' && { from: tx['from'] }),
+    ...(typeof tx['to'] === 'string' && { to: tx['to'] }),
+    ...((tx['kind'] === 'deposit' || tx['kind'] === 'withdrawal') && { kind: tx['kind'] }),
   };
+}
+
+/**
+ * The deposit `instructions` map, keeping only entries whose `value` is a string
+ * (an anchor sends arbitrary JSON; a non-string value cannot be shown to a user as
+ * a payment instruction). A missing `description` becomes `''`. `undefined` when
+ * nothing usable is left, so the field is simply absent.
+ */
+function parseInstructions(raw: unknown): Sep24Transaction['instructions'] {
+  if (typeof raw !== 'object' || raw === null || Array.isArray(raw)) return undefined;
+
+  const parsed: Record<string, { value: string; description: string }> = {};
+  for (const [key, entry] of Object.entries(raw)) {
+    if (typeof entry !== 'object' || entry === null) continue;
+    const { value, description } = entry as { value?: unknown; description?: unknown };
+    if (typeof value !== 'string') continue;
+    parsed[key] = { value, description: typeof description === 'string' ? description : '' };
+  }
+  return Object.keys(parsed).length > 0 ? parsed : undefined;
+}
+
+/**
+ * `more_info_url`, kept only when it is a parseable https URL. It is rendered as a
+ * link, so a `javascript:` or `data:` URL from a hostile anchor must never get
+ * through.
+ */
+function parseHttpsUrl(raw: unknown): string | undefined {
+  if (typeof raw !== 'string') return undefined;
+  try {
+    return new URL(raw).protocol === 'https:' ? raw : undefined;
+  } catch {
+    return undefined;
+  }
 }
 
 /**
@@ -177,6 +226,79 @@ export function resolveAssetParams(
   const params: Record<string, string> = { asset_code: assetCode };
   if (assetIssuer) params.asset_issuer = assetIssuer;
   return params;
+}
+
+/**
+ * Looks up one asset's entry in a SEP-24 /info operation map (ONR007).
+ *
+ * Anchors key these maps either by SEP-38 identifier (`stellar:CODE:ISSUER`)
+ * or by bare code (`USDC`), and native XLM additionally appears as
+ * `stellar:native` or `native`. This is the one place that tries the variants
+ * in order, so callers stop re-implementing the lookup inconsistently.
+ */
+export function findSep24AssetInfo(
+  info: Sep24InfoResponse | null,
+  operation: 'deposit' | 'withdraw',
+  assetCode: string,
+  assetIssuer?: string
+): Sep24AssetInfo | null {
+  const map = info?.[operation];
+  if (!map) return null;
+
+  const candidates =
+    assetCode === 'XLM' && !assetIssuer
+      ? ['stellar:native', 'native']
+      : assetIssuer
+        ? [`stellar:${assetCode}:${assetIssuer}`, assetCode]
+        : [assetCode];
+
+  for (const key of candidates) {
+    const entry = map[key];
+    if (entry) return entry;
+  }
+  return null;
+}
+
+/** One enabled asset parsed out of a SEP-24 /info operation map. */
+export interface Sep24EnabledAsset {
+  /** The raw /info key, exactly as the anchor published it. */
+  key: string;
+  code: string;
+  /** Issuer parsed from an identifier-style key; null for native XLM or a bare code key. */
+  issuer: string | null;
+  info: Sep24AssetInfo;
+}
+
+/**
+ * Lists the assets an anchor enables for `operation` in its SEP-24 /info
+ * (ONR007). Entries whose `enabled` is not exactly `true` are left out, and
+ * identifier-style keys are parsed into code and issuer so callers can build
+ * requests for any supported asset, not only the registry's primary one.
+ */
+export function listEnabledAssets(
+  info: Sep24InfoResponse | null,
+  operation: 'deposit' | 'withdraw'
+): Sep24EnabledAsset[] {
+  const map = info?.[operation];
+  if (!map) return [];
+
+  const assets: Sep24EnabledAsset[] = [];
+  for (const [key, entry] of Object.entries(map)) {
+    if (entry?.enabled !== true) continue;
+    if (key === 'native' || key === 'stellar:native') {
+      assets.push({ key, code: 'XLM', issuer: null, info: entry });
+      continue;
+    }
+    const identifier = /^stellar:([^:]+):([^:]+)$/.exec(key);
+    const code = identifier?.[1];
+    const issuer = identifier?.[2];
+    if (code && issuer) {
+      assets.push({ key, code, issuer, info: entry });
+    } else {
+      assets.push({ key, code: key, issuer: null, info: entry });
+    }
+  }
+  return assets;
 }
 
 // ─── GET /fee (low-level, takes transferServer directly) ─────────────────────
@@ -615,7 +737,7 @@ export async function initiateDeposit(
   params: Sep24DepositRequest,
   signal?: AbortSignal
 ): Promise<Sep24DepositResponse> {
-  const { jwt, assetCode, assetIssuer, amount, account } = params;
+  const { jwt, assetCode, assetIssuer, amount, account, lang, quoteId } = params;
   const transferServer = anchor.TRANSFER_SERVER_SEP0024;
 
   if (!transferServer || !anchor.capabilities.sep24) {
@@ -635,7 +757,12 @@ export async function initiateDeposit(
       ...assetParams,
       amount,
       account,
-      lang: 'en',
+      lang: lang ?? 'en',
+      // A first-deposit wallet has no trustline yet. Saying it can take a
+      // claimable balance lets the anchor pay out that way instead of leaving the
+      // deposit stuck in pending_trust. SEP-24 request params are strings.
+      claimable_balance_supported: 'true',
+      ...(quoteId ? { quote_id: quoteId } : {}),
     }),
     ...(signal ? { signal } : {}),
   });
@@ -671,55 +798,52 @@ export async function initiateDeposit(
 }
 
 /**
- * Opens the anchor's KYC popup and waits for the user to complete it.
- * Resolves with the transaction ID on success.
- * Rejects if the user cancels or closes the popup.
+ * Starts an interactive SEP-24 deposit and returns what the caller needs to send
+ * the user to the anchor.
+ *
+ * The preconditions are checked before anything is fetched: the anchor must
+ * support SEP-24 and the amount must be a positive decimal. It then calls
+ * {@link initiateDeposit} (which sends the language, default `en`) and, when a
+ * `callbackUrl` is given, adds it to the anchor's URL as `callback` without
+ * dropping the query parameters the anchor already put there. With no callback
+ * the anchor's URL is returned exactly as issued.
  */
-export function openWithdrawPopup(url: string): Promise<string> {
-  return new Promise((resolve, reject) => {
-    const width = 600;
-    const height = 700;
-    const left = Math.round(window.screen.width / 2 - width / 2);
-    const top = Math.round(window.screen.height / 2 - height / 2);
+export async function startDepositFlow(
+  anchor: ResolvedAnchor,
+  params: DepositFlowParams,
+  signal?: AbortSignal
+): Promise<DepositFlowSession> {
+  const transferServer = anchor.TRANSFER_SERVER_SEP0024;
+  if (!transferServer || !anchor.capabilities.sep24) {
+    throw new Error(`Anchor "${anchor.homeDomain}" does not support SEP-24 deposits.`);
+  }
+  if (!AMOUNT_PATTERN.test(params.amount) || Number(params.amount) <= 0) {
+    throw new Error('Deposit amount must be a positive decimal string.');
+  }
 
-    const popup = window.open(
-      url,
-      'stellar_anchor_kyc',
-      `width=${width},height=${height},left=${left},top=${top}`
-    );
+  const { callbackUrl, ...request } = params;
+  const issued = await initiateDeposit(anchor, request, signal);
 
-    if (!popup) {
-      reject(new Error('Failed to open popup. Check that popups are not blocked.'));
-      return;
-    }
+  let depositUrl = issued.url;
+  if (callbackUrl) {
+    const url = new URL(issued.url);
+    url.searchParams.set('callback', callbackUrl);
+    depositUrl = url.toString();
+  }
 
-    let resolved = false;
+  return { transactionId: issued.id, depositUrl, transferServer };
+}
 
-    const onMessage = (event: MessageEvent) => {
-      if (event.data?.type === 'stellar_transaction_created') {
-        cleanup();
-        resolve(event.data.transaction_id as string);
-      } else if (event.data?.type === 'stellar_cancel') {
-        cleanup();
-        reject(new Error('User cancelled the transaction'));
-      }
-    };
-
-    const pollInterval = setInterval(() => {
-      if (popup.closed && !resolved) {
-        cleanup();
-        reject(new Error('Popup was closed'));
-      }
-    }, 500);
-
-    function cleanup() {
-      resolved = true;
-      clearInterval(pollInterval);
-      window.removeEventListener('message', onMessage);
-    }
-
-    window.addEventListener('message', onMessage);
-  });
+/** The fields of a SEP-24 `/transaction` record the withdraw flow reads. */
+export interface WithdrawTransactionRecord {
+  withdrawAnchorAccount: string;
+  memo: string;
+  memoType: string;
+  /** The anchor's own `amount_in`, `amount_out`, `amount_out_asset` and fee, when it reports them. */
+  amountIn?: string;
+  amountOut?: string;
+  amountOutAsset?: string;
+  amountFee?: string;
 }
 
 /**
@@ -731,8 +855,8 @@ export async function getWithdrawTransactionRecord(
   transactionId: string,
   jwt: string,
   signal?: AbortSignal
-): Promise<{ withdrawAnchorAccount: string; memo: string; memoType: string }> {
-  const res = await fetch(`${transferServer}/transaction?id=${transactionId}`, {
+): Promise<WithdrawTransactionRecord> {
+  const res = await fetch(`${transferServer}/transaction?id=${encodeURIComponent(transactionId)}`, {
     headers: { Authorization: `Bearer ${jwt}` },
     ...(signal ? { signal } : {}),
   });
@@ -757,9 +881,18 @@ export async function getWithdrawTransactionRecord(
     );
   }
 
+  const feeDetails = tx['fee_details'] as { total?: string } | undefined;
+  const amountFee = tx['amount_fee'] ?? feeDetails?.total;
+
   return {
     withdrawAnchorAccount: tx['withdraw_anchor_account'] as string,
     memo: (tx['memo'] as string) ?? '',
     memoType: (tx['memo_type'] as string) ?? 'text',
+    ...(tx['amount_in'] !== undefined && { amountIn: tx['amount_in'] as string }),
+    ...(tx['amount_out'] !== undefined && { amountOut: tx['amount_out'] as string }),
+    ...(tx['amount_out_asset'] !== undefined && {
+      amountOutAsset: tx['amount_out_asset'] as string,
+    }),
+    ...(amountFee !== undefined && { amountFee: amountFee as string }),
   };
 }

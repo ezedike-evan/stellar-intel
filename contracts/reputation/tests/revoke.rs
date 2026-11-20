@@ -21,6 +21,7 @@ fn revoked_publisher_cannot_submit_outcome() {
     client.add_publisher(&admin, &publisher);
 
     let anchor_id = String::from_str(&env, "moneygram");
+    client.register_anchor(&admin, &anchor_id);
     let corridor = String::from_str(&env, "NGN-USD");
     let outcome_hash = String::from_str(&env, "hash-1");
 

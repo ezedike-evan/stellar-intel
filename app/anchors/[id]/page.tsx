@@ -3,9 +3,11 @@ import { notFound } from 'next/navigation';
 import { ANCHORS, CORRIDORS } from '@/constants';
 import { buildScorecards, mapOutcomeRows } from '@/lib/reputation/aggregate';
 import { getHistoryBuckets } from '@/lib/reputation/buckets';
+import { computeQuoteGapStats } from '@/lib/reputation/quote-gap';
 import { getReputationStore, ReputationStoreUnavailableError } from '@/lib/reputation/store';
 import { AnchorProfile, type AnchorProfileData } from '@/components/offramp/AnchorProfile';
 import { ScorecardCard } from '@/components/offramp/ScorecardCard';
+import { QuoteGapCard } from '@/components/anchors/QuoteGapCard';
 
 const SITE_URL = process.env.NEXT_PUBLIC_SITE_URL ?? 'https://stellar-intel.vercel.app';
 const DEFAULT_TITLE = 'Anchor profile — Stellar Intel';
@@ -98,6 +100,8 @@ export default async function AnchorDetailPage({
     .reverse()
     .find((row) => row.oracleTxHash !== null && row.publishedAt !== null);
 
+  const quoteGap = computeQuoteGapStats(rows, { windowDays: 30 });
+
   const scorecards = buildScorecards(outcomeRows, Date.now(), lastPublished?.publishedAt ?? null);
 
   const disputes: AnchorProfileData['disputes'] = rows
@@ -151,6 +155,7 @@ export default async function AnchorDetailPage({
         window="30d"
         latestOracleTxHash={lastPublished?.oracleTxHash ?? undefined}
       />
+      <QuoteGapCard {...quoteGap} />
     </div>
   );
 }

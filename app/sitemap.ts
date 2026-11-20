@@ -19,7 +19,17 @@ export default function sitemap(): MetadataRoute.Sitemap {
       changeFrequency: 'daily',
     },
     {
+      url: `${SITE_URL}/onramp`,
+      lastModified: now,
+      changeFrequency: 'daily',
+    },
+    {
       url: `${SITE_URL}/anchors`,
+      lastModified: now,
+      changeFrequency: 'daily',
+    },
+    {
+      url: `${SITE_URL}/anchors/sep38`,
       lastModified: now,
       changeFrequency: 'daily',
     },

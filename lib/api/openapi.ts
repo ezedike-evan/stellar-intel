@@ -205,6 +205,54 @@ const RateComparisonSchema = registry.register(
   })
 );
 
+const DepositRateSchema = registry.register(
+  'DepositRate',
+  z.object({
+    anchorId: z.string(),
+    anchorName: z.string(),
+    corridorId: z.string(),
+    asset: z
+      .string()
+      .describe('SEP-38 identifier of the credited asset: stellar:CODE:ISSUER or stellar:native'),
+    fiatAmount: z.number().describe("Fiat the user pays, in units of the corridor's fiat currency"),
+    fee: z
+      .number()
+      .nullable()
+      .describe('Flat fee in units of the credited asset; null when none is published'),
+    feeType: z.string(),
+    exchangeRate: z
+      .number()
+      .nullable()
+      .describe('Effective asset credited per 1 fiat unit, net of fees; null when unreachable'),
+    totalReceived: z.number().nullable(),
+    minAmount: z
+      .number()
+      .optional()
+      .describe("Deposit lower bound from the anchor's SEP-24 /info, in asset units"),
+    maxAmount: z
+      .number()
+      .optional()
+      .describe("Deposit upper bound from the anchor's SEP-24 /info, in asset units"),
+    source: z.enum(['sep38', 'sep24-fee', 'unavailable']),
+    referenceSource: z
+      .string()
+      .optional()
+      .describe('Names the reference price behind the estimate'),
+    updatedAt: z.string(),
+  })
+);
+
+const DepositRateComparisonSchema = registry.register(
+  'DepositRateComparison',
+  z.object({
+    corridorId: z.string(),
+    direction: z.literal('deposit'),
+    rates: z.array(DepositRateSchema),
+    bestRateId: z.string(),
+    errors: z.array(z.object({ anchorId: z.string(), anchorName: z.string(), reason: z.string() })),
+  })
+);
+
 const DisputeRecordSchema = registry.register(
   'DisputeRecord',
   z.object({
@@ -222,10 +270,11 @@ const DisputeAdminSchema = registry.register(
   'DisputeAdmin',
   z.object({
     id: z.string(),
-    submittedBy: z.string(),
+    intentHash: z.string(),
+    publicKey: z.string(),
     anchorId: z.string(),
     reason: z.string(),
-    status: z.enum(['pending', 'accepted', 'rejected']),
+    status: z.enum(['open', 'accepted', 'rejected']),
     createdAt: z.string(),
     resolvedAt: z.string().nullable(),
   })
@@ -329,6 +378,55 @@ registry.registerPath({
 });
 
 registry.registerPath({
+  method: 'get',
+  path: '/api/deposit-rates/{corridor}',
+  summary: 'Get indicative deposit (on-ramp) estimates for a corridor',
+  description:
+    'Returns per-anchor SEP-24 deposit estimates for the given corridor: fiat in, asset credited net of published fees, with per-anchor failures isolated into `errors`. ' +
+    'Every figure is indicative; the anchor sets the firm conversion inside its interactive deposit flow.',
+  tags: ['Rates'],
+  request: {
+    params: z.object({ corridor: CorridorPathParam }),
+    query: z.object({
+      amount: z
+        .string()
+        .optional()
+        .openapi({
+          param: { name: 'amount', in: 'query' },
+          example: '150000',
+          description: 'Fiat amount to deposit (positive decimal); defaults to 100',
+        }),
+      asset: z
+        .string()
+        .optional()
+        .openapi({
+          param: { name: 'asset', in: 'query' },
+          example: 'stellar:USDC:GA5ZSEJYB37JRC5AVCIA5MOP4RHTM335X2KGX3IHOJAPP5RE34K4KZVN',
+          description: "SEP-38 asset identifier to credit; defaults to the corridor's asset",
+        }),
+    }),
+  },
+  responses: {
+    200: {
+      description: 'Deposit estimates for the corridor',
+      content: { 'application/json': { schema: DepositRateComparisonSchema } },
+    },
+    400: {
+      description: 'Unknown corridor or invalid amount',
+      content: { 'application/json': { schema: ApiErrorSchema } },
+    },
+    429: {
+      description: 'Rate limited',
+      content: { 'application/json': { schema: ApiErrorSchema } },
+    },
+    502: {
+      description: 'The deposit estimate could not be computed',
+      content: { 'application/json': { schema: ApiErrorSchema } },
+    },
+  },
+});
+
+registry.registerPath({
   method: 'post',
   path: '/api/intent/offramp',
   summary: 'Submit an off-ramp intent',
@@ -408,6 +506,267 @@ registry.registerPath({
           }),
         },
       },
+    },
+  },
+});
+
+registry.registerPath({
+  method: 'get',
+  path: '/api/v1/anchors/{id}/price-history',
+  summary: 'Get anchor SEP-38 price history',
+  description:
+    'Returns recorded SEP-38 price observations for an anchor corridor, downsampled to at most 500 points (evenly spaced; first and last retained).',
+  tags: ['Anchors'],
+  request: {
+    params: z.object({
+      id: z.string().min(1).describe('Anchor identifier'),
+    }),
+    query: z.object({
+      corridor: z
+        .string()
+        .optional()
+        .openapi({
+          param: { name: 'corridor', in: 'query' },
+          description: 'Corridor id served by the anchor (default: first corridor)',
+        }),
+      days: z.coerce
+        .number()
+        .int()
+        .min(1)
+        .max(90)
+        .optional()
+        .openapi({
+          param: { name: 'days', in: 'query' },
+          description: 'Lookback window in days, 1–90 (default 7)',
+          example: 7,
+        }),
+    }),
+  },
+  responses: {
+    200: {
+      description: 'Price history series',
+      content: {
+        'application/json': {
+          schema: z.object({
+            anchorId: z.string(),
+            corridor: z.string(),
+            points: z.array(
+              z.object({
+                observedAt: z.string(),
+                price: z.string(),
+                totalPrice: z.string(),
+                source: z.string(),
+              })
+            ),
+          }),
+        },
+      },
+    },
+    400: {
+      description: 'Invalid params or corridor not served',
+      content: { 'application/json': { schema: ApiErrorSchema } },
+    },
+    404: {
+      description: 'Unknown anchor',
+      content: { 'application/json': { schema: ApiErrorSchema } },
+    },
+    429: {
+      description: 'Rate limit exceeded',
+      content: { 'application/json': { schema: ApiErrorSchema } },
+    },
+    503: {
+      description: 'Quote store unavailable',
+      content: { 'application/json': { schema: ApiErrorSchema } },
+    },
+  },
+});
+const OnrampQuoteRateSchema = z.object({
+  anchorId: z.string(),
+  anchorName: z.string(),
+  corridorId: z.string(),
+  asset: z.string().describe('SEP-38 identifier of the credited asset'),
+  fiatAmount: z.number().describe('Fiat the user pays'),
+  fee: z.number().nullable().describe('Flat fee in units of the credited asset'),
+  feeType: z.enum(['flat', 'percent', 'combined']),
+  exchangeRate: z.number().nullable().describe('Asset credited per 1 fiat unit, net of fees'),
+  totalReceived: z.number().nullable(),
+  assetAmount: z
+    .number()
+    .optional()
+    .describe('Asset units the fiat buys before fees; the figure minAmount/maxAmount apply to'),
+  minAmount: z.number().optional().describe('Anchor deposit minimum, in asset units'),
+  maxAmount: z.number().optional().describe('Anchor deposit maximum, in asset units'),
+  source: z.enum(['sep38', 'sep24-fee', 'unavailable']),
+  referenceSource: z.string().optional(),
+  updatedAt: z.string().describe('ISO 8601 timestamp'),
+});
+
+registry.registerPath({
+  method: 'get',
+  path: '/api/v1/onramp/quote',
+  summary: 'Get indicative deposit (on-ramp) quotes',
+  description:
+    'Returns an indicative estimate per anchor for depositing a fiat amount into a Stellar asset. SEP-24 publishes deposit fees but the anchor sets the final conversion inside its interactive deposit window, so every figure is an estimate.',
+  tags: ['On-ramp'],
+  request: {
+    query: z.object({
+      corridor: z.string().openapi({
+        param: { name: 'corridor', in: 'query' },
+        description: 'Corridor id, for example usdc-ngn',
+        example: 'usdc-ngn',
+      }),
+      amount: z.string().openapi({
+        param: { name: 'amount', in: 'query' },
+        description: 'Fiat amount to deposit: a positive decimal with at most 7 decimal places',
+        example: '10000',
+      }),
+      asset: z
+        .string()
+        .optional()
+        .openapi({
+          param: { name: 'asset', in: 'query' },
+          description: 'Restrict rows to one SEP-38 asset (stellar:CODE:ISSUER)',
+        }),
+      type: z
+        .enum(['bank_account', 'cash', 'mobile_money'])
+        .optional()
+        .openapi({
+          param: { name: 'type', in: 'query' },
+          description: 'Funding method (default bank_account)',
+        }),
+    }),
+  },
+  responses: {
+    200: {
+      description: 'Deposit estimates per anchor',
+      content: {
+        'application/json': {
+          schema: z.object({
+            corridorId: z.string(),
+            direction: z.literal('deposit'),
+            rates: z.array(OnrampQuoteRateSchema),
+            bestRateId: z.string(),
+            errors: z.array(
+              z.object({ anchorId: z.string(), anchorName: z.string(), reason: z.string() })
+            ),
+            indicative: z.literal(true),
+            disclaimer: z.string(),
+          }),
+        },
+      },
+    },
+    400: {
+      description: 'Unknown corridor or invalid amount, asset or type',
+      content: { 'application/json': { schema: ApiErrorSchema } },
+    },
+    429: {
+      description: 'Rate limit exceeded',
+      content: { 'application/json': { schema: ApiErrorSchema } },
+    },
+    502: {
+      description: 'Anchor rate lookup failed',
+      content: { 'application/json': { schema: ApiErrorSchema } },
+    },
+  },
+});
+
+registry.registerPath({
+  method: 'get',
+  path: '/api/v1/anchors/{id}/quote-gap',
+  summary: 'Get how far an anchor lands from the rate it quoted',
+  description:
+    'Signed gap between the rate shown before execution and the rate that landed, over completed, ' +
+    'undisputed withdrawals in the window. Negative means users received less than quoted. ' +
+    'Stands in for SEP-38 firm quotes, which most anchors do not offer. Null statistics mean no samples.',
+  tags: ['Anchors'],
+  request: {
+    params: z.object({
+      id: z.string().min(1).describe('Anchor identifier'),
+    }),
+    query: z.object({
+      window: z.coerce
+        .number()
+        .optional()
+        .openapi({
+          param: { name: 'window', in: 'query' },
+          description: 'Lookback window in days: 7, 30 or 90 (default 30)',
+          example: 30,
+        }),
+    }),
+  },
+  responses: {
+    200: {
+      description: 'Quote-gap statistics',
+      content: {
+        'application/json': {
+          schema: z.object({
+            anchorId: z.string(),
+            basis: z.string().describe('How the rates being compared are defined'),
+            sampleCount: z.number().int(),
+            meanGapPct: z.number().nullable().describe('Mean signed gap, percent'),
+            p50GapPct: z.number().nullable().describe('Median signed gap, percent'),
+            p95AbsGapPct: z.number().nullable().describe('95th percentile of the absolute gap'),
+            worseCount: z.number().int().describe('Transactions that landed below the quote'),
+            betterCount: z.number().int().describe('Transactions that landed above the quote'),
+            windowDays: z.union([z.literal(7), z.literal(30), z.literal(90)]),
+          }),
+        },
+      },
+    },
+    400: {
+      description: 'Invalid window',
+      content: { 'application/json': { schema: ApiErrorSchema } },
+    },
+    404: {
+      description: 'Unknown anchor',
+      content: { 'application/json': { schema: ApiErrorSchema } },
+    },
+    429: {
+      description: 'Rate limit exceeded',
+      content: { 'application/json': { schema: ApiErrorSchema } },
+    },
+    503: {
+      description: 'Reputation store unavailable',
+      content: { 'application/json': { schema: ApiErrorSchema } },
+    },
+  },
+});
+
+registry.registerPath({
+  method: 'get',
+  path: '/api/v1/sep38/readiness',
+  summary: 'Get SEP-38 firm-quote readiness per anchor',
+  description:
+    'For each registered anchor: whether the operator declares SEP-38, whether its stellar.toml ' +
+    'advertises a quote server, whether that server’s /info answers, and whether it lists the ' +
+    'anchor’s registered asset. Checked live and cached for ten minutes.',
+  tags: ['Anchors'],
+  responses: {
+    200: {
+      description: 'Readiness per anchor',
+      content: {
+        'application/json': {
+          schema: z.object({
+            anchors: z.array(
+              z.object({
+                anchorId: z.string(),
+                declared: z.boolean().describe('The operator declares SEP-38 support'),
+                quoteServer: z.string().nullable().describe('ANCHOR_QUOTE_SERVER from the toml'),
+                infoReachable: z.boolean(),
+                assets: z.array(z.string()).describe('SEP-38 asset identifiers listed'),
+                sellsRegisteredAsset: z.boolean(),
+                error: z.string().nullable(),
+                checkedAt: z.string(),
+              })
+            ),
+            generatedAt: z.string(),
+          }),
+        },
+      },
+    },
+    429: {
+      description: 'Rate limit exceeded',
+      content: { 'application/json': { schema: ApiErrorSchema } },
     },
   },
 });
@@ -1051,6 +1410,97 @@ registry.registerPath({
       content: { 'application/json': { schema: ApiErrorSchema } },
     },
     429: RATE_LIMITED_429,
+  },
+});
+
+const OnrampIntentRequestSchema = registry.register(
+  'OnrampIntentRequest',
+  z.object({
+    type: z.literal('onramp'),
+    sourceAsset: z.string().min(1).describe('Fiat currency paid in, for example NGN'),
+    destinationAsset: z.string().min(1).describe('Stellar asset bought, for example USDC'),
+    amount: z.string().regex(AMOUNT_PATTERN).describe('Amount of sourceAsset to spend'),
+    sender: z.string().min(1).describe('Payer reference on the fiat rail (not a Stellar account)'),
+    destination: z.string().describe('Stellar public key credited when the deposit completes'),
+    depositMethod: z.enum(['bank_transfer', 'cash', 'mobile_money', 'card']),
+    memo: z.string().optional().describe('Memo for pooled-account anchors; needs memoType'),
+    memoType: z.enum(['text', 'id', 'hash']).optional(),
+    signature: z.string().optional().describe('Optional attestation; send with publicKey'),
+    publicKey: z.string().optional().describe('Signer of the optional attestation'),
+  })
+);
+
+const OnrampIntentResponseSchema = registry.register(
+  'OnrampIntentResponse',
+  z.object({
+    route: z.object({
+      anchorId: z.string(),
+      anchorDomain: z.string(),
+      corridorId: z.string(),
+      asset: z.string().describe('SEP-38 identifier of the asset credited'),
+      estimatedFee: z.string(),
+      estimatedReceived: z.string(),
+      indicative: z.literal(true),
+    }),
+    intentHash: z.string().describe('Hex-encoded SHA-256 of the canonical intent'),
+    handoffUrl: z
+      .string()
+      .describe('Relative path into /onramp, where the interactive deposit runs in a browser'),
+    unsignedChangeTrustXdr: z
+      .string()
+      .nullable()
+      .describe('Base64 changeTrust transaction to sign, or null when a trustline already exists'),
+  })
+);
+
+registry.registerPath({
+  method: 'post',
+  path: '/api/v1/intent/onramp',
+  summary: 'Submit an on-ramp intent (v1)',
+  description:
+    'Routes a deposit intent to the best indicative anchor and returns the /onramp handoff URL, ' +
+    'plus an unsigned changeTrust XDR when the destination account has no trustline. No anchor ' +
+    'session is opened: KYC and the interactive deposit run in the browser. Honours ' +
+    '`Idempotency-Key` like the off-ramp endpoint.',
+  tags: ['Intent'],
+  request: {
+    headers: z.object({
+      'Idempotency-Key': z
+        .string()
+        .optional()
+        .describe('Client-generated key. A repeated value replays the original response.'),
+    }),
+    body: {
+      required: true,
+      content: { 'application/json': { schema: OnrampIntentRequestSchema } },
+    },
+  },
+  responses: {
+    200: {
+      description: 'Route resolved',
+      content: { 'application/json': { schema: OnrampIntentResponseSchema } },
+    },
+    400: {
+      description: 'Validation error',
+      content: { 'application/json': { schema: ApiErrorSchema } },
+    },
+    401: {
+      description: 'Attestation signature did not verify',
+      content: { 'application/json': { schema: ApiErrorSchema } },
+    },
+    404: {
+      description: 'No anchor serves this corridor',
+      content: { 'application/json': { schema: ApiErrorSchema } },
+    },
+    422: {
+      description: 'The destination account does not exist on Stellar',
+      content: { 'application/json': { schema: ApiErrorSchema } },
+    },
+    429: RATE_LIMITED_429,
+    503: {
+      description: 'No deposit rate is available right now',
+      content: { 'application/json': { schema: ApiErrorSchema } },
+    },
   },
 });
 

@@ -1,6 +1,6 @@
 # Webhooks
 
-**Last reviewed:** 2026-08-26
+**Last reviewed:** 2026-10-24
 
 Stellar Intel can push real-time event notifications to your HTTPS endpoint instead of requiring you to poll the API. Each delivery is HMAC-SHA256 signed so you can verify authenticity before acting on the payload.
 
@@ -13,6 +13,27 @@ Stellar Intel can push real-time event notifications to your HTTPS endpoint inst
 | `intent.failed`                | An intent reaches a terminal `failed` state                          |
 | `reputation.event_written`     | A new outcome row is appended to the reputation log                  |
 | `anchor.health_status_changed` | An anchor's health status transitions (e.g. `healthy` to `degraded`) |
+
+### `anchor.health_status_changed`
+
+Emitted by the publisher tick (every five minutes) when an anchor's `degraded` flag in
+the nightly health ledger (`constants/anchor-health.json`) differs from the last
+snapshot it notified, so a change arrives within a tick of the deploy that carries
+it. One event per anchor, in anchor-id order:
+
+```json
+{
+  "anchorId": "cowrie",
+  "from": "healthy",
+  "to": "degraded",
+  "lastCheckedAt": "2026-10-25T00:00:00.000Z",
+  "lastError": "stellar.toml returned HTTP 503"
+}
+```
+
+`from` and `to` are `healthy` or `degraded`. The first run only records a baseline and
+emits nothing, and without a database there is no baseline to keep, so nothing is
+emitted. `lastCheckedAt` and `lastError` are `null` when the ledger has none.
 
 ## Payload envelope
 
@@ -81,7 +102,7 @@ function verify(secret: string, header: string, rawBody: string): boolean {
 
 ## Retry and dead-letter
 
-If your endpoint does not respond with a 2xx status code, Stellar Intel retries up to 5 times with exponential backoff (1 s, 2 s, 4 s, 8 s between attempts). After all attempts are exhausted the delivery is moved to the dead-letter log, visible via `GET /api/webhooks/failures` (admin key required).
+If your endpoint does not respond with a 2xx status code, Stellar Intel makes up to 5 delivery attempts (the first plus 4 retries) with exponential backoff (1 s, 2 s, 4 s, 8 s between attempts). After all attempts are exhausted the delivery is moved to the dead-letter log, visible via `GET /api/webhooks/failures` (admin key required).
 
 Your endpoint should return `200` (or any 2xx) as quickly as possible and process the event asynchronously to avoid triggering retries due to slow processing.
 

@@ -1,19 +1,23 @@
-/** A minimal off-ramp intent that can be deterministically hashed. */
-export interface Intent {
+/** What every intent, off-ramp or on-ramp, needs to be deterministically hashed. */
+export interface HashableIntent {
   type: string;
   sourceAsset: string;
   destinationAsset: string;
   amount: string;
   sender: string;
-  recipient: string;
   [key: string]: unknown;
+}
+
+/** A minimal off-ramp intent that can be deterministically hashed. */
+export interface Intent extends HashableIntent {
+  recipient: string;
 }
 
 /**
  * Serialize an intent to canonical JSON: keys sorted alphabetically,
  * no whitespace. Non-string values are preserved as-is.
  */
-export function canonicalJson(intent: Intent): string {
+export function canonicalJson(intent: HashableIntent): string {
   return JSON.stringify(sortKeys(intent));
 }
 
@@ -21,7 +25,7 @@ export function canonicalJson(intent: Intent): string {
  * SHA-256 hash of the canonical JSON, returned as lowercase hex.
  * Uses the Web Crypto API so it works in both browser and Node.js 20+.
  */
-export async function hashIntent(intent: Intent): Promise<string> {
+export async function hashIntent(intent: HashableIntent): Promise<string> {
   const canonical = canonicalJson(intent);
   const encoded = new TextEncoder().encode(canonical);
   const hashBuffer = await crypto.subtle.digest('SHA-256', encoded);

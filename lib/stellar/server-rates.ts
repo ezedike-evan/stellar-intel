@@ -12,6 +12,7 @@ import { assertSep38Capable, getSep38Price } from './sep38';
 import { getSep24Info } from './sep24';
 import { getSep6Info, Sep6AssetDisabledError } from './sep6';
 import { getFxRate } from '@/lib/fx/rates';
+import { referenceMidPrice } from '@/lib/fx/reference-mid';
 import { SepError, TimeoutError } from './errors';
 import { fetchReputationScores } from '@/lib/reputation/scores';
 
@@ -120,7 +121,7 @@ function isNetworkError(err: unknown): boolean {
  * Deterministic 4xx failures are never retried; transient 5xx/timeouts/fetch errors
  * get at most `retryAttempts` extra tries.
  */
-async function withTimeoutRetry<T>(
+export async function withTimeoutRetry<T>(
   fn: () => Promise<T>,
   ms: number,
   label: string,
@@ -217,14 +218,23 @@ async function indicativeRate(
     throw new Error('anchor advertises no SEP-24 withdraw server');
   }
 
-  const [info, fxRate] = await Promise.all([
+  const [info, ref] = await Promise.all([
     withTimeoutRetry(
       () => getSep24Info(transferServer),
       serverRatesConfig.sep24Info.timeoutMs,
       `${anchor.name} SEP-24 /info`,
       serverRatesConfig.sep24Info.retryAttempts
     ),
-    getFxRate(pegCode, fiatCode),
+    pegCode && pegCode !== 'USD'
+      ? getFxRate(pegCode, fiatCode).then((price) => ({
+          price,
+          source: 'fx' as const,
+          detail: `${asset.code} pegged to ${pegCode} × open.er-api ${pegCode}→${fiatCode}`,
+        }))
+      : referenceMidPrice({ code: asset.code, issuer: asset.issuer }, fiatCode, {
+          // Keep one FX source: USDC resolves through getFxRate, as the peg path does.
+          getUsdFxRate: (fiat) => getFxRate('USD', fiat),
+        }),
   ]);
 
   let assetInfo = info.withdraw[asset.code];
@@ -238,7 +248,7 @@ async function indicativeRate(
   const feeFixed = assetInfo.fee_fixed ?? 0;
   const feePercent = assetInfo.fee_percent ?? 0;
   const netSellAmount = Math.max(0, sellAmount - feeFixed) * (1 - feePercent / 100);
-  const totalReceived = netSellAmount * fxRate; // peg-aware: 1:1 for same-currency corridors
+  const totalReceived = netSellAmount * ref.price; // peg-aware: 1:1 for same-currency corridors
   const effectiveRate = sellAmount > 0 ? totalReceived / sellAmount : 0;
 
   if (!Number.isFinite(totalReceived) || totalReceived <= 0 || effectiveRate <= 0) {
@@ -257,6 +267,8 @@ async function indicativeRate(
     exchangeRate: effectiveRate,
     totalReceived,
     source: 'sep24-fee', // rendered as "Indicative" by QuotePill
+    referenceSource: ref.source,
+    referenceDetail: ref.detail,
     updatedAt: new Date(),
   };
 }
@@ -288,7 +300,7 @@ async function sep6IndicativeRate(
   // via `withdraw-exchange` (Latamex's ARS/BRL corridors, #1296), retry once
   // against that map. Fee semantics are the same either way, so the rate
   // stays `source: 'sep6-fee'` — still indicative, not a firm quote.
-  const [config, fxRate] = await Promise.all([
+  const [config, ref] = await Promise.all([
     withTimeout(
       getSep6Info(transferServer, asset.code).catch((err) => {
         if (err instanceof Sep6AssetDisabledError) {
@@ -299,13 +311,22 @@ async function sep6IndicativeRate(
       SEP6_INFO_TIMEOUT_MS,
       `${anchor.name} SEP-6 /info`
     ),
-    getFxRate(pegCode, fiatCode),
+    pegCode && pegCode !== 'USD'
+      ? getFxRate(pegCode, fiatCode).then((price) => ({
+          price,
+          source: 'fx' as const,
+          detail: `${asset.code} pegged to ${pegCode} × open.er-api ${pegCode}→${fiatCode}`,
+        }))
+      : referenceMidPrice({ code: asset.code, issuer: asset.issuer }, fiatCode, {
+          // Keep one FX source: USDC resolves through getFxRate, as the peg path does.
+          getUsdFxRate: (fiat) => getFxRate('USD', fiat),
+        }),
   ]);
 
   const feeFixed = config.feeFixed;
   const feePercent = config.feePercent;
   const netUsdc = Math.max(0, sellAmount - feeFixed) * (1 - feePercent / 100);
-  const totalReceived = netUsdc * fxRate;
+  const totalReceived = netUsdc * ref.price;
   const effectiveRate = sellAmount > 0 ? totalReceived / sellAmount : 0;
 
   if (!Number.isFinite(totalReceived) || totalReceived <= 0 || effectiveRate <= 0) {
@@ -324,6 +345,8 @@ async function sep6IndicativeRate(
     exchangeRate: effectiveRate,
     totalReceived,
     source: 'sep6-fee',
+    referenceSource: ref.source,
+    referenceDetail: ref.detail,
     updatedAt: new Date(),
   };
 }

@@ -1,4 +1,5 @@
 import { OfframpToolError } from '@/lib/mcp/offramp';
+import type { OnrampToolError } from '@/lib/mcp/onramp';
 
 /**
  * Typed error taxonomy for MCP tools (#1051).
@@ -104,6 +105,23 @@ export function fromOfframpError(err: OfframpToolError): McpToolError {
     case 'TX_BUILD_FAILED':
     case 'SUBMIT_FAILED':
       return upstreamTimeout(err.message, err.code);
+    default:
+      return upstreamTimeout(err.message, err.code);
+  }
+}
+
+/**
+ * Map an OnrampToolError to the appropriate `McpToolError` taxonomy category,
+ * the same way `fromOfframpError` does for the off-ramp.
+ */
+export function fromOnrampError(err: OnrampToolError): McpToolError {
+  switch (err.code) {
+    case 'NO_ROUTE':
+    case 'ACCOUNT_NOT_FOUND':
+      return badInput(err.message, err.code);
+    case 'RATE_UNAVAILABLE':
+      return anchorUnavailable(err.message, err.code);
+    case 'TX_BUILD_FAILED':
     default:
       return upstreamTimeout(err.message, err.code);
   }

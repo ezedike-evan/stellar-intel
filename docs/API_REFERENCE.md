@@ -33,11 +33,18 @@ the hardening contract (see `lib/api/v1.ts`):
   - [`GET /api/v1/anchor-health/ledger`](#get-apiv1anchor-healthledger)
   - [`GET /api/v1/anchors/census`](#get-apiv1anchorscensus)
   - [`GET /api/v1/anchors/{id}/health`](#get-apiv1anchorsidhealth)
+  - [`GET /api/v1/anchors/{id}/price-history`](#get-apiv1anchorsidprice-history)
+  - [`GET /api/v1/anchors/{id}/quote-gap`](#get-apiv1anchorsidquote-gap)
+  - [`GET /api/v1/sep38/readiness`](#get-apiv1sep38readiness)
 - **Intent**
   - [`POST /api/intent`](#post-apiintent)
   - [`POST /api/intent/offramp`](#post-apiintentofframp)
   - [`POST /api/v1/intent/offramp`](#post-apiv1intentofframp)
+  - [`POST /api/v1/intent/onramp`](#post-apiv1intentonramp)
+- **On-ramp**
+  - [`GET /api/v1/onramp/quote`](#get-apiv1onrampquote)
 - **Rates**
+  - [`GET /api/deposit-rates/{corridor}`](#get-apideposit-ratescorridor)
   - [`GET /api/rates/{corridor}`](#get-apiratescorridor)
   - [`GET /api/snapshot`](#get-apisnapshot)
   - [`GET /api/v1/corridors/{corridor}/volume-savings`](#get-apiv1corridorscorridorvolume-savings)
@@ -187,6 +194,72 @@ Returns the anchor's current health status, last-probe timestamp, and score brea
 
 ---
 
+### `GET /api/v1/anchors/{id}/price-history`
+
+**Summary:** Get anchor SEP-38 price history  
+
+Returns recorded SEP-38 price observations for an anchor corridor, downsampled to at most 500 points (evenly spaced; first and last retained).
+
+#### Parameters
+
+| Name | In | Type | Required | Description |
+| :--- | :--- | :--- | :--- | :--- |
+| `id` | `path` | `string` | **Yes** | Anchor identifier |
+| `corridor` | `query` | `string` | No | Corridor id served by the anchor (default: first corridor) |
+| `days` | `query` | `integer` | No | Lookback window in days, 1–90 (default 7) |
+
+#### Responses
+
+| Status | Description | Content-Type | Schema |
+| :--- | :--- | :--- | :--- |
+| `200` | Price history series | `application/json` | `object` |
+| `400` | Invalid params or corridor not served | `application/json` | `ApiError` |
+| `404` | Unknown anchor | `application/json` | `ApiError` |
+| `429` | Rate limit exceeded | `application/json` | `ApiError` |
+| `503` | Quote store unavailable | `application/json` | `ApiError` |
+
+---
+
+### `GET /api/v1/anchors/{id}/quote-gap`
+
+**Summary:** Get how far an anchor lands from the rate it quoted  
+
+Signed gap between the rate shown before execution and the rate that landed, over completed, undisputed withdrawals in the window. Negative means users received less than quoted. Stands in for SEP-38 firm quotes, which most anchors do not offer. Null statistics mean no samples.
+
+#### Parameters
+
+| Name | In | Type | Required | Description |
+| :--- | :--- | :--- | :--- | :--- |
+| `id` | `path` | `string` | **Yes** | Anchor identifier |
+| `window` | `query` | `object` | No | Lookback window in days: 7, 30 or 90 (default 30) |
+
+#### Responses
+
+| Status | Description | Content-Type | Schema |
+| :--- | :--- | :--- | :--- |
+| `200` | Quote-gap statistics | `application/json` | `object` |
+| `400` | Invalid window | `application/json` | `ApiError` |
+| `404` | Unknown anchor | `application/json` | `ApiError` |
+| `429` | Rate limit exceeded | `application/json` | `ApiError` |
+| `503` | Reputation store unavailable | `application/json` | `ApiError` |
+
+---
+
+### `GET /api/v1/sep38/readiness`
+
+**Summary:** Get SEP-38 firm-quote readiness per anchor  
+
+For each registered anchor: whether the operator declares SEP-38, whether its stellar.toml advertises a quote server, whether that server’s /info answers, and whether it lists the anchor’s registered asset. Checked live and cached for ten minutes.
+
+#### Responses
+
+| Status | Description | Content-Type | Schema |
+| :--- | :--- | :--- | :--- |
+| `200` | Readiness per anchor | `application/json` | `object` |
+| `429` | Rate limit exceeded | `application/json` | `ApiError` |
+
+---
+
 ## Intent
 
 ### `POST /api/intent`
@@ -259,7 +332,104 @@ The public v1 intent endpoint. Honours `Idempotency-Key`: a retried request repl
 
 ---
 
+### `POST /api/v1/intent/onramp`
+
+**Summary:** Submit an on-ramp intent (v1)  
+
+Routes a deposit intent to the best indicative anchor and returns the /onramp handoff URL, plus an unsigned changeTrust XDR when the destination account has no trustline. No anchor session is opened: KYC and the interactive deposit run in the browser. Honours `Idempotency-Key` like the off-ramp endpoint.
+
+#### Parameters
+
+| Name | In | Type | Required | Description |
+| :--- | :--- | :--- | :--- | :--- |
+| `Idempotency-Key` | `header` | `string` | No | Client-generated key. A repeated value replays the original response. |
+
+#### Request Body
+
+**Content-Type:** `application/json`
+
+| Field | Type | Required | Description |
+| :--- | :--- | :--- | :--- |
+| `type` | `"onramp"` | **Yes** | - |
+| `sourceAsset` | `string` | **Yes** | Fiat currency paid in, for example NGN |
+| `destinationAsset` | `string` | **Yes** | Stellar asset bought, for example USDC |
+| `amount` | `string` | **Yes** | Amount of sourceAsset to spend |
+| `sender` | `string` | **Yes** | Payer reference on the fiat rail (not a Stellar account) |
+| `destination` | `string` | **Yes** | Stellar public key credited when the deposit completes |
+| `depositMethod` | `"bank_transfer" | "cash" | "mobile_money" | "card"` | **Yes** | - |
+| `memo` | `string` | No | Memo for pooled-account anchors; needs memoType |
+| `memoType` | `"text" | "id" | "hash"` | No | - |
+| `signature` | `string` | No | Optional attestation; send with publicKey |
+| `publicKey` | `string` | No | Signer of the optional attestation |
+
+#### Responses
+
+| Status | Description | Content-Type | Schema |
+| :--- | :--- | :--- | :--- |
+| `200` | Route resolved | `application/json` | `OnrampIntentResponse` |
+| `400` | Validation error | `application/json` | `ApiError` |
+| `401` | Attestation signature did not verify | `application/json` | `ApiError` |
+| `404` | No anchor serves this corridor | `application/json` | `ApiError` |
+| `422` | The destination account does not exist on Stellar | `application/json` | `ApiError` |
+| `429` | Rate limited | `application/json` | `ApiError` |
+| `503` | No deposit rate is available right now | `application/json` | `ApiError` |
+
+---
+
+## On-ramp
+
+### `GET /api/v1/onramp/quote`
+
+**Summary:** Get indicative deposit (on-ramp) quotes  
+
+Returns an indicative estimate per anchor for depositing a fiat amount into a Stellar asset. SEP-24 publishes deposit fees but the anchor sets the final conversion inside its interactive deposit window, so every figure is an estimate.
+
+#### Parameters
+
+| Name | In | Type | Required | Description |
+| :--- | :--- | :--- | :--- | :--- |
+| `corridor` | `query` | `string` | **Yes** | Corridor id, for example usdc-ngn |
+| `amount` | `query` | `string` | **Yes** | Fiat amount to deposit: a positive decimal with at most 7 decimal places |
+| `asset` | `query` | `string` | No | Restrict rows to one SEP-38 asset (stellar:CODE:ISSUER) |
+| `type` | `query` | `"bank_account" | "cash" | "mobile_money"` | No | Funding method (default bank_account) |
+
+#### Responses
+
+| Status | Description | Content-Type | Schema |
+| :--- | :--- | :--- | :--- |
+| `200` | Deposit estimates per anchor | `application/json` | `object` |
+| `400` | Unknown corridor or invalid amount, asset or type | `application/json` | `ApiError` |
+| `429` | Rate limit exceeded | `application/json` | `ApiError` |
+| `502` | Anchor rate lookup failed | `application/json` | `ApiError` |
+
+---
+
 ## Rates
+
+### `GET /api/deposit-rates/{corridor}`
+
+**Summary:** Get indicative deposit (on-ramp) estimates for a corridor  
+
+Returns per-anchor SEP-24 deposit estimates for the given corridor: fiat in, asset credited net of published fees, with per-anchor failures isolated into `errors`. Every figure is indicative; the anchor sets the firm conversion inside its interactive deposit flow.
+
+#### Parameters
+
+| Name | In | Type | Required | Description |
+| :--- | :--- | :--- | :--- | :--- |
+| `corridor` | `path` | `string` | **Yes** | Corridor ID (e.g. usdc-ngn, usdc-kes) |
+| `amount` | `query` | `string` | No | Fiat amount to deposit (positive decimal); defaults to 100 |
+| `asset` | `query` | `string` | No | SEP-38 asset identifier to credit; defaults to the corridor's asset |
+
+#### Responses
+
+| Status | Description | Content-Type | Schema |
+| :--- | :--- | :--- | :--- |
+| `200` | Deposit estimates for the corridor | `application/json` | `DepositRateComparison` |
+| `400` | Unknown corridor or invalid amount | `application/json` | `ApiError` |
+| `429` | Rate limited | `application/json` | `ApiError` |
+| `502` | The deposit estimate could not be computed | `application/json` | `ApiError` |
+
+---
 
 ### `GET /api/rates/{corridor}`
 

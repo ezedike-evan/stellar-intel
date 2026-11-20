@@ -107,3 +107,47 @@ describe('GET /api/sep6/withdraw (customer proxy) — SSRF guard + throttle', ()
     expect(last).toBe(429);
   });
 });
+
+describe('SEP-6 proxy — redirects and timeouts (#1352)', () => {
+  const redirect = () => new Response(null, { status: 302, headers: { location: EVIL } });
+
+  it('never follows redirects and sets a deadline on both fetches', async () => {
+    const fetchSpy = vi
+      .spyOn(globalThis, 'fetch')
+      .mockImplementation(async () => new Response('{}', { status: 200 }));
+
+    await POST(postBody(ALLOWED_APEX));
+    await GET(customerReq(ALLOWED_APEX, '10.0.0.3'));
+
+    expect(fetchSpy).toHaveBeenCalledTimes(2);
+    for (const call of fetchSpy.mock.calls) {
+      const init = call[1] as RequestInit;
+      expect(init.redirect).toBe('manual');
+      expect(init.signal).toBeInstanceOf(AbortSignal);
+    }
+  });
+
+  it('answers 502 UPSTREAM_REDIRECT when the anchor redirects the withdraw call', async () => {
+    vi.spyOn(globalThis, 'fetch').mockResolvedValue(redirect());
+    const res = await POST(postBody(ALLOWED_APEX));
+    expect(res.status).toBe(502);
+    expect(await res.json()).toMatchObject({ code: 'UPSTREAM_REDIRECT' });
+  });
+
+  it('answers 502 UPSTREAM_REDIRECT when the anchor redirects the customer call', async () => {
+    vi.spyOn(globalThis, 'fetch').mockResolvedValue(redirect());
+    const res = await GET(customerReq(ALLOWED_APEX, '10.0.0.4'));
+    expect(res.status).toBe(502);
+    expect(await res.json()).toMatchObject({ code: 'UPSTREAM_REDIRECT' });
+  });
+
+  it('answers 504 UPSTREAM_TIMEOUT when the anchor is too slow', async () => {
+    vi.spyOn(globalThis, 'fetch').mockRejectedValue(new DOMException('timed out', 'TimeoutError'));
+    const post = await POST(postBody(ALLOWED_APEX));
+    expect(post.status).toBe(504);
+    expect(await post.json()).toMatchObject({ code: 'UPSTREAM_TIMEOUT' });
+
+    const get = await GET(customerReq(ALLOWED_APEX, '10.0.0.5'));
+    expect(get.status).toBe(504);
+  });
+});

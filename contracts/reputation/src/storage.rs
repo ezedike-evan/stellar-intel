@@ -2,11 +2,18 @@
 //!
 //! ## Storage bucket strategy
 //!
-//! | Tier       | Keys stored here                              | Rationale                                           |
-//! |------------|-----------------------------------------------|-----------------------------------------------------|
-//! | Instance   | `Admin`, `Anchors`, `Publishers`              | Tiny hot metadata; always loaded with the instance  |
-//! | Persistent | `AnchorTag`, `Publisher`, `OutcomeHead`,      | Large / per-entity blobs; pay only on access        |
-//! |            | `OutcomePage`, `Corridor`                     |                                                     |
+//! | Tier       | Keys stored here                                   | Rationale                                          |
+//! |------------|----------------------------------------------------|----------------------------------------------------|
+//! | Instance   | `Admin`, `PendingAdmin`, `Anchors`, `Corridors`,   | Tiny hot metadata; always loaded with the instance |
+//! |            | `Publishers`                                       |                                                    |
+//! | Persistent | `AnchorTag`, `CorridorTag`, `Publisher`,           | Large / per-entity blobs; pay only on access       |
+//! |            | `PublisherScope`, `OutcomeHead`, `OutcomeFloor`,   |                                                    |
+//! |            | `OutcomePage`, `Corridor`, `CorridorV2`,           |                                                    |
+//! |            | `CorridorAggregate`, `CorridorRate`,               |                                                    |
+//! |            | `VolumeSavings`, `ProbeSignals`                    |                                                    |
+//!
+//! The upgrade module keeps its own instance keys (`UpgradeAdmin`, `Version`,
+//! `PendingUpgradeAdmin`, `PendingUpgrade`) in `upgrade.rs`, outside `DataKey`.
 //!
 //! ### Hot-keyed writes (`OutcomePage`)
 //! Outcome history is split into fixed-size pages of [`PAGE_SIZE`] entries.
@@ -17,12 +24,12 @@
 //! ### Bounded reads (`OutcomePage`)
 //! `recent_outcomes(n)` reads at most `ceil(n / PAGE_SIZE)` pages.
 //!
-//! ### Membership checks (`Publisher`, `AnchorTag`)
-//! Each publisher and anchor has its own persistent entry (a single bool).
+//! ### Membership checks (`Publisher`, `AnchorTag`, `CorridorTag`)
+//! Each publisher, anchor and corridor has its own persistent entry (a single bool).
 //! `is_authorized` and duplicate detection each cost one persistent read
 //! instead of scanning a `Vec` loaded from instance storage.
 //!
-//! `Anchors` and `Publishers` remain in instance storage solely to serve the
+//! `Anchors`, `Corridors` and `Publishers` remain in instance storage solely to serve the
 //! admin list-view functions; they are never touched by the hot write paths.
 
 use soroban_sdk::{contracttype, Address, Env, String};
@@ -40,7 +47,10 @@ pub const PAGE_SIZE: u32 = 25;
 // touches, and the public `bump()` entrypoint lets anyone top up the instance
 // during dormant periods. Reads deliberately do NOT self-bump — that would turn
 // every read into a state write and blow the gas/footprint budgets — so liveness
-// comes from write activity plus `bump()`.
+// comes from write activity plus `bump()`. Every mutating entrypoint extends the
+// instance on its success path (a rejected call pays nothing for the extension),
+// so a contract that only ever receives publisher writes cannot run its instance
+// down to archival.
 //
 // Ledgers close ~every 5s, so ~17_280 ledgers ≈ 1 day. Extend well past the
 // bump threshold so a single write buys a long runway; both stay comfortably
@@ -78,6 +88,8 @@ pub enum DataKey {
     PendingAdmin,
     /// Ordered list of registered anchor ids (admin list-view only).
     Anchors,
+    /// Ordered list of registered corridor ids (admin list-view only).
+    Corridors,
     /// Ordered list of publisher addresses (admin list-view only).
     Publishers,
 
@@ -85,11 +97,21 @@ pub enum DataKey {
     /// Existence flag for a single anchor id.  Checked on every `register_anchor`
     /// to avoid a full `Anchors` Vec scan.
     AnchorTag(String),
+    /// Existence flag for a single corridor id.  Checked on every rate and
+    /// volume write so an invented corridor cannot create storage.
+    CorridorTag(String),
     /// Membership flag for a single publisher address.  Checked on every
     /// `submit_outcome` to avoid a full `Publishers` Vec scan.
     Publisher(Address),
+    /// Corridors a publisher may write, as a `Vec<String>`. Absent means the
+    /// publisher is unscoped and may write any registered corridor.
+    PublisherScope(Address),
     /// Current outcome-page pointer for an anchor: `(page_num, page_len)`.
     OutcomeHead(String),
+    /// Lowest outcome page `recent_outcomes` may read for an anchor (`u32`,
+    /// default 0). `reset_outcome_history` raises it past the current head so
+    /// older pages are hidden without being iterated or deleted.
+    OutcomeFloor(String),
     /// One page of outcome entries for an anchor: at most [`PAGE_SIZE`] items.
     OutcomePage(String, u32),
     /// Corridor performance metrics: `(fill_rate_bps, slippage_bps, settle_seconds_p50, n)`.
@@ -101,6 +123,8 @@ pub enum DataKey {
     /// V2 corridor metrics: `(fill_rate_bps, slippage_bps, composite_bps, settle_seconds_p50, n)`.
     /// Supports multi-corridor expansion without breaking v1 readers.
     CorridorV2(String, String),
+    /// Latest probe signals for an anchor, keyed by anchor id.
+    ProbeSignals(String),
     /// Cumulative volume + savings for a corridor (issue #826).
     VolumeSavings(String),
 }

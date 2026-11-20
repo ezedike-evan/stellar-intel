@@ -408,6 +408,139 @@
           "bestRateId"
         ]
       },
+      "DepositRate": {
+        "type": "object",
+        "properties": {
+          "anchorId": {
+            "type": "string"
+          },
+          "anchorName": {
+            "type": "string"
+          },
+          "corridorId": {
+            "type": "string"
+          },
+          "asset": {
+            "type": "string",
+            "description": "SEP-38 identifier of the credited asset: stellar:CODE:ISSUER or stellar:native"
+          },
+          "fiatAmount": {
+            "type": "number",
+            "description": "Fiat the user pays, in units of the corridor's fiat currency"
+          },
+          "fee": {
+            "type": [
+              "number",
+              "null"
+            ],
+            "description": "Flat fee in units of the credited asset; null when none is published"
+          },
+          "feeType": {
+            "type": "string"
+          },
+          "exchangeRate": {
+            "type": [
+              "number",
+              "null"
+            ],
+            "description": "Effective asset credited per 1 fiat unit, net of fees; null when unreachable"
+          },
+          "totalReceived": {
+            "type": [
+              "number",
+              "null"
+            ]
+          },
+          "minAmount": {
+            "type": "number",
+            "description": "Deposit lower bound from the anchor's SEP-24 /info, in asset units"
+          },
+          "maxAmount": {
+            "type": "number",
+            "description": "Deposit upper bound from the anchor's SEP-24 /info, in asset units"
+          },
+          "source": {
+            "type": "string",
+            "enum": [
+              "sep38",
+              "sep24-fee",
+              "unavailable"
+            ]
+          },
+          "referenceSource": {
+            "type": "string",
+            "description": "Names the reference price behind the estimate"
+          },
+          "updatedAt": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "anchorId",
+          "anchorName",
+          "corridorId",
+          "asset",
+          "fiatAmount",
+          "fee",
+          "feeType",
+          "exchangeRate",
+          "totalReceived",
+          "source",
+          "updatedAt"
+        ]
+      },
+      "DepositRateComparison": {
+        "type": "object",
+        "properties": {
+          "corridorId": {
+            "type": "string"
+          },
+          "direction": {
+            "type": "string",
+            "enum": [
+              "deposit"
+            ]
+          },
+          "rates": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/DepositRate"
+            }
+          },
+          "bestRateId": {
+            "type": "string"
+          },
+          "errors": {
+            "type": "array",
+            "items": {
+              "type": "object",
+              "properties": {
+                "anchorId": {
+                  "type": "string"
+                },
+                "anchorName": {
+                  "type": "string"
+                },
+                "reason": {
+                  "type": "string"
+                }
+              },
+              "required": [
+                "anchorId",
+                "anchorName",
+                "reason"
+              ]
+            }
+          }
+        },
+        "required": [
+          "corridorId",
+          "direction",
+          "rates",
+          "bestRateId",
+          "errors"
+        ]
+      },
       "DisputeRecord": {
         "type": "object",
         "properties": {
@@ -449,7 +582,10 @@
           "id": {
             "type": "string"
           },
-          "submittedBy": {
+          "intentHash": {
+            "type": "string"
+          },
+          "publicKey": {
             "type": "string"
           },
           "anchorId": {
@@ -461,7 +597,7 @@
           "status": {
             "type": "string",
             "enum": [
-              "pending",
+              "open",
               "accepted",
               "rejected"
             ]
@@ -478,7 +614,8 @@
         },
         "required": [
           "id",
-          "submittedBy",
+          "intentHash",
+          "publicKey",
           "anchorId",
           "reason",
           "status",
@@ -649,6 +786,144 @@
           "anchorLatency",
           "ratesCache",
           "publisherHealth"
+        ]
+      },
+      "OnrampIntentRequest": {
+        "type": "object",
+        "properties": {
+          "type": {
+            "type": "string",
+            "enum": [
+              "onramp"
+            ]
+          },
+          "sourceAsset": {
+            "type": "string",
+            "minLength": 1,
+            "description": "Fiat currency paid in, for example NGN"
+          },
+          "destinationAsset": {
+            "type": "string",
+            "minLength": 1,
+            "description": "Stellar asset bought, for example USDC"
+          },
+          "amount": {
+            "type": "string",
+            "pattern": "^\\d+(\\.\\d+)?$",
+            "description": "Amount of sourceAsset to spend"
+          },
+          "sender": {
+            "type": "string",
+            "minLength": 1,
+            "description": "Payer reference on the fiat rail (not a Stellar account)"
+          },
+          "destination": {
+            "type": "string",
+            "description": "Stellar public key credited when the deposit completes"
+          },
+          "depositMethod": {
+            "type": "string",
+            "enum": [
+              "bank_transfer",
+              "cash",
+              "mobile_money",
+              "card"
+            ]
+          },
+          "memo": {
+            "type": "string",
+            "description": "Memo for pooled-account anchors; needs memoType"
+          },
+          "memoType": {
+            "type": "string",
+            "enum": [
+              "text",
+              "id",
+              "hash"
+            ]
+          },
+          "signature": {
+            "type": "string",
+            "description": "Optional attestation; send with publicKey"
+          },
+          "publicKey": {
+            "type": "string",
+            "description": "Signer of the optional attestation"
+          }
+        },
+        "required": [
+          "type",
+          "sourceAsset",
+          "destinationAsset",
+          "amount",
+          "sender",
+          "destination",
+          "depositMethod"
+        ]
+      },
+      "OnrampIntentResponse": {
+        "type": "object",
+        "properties": {
+          "route": {
+            "type": "object",
+            "properties": {
+              "anchorId": {
+                "type": "string"
+              },
+              "anchorDomain": {
+                "type": "string"
+              },
+              "corridorId": {
+                "type": "string"
+              },
+              "asset": {
+                "type": "string",
+                "description": "SEP-38 identifier of the asset credited"
+              },
+              "estimatedFee": {
+                "type": "string"
+              },
+              "estimatedReceived": {
+                "type": "string"
+              },
+              "indicative": {
+                "type": "boolean",
+                "enum": [
+                  true
+                ]
+              }
+            },
+            "required": [
+              "anchorId",
+              "anchorDomain",
+              "corridorId",
+              "asset",
+              "estimatedFee",
+              "estimatedReceived",
+              "indicative"
+            ]
+          },
+          "intentHash": {
+            "type": "string",
+            "description": "Hex-encoded SHA-256 of the canonical intent"
+          },
+          "handoffUrl": {
+            "type": "string",
+            "description": "Relative path into /onramp, where the interactive deposit runs in a browser"
+          },
+          "unsignedChangeTrustXdr": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "description": "Base64 changeTrust transaction to sign, or null when a trustline already exists"
+          }
+        },
+        "required": [
+          "route",
+          "intentHash",
+          "handoffUrl",
+          "unsignedChangeTrustXdr"
         ]
       },
       "AnchorHealthLedgerArtifact": {
@@ -960,6 +1235,92 @@
         }
       }
     },
+    "/api/deposit-rates/{corridor}": {
+      "get": {
+        "summary": "Get indicative deposit (on-ramp) estimates for a corridor",
+        "description": "Returns per-anchor SEP-24 deposit estimates for the given corridor: fiat in, asset credited net of published fees, with per-anchor failures isolated into `errors`. Every figure is indicative; the anchor sets the firm conversion inside its interactive deposit flow.",
+        "tags": [
+          "Rates"
+        ],
+        "parameters": [
+          {
+            "schema": {
+              "type": "string",
+              "example": "usdc-ngn",
+              "description": "Corridor ID (e.g. usdc-ngn, usdc-kes)"
+            },
+            "required": true,
+            "description": "Corridor ID (e.g. usdc-ngn, usdc-kes)",
+            "name": "corridor",
+            "in": "path"
+          },
+          {
+            "schema": {
+              "type": "string",
+              "example": "150000",
+              "description": "Fiat amount to deposit (positive decimal); defaults to 100"
+            },
+            "required": false,
+            "description": "Fiat amount to deposit (positive decimal); defaults to 100",
+            "name": "amount",
+            "in": "query"
+          },
+          {
+            "schema": {
+              "type": "string",
+              "example": "stellar:USDC:GA5ZSEJYB37JRC5AVCIA5MOP4RHTM335X2KGX3IHOJAPP5RE34K4KZVN",
+              "description": "SEP-38 asset identifier to credit; defaults to the corridor's asset"
+            },
+            "required": false,
+            "description": "SEP-38 asset identifier to credit; defaults to the corridor's asset",
+            "name": "asset",
+            "in": "query"
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Deposit estimates for the corridor",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/DepositRateComparison"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Unknown corridor or invalid amount",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiError"
+                }
+              }
+            }
+          },
+          "429": {
+            "description": "Rate limited",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiError"
+                }
+              }
+            }
+          },
+          "502": {
+            "description": "The deposit estimate could not be computed",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
     "/api/intent/offramp": {
       "post": {
         "summary": "Submit an off-ramp intent",
@@ -1102,6 +1463,645 @@
                     "error",
                     "retryAfter"
                   ]
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/anchors/{id}/price-history": {
+      "get": {
+        "summary": "Get anchor SEP-38 price history",
+        "description": "Returns recorded SEP-38 price observations for an anchor corridor, downsampled to at most 500 points (evenly spaced; first and last retained).",
+        "tags": [
+          "Anchors"
+        ],
+        "parameters": [
+          {
+            "schema": {
+              "type": "string",
+              "minLength": 1,
+              "description": "Anchor identifier"
+            },
+            "required": true,
+            "description": "Anchor identifier",
+            "name": "id",
+            "in": "path"
+          },
+          {
+            "schema": {
+              "type": "string",
+              "description": "Corridor id served by the anchor (default: first corridor)"
+            },
+            "required": false,
+            "description": "Corridor id served by the anchor (default: first corridor)",
+            "name": "corridor",
+            "in": "query"
+          },
+          {
+            "schema": {
+              "type": "integer",
+              "minimum": 1,
+              "maximum": 90,
+              "description": "Lookback window in days, 1–90 (default 7)",
+              "example": 7
+            },
+            "required": false,
+            "description": "Lookback window in days, 1–90 (default 7)",
+            "name": "days",
+            "in": "query"
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Price history series",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "anchorId": {
+                      "type": "string"
+                    },
+                    "corridor": {
+                      "type": "string"
+                    },
+                    "points": {
+                      "type": "array",
+                      "items": {
+                        "type": "object",
+                        "properties": {
+                          "observedAt": {
+                            "type": "string"
+                          },
+                          "price": {
+                            "type": "string"
+                          },
+                          "totalPrice": {
+                            "type": "string"
+                          },
+                          "source": {
+                            "type": "string"
+                          }
+                        },
+                        "required": [
+                          "observedAt",
+                          "price",
+                          "totalPrice",
+                          "source"
+                        ]
+                      }
+                    }
+                  },
+                  "required": [
+                    "anchorId",
+                    "corridor",
+                    "points"
+                  ]
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Invalid params or corridor not served",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiError"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Unknown anchor",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiError"
+                }
+              }
+            }
+          },
+          "429": {
+            "description": "Rate limit exceeded",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiError"
+                }
+              }
+            }
+          },
+          "503": {
+            "description": "Quote store unavailable",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/onramp/quote": {
+      "get": {
+        "summary": "Get indicative deposit (on-ramp) quotes",
+        "description": "Returns an indicative estimate per anchor for depositing a fiat amount into a Stellar asset. SEP-24 publishes deposit fees but the anchor sets the final conversion inside its interactive deposit window, so every figure is an estimate.",
+        "tags": [
+          "On-ramp"
+        ],
+        "parameters": [
+          {
+            "schema": {
+              "type": "string",
+              "description": "Corridor id, for example usdc-ngn",
+              "example": "usdc-ngn"
+            },
+            "required": true,
+            "description": "Corridor id, for example usdc-ngn",
+            "name": "corridor",
+            "in": "query"
+          },
+          {
+            "schema": {
+              "type": "string",
+              "description": "Fiat amount to deposit: a positive decimal with at most 7 decimal places",
+              "example": "10000"
+            },
+            "required": true,
+            "description": "Fiat amount to deposit: a positive decimal with at most 7 decimal places",
+            "name": "amount",
+            "in": "query"
+          },
+          {
+            "schema": {
+              "type": "string",
+              "description": "Restrict rows to one SEP-38 asset (stellar:CODE:ISSUER)"
+            },
+            "required": false,
+            "description": "Restrict rows to one SEP-38 asset (stellar:CODE:ISSUER)",
+            "name": "asset",
+            "in": "query"
+          },
+          {
+            "schema": {
+              "type": "string",
+              "enum": [
+                "bank_account",
+                "cash",
+                "mobile_money"
+              ],
+              "description": "Funding method (default bank_account)"
+            },
+            "required": false,
+            "description": "Funding method (default bank_account)",
+            "name": "type",
+            "in": "query"
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Deposit estimates per anchor",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "corridorId": {
+                      "type": "string"
+                    },
+                    "direction": {
+                      "type": "string",
+                      "enum": [
+                        "deposit"
+                      ]
+                    },
+                    "rates": {
+                      "type": "array",
+                      "items": {
+                        "type": "object",
+                        "properties": {
+                          "anchorId": {
+                            "type": "string"
+                          },
+                          "anchorName": {
+                            "type": "string"
+                          },
+                          "corridorId": {
+                            "type": "string"
+                          },
+                          "asset": {
+                            "type": "string",
+                            "description": "SEP-38 identifier of the credited asset"
+                          },
+                          "fiatAmount": {
+                            "type": "number",
+                            "description": "Fiat the user pays"
+                          },
+                          "fee": {
+                            "type": [
+                              "number",
+                              "null"
+                            ],
+                            "description": "Flat fee in units of the credited asset"
+                          },
+                          "feeType": {
+                            "type": "string",
+                            "enum": [
+                              "flat",
+                              "percent",
+                              "combined"
+                            ]
+                          },
+                          "exchangeRate": {
+                            "type": [
+                              "number",
+                              "null"
+                            ],
+                            "description": "Asset credited per 1 fiat unit, net of fees"
+                          },
+                          "totalReceived": {
+                            "type": [
+                              "number",
+                              "null"
+                            ]
+                          },
+                          "assetAmount": {
+                            "type": "number",
+                            "description": "Asset units the fiat buys before fees; the figure minAmount/maxAmount apply to"
+                          },
+                          "minAmount": {
+                            "type": "number",
+                            "description": "Anchor deposit minimum, in asset units"
+                          },
+                          "maxAmount": {
+                            "type": "number",
+                            "description": "Anchor deposit maximum, in asset units"
+                          },
+                          "source": {
+                            "type": "string",
+                            "enum": [
+                              "sep38",
+                              "sep24-fee",
+                              "unavailable"
+                            ]
+                          },
+                          "referenceSource": {
+                            "type": "string"
+                          },
+                          "updatedAt": {
+                            "type": "string",
+                            "description": "ISO 8601 timestamp"
+                          }
+                        },
+                        "required": [
+                          "anchorId",
+                          "anchorName",
+                          "corridorId",
+                          "asset",
+                          "fiatAmount",
+                          "fee",
+                          "feeType",
+                          "exchangeRate",
+                          "totalReceived",
+                          "source",
+                          "updatedAt"
+                        ]
+                      }
+                    },
+                    "bestRateId": {
+                      "type": "string"
+                    },
+                    "errors": {
+                      "type": "array",
+                      "items": {
+                        "type": "object",
+                        "properties": {
+                          "anchorId": {
+                            "type": "string"
+                          },
+                          "anchorName": {
+                            "type": "string"
+                          },
+                          "reason": {
+                            "type": "string"
+                          }
+                        },
+                        "required": [
+                          "anchorId",
+                          "anchorName",
+                          "reason"
+                        ]
+                      }
+                    },
+                    "indicative": {
+                      "type": "boolean",
+                      "enum": [
+                        true
+                      ]
+                    },
+                    "disclaimer": {
+                      "type": "string"
+                    }
+                  },
+                  "required": [
+                    "corridorId",
+                    "direction",
+                    "rates",
+                    "bestRateId",
+                    "errors",
+                    "indicative",
+                    "disclaimer"
+                  ]
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Unknown corridor or invalid amount, asset or type",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiError"
+                }
+              }
+            }
+          },
+          "429": {
+            "description": "Rate limit exceeded",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiError"
+                }
+              }
+            }
+          },
+          "502": {
+            "description": "Anchor rate lookup failed",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/anchors/{id}/quote-gap": {
+      "get": {
+        "summary": "Get how far an anchor lands from the rate it quoted",
+        "description": "Signed gap between the rate shown before execution and the rate that landed, over completed, undisputed withdrawals in the window. Negative means users received less than quoted. Stands in for SEP-38 firm quotes, which most anchors do not offer. Null statistics mean no samples.",
+        "tags": [
+          "Anchors"
+        ],
+        "parameters": [
+          {
+            "schema": {
+              "type": "string",
+              "minLength": 1,
+              "description": "Anchor identifier"
+            },
+            "required": true,
+            "description": "Anchor identifier",
+            "name": "id",
+            "in": "path"
+          },
+          {
+            "schema": {
+              "type": [
+                "number",
+                "null"
+              ],
+              "description": "Lookback window in days: 7, 30 or 90 (default 30)",
+              "example": 30
+            },
+            "required": false,
+            "description": "Lookback window in days: 7, 30 or 90 (default 30)",
+            "name": "window",
+            "in": "query"
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Quote-gap statistics",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "anchorId": {
+                      "type": "string"
+                    },
+                    "basis": {
+                      "type": "string",
+                      "description": "How the rates being compared are defined"
+                    },
+                    "sampleCount": {
+                      "type": "integer"
+                    },
+                    "meanGapPct": {
+                      "type": [
+                        "number",
+                        "null"
+                      ],
+                      "description": "Mean signed gap, percent"
+                    },
+                    "p50GapPct": {
+                      "type": [
+                        "number",
+                        "null"
+                      ],
+                      "description": "Median signed gap, percent"
+                    },
+                    "p95AbsGapPct": {
+                      "type": [
+                        "number",
+                        "null"
+                      ],
+                      "description": "95th percentile of the absolute gap"
+                    },
+                    "worseCount": {
+                      "type": "integer",
+                      "description": "Transactions that landed below the quote"
+                    },
+                    "betterCount": {
+                      "type": "integer",
+                      "description": "Transactions that landed above the quote"
+                    },
+                    "windowDays": {
+                      "anyOf": [
+                        {
+                          "type": "number",
+                          "enum": [
+                            7
+                          ]
+                        },
+                        {
+                          "type": "number",
+                          "enum": [
+                            30
+                          ]
+                        },
+                        {
+                          "type": "number",
+                          "enum": [
+                            90
+                          ]
+                        }
+                      ]
+                    }
+                  },
+                  "required": [
+                    "anchorId",
+                    "basis",
+                    "sampleCount",
+                    "meanGapPct",
+                    "p50GapPct",
+                    "p95AbsGapPct",
+                    "worseCount",
+                    "betterCount",
+                    "windowDays"
+                  ]
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Invalid window",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiError"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Unknown anchor",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiError"
+                }
+              }
+            }
+          },
+          "429": {
+            "description": "Rate limit exceeded",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiError"
+                }
+              }
+            }
+          },
+          "503": {
+            "description": "Reputation store unavailable",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/sep38/readiness": {
+      "get": {
+        "summary": "Get SEP-38 firm-quote readiness per anchor",
+        "description": "For each registered anchor: whether the operator declares SEP-38, whether its stellar.toml advertises a quote server, whether that server’s /info answers, and whether it lists the anchor’s registered asset. Checked live and cached for ten minutes.",
+        "tags": [
+          "Anchors"
+        ],
+        "responses": {
+          "200": {
+            "description": "Readiness per anchor",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "anchors": {
+                      "type": "array",
+                      "items": {
+                        "type": "object",
+                        "properties": {
+                          "anchorId": {
+                            "type": "string"
+                          },
+                          "declared": {
+                            "type": "boolean",
+                            "description": "The operator declares SEP-38 support"
+                          },
+                          "quoteServer": {
+                            "type": [
+                              "string",
+                              "null"
+                            ],
+                            "description": "ANCHOR_QUOTE_SERVER from the toml"
+                          },
+                          "infoReachable": {
+                            "type": "boolean"
+                          },
+                          "assets": {
+                            "type": "array",
+                            "items": {
+                              "type": "string"
+                            },
+                            "description": "SEP-38 asset identifiers listed"
+                          },
+                          "sellsRegisteredAsset": {
+                            "type": "boolean"
+                          },
+                          "error": {
+                            "type": [
+                              "string",
+                              "null"
+                            ]
+                          },
+                          "checkedAt": {
+                            "type": "string"
+                          }
+                        },
+                        "required": [
+                          "anchorId",
+                          "declared",
+                          "quoteServer",
+                          "infoReachable",
+                          "assets",
+                          "sellsRegisteredAsset",
+                          "error",
+                          "checkedAt"
+                        ]
+                      }
+                    },
+                    "generatedAt": {
+                      "type": "string"
+                    }
+                  },
+                  "required": [
+                    "anchors",
+                    "generatedAt"
+                  ]
+                }
+              }
+            }
+          },
+          "429": {
+            "description": "Rate limit exceeded",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiError"
                 }
               }
             }
@@ -2347,6 +3347,109 @@
           },
           "429": {
             "description": "Rate limited",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/intent/onramp": {
+      "post": {
+        "summary": "Submit an on-ramp intent (v1)",
+        "description": "Routes a deposit intent to the best indicative anchor and returns the /onramp handoff URL, plus an unsigned changeTrust XDR when the destination account has no trustline. No anchor session is opened: KYC and the interactive deposit run in the browser. Honours `Idempotency-Key` like the off-ramp endpoint.",
+        "tags": [
+          "Intent"
+        ],
+        "parameters": [
+          {
+            "schema": {
+              "type": "string",
+              "description": "Client-generated key. A repeated value replays the original response."
+            },
+            "required": false,
+            "description": "Client-generated key. A repeated value replays the original response.",
+            "name": "Idempotency-Key",
+            "in": "header"
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/OnrampIntentRequest"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Route resolved",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/OnrampIntentResponse"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Validation error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiError"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Attestation signature did not verify",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiError"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "No anchor serves this corridor",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiError"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "The destination account does not exist on Stellar",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiError"
+                }
+              }
+            }
+          },
+          "429": {
+            "description": "Rate limited",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiError"
+                }
+              }
+            }
+          },
+          "503": {
+            "description": "No deposit rate is available right now",
             "content": {
               "application/json": {
                 "schema": {

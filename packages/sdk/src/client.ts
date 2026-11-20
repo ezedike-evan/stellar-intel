@@ -8,10 +8,17 @@ import type {
   AnchorCensusResponse,
   AnchorHealth,
   AnchorHealthLedgerArtifact,
+  AnchorPriceHistory,
+  AnchorQuoteGap,
   CorridorVolumeSavings,
   OfframpIntentRequest,
   OfframpIntentResponse,
+  OnrampFundingType,
+  OnrampIntentRequest,
+  OnrampIntentResponse,
+  OnrampQuote,
   RateComparison,
+  Sep38ReadinessResponse,
 } from './types.js';
 
 export const DEFAULT_BASE_URL = 'https://stellar-intel.vercel.app';
@@ -145,6 +152,45 @@ export class StellarIntelClient {
     });
   }
 
+  /**
+   * Routes an on-ramp (deposit) intent and returns the browser handoff.
+   *
+   * Nothing is paid or opened: the interactive deposit and KYC run in a browser at
+   * `handoffUrl`. If the destination lacks a trustline, `unsignedChangeTrustXdr`
+   * is a transaction for the wallet to sign first. An `Idempotency-Key` is
+   * generated per call and reused across its own retries.
+   */
+  async submitOnrampIntent(
+    intent: Omit<OnrampIntentRequest, 'type'>,
+    options: { idempotencyKey?: string } = {}
+  ): Promise<OnrampIntentResponse> {
+    return this.request<OnrampIntentResponse>({
+      method: 'POST',
+      path: '/api/v1/intent/onramp',
+      body: { type: 'onramp', ...intent } satisfies OnrampIntentRequest,
+      idempotencyKey: options.idempotencyKey ?? newIdempotencyKey(),
+    });
+  }
+
+  /**
+   * Indicative deposit estimates for a fiat amount into a Stellar asset, one row
+   * per anchor. The anchor sets the final rate inside its own deposit window, so
+   * every figure here is an estimate.
+   */
+  async getOnrampQuote(
+    corridor: string,
+    amount: string,
+    options: { asset?: string; type?: OnrampFundingType } = {}
+  ): Promise<OnrampQuote> {
+    const query = new URLSearchParams({ corridor, amount });
+    if (options.asset) query.set('asset', options.asset);
+    if (options.type) query.set('type', options.type);
+    return this.request<OnrampQuote>({
+      method: 'GET',
+      path: `/api/v1/onramp/quote?${query.toString()}`,
+    });
+  }
+
   /** Health of a single anchor, from the nightly validation ledger. */
   async getAnchorHealth(anchorId: string): Promise<AnchorHealth> {
     return this.request<AnchorHealth>({
@@ -165,6 +211,52 @@ export class StellarIntelClient {
     return this.request<AnchorHealthLedgerArtifact>({
       method: 'GET',
       path: `/api/v1/anchor-health/ledger${query}`,
+    });
+  }
+
+  /**
+   * Recorded SEP-38 indicative prices for one anchor corridor, oldest first.
+   *
+   * `corridor` defaults to the anchor's first corridor; `days` is 1–90
+   * (server default 7).
+   */
+  async getAnchorPriceHistory(
+    anchorId: string,
+    options: { corridor?: string; days?: number } = {}
+  ): Promise<AnchorPriceHistory> {
+    const query = new URLSearchParams();
+    if (options.corridor) query.set('corridor', options.corridor);
+    if (options.days !== undefined) query.set('days', String(options.days));
+    const qs = query.size > 0 ? `?${query.toString()}` : '';
+    return this.request<AnchorPriceHistory>({
+      method: 'GET',
+      path: `/api/v1/anchors/${encodeURIComponent(anchorId)}/price-history${qs}`,
+    });
+  }
+
+  /**
+   * Which anchors are ready to give firm (SEP-38) quotes: quote server advertised,
+   * /info reachable, registered asset listed. Checked live; the server caches the
+   * answer for ten minutes.
+   */
+  async getSep38Readiness(): Promise<Sep38ReadinessResponse> {
+    return this.request<Sep38ReadinessResponse>({
+      method: 'GET',
+      path: '/api/v1/sep38/readiness',
+    });
+  }
+
+  /**
+   * Quoted-vs-landed rate gap for one anchor, over completed withdrawals.
+   *
+   * `window` is 7, 30 or 90 days (server default 30). Gaps are signed percentages:
+   * negative means users received less than the anchor showed.
+   */
+  async getAnchorQuoteGap(anchorId: string, window?: 7 | 30 | 90): Promise<AnchorQuoteGap> {
+    const qs = window === undefined ? '' : `?window=${window}`;
+    return this.request<AnchorQuoteGap>({
+      method: 'GET',
+      path: `/api/v1/anchors/${encodeURIComponent(anchorId)}/quote-gap${qs}`,
     });
   }
 

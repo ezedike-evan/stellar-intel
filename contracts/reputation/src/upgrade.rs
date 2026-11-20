@@ -9,13 +9,22 @@
 //! monotonically increasing version is persisted so callers can observe which
 //! revision is live.
 //!
+//! ## Time-lock
+//!
+//! `apply` does not swap on demand. The upgrade admin first announces the new
+//! hash with [`propose_upgrade`]; it can be applied only after
+//! [`UPGRADE_DELAY_SECONDS`] (7 days), and only with that exact hash. A
+//! compromised upgrade-admin key therefore cannot replace the contract in one
+//! transaction: the pending upgrade is visible via [`get_pending_upgrade`] for a
+//! week, during which the genuine admin can [`cancel_upgrade`] or rotate the key.
+//!
 //! The module owns its admin and version keys outright. This keeps the upgrade
 //! authority independent of the wider admin lifecycle that other sub-issues of
 //! #197 are still wiring up, so the hook compiles and is testable on its own.
 
 use soroban_sdk::{contracttype, Address, BytesN, Env};
 
-use crate::Error;
+use crate::{events, Error};
 
 /// Instance-storage keys owned by this module.
 ///
@@ -31,7 +40,12 @@ enum UpgradeKey {
     Version,
     /// Address nominated to become the upgrade admin, pending its acceptance.
     PendingUpgradeAdmin,
+    /// A proposed WASM upgrade: `(wasm_hash, earliest_execution_timestamp)`.
+    PendingUpgrade,
 }
+
+/// How long a proposed upgrade must wait before it can be applied: 7 days.
+pub const UPGRADE_DELAY_SECONDS: u64 = 604_800;
 
 /// Version stamped on a freshly initialized contract, before any upgrade.
 const INITIAL_VERSION: u32 = 1;
@@ -52,10 +66,16 @@ pub fn init(env: &Env, admin: Address) {
 
 /// Swap the contract's WASM to `new_wasm_hash`, preserving all stored state.
 ///
-/// Requires the stored upgrade admin's authorization. The persisted version is
+/// Requires the stored upgrade admin's authorization and a matching proposal
+/// that has waited out [`UPGRADE_DELAY_SECONDS`]:
+///   - `NoPendingUpgrade` when nothing was proposed,
+///   - `UpgradeHashMismatch` when `new_wasm_hash` is not the proposed hash,
+///   - `UpgradeNotReady` when the delay has not elapsed.
+///
+/// On success the pending entry is cleared and the persisted version is
 /// incremented *before* the swap so the freshly installed bytecode boots on the
 /// bumped version.
-pub fn apply(env: &Env, new_wasm_hash: BytesN<32>) {
+pub fn apply(env: &Env, new_wasm_hash: BytesN<32>) -> Result<(), Error> {
     let storage = env.storage().instance();
     let admin: Address = storage
         .get(&UpgradeKey::UpgradeAdmin)
@@ -64,10 +84,55 @@ pub fn apply(env: &Env, new_wasm_hash: BytesN<32>) {
     // Admin-only: reverts unless the stored admin signed this invocation.
     admin.require_auth();
 
+    let (pending_hash, eta): (BytesN<32>, u64) = storage
+        .get(&UpgradeKey::PendingUpgrade)
+        .ok_or(Error::NoPendingUpgrade)?;
+    if pending_hash != new_wasm_hash {
+        return Err(Error::UpgradeHashMismatch);
+    }
+    if env.ledger().timestamp() < eta {
+        return Err(Error::UpgradeNotReady);
+    }
+    storage.remove(&UpgradeKey::PendingUpgrade);
+
     let next = current_version(env) + 1;
     storage.set(&UpgradeKey::Version, &next);
 
+    // Before the swap: after it, this invocation is running on the new code.
+    events::upgraded(env, &admin, &new_wasm_hash, next);
     env.deployer().update_current_contract_wasm(new_wasm_hash);
+    Ok(())
+}
+
+/// Announce an upgrade to `new_wasm_hash`, applicable after
+/// [`UPGRADE_DELAY_SECONDS`]. Upgrade admin only. Replaces any earlier proposal
+/// and restarts the clock.
+pub fn propose_upgrade(
+    env: &Env,
+    caller: &Address,
+    new_wasm_hash: BytesN<32>,
+) -> Result<(), Error> {
+    require_upgrade_admin(env, caller)?;
+    let eta = env
+        .ledger()
+        .timestamp()
+        .saturating_add(UPGRADE_DELAY_SECONDS);
+    env.storage()
+        .instance()
+        .set(&UpgradeKey::PendingUpgrade, &(new_wasm_hash, eta));
+    Ok(())
+}
+
+/// Withdraw the pending upgrade, if any. Upgrade admin only.
+pub fn cancel_upgrade(env: &Env, caller: &Address) -> Result<(), Error> {
+    require_upgrade_admin(env, caller)?;
+    env.storage().instance().remove(&UpgradeKey::PendingUpgrade);
+    Ok(())
+}
+
+/// The pending upgrade as `(wasm_hash, earliest_execution_timestamp)`, if any.
+pub fn get_pending_upgrade(env: &Env) -> Option<(BytesN<32>, u64)> {
+    env.storage().instance().get(&UpgradeKey::PendingUpgrade)
 }
 
 /// Return the address authorized to upgrade the contract, if one is bound.
@@ -128,6 +193,7 @@ pub fn propose_upgrade_admin(
     env.storage()
         .instance()
         .set(&UpgradeKey::PendingUpgradeAdmin, candidate);
+    events::upgrade_admin_proposed(env, caller, candidate);
     Ok(())
 }
 
@@ -154,15 +220,19 @@ pub fn accept_upgrade_admin(env: &Env, candidate: &Address) -> Result<(), Error>
     env.storage()
         .instance()
         .remove(&UpgradeKey::PendingUpgradeAdmin);
+    events::upgrade_admin_accepted(env, candidate);
     Ok(())
 }
 
 /// Withdraw a pending proposal. Current upgrade admin only.
 pub fn cancel_upgrade_proposal(env: &Env, caller: &Address) -> Result<(), Error> {
     require_upgrade_admin(env, caller)?;
-    env.storage()
-        .instance()
-        .remove(&UpgradeKey::PendingUpgradeAdmin);
+    if let Some(candidate) = get_pending_upgrade_admin(env) {
+        env.storage()
+            .instance()
+            .remove(&UpgradeKey::PendingUpgradeAdmin);
+        events::upgrade_proposal_cancelled(env, caller, &candidate);
+    }
     Ok(())
 }
 

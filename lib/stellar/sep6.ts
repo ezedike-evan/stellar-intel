@@ -2,11 +2,14 @@ import { Sep6NotSupportedError, SepError, TimeoutError, parseSepErrorBody } from
 import { TERMINAL_STATES } from './sep24';
 import { mapToCanonical, normalizeStatus } from './sep24-status-map';
 import { getUsdFxRate } from '@/lib/fx/rates';
+import { referenceMidPrice } from '@/lib/fx/reference-mid';
 import type {
   WithdrawStatusValue,
   WithdrawStatus,
   Anchor,
   AnchorRate,
+  Sep6DepositParams,
+  Sep6DepositResponse,
   Sep6WithdrawParams,
   Sep6WithdrawResponse,
 } from '@/types';
@@ -200,6 +203,32 @@ export function buildSep6WithdrawRequest(
 
 export type { Sep6WithdrawParams, Sep6WithdrawResponse };
 
+/**
+ * Builds the SEP-6 `GET /deposit` URL. The counterpart to
+ * {@link buildSep6WithdrawRequest}: `account` (where the asset is credited) is
+ * required in place of `dest`. Anchors that support it may pay out as a
+ * claimable balance when the account has no trustline, so that is always asked for.
+ */
+export function buildSep6DepositRequest(transferServer: string, params: Sep6DepositParams): string {
+  if (!params.asset_code) throw new Error('asset_code is required');
+  if (!params.account) throw new Error('account is required');
+
+  const url = new URL(`${transferServer}/deposit`);
+  url.searchParams.set('asset_code', params.asset_code);
+  url.searchParams.set('account', params.account);
+  if (params.amount) url.searchParams.set('amount', params.amount);
+  if (params.type) url.searchParams.set('type', params.type);
+  if (params.email_address) url.searchParams.set('email_address', params.email_address);
+  if (params.memo_type) url.searchParams.set('memo_type', params.memo_type);
+  if (params.memo) url.searchParams.set('memo', params.memo);
+  if (params.lang) url.searchParams.set('lang', params.lang);
+  url.searchParams.set('claimable_balance_supported', 'true');
+
+  return url.toString();
+}
+
+export type { Sep6DepositParams, Sep6DepositResponse };
+
 // ─── Capability detection (network-free TOML inspection) ──────────────────────
 
 /**
@@ -260,15 +289,17 @@ export async function sep6IndicativeRate(
 ): Promise<AnchorRate> {
   const transferServer = getSep6TransferServer(toml);
 
-  const [info, fxRate] = await Promise.all([
+  const [info, ref] = await Promise.all([
     getSep6Info(transferServer, anchor.assetCode),
-    getUsdFxRate(fiatCode),
+    referenceMidPrice({ code: anchor.assetCode, issuer: anchor.assetIssuer }, fiatCode, {
+      getUsdFxRate,
+    }),
   ]);
 
   const feeFixed = info.feeFixed;
   const feePercent = info.feePercent;
   const netSellAmount = Math.max(0, sellAmount - feeFixed) * (1 - feePercent / 100);
-  const totalReceived = netSellAmount * fxRate;
+  const totalReceived = netSellAmount * ref.price;
   const effectiveRate = sellAmount > 0 ? totalReceived / sellAmount : 0;
 
   if (
@@ -294,6 +325,8 @@ export async function sep6IndicativeRate(
     exchangeRate: effectiveRate,
     totalReceived,
     source: 'sep6-info',
+    referenceSource: ref.source,
+    referenceDetail: ref.detail,
     updatedAt: new Date(),
   };
 }

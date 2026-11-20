@@ -8,6 +8,10 @@ describe('SEP-1 Resolver Fixtures', () => {
     vi.restoreAllMocks();
   });
 
+  // Server URLs are only kept when they sit on a registered anchor host (see
+  // safeServerUrl in lib/stellar/sep1.ts), so every fixture uses a registered
+  // domain. The old bitso, flutterwave, tempo and mychoice fixtures used hosts
+  // that are not in the registry, and would now be dropped by design.
   const fixtures = [
     {
       name: 'cowrie',
@@ -30,16 +34,16 @@ describe('SEP-1 Resolver Fixtures', () => {
       },
     },
     {
-      name: 'bitso',
-      domain: 'bitso.com',
+      name: 'anclap',
+      domain: 'anclap.com',
       toml: {
-        TRANSFER_SERVER_SEP0024: 'https://api.bitso.com/stellar/sep24',
-        WEB_AUTH_ENDPOINT: 'https://api.bitso.com/stellar/auth',
+        TRANSFER_SERVER_SEP0024: 'https://api.anclap.com/stellar/sep24',
+        WEB_AUTH_ENDPOINT: 'https://api.anclap.com/stellar/auth',
         SIGNING_KEY: 'GABXNVRVNVNVNVNVNVNVNVNVNVNVNVNVNVNVNVNVNVNVNVNVNVNVNVNV',
       },
       expected: {
-        TRANSFER_SERVER_SEP0024: 'https://api.bitso.com/stellar/sep24',
-        WEB_AUTH_ENDPOINT: 'https://api.bitso.com/stellar/auth',
+        TRANSFER_SERVER_SEP0024: 'https://api.anclap.com/stellar/sep24',
+        WEB_AUTH_ENDPOINT: 'https://api.anclap.com/stellar/auth',
         SIGNING_KEY: 'GABXNVRVNVNVNVNVNVNVNVNVNVNVNVNVNVNVNVNVNVNVNVNVNVNVNVNV',
         capabilities: {
           sep10: true,
@@ -50,16 +54,16 @@ describe('SEP-1 Resolver Fixtures', () => {
       },
     },
     {
-      name: 'flutterwave',
-      domain: 'flutterwave.com',
+      name: 'zeam',
+      domain: 'zeam.money',
       toml: {
-        TRANSFER_SERVER_SEP0024: 'https://api.flutterwave.com/v3/stellar/sep24',
-        WEB_AUTH_ENDPOINT: 'https://api.flutterwave.com/v3/stellar/auth',
+        TRANSFER_SERVER_SEP0024: 'https://api.zeam.money/v3/stellar/sep24',
+        WEB_AUTH_ENDPOINT: 'https://api.zeam.money/v3/stellar/auth',
         SIGNING_KEY: 'GBFLUTTERWAVE',
       },
       expected: {
-        TRANSFER_SERVER_SEP0024: 'https://api.flutterwave.com/v3/stellar/sep24',
-        WEB_AUTH_ENDPOINT: 'https://api.flutterwave.com/v3/stellar/auth',
+        TRANSFER_SERVER_SEP0024: 'https://api.zeam.money/v3/stellar/sep24',
+        WEB_AUTH_ENDPOINT: 'https://api.zeam.money/v3/stellar/auth',
         SIGNING_KEY: 'GBFLUTTERWAVE',
         capabilities: {
           sep10: true,
@@ -70,17 +74,17 @@ describe('SEP-1 Resolver Fixtures', () => {
       },
     },
     {
-      name: 'tempo',
-      domain: 'tempo.eu.com',
+      name: 'ntokens',
+      domain: 'ntokens.com',
       toml: {
-        TRANSFER_SERVER_SEP0024: 'https://tempo.eu.com/api/sep24',
-        WEB_AUTH_ENDPOINT: 'https://tempo.eu.com/api/auth',
+        TRANSFER_SERVER_SEP0024: 'https://ntokens.com/api/sep24',
+        WEB_AUTH_ENDPOINT: 'https://ntokens.com/api/auth',
         SIGNING_KEY: 'GATEMPO',
-        ANCHOR_QUOTE_SERVER: 'https://tempo.eu.com/api/sep38',
+        ANCHOR_QUOTE_SERVER: 'https://ntokens.com/api/sep38',
       },
       expected: {
-        TRANSFER_SERVER_SEP0024: 'https://tempo.eu.com/api/sep24',
-        WEB_AUTH_ENDPOINT: 'https://tempo.eu.com/api/auth',
+        TRANSFER_SERVER_SEP0024: 'https://ntokens.com/api/sep24',
+        WEB_AUTH_ENDPOINT: 'https://ntokens.com/api/auth',
         SIGNING_KEY: 'GATEMPO',
         capabilities: {
           sep10: true,
@@ -91,16 +95,16 @@ describe('SEP-1 Resolver Fixtures', () => {
       },
     },
     {
-      name: 'mychoice',
-      domain: 'mychoice.io',
+      name: 'sofizpay',
+      domain: 'sofizpay.com',
       toml: {
-        TRANSFER_SERVER_SEP0024: 'https://api.mychoice.io/sep24',
-        WEB_AUTH_ENDPOINT: 'https://api.mychoice.io/auth',
+        TRANSFER_SERVER_SEP0024: 'https://api.sofizpay.com/sep24',
+        WEB_AUTH_ENDPOINT: 'https://api.sofizpay.com/auth',
         SIGNING_KEY: 'GAMYCHOICE',
       },
       expected: {
-        TRANSFER_SERVER_SEP0024: 'https://api.mychoice.io/sep24',
-        WEB_AUTH_ENDPOINT: 'https://api.mychoice.io/auth',
+        TRANSFER_SERVER_SEP0024: 'https://api.sofizpay.com/sep24',
+        WEB_AUTH_ENDPOINT: 'https://api.sofizpay.com/auth',
         SIGNING_KEY: 'GAMYCHOICE',
         capabilities: {
           sep10: true,

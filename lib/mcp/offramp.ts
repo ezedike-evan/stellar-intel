@@ -14,9 +14,11 @@
 import { z } from 'zod';
 import { CORRIDORS } from '@/constants';
 import { hashIntent, type Intent } from '@/lib/intent/hash';
+import { verifyIntentSignature } from '@/lib/intent/verify';
 import { HORIZON_URL, NETWORK_PASSPHRASE } from '@/lib/config';
 import { STELLAR_PUBKEY_PATTERN, AMOUNT_7DP_PATTERN } from '@/lib/patterns';
 import { fetchCorridorRates } from '@/lib/stellar/server-rates';
+import { isIndicativeRateSource } from '@/types';
 import {
   registeredAnchorsForCorridor,
   routingTargetsForCorridor,
@@ -84,6 +86,13 @@ export const QuoteOutputSchema = z.object({
   quoteId: z.string(),
   netReceived: z.string(),
   expiresAt: z.string(),
+  /** Where the rate came from. Only `sep38` is a quote the anchor commits to. */
+  source: z.enum(['sep38', 'sep24-fee', 'sep6-info', 'sep6-fee']),
+  /**
+   * True for every source but `sep38`: `netReceived` is an estimate the anchor may
+   * move before the payout, and must not be presented to a user as a guarantee.
+   */
+  indicative: z.boolean(),
 });
 export type QuoteOutput = z.infer<typeof QuoteOutputSchema>;
 
@@ -124,6 +133,7 @@ export class OfframpToolError extends Error {
     public readonly code:
       | 'NO_ROUTE'
       | 'TX_BUILD_FAILED'
+      | 'SENDER_NOT_FOUND'
       | 'RATE_UNAVAILABLE'
       | 'INTENT_HASH_MISMATCH'
       | 'SIGNATURE_INVALID'
@@ -149,7 +159,33 @@ function formatNetReceived(value: number): string {
 }
 
 /**
- * Build an unsigned Stellar payment tx to the anchor (XDR base64).
+ * The slice of a Stellar account a transaction is built from. Structural, not
+ * the SDK's `Account`, because the SDK's types cannot be imported statically
+ * under the standalone package's Node16 resolution (see below).
+ */
+export interface SourceAccount {
+  accountId(): string;
+  sequenceNumber(): string;
+  incrementSequenceNumber(): void;
+}
+
+/** Loads the sender's on-chain account, for its current sequence number. */
+export type AccountLoader = (publicKey: string) => Promise<SourceAccount>;
+
+/** The default loader: the configured Horizon. */
+const loadAccountFromHorizon: AccountLoader = async (publicKey) => {
+  const { Horizon } = await import('@stellar/stellar-sdk');
+  return new Horizon.Server(HORIZON_URL).loadAccount(publicKey);
+};
+
+/**
+ * Build an unsigned Stellar payment tx to the anchor (XDR base64), from the
+ * sender's real account so the sequence number is the one the network expects
+ * and the transaction can be submitted as prepared.
+ *
+ * Throws {@link OfframpToolError} `SENDER_NOT_FOUND` when the sender has no
+ * account on the network (Horizon 404), and `TX_BUILD_FAILED` for any other
+ * failure to load it or build the transaction.
  *
  * Dynamic import: @stellar/stellar-sdk ships ESM-flavored types that TS's
  * Node16 resolution (used by the standalone packages/mcp build) refuses to
@@ -162,12 +198,29 @@ export async function buildUnsignedOfframpTx(
   amount: string,
   assetCode: string,
   assetIssuer: string | null,
-  quoteId: string
+  quoteId: string,
+  loadAccount: AccountLoader = loadAccountFromHorizon
 ): Promise<string> {
-  const { Asset, TransactionBuilder, Operation, Memo, BASE_FEE, Account } =
+  const { Asset, TransactionBuilder, Operation, Memo, BASE_FEE } =
     await import('@stellar/stellar-sdk');
   const asset = assetIssuer !== null ? new Asset(assetCode, assetIssuer) : Asset.native();
-  const account = new Account(senderPublicKey, '0');
+
+  let account: SourceAccount;
+  try {
+    account = await loadAccount(senderPublicKey);
+  } catch (err) {
+    if ((err as { response?: { status?: number } })?.response?.status === 404) {
+      throw new OfframpToolError(
+        'sender account does not exist on the network',
+        'SENDER_NOT_FOUND'
+      );
+    }
+    throw new OfframpToolError(
+      `Could not load the sender account: ${err instanceof Error ? err.message : 'unknown error'}`,
+      'TX_BUILD_FAILED'
+    );
+  }
+
   const tx = new TransactionBuilder(account, {
     fee: BASE_FEE,
     networkPassphrase: NETWORK_PASSPHRASE,
@@ -225,17 +278,43 @@ export async function getQuote(
     quoteId,
     netReceived,
     expiresAt: new Date(now() + QUOTE_TTL_SECONDS * 1000).toISOString(),
+    source: anchorRate.source,
+    indicative: isIndicativeRateSource(anchorRate.source),
   });
 }
 
 // ─── Tool: intel.offramp.prepare (#136) ──────────────────────────────────────
 
 /**
+ * One structured line on stderr. This module also ships in the standalone
+ * @stellarintel/mcp package, which has neither pino nor next, so it cannot use
+ * lib/logger; stderr is also the one stream a stdio MCP server may write to.
+ */
+function warnLegacySignatureFormat(): void {
+  process.stderr.write(
+    `${JSON.stringify({
+      level: 'warn',
+      name: 'mcp.offramp',
+      event: 'mcp_legacy_signature_format',
+    })}\n`
+  );
+}
+
+/**
  * Returns an unsigned intent envelope plus an unsigned Stellar transaction so an
  * agent can sign both. The `intentHash` in the envelope is the canonical SHA-256
  * an agent signs to authorise the intent.
+ *
+ * The transaction is built from the sender's real account, so its sequence
+ * number is the network's current one plus one and it can be submitted as
+ * prepared. That means this call reads the sender's account from Horizon:
+ * a sender with no account on the network is rejected with `SENDER_NOT_FOUND`.
+ * `loadAccount` is injectable for tests; it defaults to the configured Horizon.
  */
-export async function prepareIntent(input: PrepareInput): Promise<PrepareOutput> {
+export async function prepareIntent(
+  input: PrepareInput,
+  loadAccount?: AccountLoader
+): Promise<PrepareOutput> {
   const intent = PrepareInputSchema.parse(input);
   const id = corridorId(intent.sourceAsset, intent.destinationAsset);
   const corridor = resolveCorridor(id);
@@ -251,9 +330,11 @@ export async function prepareIntent(input: PrepareInput): Promise<PrepareOutput>
       intent.amount,
       corridor.from,
       corridor.fromIssuer,
-      intentHash
+      intentHash,
+      loadAccount
     );
   } catch (err) {
+    if (err instanceof OfframpToolError) throw err;
     throw new OfframpToolError(
       err instanceof Error ? err.message : 'Failed to build transaction',
       'TX_BUILD_FAILED'
@@ -279,9 +360,13 @@ export const ExecuteInputSchema = z.object({
   /** The exact envelope returned by intel.offramp.prepare. */
   unsignedEnvelope: UnsignedEnvelopeSchema,
   /**
-   * Base64 ed25519 signature over `unsignedEnvelope.intentHash` (as UTF-8 bytes),
-   * produced by the intent's `sender` key — an off-chain attestation that the
-   * agent authorised this exact intent.
+   * Base64 ed25519 signature over `unsignedEnvelope.intentHash`, produced by the
+   * intent's `sender` key — an off-chain attestation that the agent authorised
+   * this exact intent. Two forms are canonical, the same two the web path
+   * accepts: the 32 raw bytes the hex hash decodes to (`Keypair.sign`), and
+   * SEP-53 (`Keypair.signMessage`, what Freighter's `signMessage` produces). The
+   * older form, a signature over the hash's UTF-8 bytes, is still accepted but
+   * deprecated.
    */
   signature: z.string().min(1),
   /**
@@ -302,13 +387,27 @@ export const ExecuteOutputSchema = z.object({
 });
 export type ExecuteOutput = z.infer<typeof ExecuteOutputSchema>;
 
+/** Highest fee, in stroops, an agent-signed transaction may carry (0.01 XLM). */
+const MAX_FEE_STROOPS = 100_000;
+/** Longest an agent-signed transaction may stay valid for, in seconds. */
+const MAX_VALIDITY_SECONDS = 900;
+
 /**
  * Verifies a signed intent + transaction against the corridor route it was
  * prepared for, then submits the transaction to Horizon. Throws
  * {@link OfframpToolError} for any mismatch between the signed material and
  * the intent it claims to execute, or if Horizon rejects the submission.
+ *
+ * Besides the payment itself, the fee and validity window are bounded: a fee
+ * over {@link MAX_FEE_STROOPS}, a missing or already-passed expiry, or one more
+ * than {@link MAX_VALIDITY_SECONDS} away is rejected, so the hosted endpoint
+ * cannot be used to relay a transaction with a huge fee or no expiry. `now` is
+ * milliseconds since the epoch, injectable for tests.
  */
-export async function executeIntent(input: ExecuteInput): Promise<ExecuteOutput> {
+export async function executeIntent(
+  input: ExecuteInput,
+  now: number = Date.now()
+): Promise<ExecuteOutput> {
   const parsed = ExecuteInputSchema.parse(input);
   const { intent, intentHash } = parsed.unsignedEnvelope;
 
@@ -336,14 +435,26 @@ export async function executeIntent(input: ExecuteInput): Promise<ExecuteOutput>
     throw new OfframpToolError('sender is not a valid Stellar public key', 'SIGNATURE_INVALID');
   }
 
-  let signatureValid: boolean;
-  try {
-    signatureValid = senderKey.verify(
-      Buffer.from(intentHash, 'utf8'),
-      Buffer.from(parsed.signature, 'base64')
-    );
-  } catch {
-    signatureValid = false;
+  // The same verifier the web path uses (raw hex bytes or SEP-53), so a wallet
+  // signature that is valid on one surface is valid on the other.
+  let signatureValid = verifyIntentSignature({
+    intentHash,
+    publicKey: intent.sender,
+    signature: parsed.signature,
+  });
+
+  if (!signatureValid) {
+    // Deprecated form kept for existing clients: a signature over the hash's
+    // UTF-8 bytes. Not removed here, but each use is logged so it can be.
+    try {
+      signatureValid = senderKey.verify(
+        Buffer.from(intentHash, 'utf8'),
+        Buffer.from(parsed.signature, 'base64')
+      );
+    } catch {
+      signatureValid = false;
+    }
+    if (signatureValid) warnLegacySignatureFormat();
   }
   if (!signatureValid) {
     throw new OfframpToolError(
@@ -370,6 +481,27 @@ export async function executeIntent(input: ExecuteInput): Promise<ExecuteOutput>
   }
   if (!('operations' in tx)) {
     throw new OfframpToolError('signedTx has no operations', 'TX_MISMATCH');
+  }
+
+  if (Number(tx.fee) > MAX_FEE_STROOPS) {
+    throw new OfframpToolError(
+      `Transaction fee ${tx.fee} exceeds the maximum of ${MAX_FEE_STROOPS} stroops`,
+      'TX_MISMATCH'
+    );
+  }
+  const maxTime = Number(tx.timeBounds?.maxTime ?? 0);
+  if (!tx.timeBounds || maxTime === 0) {
+    throw new OfframpToolError('Transaction has no expiry (timeBounds.maxTime)', 'TX_MISMATCH');
+  }
+  const nowSeconds = Math.floor(now / 1000);
+  if (maxTime <= nowSeconds) {
+    throw new OfframpToolError('Transaction has already expired', 'TX_MISMATCH');
+  }
+  if (maxTime - nowSeconds > MAX_VALIDITY_SECONDS) {
+    throw new OfframpToolError(
+      `Transaction stays valid for longer than ${MAX_VALIDITY_SECONDS} seconds`,
+      'TX_MISMATCH'
+    );
   }
 
   const [operation, ...rest] = tx.operations;

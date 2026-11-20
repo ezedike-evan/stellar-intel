@@ -50,14 +50,10 @@ export const ALLOWLIST = {
   moneygram:
     'Directory lists the issuer-only domain (mgusd.moneygram.com); live SEP-24 runs at the service domain stellar.moneygram.com, which the survey does not crawl.',
   aps: 'Found outside the `anchor` tag the census crawls: SEP-24 runs at ramp.aps.money/gollum/api/v1/sep0024, a service path the survey does not reach, so the domain is absent from the transfer-capable snapshot.',
-  bitnovo:
-    'Live SEP-24 runs at stellar.bitnovo.com, which the committed survey snapshot does not classify as transfer-capable; re-survey to confirm and remove this entry once the snapshot covers it.',
   perahub: 'SEP-31-only; never transfer-capable by design',
   clpx: 'Absent from the public anchor directory the survey crawls — it is not in the 2026-09-01 snapshot at all — but its own TOML advertises live SEP-6 and SEP-24 endpoints and CLPX deposit is enabled. Its CLPX withdraw is advertised disabled, so the only fiat-out path is SEP-31, which is never routed.',
   sofizpay:
     'First Algerian corridor (DZT): live SEP-24 runs at sofizpay.com, which the tag-based survey snapshot does not classify as transfer-capable; re-survey to confirm and remove this entry once the snapshot covers it.',
-  finclusive:
-    'US rail with no withdraw types on /info: live SEP-24 runs at api.finclusive.com/stellar/transfer, which the tag-based survey snapshot does not classify as transfer-capable; re-survey to confirm and remove this entry once the snapshot covers it.',
   cowrie:
     'Service domain api.cowrie.exchange is not in the 2026-10-01 survey snapshot at all (the survey probes the home domain only); SEP-24 runs at the service domain. Re-survey to confirm and remove this entry once the snapshot covers it.',
   anclap:

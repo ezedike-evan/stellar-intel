@@ -1,13 +1,21 @@
 /**
- * Live testnet oracle read check (#723).
+ * Live oracle read check (#723, network-aware since #1406).
  *
  * Reads the deployed reputation contract over Soroban RPC and prints what came
  * back. Intended to run warn-only on a schedule: a third-party network being
  * unreachable is not a repository defect, so this never fails the caller unless
  * `--strict` is passed.
  *
- *   npx tsx scripts/verify-oracle-read.mts            # warn-only
- *   npx tsx scripts/verify-oracle-read.mts --strict   # exit 1 on failure
+ *   npx tsx scripts/verify-oracle-read.mts                      # warn-only
+ *   npx tsx scripts/verify-oracle-read.mts --strict             # exit 1 on failure
+ *   npx tsx scripts/verify-oracle-read.mts --network mainnet    # verify mainnet
+ *   npx tsx scripts/verify-oracle-read.mts --corridor usdc-kes
+ *
+ * The network is `--network`, else NEXT_PUBLIC_STELLAR_NETWORK, else testnet. It
+ * decides which recorded deployment (.deployments/<network>.json) and which RPC
+ * and passphrase are read. With `--network mainnet` and no mainnet deployment
+ * recorded the script reports an error and exits 1 even without `--strict`:
+ * a mainnet check that quietly checked testnet would be worse than none.
  */
 
 // Deliberately does not import from constants/: that pulls lib/config.ts, which
@@ -19,18 +27,17 @@ import {
   getCorridorAggregate,
   getScoreForCorridor,
   getOracleGovernance,
+  resolveReadDefaults,
+  type OracleReadConfig,
 } from '../lib/oracle/read.js';
 import {
-  TESTNET_ORACLE_CONTRACT_ID,
+  MAINNET_ORACLE_DEPLOYED_AT,
   TESTNET_ORACLE_DEPLOYED_AT,
+  resolveOracleContractId,
 } from '../lib/oracle/deployment.js';
+import { parseVerifyArgs } from './lib/oracle-verify.js';
 
-const strict = process.argv.includes('--strict');
-
-/** Corridor to sample. Override with `--corridor <id>`. */
-const corridorArgIndex = process.argv.indexOf('--corridor');
-const corridor =
-  corridorArgIndex !== -1 ? (process.argv[corridorArgIndex + 1] ?? 'usdc-ngn') : 'usdc-ngn';
+const { strict, network, corridor } = parseVerifyArgs(process.argv.slice(2));
 
 function fail(message: string): void {
   console.error(`::${strict ? 'error' : 'warning'}::${message}`);
@@ -38,13 +45,32 @@ function fail(message: string): void {
 }
 
 async function main(): Promise<void> {
-  console.log(`Oracle contract : ${TESTNET_ORACLE_CONTRACT_ID}`);
-  console.log(`Deployed at     : ${TESTNET_ORACLE_DEPLOYED_AT}`);
+  let contractId: string;
+  try {
+    contractId = resolveOracleContractId(undefined, network);
+  } catch (err) {
+    // Always an error, strict or not: an unverifiable mainnet must not read as ok.
+    console.error(`::error::${err instanceof Error ? err.message : String(err)}`);
+    process.exitCode = 1;
+    return;
+  }
+
+  // Point every read at the chosen network, not at whatever the environment says.
+  const config: OracleReadConfig = { contractId, ...resolveReadDefaults(network) };
+
+  console.log(`Network         : ${network}`);
+  console.log(`Oracle contract : ${contractId}`);
+  console.log(
+    `Deployed at     : ${
+      (network === 'mainnet' ? MAINNET_ORACLE_DEPLOYED_AT : TESTNET_ORACLE_DEPLOYED_AT) ||
+      '(not recorded)'
+    }`
+  );
 
   // Custody first: who controls this contract is the question a mainnet
   // pre-flight actually needs answered (#913).
   try {
-    const gov = await getOracleGovernance();
+    const gov = await getOracleGovernance(config);
     console.log(`Contract version: ${gov.contractVersion}`);
     console.log(`Admin           : ${gov.admin ?? '(unset)'}`);
     console.log(`Upgrade admin   : ${gov.upgradeAdmin ?? '(unset)'}`);
@@ -86,7 +112,7 @@ async function main(): Promise<void> {
 
   let anchors: string[];
   try {
-    anchors = await listAnchors();
+    anchors = await listAnchors(config);
   } catch (err) {
     fail(`list_anchors failed: ${err instanceof Error ? err.message : String(err)}`);
     return;
@@ -103,8 +129,8 @@ async function main(): Promise<void> {
 
   for (const anchorId of anchors) {
     try {
-      const aggregate = await getCorridorAggregate(anchorId, corridor);
-      const score = await getScoreForCorridor(anchorId, corridor);
+      const aggregate = await getCorridorAggregate(anchorId, corridor, config);
+      const score = await getScoreForCorridor(anchorId, corridor, config);
 
       // Both read helpers return null when the contract has no data for the
       // pair, rather than a zeroed tuple that reads as a real score (#723).

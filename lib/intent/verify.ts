@@ -1,5 +1,5 @@
 import { Keypair } from '@stellar/stellar-sdk';
-import { hashIntent, type Intent } from './hash';
+import { hashIntent, type HashableIntent } from './hash';
 
 /**
  * Verify an Ed25519 signature over an intent hash.
@@ -56,7 +56,7 @@ export type IntentAttestationResult =
  */
 export async function verifyOptionalIntentAttestation(
   body: unknown,
-  intent: Intent
+  intent: HashableIntent
 ): Promise<IntentAttestationResult> {
   const raw = (body ?? {}) as Record<string, unknown>;
   const signature = typeof raw.signature === 'string' ? raw.signature : undefined;

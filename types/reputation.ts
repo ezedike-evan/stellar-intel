@@ -93,15 +93,16 @@ export const PROBE_KINDS = [
   'issuer-mismatch',
   'toml-integrity',
   'sep31-info',
+  'deposit',
 ] as const;
 export type ProbeKind = (typeof PROBE_KINDS)[number];
 
 export interface ProbeLedgerRow {
   /** Anchor home domain that was probed. */
   domain: string;
-  /** Which check this row represents: stellar.toml reachability, a SEP-38 quote round-trip, an issuer-mismatch comparison, a toml-integrity validation, or a SEP-31 receive-capability check. */
+  /** Which check this row represents: stellar.toml reachability, a SEP-38 quote round-trip, an issuer-mismatch comparison, a toml-integrity validation, a SEP-31 receive-capability check, or SEP-24 deposit availability. */
   kind: ProbeKind;
-  /** Corridor ID (e.g. 'usdc-ngn') for `quote` rows; null for `uptime`/`issuer-mismatch`/`toml-integrity` rows. */
+  /** Corridor ID (e.g. 'usdc-ngn') for `quote` rows; `deposit:<CODE>` (one row per deposit asset) for `deposit` rows; null for `uptime`/`issuer-mismatch`/`toml-integrity` rows. */
   corridor: string | null;
   /** True when the probe succeeded (toml resolved, a quote was returned, the issuer matched, or the toml validated clean). */
   reachable: boolean;
@@ -121,4 +122,32 @@ export interface LatencyPercentiles {
   p95Ms: number;
   /** Number of reachable samples the percentiles were computed over. */
   sampleCount: number;
+}
+
+// ─── SEP-38 quote history (Q38012) ───────────────────────────────────────────
+//
+// One indicative price seen on an anchor's SEP-38 quote server, kept so a price
+// history exists even when no user transacts and can later be compared with the
+// rate that actually landed. All amounts are decimal strings.
+
+export const QUOTE_SOURCES = ['sep38-prices', 'sep38-price'] as const;
+export type QuoteSource = (typeof QUOTE_SOURCES)[number];
+
+export interface QuoteHistoryRow {
+  anchorId: string;
+  /** Corridor whose payout currency the buy asset matched. */
+  corridor: string;
+  /** SEP-38 sell asset identifier, e.g. `stellar:USDC:G...`. */
+  sellAsset: string;
+  /** SEP-38 buy asset identifier, e.g. `iso4217:NGN`. */
+  buyAsset: string;
+  /** Reference sell amount the prices were quoted for (decimal string). */
+  sellAmount: string;
+  /** Indicative unit price (decimal string, straight from the anchor). */
+  price: string;
+  /** Indicative total for `sellAmount`, fees included (decimal string). */
+  totalPrice: string;
+  source: QuoteSource;
+  /** ISO 8601 timestamp of the observation. */
+  observedAt: string;
 }

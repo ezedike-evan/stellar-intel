@@ -79,6 +79,66 @@ describe('initiateDeposit — POST /transactions/deposit/interactive', () => {
     expect(body['account']).toBe('GABCDEFGHIJKLMNOPQRSTUVWXYZ');
   });
 
+  it('tells the anchor the wallet can take a claimable balance (string "true")', async () => {
+    let body: Record<string, unknown> = {};
+    vi.stubGlobal(
+      'fetch',
+      vi.fn(async (_url: string, opts: RequestInit) => {
+        body = JSON.parse(opts.body as string) as Record<string, unknown>;
+        return {
+          ok: true,
+          json: async () => ({
+            type: 'interactive_customer_info_needed',
+            url: 'https://u',
+            id: 'id1',
+          }),
+        };
+      })
+    );
+
+    await initiateDeposit(RESOLVED_ANCHOR, PARAMS);
+    expect(body['claimable_balance_supported']).toBe('true');
+  });
+
+  describe('SEP-38 quote_id (#1511)', () => {
+    function captureBody() {
+      const captured: { body: Record<string, unknown> } = { body: {} };
+      vi.stubGlobal(
+        'fetch',
+        vi.fn(async (_url: string, opts: RequestInit) => {
+          captured.body = JSON.parse(opts.body as string) as Record<string, unknown>;
+          return {
+            ok: true,
+            json: async () => ({
+              type: 'interactive_customer_info_needed',
+              url: 'https://u',
+              id: 'id1',
+            }),
+          };
+        })
+      );
+      return captured;
+    }
+
+    it('sends quote_id when a firm quote is given', async () => {
+      const captured = captureBody();
+      await initiateDeposit(RESOLVED_ANCHOR, { ...PARAMS, quoteId: 'quote-123' });
+      expect(captured.body['quote_id']).toBe('quote-123');
+    });
+
+    it('omits quote_id when there is none', async () => {
+      const captured = captureBody();
+      await initiateDeposit(RESOLVED_ANCHOR, PARAMS);
+      expect(captured.body).not.toHaveProperty('quote_id');
+    });
+
+    it('omits quote_id for an empty string', async () => {
+      const captured = captureBody();
+      await initiateDeposit(RESOLVED_ANCHOR, { ...PARAMS, quoteId: '' });
+      expect(captured.body).not.toHaveProperty('quote_id');
+    });
+  });
+
   it('sends Authorization: Bearer <jwt> header', async () => {
     let headers: Record<string, string> = {};
     vi.stubGlobal(

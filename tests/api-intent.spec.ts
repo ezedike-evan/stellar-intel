@@ -282,9 +282,10 @@ describe('POST /api/intent/offramp — idempotency', () => {
     const firstBody = (await first.json()) as OfframpIntentResponse;
     expect(first.headers.get('Idempotency-Replayed')).toBeNull();
 
-    // A different intent under the same key must still return the FIRST
-    // response verbatim -- that's the point of an idempotency key.
-    const second = await POST(makeRequest({ ...VALID_INTENT, destinationAsset: 'KES' }, headers));
+    // The same body under the same key returns the FIRST response verbatim --
+    // that's the point of an idempotency key. (A different body no longer
+    // replays: keys are scoped to the body, see #1351.)
+    const second = await POST(makeRequest(VALID_INTENT, headers));
     const secondBody = (await second.json()) as OfframpIntentResponse;
 
     expect(second.status).toBe(first.status);
@@ -322,19 +323,19 @@ describe('POST /api/intent/offramp — idempotency', () => {
     expect(second.headers.get('Idempotency-Replayed')).toBe('true');
   });
 
-  it('bypasses rate limiting for an idempotent replay', async () => {
+  it('rate-limits an idempotent replay like any other request (#1350)', async () => {
     const ip = '203.0.113.54';
     const headers = { 'Idempotency-Key': 'key-bypass', 'x-forwarded-for': ip };
 
     await POST(makeRequest(VALID_INTENT, headers));
-    // Exhaust the bucket directly so a fresh (non-idempotent) request would 429.
+    // Exhaust the bucket directly: a replay must not be a way around the limit.
     for (let i = 0; i < 20; i++) {
       await checkRateLimit(ip, { bucket: 'api.intent.offramp', maxRequests: 20 });
     }
 
     const replay = await POST(makeRequest(VALID_INTENT, headers));
-    expect(replay.status).toBe(200);
-    expect(replay.headers.get('Idempotency-Replayed')).toBe('true');
+    expect(replay.status).toBe(429);
+    expect(replay.headers.get('Idempotency-Replayed')).toBeNull();
   });
 });
 
