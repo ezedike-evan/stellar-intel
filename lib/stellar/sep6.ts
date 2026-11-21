@@ -1,6 +1,7 @@
 import { Sep6NotSupportedError, SepError, TimeoutError, parseSepErrorBody } from './errors';
 import { TERMINAL_STATES } from './sep24';
 import { mapToCanonical, normalizeStatus } from './sep24-status-map';
+import { parseRefunds } from './refunds';
 import { getUsdFxRate } from '@/lib/fx/rates';
 import { referenceMidPrice } from '@/lib/fx/reference-mid';
 import type {
@@ -12,6 +13,7 @@ import type {
   Sep6DepositResponse,
   Sep6WithdrawParams,
   Sep6WithdrawResponse,
+  Sep24Refunds,
 } from '@/types';
 
 export { TERMINAL_STATES };
@@ -59,6 +61,8 @@ export interface Sep6Transaction {
   amountFee?: string;
   stellarTransactionId?: string;
   externalTransactionId?: string;
+  /** The anchor's refund report, validated. SEP-6 uses the SEP-24 shape for it. */
+  refunds?: Sep24Refunds;
 }
 
 // ─── Typed error ──────────────────────────────────────────────────────────────
@@ -165,6 +169,8 @@ export async function getSep6Transaction(
   const data = (await res.json()) as { transaction?: Record<string, unknown> };
   const tx = data.transaction ?? {};
   const status = normalizeStatus(tx['status']);
+  // Validated, never cast: see `parseRefunds`.
+  const refunds = parseRefunds(tx['refunds']);
 
   return {
     id: String(tx['id'] ?? transactionId),
@@ -180,6 +186,7 @@ export async function getSep6Transaction(
     ...(tx['external_transaction_id'] !== undefined && {
       externalTransactionId: tx['external_transaction_id'] as string,
     }),
+    ...(refunds !== undefined && { refunds }),
   };
 }
 

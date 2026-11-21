@@ -37,6 +37,7 @@ This project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.htm
 - `QuotePill`: the `sep6-fee` badge visibly read "SEP-6" with no indication it was an estimate, unlike the `sep6-info` badge's "Indicative (SEP-6)" — both are now labeled "Indicative (SEP-6)" so a SEP-6 rate is never mistaken for a firm quote (#802)
 - Stellar public-key validation now uses the correct base32 alphabet (`G[A-Z2-7]{55}`), rejecting keys containing `0`, `1`, `8`, or `9` that the previous `[A-Z0-9]` pattern wrongly accepted.
 - `NEXT_PUBLIC_INTENT_FLOW` no longer had two flag accessors with opposite defaults; `lib/flags.ts` now exposes a single accessor (intent flow OFF unless explicitly `"true"`).
+- An anchor's `refunds` object is validated instead of cast (#2112, RFD001). `parseRefunds` (`lib/stellar/refunds.ts`) rebuilds it field by field: amounts must be plain decimal amounts, a payment's `id_type` must be `stellar` or `external`, payments that fail are dropped, and an object without a usable `amount_refunded` is omitted altogether. A malformed or hostile response could previously put arbitrary values into the refund panel. `getSep6Transaction` now returns the same parsed `refunds`; it used to drop the field.
 
 ### Removed
 
