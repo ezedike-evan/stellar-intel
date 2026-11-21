@@ -2,7 +2,9 @@ import { NextRequest, NextResponse } from 'next/server';
 import type { McpServer } from '@modelcontextprotocol/sdk/server/mcp.js';
 import { WebStandardStreamableHTTPServerTransport } from '@modelcontextprotocol/sdk/server/webStandardStreamableHttp.js';
 import { createServer } from '@/lib/mcp/server';
-import { checkRateLimit, getClientIp } from '@/lib/api/rate-limit';
+import { checkRateLimit } from '@/lib/api/rate-limit';
+import { withApiHeaders, withRateLimitHeaders } from '@/lib/api/response';
+import { limitForTier, resolveCaller } from '@/lib/auth/caller';
 import { getLogger } from '@/lib/logger';
 
 /**
@@ -33,11 +35,26 @@ const MCP_RATE_LIMIT = { bucket: 'api.mcp', maxRequests: 60 } as const;
 
 export async function POST(request: NextRequest): Promise<Response> {
   const logger = getLogger('api.mcp');
-  const ip = getClientIp(request.headers);
-  const rl = await checkRateLimit(ip, MCP_RATE_LIMIT);
-  if (!rl.allowed) {
-    logger.warn({ event: 'rate_limit_exceeded', ip, retryAfter: rl.retryAfter });
+  const resolved = await resolveCaller(request.headers);
+  if (!resolved.ok) {
     return NextResponse.json(
+      {
+        jsonrpc: '2.0',
+        error: { code: -32001, message: resolved.message },
+        id: null,
+      },
+      { status: 401 }
+    );
+  }
+  const { caller } = resolved;
+
+  const rl = await checkRateLimit(caller.rateLimitKey, {
+    bucket: MCP_RATE_LIMIT.bucket,
+    maxRequests: limitForTier(MCP_RATE_LIMIT.maxRequests, caller.tier),
+  });
+  if (!rl.allowed) {
+    logger.warn({ event: 'rate_limit_exceeded', callerId: caller.id, retryAfter: rl.retryAfter });
+    const response = NextResponse.json(
       {
         jsonrpc: '2.0',
         error: { code: -32000, message: 'Too many requests' },
@@ -45,9 +62,10 @@ export async function POST(request: NextRequest): Promise<Response> {
       },
       {
         status: 429,
-        headers: { 'Retry-After': String(rl.retryAfter), 'X-RateLimit-Remaining': '0' },
+        headers: { 'Retry-After': String(rl.retryAfter) },
       }
     );
+    return withApiHeaders(withRateLimitHeaders(response, rl, 'api.mcp'));
   }
 
   // A stateless transport refuses to serve a second request — it throws
@@ -73,7 +91,13 @@ export async function POST(request: NextRequest): Promise<Response> {
     // With enableJsonResponse the returned Response carries a fully buffered
     // JSON body rather than an open SSE stream, so it is safe to close the
     // server once this resolves.
-    const response = await transport.handleRequest(request);
+    const response = await transport.handleRequest(request, {
+      authInfo: {
+        token: caller.id,
+        clientId: caller.id,
+        scopes: caller.scopes,
+      },
+    });
     await server.close();
     server = undefined;
     return response;

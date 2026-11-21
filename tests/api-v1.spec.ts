@@ -48,6 +48,7 @@ describe('rateLimitHeaders (#805)', () => {
         retryAfter: 0,
         limit: 20,
         resetAt: 1_800_000_000_000,
+        windowMs: 60_000,
         shared: false,
       })
     ).toMatchObject({
@@ -61,6 +62,7 @@ describe('rateLimitHeaders (#805)', () => {
       retryAfter: 42,
       limit: 20,
       resetAt: 1_800_000_000_000,
+      windowMs: 60_000,
       shared: false,
     });
     // Retry-After carries the delta.

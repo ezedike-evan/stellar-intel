@@ -7,7 +7,7 @@ import {
   scopedIdempotencyKey,
   storeIdempotentResponse as storeSharedIdempotentResponse,
 } from './idempotency';
-import { API_VERSION } from './response';
+import { API_VERSION, standardRateLimitHeaders } from './response';
 import { getLogger } from '@/lib/logger';
 
 /**
@@ -51,12 +51,17 @@ export function v1Error(
  * interpret it without knowing that (#914). `Retry-After` is the header that
  * carries a delta.
  */
-export function rateLimitHeaders(limit: number, result: RateLimitResult): Record<string, string> {
+export function rateLimitHeaders(
+  limit: number,
+  result: RateLimitResult,
+  policy = 'default'
+): Record<string, string> {
   const headers: Record<string, string> = {
     'API-Version': API_VERSION,
     'X-RateLimit-Limit': String(limit),
     'X-RateLimit-Remaining': String(Math.max(0, result.remaining)),
     'X-RateLimit-Reset': String(Math.ceil(result.resetAt / 1000)),
+    ...standardRateLimitHeaders(policy, { ...result, limit }),
   };
   if (!result.allowed) headers['Retry-After'] = String(result.retryAfter);
   return headers;
@@ -136,7 +141,10 @@ export async function withV1(
   const ip = getClientIp(request.headers);
 
   const rl = await checkRateLimit(ip, { bucket: options.bucket, maxRequests: options.maxRequests });
-  const baseHeaders = { 'X-Request-Id': requestId, ...rateLimitHeaders(options.maxRequests, rl) };
+  const baseHeaders = {
+    'X-Request-Id': requestId,
+    ...rateLimitHeaders(options.maxRequests, rl, options.bucket),
+  };
 
   if (!rl.allowed) {
     return v1Error('rate_limited', 'Too many requests', requestId, 429, baseHeaders);

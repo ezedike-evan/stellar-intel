@@ -4,7 +4,8 @@ export type FlagName =
   | 'mcpAdvertisement'
   | 'v11Corridors'
   | 'recurringIntents'
-  | 'firmQuoteBonus';
+  | 'firmQuoteBonus'
+  | 'requireKeyForWrites';
 
 export const flags: Record<FlagName, boolean> = {
   // Default to enabled unless explicitly set to 'off'
@@ -22,6 +23,9 @@ export const flags: Record<FlagName, boolean> = {
   // Default OFF; opt in with NEXT_PUBLIC_FIRM_QUOTE_BONUS=on. It reorders rows and
   // never changes a displayed amount.
   firmQuoteBonus: (process.env.NEXT_PUBLIC_FIRM_QUOTE_BONUS || 'off') === 'on',
+  // Require an API key with `intents:write` for mutating operations.
+  // Default OFF so anonymous callers keep existing write access until enabled.
+  requireKeyForWrites: (process.env.REQUIRE_KEY_FOR_WRITES || 'off') === 'on',
 };
 
 export function isFlag(name: FlagName) {

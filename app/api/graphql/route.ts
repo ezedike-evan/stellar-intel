@@ -11,8 +11,11 @@ import {
 } from 'graphql';
 import { schema } from '@/lib/graphql/schema';
 import { countRootFields, graphqlValidationRules } from '@/lib/graphql/security';
-import { checkRateLimit, getClientIp } from '@/lib/api/rate-limit';
+import type { GraphQLContext } from '@/lib/graphql/context';
+import { checkRateLimit } from '@/lib/api/rate-limit';
 import { rateLimitedResponse } from '@/lib/api/response';
+import { hasScope, limitForTier, resolveCaller } from '@/lib/auth/caller';
+import { recordAuditEvent, type AuditOutcome } from '@/lib/audit';
 import { getLogger } from '@/lib/logger';
 
 /**
@@ -130,18 +133,27 @@ function serialiseErrors(errors: readonly GraphQLError[]) {
 
 async function handler(request: NextRequest): Promise<Response> {
   const logger = getLogger('api.graphql');
+  const requestId = request.headers.get('x-request-id') ?? globalThis.crypto.randomUUID();
 
-  const ip = getClientIp(request.headers);
-  const rl = await checkRateLimit(ip, { bucket: 'api.graphql', maxRequests: 60 });
-  if (!rl.allowed) {
-    logger.warn({ event: 'rate_limit_exceeded', ip, retryAfter: rl.retryAfter });
+  const resolved = await resolveCaller(request.headers);
+  if (!resolved.ok) {
     return NextResponse.json(
-      { error: 'Too many requests', retryAfter: rl.retryAfter },
       {
-        status: 429,
-        headers: { 'Retry-After': String(rl.retryAfter), 'X-RateLimit-Remaining': '0' },
-      }
+        data: null,
+        errors: [{ message: resolved.message, extensions: { code: 'UNAUTHENTICATED' } }],
+      },
+      { status: 401 }
     );
+  }
+  const { caller } = resolved;
+
+  const rl = await checkRateLimit(caller.rateLimitKey, {
+    bucket: 'api.graphql',
+    maxRequests: limitForTier(60, caller.tier),
+  });
+  if (!rl.allowed) {
+    logger.warn({ event: 'rate_limit_exceeded', callerId: caller.id, retryAfter: rl.retryAfter });
+    return rateLimitedResponse(rl, 'api.graphql');
   }
 
   const parsed = await readOperation(request);
@@ -169,7 +181,38 @@ async function handler(request: NextRequest): Promise<Response> {
   // so it is held to that route's limits: one mutation field per request, charged
   // to the same bucket. Without this it is the cheapest way to call the builder.
   const selected = getOperationAST(document, operation.operationName ?? null);
-  if (selected?.operation === 'mutation') {
+  const isMutation = selected?.operation === 'mutation';
+  const isQuery = selected?.operation === 'query';
+
+  if (isQuery && !hasScope(caller.scopes, 'quotes:read')) {
+    if (caller.kind !== 'anonymous') {
+      recordAuditEvent({
+        surface: 'graphql',
+        action: 'Query',
+        scope: 'quotes:read',
+        intentHash: null,
+        outcome: 'denied',
+        status: 403,
+        requestId,
+        callerId: caller.id,
+        callerKind: caller.kind,
+      });
+    }
+    return NextResponse.json(
+      {
+        data: null,
+        errors: [
+          {
+            message: 'This call needs the "quotes:read" scope',
+            extensions: { code: 'FORBIDDEN' },
+          },
+        ],
+      },
+      { status: 403 }
+    );
+  }
+
+  if (isMutation) {
     const fragments = new Map<string, FragmentDefinitionNode>();
     for (const definition of document.definitions) {
       if (definition.kind === Kind.FRAGMENT_DEFINITION) {
@@ -180,20 +223,76 @@ async function handler(request: NextRequest): Promise<Response> {
       return errorResponse('Only one mutation field per request', 400);
     }
 
-    const intentLimit = await checkRateLimit(ip, { bucket: 'api.intent.offramp', maxRequests: 20 });
+    const intentLimit = await checkRateLimit(caller.rateLimitKey, {
+      bucket: 'api.intent.offramp',
+      maxRequests: limitForTier(20, caller.tier),
+    });
     if (!intentLimit.allowed) {
-      logger.warn({ event: 'rate_limit_exceeded', ip, retryAfter: intentLimit.retryAfter });
-      return rateLimitedResponse(intentLimit);
+      logger.warn({
+        event: 'rate_limit_exceeded',
+        callerId: caller.id,
+        retryAfter: intentLimit.retryAfter,
+      });
+      recordAuditEvent({
+        surface: 'graphql',
+        action: 'Mutation.submitOfframpIntent',
+        scope: 'intents:write',
+        intentHash: null,
+        outcome: 'rate_limited',
+        status: 429,
+        requestId,
+        callerId: caller.id,
+        callerKind: caller.kind,
+      });
+      return rateLimitedResponse(intentLimit, 'api.intent.offramp');
     }
   }
+
+  const contextValue = { caller, requestId } satisfies GraphQLContext;
 
   try {
     const result: ExecutionResult = await execute({
       schema,
       document,
+      contextValue,
       ...(operation.variables ? { variableValues: operation.variables } : {}),
       ...(operation.operationName ? { operationName: operation.operationName } : {}),
     });
+
+    const outcome: AuditOutcome =
+      !result.errors || result.errors.length === 0
+        ? 'ok'
+        : result.errors.some((e) => e.extensions?.code === 'FORBIDDEN')
+          ? 'denied'
+          : 'client_error';
+
+    if (isMutation) {
+      const submitData = result.data?.submitOfframpIntent as
+        { quoteId?: string } | null | undefined;
+      recordAuditEvent({
+        surface: 'graphql',
+        action: 'Mutation.submitOfframpIntent',
+        scope: 'intents:write',
+        intentHash: submitData?.quoteId ?? null,
+        outcome,
+        status: 200,
+        requestId,
+        callerId: caller.id,
+        callerKind: caller.kind,
+      });
+    } else if (isQuery && caller.kind !== 'anonymous') {
+      recordAuditEvent({
+        surface: 'graphql',
+        action: 'Query',
+        scope: 'quotes:read',
+        intentHash: null,
+        outcome,
+        status: 200,
+        requestId,
+        callerId: caller.id,
+        callerKind: caller.kind,
+      });
+    }
 
     return NextResponse.json(
       {
@@ -215,6 +314,31 @@ async function handler(request: NextRequest): Promise<Response> {
       error: message,
       stack: error instanceof Error ? error.stack : undefined,
     });
+    if (isMutation) {
+      recordAuditEvent({
+        surface: 'graphql',
+        action: 'Mutation.submitOfframpIntent',
+        scope: 'intents:write',
+        intentHash: null,
+        outcome: 'error',
+        status: 500,
+        requestId,
+        callerId: caller.id,
+        callerKind: caller.kind,
+      });
+    } else if (isQuery && caller.kind !== 'anonymous') {
+      recordAuditEvent({
+        surface: 'graphql',
+        action: 'Query',
+        scope: 'quotes:read',
+        intentHash: null,
+        outcome: 'error',
+        status: 500,
+        requestId,
+        callerId: caller.id,
+        callerKind: caller.kind,
+      });
+    }
     return errorResponse('Internal server error', 500);
   }
 }
