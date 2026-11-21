@@ -8,7 +8,10 @@ import {
   storeIdempotentResponse as storeSharedIdempotentResponse,
 } from './idempotency';
 import { API_VERSION } from './response';
+import { limitForTier } from './rate-limit-tiers';
 import { getLogger } from '@/lib/logger';
+import { hasScope, type ApiScope } from '@/lib/auth/api-keys';
+import { resolveCaller, type Caller } from '@/lib/auth/caller';
 
 /**
  * lib/api/v1.ts
@@ -97,6 +100,8 @@ export async function storeIdempotentResponse(
 export interface V1Context {
   requestId: string;
   ip: string;
+  /** The resolved calling identity (anonymous, key or token). */
+  caller: Caller;
   /** Build a standard-envelope error result from inside a handler. */
   error(code: string, message: string, status: number): V1HandlerResult;
 }
@@ -118,6 +123,12 @@ export interface V1Options {
   maxRequests: number;
   /** Honour the `Idempotency-Key` header (for mutating endpoints). */
   idempotent?: boolean;
+  /**
+   * Scope the caller must hold. `null` means any caller may reach the handler,
+   * which then authorizes itself; say why with a comment at each use. Required,
+   * so a new v1 route cannot forget it.
+   */
+  scope: ApiScope | null;
 }
 
 /**
@@ -135,11 +146,52 @@ export async function withV1(
   const requestId = request.headers.get('x-request-id') ?? globalThis.crypto.randomUUID();
   const ip = getClientIp(request.headers);
 
-  const rl = await checkRateLimit(ip, { bucket: options.bucket, maxRequests: options.maxRequests });
-  const baseHeaders = { 'X-Request-Id': requestId, ...rateLimitHeaders(options.maxRequests, rl) };
+  const resolution = await resolveCaller(request.headers);
+  if (!resolution.ok) {
+    // Invalid credentials are throttled per IP so keys cannot be guessed fast.
+    const invalid = await checkRateLimit(ip, { bucket: 'auth.invalid', maxRequests: 30 });
+    const headers = {
+      'X-Request-Id': requestId,
+      'X-Caller-Tier': 'anonymous',
+      ...rateLimitHeaders(30, invalid),
+    };
+    if (!invalid.allowed) {
+      return v1Error('rate_limited', 'Too many requests', requestId, 429, headers);
+    }
+    return v1Error(resolution.code, resolution.message, requestId, 401, {
+      ...headers,
+      'WWW-Authenticate': 'Bearer realm="stellar-intel", error="invalid_token"',
+    });
+  }
+  const { caller } = resolution;
+
+  const limit = limitForTier(options.maxRequests, caller.tier);
+  const rl = await checkRateLimit(caller.rateLimitKey, {
+    bucket: options.bucket,
+    maxRequests: limit,
+  });
+  const baseHeaders = {
+    'X-Request-Id': requestId,
+    'X-Caller-Tier': caller.tier,
+    ...rateLimitHeaders(limit, rl),
+  };
 
   if (!rl.allowed) {
     return v1Error('rate_limited', 'Too many requests', requestId, 429, baseHeaders);
+  }
+
+  // After rate limiting, so denied calls are still throttled.
+  if (options.scope && !hasScope(caller.scopes, options.scope)) {
+    return v1Error(
+      'insufficient_scope',
+      `This call needs the "${options.scope}" scope`,
+      requestId,
+      403,
+      {
+        ...baseHeaders,
+        'WWW-Authenticate': `Bearer error="insufficient_scope", scope="${options.scope}"`,
+      }
+    );
   }
 
   // Scoped to this bucket and the exact body, so a key cannot replay another
@@ -157,6 +209,7 @@ export async function withV1(
   const ctx: V1Context = {
     requestId,
     ip,
+    caller,
     error: (code, message, status) => ({
       status,
       body: { error: { code, message, requestId } },
