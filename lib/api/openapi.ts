@@ -1949,6 +1949,70 @@ registry.registerPath({
   },
 });
 
+registry.registerPath({
+  method: 'get',
+  path: '/api/webhooks/deliveries',
+  summary: 'List webhook delivery records',
+  description:
+    'Admin only. Returns webhook delivery records filtered by status, subscription, or event, newest first.',
+  tags: ['System'],
+  request: {
+    query: z.object({
+      status: z
+        .enum(['success', 'failed', 'dead_letter'])
+        .optional()
+        .openapi({
+          param: { name: 'status', in: 'query' },
+          example: 'dead_letter',
+          description: 'Filter by delivery status (success, failed, dead_letter)',
+        }),
+      subscriptionId: z
+        .string()
+        .min(1)
+        .max(100)
+        .optional()
+        .openapi({
+          param: { name: 'subscriptionId', in: 'query' },
+          example: 'sub-1',
+          description: 'Filter by subscription ID',
+        }),
+      eventId: z
+        .string()
+        .min(1)
+        .max(100)
+        .optional()
+        .openapi({
+          param: { name: 'eventId', in: 'query' },
+          example: 'evt-1',
+          description: 'Filter by event ID',
+        }),
+      limit: z.coerce
+        .number()
+        .int()
+        .min(1)
+        .max(500)
+        .optional()
+        .openapi({
+          param: { name: 'limit', in: 'query' },
+          example: 100,
+          description: 'Maximum number of deliveries to return (1-500, default 100)',
+        }),
+    }),
+  },
+  responses: {
+    200: {
+      description: 'Webhook delivery records',
+      content: { 'application/json': { schema: z.array(z.object({}).passthrough()) } },
+    },
+    400: {
+      description: 'Validation error',
+      content: { 'application/json': { schema: ApiErrorSchema } },
+    },
+    401: UNAUTHORIZED_401,
+    429: RATE_LIMITED_429,
+  },
+});
+
 // ─── Spec builder ────────────────────────────────────────────────────────────
 
 export function buildOpenApiSpec() {

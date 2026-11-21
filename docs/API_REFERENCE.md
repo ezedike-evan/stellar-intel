@@ -75,6 +75,7 @@ the hardening contract (see `lib/api/v1.ts`):
   - [`POST /api/reputation/refresh`](#post-apireputationrefresh)
   - [`GET /api/status`](#get-apistatus)
   - [`GET /api/v1/health`](#get-apiv1health)
+  - [`GET /api/webhooks/deliveries`](#get-apiwebhooksdeliveries)
   - [`GET /api/webhooks/failures`](#get-apiwebhooksfailures)
   - [`GET /api/webhooks/subscriptions`](#get-apiwebhookssubscriptions)
   - [`POST /api/webhooks/subscriptions`](#post-apiwebhookssubscriptions)
@@ -947,6 +948,32 @@ Liveness and dependency status for the public v1 surface.
 | Status | Description | Content-Type | Schema |
 | :--- | :--- | :--- | :--- |
 | `200` | Health snapshot | `application/json` | `object` |
+| `429` | Rate limited | `application/json` | `ApiError` |
+
+---
+
+### `GET /api/webhooks/deliveries`
+
+**Summary:** List webhook delivery records  
+
+Admin only. Returns webhook delivery records filtered by status, subscription, or event, newest first.
+
+#### Parameters
+
+| Name | In | Type | Required | Description |
+| :--- | :--- | :--- | :--- | :--- |
+| `status` | `query` | `"success" | "failed" | "dead_letter"` | No | Filter by delivery status (success, failed, dead_letter) |
+| `subscriptionId` | `query` | `string` | No | Filter by subscription ID |
+| `eventId` | `query` | `string` | No | Filter by event ID |
+| `limit` | `query` | `integer` | No | Maximum number of deliveries to return (1-500, default 100) |
+
+#### Responses
+
+| Status | Description | Content-Type | Schema |
+| :--- | :--- | :--- | :--- |
+| `200` | Webhook delivery records | `application/json` | `object[]` |
+| `400` | Validation error | `application/json` | `ApiError` |
+| `401` | Missing or invalid credentials | `application/json` | `ApiError` |
 | `429` | Rate limited | `application/json` | `ApiError` |
 
 ---
