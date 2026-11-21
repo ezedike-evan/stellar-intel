@@ -95,6 +95,21 @@ jobs:
             *) echo "::error::reconcile returned HTTP $CODE"; exit 1 ;;
           esac
 
+      - name: Dispute sweep
+        id: dispute_sweep
+        if: env.STORE_UNAVAILABLE != '1'
+        run: |
+          set -euo pipefail
+          CODE=$(curl -sS -L --proto '=https' --fail-with-body \
+            -o /tmp/dispute_sweep.out -w '%{http_code}' \
+            -X POST "$APP/api/reputation/dispute-sweep" \
+            -H "Authorization: Bearer $CRON_SECRET") || true
+          cat /tmp/dispute_sweep.out
+          case "$CODE" in
+            2*) ;;
+            *) echo "::error::dispute sweep returned HTTP $CODE"; exit 1 ;;
+          esac
+
       - name: Publisher tick
         id: tick
         if: env.STORE_UNAVAILABLE != '1'
