@@ -4,7 +4,8 @@ export type FlagName =
   | 'mcpAdvertisement'
   | 'v11Corridors'
   | 'recurringIntents'
-  | 'firmQuoteBonus';
+  | 'firmQuoteBonus'
+  | 'executionSla';
 
 export const flags: Record<FlagName, boolean> = {
   // Default to enabled unless explicitly set to 'off'
@@ -22,6 +23,8 @@ export const flags: Record<FlagName, boolean> = {
   // Default OFF; opt in with NEXT_PUBLIC_FIRM_QUOTE_BONUS=on. It reorders rows and
   // never changes a displayed amount.
   firmQuoteBonus: (process.env.NEXT_PUBLIC_FIRM_QUOTE_BONUS || 'off') === 'on',
+  // Execution SLA card on the anchor page. Default OFF until anchors have settlement volume.
+  executionSla: (process.env.NEXT_PUBLIC_EXECUTION_SLA || 'off') === 'on',
 };
 
 export function isFlag(name: FlagName) {
