@@ -10,6 +10,13 @@ extendZodWithOpenApi(z);
 
 export const registry = new OpenAPIRegistry();
 
+registry.registerComponent('securitySchemes', 'callerKey', {
+  type: 'http',
+  scheme: 'bearer',
+  description:
+    'Caller API key (sik_…) or a short-lived caller token. Optional on public routes: anonymous calls are served at the anonymous tier.',
+});
+
 // ─── Reusable param helpers ─────────────────────────────────────────────────
 
 const CorridorPathParam = z.string().openapi({
@@ -1408,6 +1415,135 @@ registry.registerPath({
     400: {
       description: 'Validation error',
       content: { 'application/json': { schema: ApiErrorSchema } },
+    },
+    429: RATE_LIMITED_429,
+  },
+});
+
+const TokenExchangeRequestSchema = registry.register(
+  'TokenExchangeRequest',
+  z.object({
+    scopes: z
+      .array(z.enum(['quotes:read', 'intents:write', 'reputation:write', 'admin']))
+      .min(1)
+      .optional()
+      .describe(
+        "Unique scopes to carry; each must be held by the key. Defaults to all of the key's scopes."
+      ),
+    ttlSeconds: z
+      .number()
+      .int()
+      .min(60)
+      .max(900)
+      .optional()
+      .describe('Token lifetime in seconds (60-900, default 900)'),
+  })
+);
+
+const TokenExchangeResponseSchema = registry.register(
+  'TokenExchangeResponse',
+  z.object({
+    token: z.string().describe('Compact HS256 JWT; send as `Authorization: Bearer <token>`'),
+    tokenType: z.literal('Bearer'),
+    expiresIn: z.number().int().describe('Seconds until the token expires'),
+    expiresAt: z.string().describe('ISO 8601 expiry time'),
+    scopes: z
+      .array(z.enum(['quotes:read', 'intents:write', 'reputation:write', 'admin']))
+      .describe('Scopes the token carries'),
+    tier: z.string().describe('Rate-limit tier of the minting key'),
+  })
+);
+
+registry.registerPath({
+  method: 'post',
+  path: '/api/v1/auth/token',
+  summary: 'Exchange an API key for a short-lived token (v1)',
+  description:
+    "Mints a token of at most 15 minutes carrying a subset of the calling key's scopes, for " +
+    'handing to an agent. Requires an API key: tokens and anonymous calls cannot mint tokens. ' +
+    'The response is sent with `Cache-Control: no-store`.',
+  tags: ['Auth'],
+  security: [{ callerKey: [] }],
+  request: {
+    body: {
+      required: false,
+      content: { 'application/json': { schema: TokenExchangeRequestSchema } },
+    },
+  },
+  responses: {
+    200: {
+      description: 'Token issued',
+      content: { 'application/json': { schema: TokenExchangeResponseSchema } },
+    },
+    400: {
+      description: 'Validation error',
+      content: { 'application/json': { schema: ApiErrorSchema } },
+    },
+    401: {
+      description: 'An API key is required (`api_key_required`), or the credential is invalid',
+      content: { 'application/json': { schema: ApiErrorSchema } },
+    },
+    403: {
+      description: 'A requested scope is not held by the key (`insufficient_scope`)',
+      content: { 'application/json': { schema: ApiErrorSchema } },
+    },
+    429: RATE_LIMITED_429,
+    503: {
+      description: 'Caller tokens are not enabled on this deployment (`tokens_unavailable`)',
+      content: { 'application/json': { schema: ApiErrorSchema } },
+    },
+  },
+});
+
+const UsageCallerSchema = registry.register(
+  'UsageCaller',
+  z.object({
+    kind: z.string(),
+    keyPrefix: z.string().nullable(),
+    tier: z.string(),
+    scopes: z.array(z.string()),
+  })
+);
+
+const UsageQuotaSchema = registry.register(
+  'UsageQuota',
+  z.object({
+    limit: z.number().int(),
+    used: z.number().int(),
+    resetAt: z.string(),
+  })
+);
+
+const UsageWindowSchema = registry.register(
+  'UsageWindow',
+  z.object({
+    bucket: z.string(),
+    used: z.number().int(),
+    resetAt: z.string(),
+  })
+);
+
+const UsageResponseSchema = registry.register(
+  'UsageResponse',
+  z.object({
+    caller: UsageCallerSchema,
+    quota: UsageQuotaSchema.nullable(),
+    windows: z.array(UsageWindowSchema),
+  })
+);
+
+registry.registerPath({
+  method: 'get',
+  path: '/api/v1/usage',
+  summary: 'Get caller usage, quota, and rate-limit windows (v1)',
+  description:
+    'Returns the caller identity, tier, scopes, daily quota status, and active rate-limit windows.',
+  tags: ['Usage'],
+  security: [{ callerKey: [] }],
+  responses: {
+    200: {
+      description: 'Usage retrieved',
+      content: { 'application/json': { schema: UsageResponseSchema } },
     },
     429: RATE_LIMITED_429,
   },
