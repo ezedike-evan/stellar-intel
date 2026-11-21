@@ -1949,6 +1949,140 @@ registry.registerPath({
   },
 });
 
+// ─── Admin caller keys (AGS006) ──────────────────────────────────────────────
+
+const ApiKeyRecordSchema = registry.register(
+  'ApiKeyRecord',
+  z.object({
+    keyId: z.string().describe('16 lowercase hex characters'),
+    displayPrefix: z.string().describe('sik_<keyId>; safe to show instead of the key'),
+    name: z.string(),
+    scopes: z.array(z.enum(['quotes:read', 'intents:write', 'reputation:write', 'admin'])),
+    tier: z.enum(['standard', 'partner']),
+    maxIntentAmount: z.string().nullable().describe('Per-key intent amount cap, or null'),
+    createdAt: z.string(),
+    expiresAt: z.string().nullable(),
+    revokedAt: z.string().nullable(),
+    lastUsedAt: z.string().nullable(),
+  })
+);
+
+const CreatedApiKeySchema = registry.register(
+  'CreatedApiKey',
+  z.object({
+    key: z.string().describe('The raw caller key. Returned once, at creation, and never again.'),
+    keyId: z.string(),
+    displayPrefix: z.string(),
+    name: z.string(),
+    scopes: z.array(z.enum(['quotes:read', 'intents:write', 'reputation:write', 'admin'])),
+    tier: z.enum(['standard', 'partner']),
+    maxIntentAmount: z.string().nullable(),
+    createdAt: z.string(),
+    expiresAt: z.string().nullable(),
+  })
+);
+
+const CreateApiKeyRequestSchema = registry.register(
+  'CreateApiKeyRequest',
+  z.object({
+    name: z.string().min(1).max(80).describe('Human label for the key holder'),
+    scopes: z
+      .array(z.enum(['quotes:read', 'intents:write', 'reputation:write', 'admin']))
+      .min(1)
+      .describe('Non-empty, no duplicates'),
+    tier: z.enum(['standard', 'partner']).optional().describe('Defaults to standard'),
+    expiresInDays: z.number().int().min(1).max(365).optional(),
+    maxIntentAmount: z.string().regex(AMOUNT_PATTERN).optional(),
+  })
+);
+
+registry.registerPath({
+  method: 'post',
+  path: '/api/admin/keys',
+  summary: 'Issue a caller API key (admin)',
+  description:
+    'Issues a caller key and returns the raw key exactly once, at creation. Only the SHA-256 hash ' +
+    'is stored. Authenticated by ADMIN_SECRET_KEY only — a caller key with the `admin` scope cannot ' +
+    'mint keys.',
+  tags: ['Admin'],
+  security: [{ adminKey: [] }],
+  request: {
+    body: {
+      required: true,
+      content: { 'application/json': { schema: CreateApiKeyRequestSchema } },
+    },
+  },
+  responses: {
+    201: {
+      description: 'Caller key issued. The response is not cacheable.',
+      content: { 'application/json': { schema: CreatedApiKeySchema } },
+    },
+    400: {
+      description: 'Validation error',
+      content: { 'application/json': { schema: ApiErrorSchema } },
+    },
+    403: {
+      description: 'Admin key required',
+      content: { 'application/json': { schema: ApiErrorSchema } },
+    },
+    429: RATE_LIMITED_429,
+  },
+});
+
+registry.registerPath({
+  method: 'get',
+  path: '/api/admin/keys',
+  summary: 'List caller API keys (admin)',
+  description: 'Lists issued caller keys newest first, without their hashes.',
+  tags: ['Admin'],
+  security: [{ adminKey: [] }],
+  responses: {
+    200: {
+      description: 'Caller keys, newest first',
+      content: { 'application/json': { schema: z.array(ApiKeyRecordSchema) } },
+    },
+    403: {
+      description: 'Admin key required',
+      content: { 'application/json': { schema: ApiErrorSchema } },
+    },
+    429: RATE_LIMITED_429,
+  },
+});
+
+registry.registerPath({
+  method: 'delete',
+  path: '/api/admin/keys/{keyId}',
+  summary: 'Revoke a caller API key (admin)',
+  description:
+    'Revokes a caller key immediately. Answers 404 for an unknown or already revoked key.',
+  tags: ['Admin'],
+  security: [{ adminKey: [] }],
+  request: {
+    params: z.object({
+      keyId: z
+        .string()
+        .regex(/^[0-9a-f]{16}$/)
+        .describe('16 lowercase hex characters'),
+    }),
+  },
+  responses: {
+    204: { description: 'Key revoked' },
+    400: {
+      description: 'Malformed keyId',
+      content: { 'application/json': { schema: ApiErrorSchema } },
+    },
+    403: {
+      description: 'Admin key required',
+      content: { 'application/json': { schema: ApiErrorSchema } },
+    },
+    404: {
+      description: 'Unknown or already revoked key',
+      content: { 'application/json': { schema: ApiErrorSchema } },
+    },
+    429: RATE_LIMITED_429,
+  },
+});
+
 // ─── Spec builder ────────────────────────────────────────────────────────────
 
 export function buildOpenApiSpec() {

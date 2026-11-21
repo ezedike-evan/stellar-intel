@@ -933,6 +933,9 @@ the hardening contract (see `lib/api/v1.ts`):
 - **Admin**
   - [`GET /api/admin/disputes`](#get-apiadmindisputes)
   - [`POST /api/admin/disputes`](#post-apiadmindisputes)
+  - [`GET /api/admin/keys`](#get-apiadminkeys)
+  - [`POST /api/admin/keys`](#post-apiadminkeys)
+  - [`DELETE /api/admin/keys/{keyId}`](#delete-apiadminkeyskeyid)
 - **Anchors**
   - [`GET /api/v1/anchor-health/ledger`](#get-apiv1anchor-healthledger)
   - [`GET /api/v1/anchors/census`](#get-apiv1anchorscensus)
@@ -1024,6 +1027,75 @@ Accepts or rejects a dispute. Requires admin authentication.
 | `400` | Invalid request | `application/json` | `ApiError` |
 | `401` | Admin access required | `application/json` | `ApiError` |
 | `404` | Dispute not found | `application/json` | `ApiError` |
+
+---
+
+### `GET /api/admin/keys`
+
+**Summary:** List caller API keys (admin)  
+
+Lists issued caller keys newest first, without their hashes.
+
+#### Responses
+
+| Status | Description | Content-Type | Schema |
+| :--- | :--- | :--- | :--- |
+| `200` | Caller keys, newest first | `application/json` | `ApiKeyRecord[]` |
+| `403` | Admin key required | `application/json` | `ApiError` |
+| `429` | Rate limited | `application/json` | `ApiError` |
+
+---
+
+### `POST /api/admin/keys`
+
+**Summary:** Issue a caller API key (admin)  
+
+Issues a caller key and returns the raw key exactly once, at creation. Only the SHA-256 hash is stored. Authenticated by ADMIN_SECRET_KEY only — a caller key with the `admin` scope cannot mint keys.
+
+#### Request Body
+
+**Content-Type:** `application/json`
+
+| Field | Type | Required | Description |
+| :--- | :--- | :--- | :--- |
+| `name` | `string` | **Yes** | Human label for the key holder |
+| `scopes` | `"quotes:read" | "intents:write" | "reputation:write" | "admin"[]` | **Yes** | Non-empty, no duplicates |
+| `tier` | `"standard" | "partner"` | No | Defaults to standard |
+| `expiresInDays` | `integer` | No | - |
+| `maxIntentAmount` | `string` | No | - |
+
+#### Responses
+
+| Status | Description | Content-Type | Schema |
+| :--- | :--- | :--- | :--- |
+| `201` | Caller key issued. The response is not cacheable. | `application/json` | `CreatedApiKey` |
+| `400` | Validation error | `application/json` | `ApiError` |
+| `403` | Admin key required | `application/json` | `ApiError` |
+| `429` | Rate limited | `application/json` | `ApiError` |
+
+---
+
+### `DELETE /api/admin/keys/{keyId}`
+
+**Summary:** Revoke a caller API key (admin)  
+
+Revokes a caller key immediately. Answers 404 for an unknown or already revoked key.
+
+#### Parameters
+
+| Name | In | Type | Required | Description |
+| :--- | :--- | :--- | :--- | :--- |
+| `keyId` | `path` | `string` | **Yes** | 16 lowercase hex characters |
+
+#### Responses
+
+| Status | Description | Content-Type | Schema |
+| :--- | :--- | :--- | :--- |
+| `204` | Key revoked | - | - |
+| `400` | Malformed keyId | `application/json` | `ApiError` |
+| `403` | Admin key required | `application/json` | `ApiError` |
+| `404` | Unknown or already revoked key | `application/json` | `ApiError` |
+| `429` | Rate limited | `application/json` | `ApiError` |
 
 ---
 
