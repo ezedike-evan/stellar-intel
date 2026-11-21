@@ -2,7 +2,8 @@ import { NextRequest, NextResponse } from 'next/server';
 import type { McpServer } from '@modelcontextprotocol/sdk/server/mcp.js';
 import { WebStandardStreamableHTTPServerTransport } from '@modelcontextprotocol/sdk/server/webStandardStreamableHttp.js';
 import { createServer } from '@/lib/mcp/server';
-import { checkRateLimit, getClientIp } from '@/lib/api/rate-limit';
+import { checkRateLimit } from '@/lib/api/rate-limit';
+import { resolveCaller } from '@/lib/auth/caller';
 import { getLogger } from '@/lib/logger';
 
 /**
@@ -33,10 +34,27 @@ const MCP_RATE_LIMIT = { bucket: 'api.mcp', maxRequests: 60 } as const;
 
 export async function POST(request: NextRequest): Promise<Response> {
   const logger = getLogger('api.mcp');
-  const ip = getClientIp(request.headers);
-  const rl = await checkRateLimit(ip, MCP_RATE_LIMIT);
+  const resolution = await resolveCaller(request.headers);
+  if (!resolution.ok) {
+    return NextResponse.json(
+      {
+        jsonrpc: '2.0',
+        error: { code: -32001, message: resolution.message },
+        id: null,
+      },
+      {
+        status: 401,
+        headers: {
+          'WWW-Authenticate': 'Bearer realm="stellar-intel", error="invalid_token"',
+        },
+      }
+    );
+  }
+  const caller = resolution.caller;
+
+  const rl = await checkRateLimit(caller.rateLimitKey, MCP_RATE_LIMIT);
   if (!rl.allowed) {
-    logger.warn({ event: 'rate_limit_exceeded', ip, retryAfter: rl.retryAfter });
+    logger.warn({ event: 'rate_limit_exceeded', key: caller.rateLimitKey, retryAfter: rl.retryAfter });
     return NextResponse.json(
       {
         jsonrpc: '2.0',
@@ -73,7 +91,19 @@ export async function POST(request: NextRequest): Promise<Response> {
     // With enableJsonResponse the returned Response carries a fully buffered
     // JSON body rather than an open SSE stream, so it is safe to close the
     // server once this resolves.
-    const response = await transport.handleRequest(request);
+    const response = await transport.handleRequest(request, {
+      authInfo: {
+        token: '', // token is deliberately empty: tool handlers never see the raw credential
+        clientId: caller.id,
+        scopes: [...caller.scopes],
+        extra: {
+          kind: caller.kind,
+          tier: caller.tier,
+          rateLimitKey: caller.rateLimitKey,
+          maxIntentAmount: caller.maxIntentAmount,
+        },
+      },
+    });
     await server.close();
     server = undefined;
     return response;
