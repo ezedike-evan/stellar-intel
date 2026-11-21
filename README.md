@@ -160,7 +160,8 @@ the stack that needs the variable.
 
 | Variable                  | Required            | Description                                                                                                                         |
 | ------------------------- | ------------------- | ----------------------------------------------------------------------------------------------------------------------------------- |
-| `NEXT_PUBLIC_INTENT_FLOW` | No                  | Feature flag: the signed-intent off-ramp path is off unless set to `true`.                                                          |
+| `NEXT_PUBLIC_INTENT_FLOW`            | No                  | Feature flag: the signed-intent off-ramp path is off unless set to `true`.                                                          |
+| `NEXT_PUBLIC_REQUIRE_KEY_FOR_WRITES` | No                  | Feature flag: require a caller key with write scope for intents, reputation appends, and disputes.                                   |
 | `ROUTING_STRATEGY`        | No                  | Router selection strategy: `first-match` (default) or `scored` (multi-factor solver).                                               |
 | `FEE_BUDGET_PCT`          | No                  | Router fee budget as a percentage of the amount, e.g. `1` for 1%. `lib/env.ts` uses `100` when unset.                               |
 | `SOROSWAP_API_KEY`        | Swap hops           | Soroswap aggregator API key for the swap hop connector, which throws `SoroswapConfigError` when it is unset.                        |

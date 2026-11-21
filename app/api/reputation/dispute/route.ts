@@ -7,6 +7,7 @@ import { checkRateLimit, clearRateLimitStore } from '@/lib/api/rate-limit';
 import { _setDisputeStore, getDisputeStore } from '@/lib/reputation/disputes';
 import { verifyIntentSignature } from '@/lib/intent/verify';
 import { enforceRateLimit } from '@/lib/api/response';
+import { requireCallerScope } from '@/lib/auth/caller';
 import { checkDurableStore } from '@/lib/api/store-guard';
 import { getReputationStore } from '@/lib/reputation/store';
 import { ANCHORS } from '@/constants/anchors';
@@ -78,6 +79,9 @@ export async function POST(request: NextRequest): Promise<NextResponse> {
       maxRequests: 10,
     });
     if (limited) return limited;
+
+    const auth = await requireCallerScope(request, 'reputation:write');
+    if (!auth.ok) return auth.response;
 
     let body: unknown;
     try {

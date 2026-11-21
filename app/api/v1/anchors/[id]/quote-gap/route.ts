@@ -19,41 +19,45 @@ export async function GET(
   request: NextRequest,
   { params }: { params: Promise<{ id: string }> }
 ): Promise<NextResponse> {
-  return withV1(request, { bucket: 'v1.anchor.quote-gap', maxRequests: 60 }, async (ctx) => {
-    const { id } = await params;
+  return withV1(
+    request,
+    { bucket: 'v1.anchor.quote-gap', maxRequests: 60, scope: 'quotes:read' },
+    async (ctx) => {
+      const { id } = await params;
 
-    try {
-      getAnchorById(id);
-    } catch {
-      return ctx.error('not_found', `Unknown anchor: "${id}"`, 404);
-    }
-
-    let windowDays = DEFAULT_WINDOW;
-    const windowRaw = new URL(request.url).searchParams.get('window');
-    if (windowRaw !== null && windowRaw !== '') {
-      const parsed = Number(windowRaw);
-      if (!WINDOWS.includes(parsed as QuoteGapWindowDays)) {
-        return ctx.error('validation_error', `window must be one of ${WINDOWS.join(', ')}`, 400);
+      try {
+        getAnchorById(id);
+      } catch {
+        return ctx.error('not_found', `Unknown anchor: "${id}"`, 404);
       }
-      windowDays = parsed as QuoteGapWindowDays;
-    }
 
-    const store = tryGetReputationStore();
-    if (!store) {
-      return ctx.error('store_unavailable', 'Reputation store is not available', 503);
-    }
+      let windowDays = DEFAULT_WINDOW;
+      const windowRaw = new URL(request.url).searchParams.get('window');
+      if (windowRaw !== null && windowRaw !== '') {
+        const parsed = Number(windowRaw);
+        if (!WINDOWS.includes(parsed as QuoteGapWindowDays)) {
+          return ctx.error('validation_error', `window must be one of ${WINDOWS.join(', ')}`, 400);
+        }
+        windowDays = parsed as QuoteGapWindowDays;
+      }
 
-    let rows;
-    try {
-      rows = await store.query({ anchorId: id, direction: 'withdraw' });
-    } catch {
-      return ctx.error('store_unavailable', 'Reputation store is not available', 503);
-    }
+      const store = tryGetReputationStore();
+      if (!store) {
+        return ctx.error('store_unavailable', 'Reputation store is not available', 503);
+      }
 
-    return {
-      status: 200,
-      body: { anchorId: id, basis: BASIS, ...computeQuoteGapStats(rows, { windowDays }) },
-      headers: { 'Cache-Control': 'public, max-age=300' },
-    };
-  });
+      let rows;
+      try {
+        rows = await store.query({ anchorId: id, direction: 'withdraw' });
+      } catch {
+        return ctx.error('store_unavailable', 'Reputation store is not available', 503);
+      }
+
+      return {
+        status: 200,
+        body: { anchorId: id, basis: BASIS, ...computeQuoteGapStats(rows, { windowDays }) },
+        headers: { 'Cache-Control': 'public, max-age=300' },
+      };
+    }
+  );
 }

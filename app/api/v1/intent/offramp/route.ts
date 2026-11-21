@@ -18,7 +18,7 @@ export const runtime = 'nodejs';
 export async function POST(request: NextRequest): Promise<NextResponse> {
   return withV1(
     request,
-    { bucket: 'v1.intent.offramp', maxRequests: 20, idempotent: true },
+    { bucket: 'v1.intent.offramp', maxRequests: 20, scope: 'intents:write', idempotent: true },
     async (ctx) => {
       const body = await request.json().catch(() => null);
 

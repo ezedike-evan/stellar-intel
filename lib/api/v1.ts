@@ -9,6 +9,8 @@ import {
 } from './idempotency';
 import { API_VERSION } from './response';
 import { getLogger } from '@/lib/logger';
+import { hasScope, type ApiScope } from '@/lib/auth/api-keys';
+import { resolveCaller, type Caller } from '@/lib/auth/caller';
 
 /**
  * lib/api/v1.ts
@@ -97,6 +99,7 @@ export async function storeIdempotentResponse(
 export interface V1Context {
   requestId: string;
   ip: string;
+  caller: Caller;
   /** Build a standard-envelope error result from inside a handler. */
   error(code: string, message: string, status: number): V1HandlerResult;
 }
@@ -116,6 +119,8 @@ export interface V1HandlerResult {
 export interface V1Options {
   bucket: string;
   maxRequests: number;
+  /** Required scope for this endpoint. `null` means "any caller, the handler authorizes itself" and must carry a comment at each use. */
+  scope: ApiScope | null;
   /** Honour the `Idempotency-Key` header (for mutating endpoints). */
   idempotent?: boolean;
 }
@@ -142,6 +147,28 @@ export async function withV1(
     return v1Error('rate_limited', 'Too many requests', requestId, 429, baseHeaders);
   }
 
+  const callerRes = await resolveCaller(request.headers);
+  if (!callerRes.ok) {
+    return v1Error(callerRes.code, callerRes.message, requestId, callerRes.status, {
+      ...baseHeaders,
+      'WWW-Authenticate': 'Bearer error="invalid_token"',
+    });
+  }
+  const caller = callerRes.caller;
+
+  if (options.scope && !hasScope(caller.scopes, options.scope)) {
+    return v1Error(
+      'insufficient_scope',
+      `This call needs the "${options.scope}" scope`,
+      requestId,
+      403,
+      {
+        ...baseHeaders,
+        'WWW-Authenticate': `Bearer error="insufficient_scope", scope="${options.scope}"`,
+      }
+    );
+  }
+
   // Scoped to this bucket and the exact body, so a key cannot replay another
   // caller's response, or one from a different route or payload. The clone
   // leaves the body unread for the handler.
@@ -157,6 +184,7 @@ export async function withV1(
   const ctx: V1Context = {
     requestId,
     ip,
+    caller,
     error: (code, message, status) => ({
       status,
       body: { error: { code, message, requestId } },
