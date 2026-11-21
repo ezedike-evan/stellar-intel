@@ -165,6 +165,7 @@ the stack that needs the variable.
 | `FEE_BUDGET_PCT`          | No                  | Router fee budget as a percentage of the amount, e.g. `1` for 1%. `lib/env.ts` uses `100` when unset.                               |
 | `SOROSWAP_API_KEY`        | Swap hops           | Soroswap aggregator API key for the swap hop connector, which throws `SoroswapConfigError` when it is unset.                        |
 | `CRON_SECRET`             | Reputation pipeline | Shared secret required by the cron-triggered routes (publisher tick, reconcile, refresh).                                           |
+| `CALLER_TOKEN_SECRET`     | No                  | HMAC secret (32+ characters) for short-lived caller tokens. Tokens are disabled while it is unset.                                  |
 | `REPUTATION_BACKEND`      | No                  | Reputation store backend: `sqlite` (default) or `postgres`.                                                                         |
 | `DATABASE_URL`            | Reputation pipeline | Postgres connection string for the reputation store. Setting it implies the postgres backend.                                       |
 | `LOG_LEVEL`               | No                  | Pino log level: `trace`, `debug`, `info`, `warn` or `error` (default `info`).                                                       |
