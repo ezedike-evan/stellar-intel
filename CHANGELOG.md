@@ -25,6 +25,7 @@ This project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.htm
 - Hardened the unversioned `POST /api/intent/offramp` (#805) to match the guarantees the public `/api/v1` surface already makes: `Idempotency-Key` header support (24h replay window, only for deterministic 200/400 outcomes), `X-RateLimit-Limit`/`X-RateLimit-Remaining`/`X-RateLimit-Reset` headers on every response, an `API-Version` header, and a unified `ApiError` envelope for the previously ad hoc 429 body. New `lib/api/idempotency.ts` and `lib/api/response.ts`.
 - `StatusTracker`: when `stellar_transaction_id` is a valid 64-char hex, render a link to `{STELLAR_EXPERT_URL}/tx/{id}` opening in a new tab (`target="_blank" rel="noopener noreferrer"`) ([#47](https://github.com/Ezedike-Evan/stellar-intel/issues/47))
 - `lib/reporter`: pluggable error reporter with noop default; wire via `configureReporter()` at app startup (#184)
+- Six webhook event kinds can be subscribed to: `intent.rejected`, `intent.expired`, `settlement.status_changed`, `dispute.opened`, `dispute.resolved` and `oracle.published` (#2181, WHK003). Each has a strict payload schema in `types/webhooks.ts`; none carries a sender, recipient, public key, signature, dispute reason text or JWT. Nothing emits them yet. `/docs/webhooks` lists all eleven kinds, marks the six as not yet emitted, and now counts the live kinds in its banner instead of stating a number.
 
 ### Changed
 
