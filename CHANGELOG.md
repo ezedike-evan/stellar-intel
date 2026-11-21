@@ -25,6 +25,7 @@ This project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.htm
 - Hardened the unversioned `POST /api/intent/offramp` (#805) to match the guarantees the public `/api/v1` surface already makes: `Idempotency-Key` header support (24h replay window, only for deterministic 200/400 outcomes), `X-RateLimit-Limit`/`X-RateLimit-Remaining`/`X-RateLimit-Reset` headers on every response, an `API-Version` header, and a unified `ApiError` envelope for the previously ad hoc 429 body. New `lib/api/idempotency.ts` and `lib/api/response.ts`.
 - `StatusTracker`: when `stellar_transaction_id` is a valid 64-char hex, render a link to `{STELLAR_EXPERT_URL}/tx/{id}` opening in a new tab (`target="_blank" rel="noopener noreferrer"`) ([#47](https://github.com/Ezedike-Evan/stellar-intel/issues/47))
 - `lib/reporter`: pluggable error reporter with noop default; wire via `configureReporter()` at app startup (#184)
+- `lib/auth/api-keys.ts`: the building blocks for caller API keys (#2194, AGS001). The four scopes with `isApiScope` and `hasScope` (`admin` implies the rest), the key format `sik_<keyId>_<secret>` with `generateApiKey` and `parseApiKey`, and `hashApiKey` (SHA-256) with a constant-time `hashesEqual`. Pure: nothing is stored, no route uses it yet.
 
 ### Changed
 
