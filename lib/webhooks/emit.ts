@@ -3,7 +3,7 @@ import { getLogger } from '@/lib/logger';
 import { dispatchEvent } from './dispatch';
 import { makeWebhookEvent } from './events';
 import { getWebhookStore } from './store';
-import type { WebhookEventKind } from './types';
+import type { WebhookEventKind, WebhookEventPayloadMap } from './types';
 
 const logger = getLogger('webhooks');
 
@@ -24,7 +24,10 @@ export function _setWebhookEmitter(fn: WebhookEmitter | null): void {
  * retry backoff up to 15 s) runs after the response is sent via `after()`,
  * and a delivery failure is logged, never thrown back into the request.
  */
-export function emitWebhookEvent(kind: WebhookEventKind, payload: Record<string, unknown>): void {
+export function emitWebhookEvent<K extends WebhookEventKind>(
+  kind: K,
+  payload: WebhookEventPayloadMap[K]
+): void {
   if (testEmitter) {
     testEmitter(kind, payload);
     return;
