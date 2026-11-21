@@ -172,6 +172,7 @@ the stack that needs the variable.
 | `ORACLE_CONTRACT_ID`      | Publisher           | Soroban reputation oracle contract address, required by `scripts/init-oracle-registry.ts` and the publisher.                        |
 | `STELLAR_NETWORK`         | Publisher           | Network the publisher signs against: `mainnet` or `testnet`. No default, since it signs real transactions.                          |
 | `PUBLISHER_SECRET`        | Publisher           | Secret key of an account registered as a publisher on the oracle contract, required by the publisher CLI and `/api/publisher/tick`. |
+| `MCP_MAX_INTENT_AMOUNT`   | No                  | Deployment-wide cap on the source amount of intents an agent can prepare or execute via MCP.                                       |
 
 [`docs/ARCHITECTURE.md` §11](docs/ARCHITECTURE.md#11-environment-variable-schema) is the
 exhaustive list, including the optional variables left commented out in `.env.example`.

@@ -3,6 +3,7 @@ import { z } from 'zod';
 import { prepareOnrampIntent, OnrampPrepareOutputSchema, OnrampToolError } from '@/lib/mcp/onramp';
 import { fromOnrampError, McpToolError, upstreamTimeout } from '@/lib/mcp/errors';
 import { OnrampDepositMethodSchema, OnrampMemoTypeSchema } from '@/lib/intent/onramp-schema';
+import { effectiveAmountCap, assertWithinAmountCap } from '@/lib/mcp/safety';
 
 export const ONRAMP_PREPARE_TOOL_NAME = 'intel.onramp.prepare';
 
@@ -32,8 +33,13 @@ export function registerOnrampPrepareTool(server: McpServer): void {
       outputSchema: OnrampPrepareOutputSchema,
       annotations: { readOnlyHint: true },
     },
-    async (args) => {
+    async (args, extra) => {
       try {
+        const callerCap = (extra as { authInfo?: { extra?: { maxIntentAmount?: string | null } } })
+          ?.authInfo?.extra?.maxIntentAmount;
+        const cap = effectiveAmountCap(callerCap);
+        assertWithinAmountCap(args.amount, cap);
+
         const result = await prepareOnrampIntent(args);
         return {
           content: [{ type: 'text', text: JSON.stringify(result) }],

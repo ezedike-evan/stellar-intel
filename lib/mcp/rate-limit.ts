@@ -88,7 +88,12 @@ function headerValue(headers: IsomorphicHeaders | undefined, name: string): stri
 export function resolveClientId(extra: {
   sessionId?: string;
   requestInfo?: { headers?: IsomorphicHeaders };
+  authInfo?: { extra?: { rateLimitKey?: string } };
 }): string {
+  const rateLimitKey = extra.authInfo?.extra?.rateLimitKey;
+  if (typeof rateLimitKey === 'string' && rateLimitKey.startsWith('key:')) {
+    return rateLimitKey;
+  }
   if (extra.sessionId?.trim()) return `session:${extra.sessionId.trim()}`;
 
   const headers = extra.requestInfo?.headers;

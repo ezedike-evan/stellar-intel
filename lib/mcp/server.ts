@@ -30,15 +30,20 @@ export async function createServer(): Promise<McpServer> {
   const { registerOnrampPrepareTool } = await import('./tools/onramp-prepare');
   const { registerPrompts } = await import('./prompts');
   const { registerAnchorHealthResource } = await import('./resources/anchor-health');
+  const { applyToolAudit } = await import('./audit');
   const { applyToolRateLimit } = await import('./rate-limit');
+  const { applyToolScopes } = await import('./scopes');
 
   const server = new McpServer({
     name: '@stellarintel/mcp',
     version: '0.1.0',
   });
-  // Before any tool is registered: the limiter wraps `registerTool`, so a tool
-  // registered afterwards is covered without opting in. See rate-limit.ts.
+  // Wrappers on registerTool: each wraps the previous, so installation order
+  // is (1) audit, (2) rate limit, (3) scopes; runtime dispatch order is
+  // (1) audit, (2) rate limit, (3) scopes.
+  applyToolAudit(server);
   applyToolRateLimit(server);
+  applyToolScopes(server);
 
   registerQuoteTool(server);
   registerPrepareTool(server);
