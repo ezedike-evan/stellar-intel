@@ -70,6 +70,77 @@ rate-limited to 60 per minute per IP.
 on-ramp tools — alongside prompts and the anchor health ledger resource across
 all transports.
 
+## Authentication, scopes and limits
+
+### Client configuration
+
+Clients authenticate against the hosted endpoint by passing an `Authorization` header in their MCP client configuration:
+
+```json
+{
+  "mcpServers": {
+    "stellar-intel": {
+      "type": "http",
+      "url": "https://stellar-intel.vercel.app/api/mcp",
+      "headers": {
+        "Authorization": "Bearer sik_0123456789abcdef_..."
+      }
+    }
+  }
+}
+```
+
+While an API key (`sik_…`) can be passed directly, it is strongly recommended to use a short-lived caller token minted via `POST /api/v1/auth/token`. Tokens are capped at a 15-minute maximum lifetime, inherit a restricted subset of the minting key's scopes, and cannot mint further tokens. Passing short-lived tokens to autonomous agents bounds the blast radius if an agent is prompt-injected or compromised.
+
+### Tool scopes
+
+Every tool call on the hosted endpoint requires a specific scope. Keys and short-lived tokens are restricted to their granted permissions:
+
+| Tool                      | Scope           | Description                                                           |
+| ------------------------- | --------------- | --------------------------------------------------------------------- |
+| `intel.offramp.quote`     | `quotes:read`   | Read indicative and firm off-ramp quotes across registered anchors    |
+| `intel.offramp.prepare`   | `intents:write` | Build an unsigned off-ramp intent and payment transaction             |
+| `intel.execute`           | `intents:write` | Validate and broadcast a signed transaction (or dry run via `dryRun`) |
+| `intel.probe.coverage`    | `quotes:read`   | Inspect automated quote-probe coverage across anchors                 |
+| `intel.anchor.reputation` | `quotes:read`   | Fetch rolling fill rates, latencies, and scorecards                   |
+| `intel.anchor.health`     | `quotes:read`   | Live health and probe outcomes for an anchor                          |
+| `intel.leaderboard`       | `quotes:read`   | Reputation leaderboard across anchors                                 |
+| `intel.corridors`         | `quotes:read`   | Supported corridors, assets, and active anchors                       |
+| `intel.onramp.quote`      | `quotes:read`   | Indicative quotes and fees for fiat-to-crypto deposits                |
+| `intel.onramp.prepare`    | `intents:write` | Build an unsigned on-ramp deposit intent                              |
+
+### Error codes and `_meta` payloads
+
+When a call cannot be completed due to authorization or policy constraints, the tool returns an error result (`isError: true`) with structured metadata under reserved `_meta` keys:
+
+- `INSUFFICIENT_SCOPE`: The caller key or token does not hold the scope required by the tool. Structured error details are provided under `_meta['stellarintel/auth']` (including `{ code: "INSUFFICIENT_SCOPE", tool, requiredScope }`).
+- `AMOUNT_OVER_CAP`: The intent amount exceeds the global spending cap (`MCP_MAX_INTENT_AMOUNT`) or the key's configured `maxIntentAmount`. The call is rejected before transaction construction or submission.
+- `RATE_LIMITED`: The request exceeds the per-minute rate limit for the caller's tier. Detailed reset timing is provided under `_meta['stellarintel/rateLimit']` (including `{ code: "RATE_LIMITED", tool, retryAfter, limit, resetAt }`).
+
+### Caller tiers and daily quotas
+
+Rate limits and capacity scale with caller identity tiers:
+
+- **Anonymous** (1× baseline): 60 requests per minute per IP, shared quota window.
+- **Standard** (5× baseline): 300 requests per minute, per-caller bucket, daily request quota (e.g. 50,000 requests/day).
+- **Partner** (20× baseline): 1,200 requests per minute, dedicated high-volume daily quota.
+
+Daily quotas are shared across all API surfaces (REST v1, MCP, and GraphQL). Callers can check active counters and remaining quotas with `GET /api/v1/usage`.
+
+### Dry-run execution (`intel.execute`)
+
+`intel.execute` supports pre-flight transaction verification without submitting to Horizon:
+
+- Supplying `dryRun: true` runs all signature, account, fee, and timebound assertions without broadcasting to the network.
+- When valid, it returns `{ status: "verified", hash, ledger: null, corridorId, anchorId }` instead of status `"submitted"`.
+
+### Audit logging
+
+All hosted MCP tool invocations are recorded in the append-only audit log:
+
+- Fields recorded: tool name (`action`), caller ID (`callerId`), scope used (`scope`), intent hash (`intentHash`), and execution outcome (`ok`, `denied`, `rate_limited`, `error`).
+- Parameters and secrets: tool arguments, destination addresses, and payment payloads are **never** audited or persisted.
+
 ## Running it yourself
 
 > **Note:** `@stellarintel/mcp` is **not yet published to npm** —

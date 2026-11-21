@@ -24,6 +24,13 @@
     }
   ],
   "components": {
+    "securitySchemes": {
+      "callerKey": {
+        "type": "http",
+        "scheme": "bearer",
+        "description": "Caller API key (sik_…) or a short-lived caller token. Optional on public routes: anonymous calls are served at the anonymous tier."
+      }
+    },
     "schemas": {
       "OfframpIntent": {
         "type": "object",
@@ -786,6 +793,178 @@
           "anchorLatency",
           "ratesCache",
           "publisherHealth"
+        ]
+      },
+      "TokenExchangeRequest": {
+        "type": "object",
+        "properties": {
+          "scopes": {
+            "type": "array",
+            "items": {
+              "type": "string",
+              "enum": [
+                "quotes:read",
+                "intents:write",
+                "reputation:write",
+                "admin"
+              ]
+            },
+            "minItems": 1,
+            "description": "Unique scopes to carry; each must be held by the key. Defaults to all of the key's scopes."
+          },
+          "ttlSeconds": {
+            "type": "integer",
+            "minimum": 60,
+            "maximum": 900,
+            "description": "Token lifetime in seconds (60-900, default 900)"
+          }
+        }
+      },
+      "TokenExchangeResponse": {
+        "type": "object",
+        "properties": {
+          "token": {
+            "type": "string",
+            "description": "Compact HS256 JWT; send as `Authorization: Bearer <token>`"
+          },
+          "tokenType": {
+            "type": "string",
+            "enum": [
+              "Bearer"
+            ]
+          },
+          "expiresIn": {
+            "type": "integer",
+            "description": "Seconds until the token expires"
+          },
+          "expiresAt": {
+            "type": "string",
+            "description": "ISO 8601 expiry time"
+          },
+          "scopes": {
+            "type": "array",
+            "items": {
+              "type": "string",
+              "enum": [
+                "quotes:read",
+                "intents:write",
+                "reputation:write",
+                "admin"
+              ]
+            },
+            "description": "Scopes the token carries"
+          },
+          "tier": {
+            "type": "string",
+            "description": "Rate-limit tier of the minting key"
+          }
+        },
+        "required": [
+          "token",
+          "tokenType",
+          "expiresIn",
+          "expiresAt",
+          "scopes",
+          "tier"
+        ]
+      },
+      "UsageCaller": {
+        "type": "object",
+        "properties": {
+          "kind": {
+            "type": "string"
+          },
+          "keyPrefix": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "tier": {
+            "type": "string"
+          },
+          "scopes": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            }
+          }
+        },
+        "required": [
+          "kind",
+          "keyPrefix",
+          "tier",
+          "scopes"
+        ]
+      },
+      "UsageQuota": {
+        "type": "object",
+        "properties": {
+          "limit": {
+            "type": "integer"
+          },
+          "used": {
+            "type": "integer"
+          },
+          "resetAt": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "limit",
+          "used",
+          "resetAt"
+        ]
+      },
+      "UsageWindow": {
+        "type": "object",
+        "properties": {
+          "bucket": {
+            "type": "string"
+          },
+          "used": {
+            "type": "integer"
+          },
+          "resetAt": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "bucket",
+          "used",
+          "resetAt"
+        ]
+      },
+      "UsageResponse": {
+        "type": "object",
+        "properties": {
+          "caller": {
+            "$ref": "#/components/schemas/UsageCaller"
+          },
+          "quota": {
+            "allOf": [
+              {
+                "$ref": "#/components/schemas/UsageQuota"
+              },
+              {
+                "type": [
+                  "object",
+                  "null"
+                ]
+              }
+            ]
+          },
+          "windows": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/UsageWindow"
+            }
+          }
+        },
+        "required": [
+          "caller",
+          "quota",
+          "windows"
         ]
       },
       "OnrampIntentRequest": {
@@ -3341,6 +3520,128 @@
               "application/json": {
                 "schema": {
                   "$ref": "#/components/schemas/ApiError"
+                }
+              }
+            }
+          },
+          "429": {
+            "description": "Rate limited",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/auth/token": {
+      "post": {
+        "summary": "Exchange an API key for a short-lived token (v1)",
+        "description": "Mints a token of at most 15 minutes carrying a subset of the calling key's scopes, for handing to an agent. Requires an API key: tokens and anonymous calls cannot mint tokens. The response is sent with `Cache-Control: no-store`.",
+        "tags": [
+          "Auth"
+        ],
+        "security": [
+          {
+            "callerKey": []
+          }
+        ],
+        "requestBody": {
+          "required": false,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/TokenExchangeRequest"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Token issued",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/TokenExchangeResponse"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Validation error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiError"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "An API key is required (`api_key_required`), or the credential is invalid",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiError"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "A requested scope is not held by the key (`insufficient_scope`)",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiError"
+                }
+              }
+            }
+          },
+          "429": {
+            "description": "Rate limited",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiError"
+                }
+              }
+            }
+          },
+          "503": {
+            "description": "Caller tokens are not enabled on this deployment (`tokens_unavailable`)",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/usage": {
+      "get": {
+        "summary": "Get caller usage, quota, and rate-limit windows (v1)",
+        "description": "Returns the caller identity, tier, scopes, daily quota status, and active rate-limit windows.",
+        "tags": [
+          "Usage"
+        ],
+        "security": [
+          {
+            "callerKey": []
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Usage retrieved",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/UsageResponse"
                 }
               }
             }
