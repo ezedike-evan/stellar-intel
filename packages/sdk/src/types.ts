@@ -280,6 +280,8 @@ export const OPERATIONS = {
   getCorridorVolumeSavings: 'GET /api/v1/corridors/{corridor}/volume-savings',
   getHealth: 'GET /api/v1/health',
   getVolumeSavings: 'GET /api/v1/corridors/{corridor}/volume-savings',
+  // Registered for the spec drift guard; the SDK client method is AGS026.
+  exchangeCallerToken: 'POST /api/v1/auth/token',
 } as const;
 
 export type OperationName = keyof typeof OPERATIONS;

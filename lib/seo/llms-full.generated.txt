@@ -940,6 +940,8 @@ the hardening contract (see `lib/api/v1.ts`):
   - [`GET /api/v1/anchors/{id}/price-history`](#get-apiv1anchorsidprice-history)
   - [`GET /api/v1/anchors/{id}/quote-gap`](#get-apiv1anchorsidquote-gap)
   - [`GET /api/v1/sep38/readiness`](#get-apiv1sep38readiness)
+- **Auth**
+  - [`POST /api/v1/auth/token`](#post-apiv1authtoken)
 - **Intent**
   - [`POST /api/intent`](#post-apiintent)
   - [`POST /api/intent/offramp`](#post-apiintentofframp)
@@ -1161,6 +1163,36 @@ For each registered anchor: whether the operator declares SEP-38, whether its st
 | :--- | :--- | :--- | :--- |
 | `200` | Readiness per anchor | `application/json` | `object` |
 | `429` | Rate limit exceeded | `application/json` | `ApiError` |
+
+---
+
+## Auth
+
+### `POST /api/v1/auth/token`
+
+**Summary:** Exchange an API key for a short-lived token (v1)  
+
+Mints a token of at most 15 minutes carrying a subset of the calling key's scopes, for handing to an agent. Requires an API key: tokens and anonymous calls cannot mint tokens. The response is sent with `Cache-Control: no-store`.
+
+#### Request Body
+
+**Content-Type:** `application/json`
+
+| Field | Type | Required | Description |
+| :--- | :--- | :--- | :--- |
+| `scopes` | `"quotes:read" | "intents:write" | "reputation:write" | "admin"[]` | No | Unique scopes to carry; each must be held by the key. Defaults to all of the key's scopes. |
+| `ttlSeconds` | `integer` | No | Token lifetime in seconds (60-900, default 900) |
+
+#### Responses
+
+| Status | Description | Content-Type | Schema |
+| :--- | :--- | :--- | :--- |
+| `200` | Token issued | `application/json` | `TokenExchangeResponse` |
+| `400` | Validation error | `application/json` | `ApiError` |
+| `401` | An API key is required (`api_key_required`), or the credential is invalid | `application/json` | `ApiError` |
+| `403` | A requested scope is not held by the key (`insufficient_scope`) | `application/json` | `ApiError` |
+| `429` | Rate limited | `application/json` | `ApiError` |
+| `503` | Caller tokens are not enabled on this deployment (`tokens_unavailable`) | `application/json` | `ApiError` |
 
 ---
 
