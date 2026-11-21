@@ -10,6 +10,26 @@ extendZodWithOpenApi(z);
 
 export const registry = new OpenAPIRegistry();
 
+registry.registerComponent('securitySchemes', 'adminKey', {
+  type: 'apiKey',
+  in: 'header',
+  name: 'x-admin-key',
+  description: 'Server-side ADMIN_SECRET_KEY. Operator only.',
+});
+
+registry.registerComponent('securitySchemes', 'bearerAuth', {
+  type: 'http',
+  scheme: 'bearer',
+  description: 'CRON_SECRET. Vercel Cron and the operator only.',
+});
+
+registry.registerComponent('securitySchemes', 'callerKey', {
+  type: 'http',
+  scheme: 'bearer',
+  description:
+    'Caller API key (sik_…) or a short-lived caller token. Optional on public routes: anonymous calls are served at the anonymous tier.',
+});
+
 // ─── Reusable param helpers ─────────────────────────────────────────────────
 
 const CorridorPathParam = z.string().openapi({
@@ -476,8 +496,9 @@ registry.registerPath({
   path: '/api/v1/anchors/{id}/health',
   summary: 'Get anchor health status',
   description:
-    "Returns the anchor's current health status, last-probe timestamp, and score breakdown. Returns 'unknown' or 'stale' when probes haven't run recently — honest degradation rather than fabricated data.",
+    "Returns the anchor's current health status, last-probe timestamp, and score breakdown. Returns 'unknown' or 'stale' when probes haven't run recently — honest degradation rather than fabricated data. Required scope: quotes:read.",
   tags: ['Anchors'],
+  security: [{}, { callerKey: [] }],
   request: {
     params: z.object({
       id: z.string().min(1).describe('Anchor identifier (e.g. moneygram, cowrie, anclap)'),
@@ -515,8 +536,9 @@ registry.registerPath({
   path: '/api/v1/anchors/{id}/price-history',
   summary: 'Get anchor SEP-38 price history',
   description:
-    'Returns recorded SEP-38 price observations for an anchor corridor, downsampled to at most 500 points (evenly spaced; first and last retained).',
+    'Returns recorded SEP-38 price observations for an anchor corridor, downsampled to at most 500 points (evenly spaced; first and last retained). Required scope: quotes:read.',
   tags: ['Anchors'],
+  security: [{}, { callerKey: [] }],
   request: {
     params: z.object({
       id: z.string().min(1).describe('Anchor identifier'),
@@ -606,8 +628,9 @@ registry.registerPath({
   path: '/api/v1/onramp/quote',
   summary: 'Get indicative deposit (on-ramp) quotes',
   description:
-    'Returns an indicative estimate per anchor for depositing a fiat amount into a Stellar asset. SEP-24 publishes deposit fees but the anchor sets the final conversion inside its interactive deposit window, so every figure is an estimate.',
+    'Returns an indicative estimate per anchor for depositing a fiat amount into a Stellar asset. SEP-24 publishes deposit fees but the anchor sets the final conversion inside its interactive deposit window, so every figure is an estimate. Required scope: quotes:read.',
   tags: ['On-ramp'],
+  security: [{}, { callerKey: [] }],
   request: {
     query: z.object({
       corridor: z.string().openapi({
@@ -677,8 +700,9 @@ registry.registerPath({
   description:
     'Signed gap between the rate shown before execution and the rate that landed, over completed, ' +
     'undisputed withdrawals in the window. Negative means users received less than quoted. ' +
-    'Stands in for SEP-38 firm quotes, which most anchors do not offer. Null statistics mean no samples.',
+    'Stands in for SEP-38 firm quotes, which most anchors do not offer. Null statistics mean no samples. Required scope: quotes:read.',
   tags: ['Anchors'],
+  security: [{}, { callerKey: [] }],
   request: {
     params: z.object({
       id: z.string().min(1).describe('Anchor identifier'),
@@ -739,8 +763,9 @@ registry.registerPath({
   description:
     'For each registered anchor: whether the operator declares SEP-38, whether its stellar.toml ' +
     'advertises a quote server, whether that server’s /info answers, and whether it lists the ' +
-    'anchor’s registered asset. Checked live and cached for ten minutes.',
+    'anchor’s registered asset. Checked live and cached for ten minutes. Required scope: quotes:read.',
   tags: ['Anchors'],
+  security: [{}, { callerKey: [] }],
   responses: {
     200: {
       description: 'Readiness per anchor',
@@ -1398,8 +1423,9 @@ registry.registerPath({
   summary: 'Submit an off-ramp intent (v1)',
   description:
     'The public v1 intent endpoint. Honours `Idempotency-Key`: a retried request replays the ' +
-    'original response with `Idempotency-Replayed: true` rather than creating a second intent.',
+    'original response with `Idempotency-Replayed: true` rather than creating a second intent. Required scope: intents:write.',
   tags: ['Intent'],
+  security: [{}, { callerKey: [] }],
   responses: {
     200: {
       description: 'Intent accepted',
@@ -1407,6 +1433,10 @@ registry.registerPath({
     },
     400: {
       description: 'Validation error',
+      content: { 'application/json': { schema: ApiErrorSchema } },
+    },
+    403: {
+      description: 'Forbidden: insufficient scope',
       content: { 'application/json': { schema: ApiErrorSchema } },
     },
     429: RATE_LIMITED_429,
@@ -1461,8 +1491,9 @@ registry.registerPath({
     'Routes a deposit intent to the best indicative anchor and returns the /onramp handoff URL, ' +
     'plus an unsigned changeTrust XDR when the destination account has no trustline. No anchor ' +
     'session is opened: KYC and the interactive deposit run in the browser. Honours ' +
-    '`Idempotency-Key` like the off-ramp endpoint.',
+    '`Idempotency-Key` like the off-ramp endpoint. Required scope: intents:write.',
   tags: ['Intent'],
+  security: [{}, { callerKey: [] }],
   request: {
     headers: z.object({
       'Idempotency-Key': z
@@ -1488,6 +1519,10 @@ registry.registerPath({
       description: 'Attestation signature did not verify',
       content: { 'application/json': { schema: ApiErrorSchema } },
     },
+    403: {
+      description: 'Forbidden: insufficient scope',
+      content: { 'application/json': { schema: ApiErrorSchema } },
+    },
     404: {
       description: 'No anchor serves this corridor',
       content: { 'application/json': { schema: ApiErrorSchema } },
@@ -1508,8 +1543,10 @@ registry.registerPath({
   method: 'get',
   path: '/api/v1/health',
   summary: 'Service health (v1)',
-  description: 'Liveness and dependency status for the public v1 surface.',
+  description:
+    'Liveness and dependency status for the public v1 surface. Required scope: quotes:read.',
   tags: ['System'],
+  security: [{}, { callerKey: [] }],
   responses: {
     200: {
       description: 'Health snapshot',
@@ -1636,8 +1673,9 @@ registry.registerPath({
     'Reads the on-chain volume/savings oracle for one corridor: cumulative USDC routed, USDC ' +
     'saved against the baseline rate, and the settlement count behind both. Amounts are ' +
     'microUSDC. Served from the contract, so the aggregate is checkable without trusting this ' +
-    "app's own database. Zeroes are returned when the corridor has no on-chain entry yet.",
+    "app's own database. Zeroes are returned when the corridor has no on-chain entry yet. Required scope: quotes:read.",
   tags: ['Rates'],
+  security: [{}, { callerKey: [] }],
   request: {
     params: z.object({
       corridor: z.string().min(1).describe('Corridor identifier (e.g. usdc-ngn)'),
@@ -1723,8 +1761,9 @@ registry.registerPath({
     'ledger this deployment was built with. With `date` (YYYY-MM-DD), returns the ledger as it ' +
     'stood on that date, resolved from the git history of `constants/anchor-health.json` — so the ' +
     'series is fetchable without cloning the repository. The committed file remains the source of ' +
-    'truth; nothing is mirrored server-side. A dated response is immutable and cached as such.',
+    'truth; nothing is mirrored server-side. A dated response is immutable and cached as such. Required scope: quotes:read.',
   tags: ['Anchors'],
+  security: [{}, { callerKey: [] }],
   request: {
     query: z.object({
       date: z
@@ -1800,8 +1839,9 @@ registry.registerPath({
   description:
     'Serves the committed anchor census (constants/anchor-census-rows.json), covering every surveyed ' +
     'anchor — routable, health-only, or merely listed — not only the anchors registered for ' +
-    'routing. Optionally filtered to a single tier.',
+    'routing. Optionally filtered to a single tier. Required scope: quotes:read.',
   tags: ['Anchors'],
+  security: [{}, { callerKey: [] }],
   request: {
     query: z.object({
       tier: z
