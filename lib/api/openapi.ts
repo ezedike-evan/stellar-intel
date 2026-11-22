@@ -333,6 +333,48 @@ const MetricsSnapshotSchema = registry.register(
   })
 );
 
+const RefundAckPaymentSchema = registry.register(
+  'RefundAckPayment',
+  z.object({
+    id: z.string().min(1).max(128).describe('Payment identifier'),
+    idType: z.enum(['stellar', 'external']).describe('Type of payment identifier'),
+    amount: z.string().regex(AMOUNT_PATTERN).max(40).describe('Amount refunded in this payment'),
+  })
+);
+
+const RefundAckPayloadSchema = registry.register(
+  'RefundAckPayload',
+  z.object({
+    type: z.literal('refund-ack').describe('Payload type discriminator'),
+    version: z.literal(1).describe('Payload format version'),
+    intentHash: z.string().regex(/^[0-9a-f]{64}$/).describe('64-hex SHA-256 intent hash'),
+    anchorId: z.string().min(1).max(64).describe('Anchor identifier'),
+    account: z.string().regex(STELLAR_PUBKEY_PATTERN).describe('Stellar public key of acknowledging user'),
+    amountRefunded: z.string().regex(AMOUNT_PATTERN).max(40).describe('Total amount refunded'),
+    refundFee: z.string().regex(AMOUNT_PATTERN).max(40).describe('Total refund fee deducted'),
+    payments: z.array(RefundAckPaymentSchema).max(20).describe('Individual refund payments'),
+  })
+);
+
+const RefundAckRequestBodySchema = registry.register(
+  'RefundAckRequestBody',
+  z.object({
+    ack: RefundAckPayloadSchema,
+    signature: z.string().min(1).max(256).describe('Cryptographic signature over the canonical refund-ack payload hash'),
+  })
+);
+
+const RefundAckResponseSchema = registry.register(
+  'RefundAckResponse',
+  z.object({
+    id: z.string().describe('Refund case identifier'),
+    intentHash: z.string().regex(/^[0-9a-f]{64}$/).describe('Intent hash for the refund case'),
+    status: z.literal('acknowledged').describe('Status of the refund case'),
+    acknowledgedAt: z.string().describe('ISO 8601 timestamp when acknowledged'),
+    onChainCheck: z.enum(['verified', 'mismatch', 'unverifiable']).nullable().describe('On-chain verification status'),
+  })
+);
+
 // Suppress unused-variable warnings
 void SignedIntentEnvelopeSchema;
 void AnchorRateSchema;
@@ -341,6 +383,8 @@ void DisputeAdminSchema;
 void LeaderboardResponseSchema;
 void PublisherHealthSchema;
 void MetricsSnapshotSchema;
+void RefundAckRequestBodySchema;
+void RefundAckResponseSchema;
 
 // ─── Route registrations ─────────────────────────────────────────────────────
 
@@ -1945,6 +1989,57 @@ registry.registerPath({
       content: { 'application/json': { schema: z.array(z.object({}).passthrough()) } },
     },
     401: UNAUTHORIZED_401,
+    429: RATE_LIMITED_429,
+  },
+});
+
+registry.registerPath({
+  method: 'post',
+  path: '/api/refunds/ack',
+  summary: 'Record user-signed refund acknowledgement',
+  description:
+    'Secured write route to record a user-signed refund acknowledgement for an owed or refunded case. ' +
+    'The server validates that only the original transfer signer can acknowledge, verifies the cryptographic signature over the canonical payload hash, and confirms the refunded amount does not exceed the paid amount.',
+  tags: ['Refunds'],
+  request: {
+    body: {
+      content: {
+        'application/json': {
+          schema: RefundAckRequestBodySchema,
+        },
+      },
+    },
+  },
+  responses: {
+    200: {
+      description: 'Refund acknowledgement recorded',
+      content: {
+        'application/json': {
+          schema: RefundAckResponseSchema,
+        },
+      },
+    },
+    400: {
+      description: 'Invalid JSON',
+      content: { 'application/json': { schema: ApiErrorSchema } },
+    },
+    401: UNAUTHORIZED_401,
+    403: {
+      description: 'Signer mismatch',
+      content: { 'application/json': { schema: ApiErrorSchema } },
+    },
+    404: {
+      description: 'No refund case found',
+      content: { 'application/json': { schema: ApiErrorSchema } },
+    },
+    409: {
+      description: 'Case already acknowledged',
+      content: { 'application/json': { schema: ApiErrorSchema } },
+    },
+    422: {
+      description: 'Validation error',
+      content: { 'application/json': { schema: ApiErrorSchema } },
+    },
     429: RATE_LIMITED_429,
   },
 });

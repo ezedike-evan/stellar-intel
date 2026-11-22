@@ -14,11 +14,32 @@ export interface Intent extends HashableIntent {
 }
 
 /**
+ * Serialize an arbitrary value to canonical JSON: object keys sorted
+ * alphabetically (recursively), arrays preserved in order, no whitespace.
+ */
+export function canonicalJsonValue(value: unknown): string {
+  return JSON.stringify(sortKeys(value));
+}
+
+/**
+ * SHA-256 hash of the canonical JSON of an arbitrary value, returned as 64 lowercase hex characters.
+ * Uses the Web Crypto API so it works in both browser and Node.js 20+.
+ */
+export async function hashCanonical(value: unknown): Promise<string> {
+  const canonical = canonicalJsonValue(value);
+  const encoded = new TextEncoder().encode(canonical);
+  const hashBuffer = await crypto.subtle.digest('SHA-256', encoded);
+  return Array.from(new Uint8Array(hashBuffer))
+    .map((b) => b.toString(16).padStart(2, '0'))
+    .join('');
+}
+
+/**
  * Serialize an intent to canonical JSON: keys sorted alphabetically,
  * no whitespace. Non-string values are preserved as-is.
  */
 export function canonicalJson(intent: HashableIntent): string {
-  return JSON.stringify(sortKeys(intent));
+  return canonicalJsonValue(intent);
 }
 
 /**
@@ -26,12 +47,7 @@ export function canonicalJson(intent: HashableIntent): string {
  * Uses the Web Crypto API so it works in both browser and Node.js 20+.
  */
 export async function hashIntent(intent: HashableIntent): Promise<string> {
-  const canonical = canonicalJson(intent);
-  const encoded = new TextEncoder().encode(canonical);
-  const hashBuffer = await crypto.subtle.digest('SHA-256', encoded);
-  return Array.from(new Uint8Array(hashBuffer))
-    .map((b) => b.toString(16).padStart(2, '0'))
-    .join('');
+  return hashCanonical(intent);
 }
 
 function sortKeys(value: unknown): unknown {
