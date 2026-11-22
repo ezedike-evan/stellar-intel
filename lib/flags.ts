@@ -4,7 +4,9 @@ export type FlagName =
   | 'mcpAdvertisement'
   | 'v11Corridors'
   | 'recurringIntents'
-  | 'firmQuoteBonus';
+  | 'firmQuoteBonus'
+  | 'executionSla'
+  | 'intentTemplates';
 
 export const flags: Record<FlagName, boolean> = {
   // Default to enabled unless explicitly set to 'off'
@@ -22,6 +24,11 @@ export const flags: Record<FlagName, boolean> = {
   // Default OFF; opt in with NEXT_PUBLIC_FIRM_QUOTE_BONUS=on. It reorders rows and
   // never changes a displayed amount.
   firmQuoteBonus: (process.env.NEXT_PUBLIC_FIRM_QUOTE_BONUS || 'off') === 'on',
+  // Execution SLA: settlement time percentiles and breach assessment (#2147).
+  // Default OFF; opt in with NEXT_PUBLIC_EXECUTION_SLA=on.
+  executionSla: (process.env.NEXT_PUBLIC_EXECUTION_SLA || 'off') === 'on',
+  // Per-corridor intent templates, saved in the browser per wallet. Default OFF.
+  intentTemplates: (process.env.NEXT_PUBLIC_INTENT_TEMPLATES || 'off') === 'on',
 };
 
 export function isFlag(name: FlagName) {

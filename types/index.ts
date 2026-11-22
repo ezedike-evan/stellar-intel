@@ -163,6 +163,15 @@ export interface AnchorRate {
   referenceSource?: 'fx' | 'sdex+fx';
   /** Human-readable explanation of how the reference price was derived. */
   referenceDetail?: string;
+  /**
+   * 30-day p95 settle time on this corridor, from completed withdrawals; absent
+   * below 30 samples or when the executionSla flag is off.
+   */
+  settleP95Ms?: number;
+  /**
+   * Number of completed withdrawals used to calculate settleP95Ms.
+   */
+  settleSampleSize?: number;
 }
 
 /**
