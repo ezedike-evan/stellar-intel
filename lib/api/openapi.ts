@@ -257,10 +257,14 @@ const DisputeRecordSchema = registry.register(
   'DisputeRecord',
   z.object({
     id: z.string(),
+    ref: z.string(),
     intentHash: z.string(),
     publicKey: z.string(),
     anchorId: z.string(),
     reason: z.string(),
+    category: z.string(),
+    level: z.string(),
+    levelDeadline: z.string(),
     disputed: z.boolean(),
     createdAt: z.string(),
   })
@@ -277,6 +281,12 @@ const DisputeAdminSchema = registry.register(
     status: z.enum(['open', 'accepted', 'rejected']),
     createdAt: z.string(),
     resolvedAt: z.string().nullable(),
+    category: z.string(),
+    level: z.string(),
+    levelDeadline: z.string(),
+    subjectKind: z.string(),
+    subjectRef: z.string().nullable(),
+    appealedAt: z.string().nullable(),
   })
 );
 
@@ -948,6 +958,7 @@ registry.registerPath({
             signature: z.string(),
             anchorId: z.string(),
             reason: z.string(),
+            category: z.string().optional(),
           }),
         },
       },
@@ -964,6 +975,10 @@ registry.registerPath({
     },
     403: {
       description: 'Signature verification failed',
+      content: { 'application/json': { schema: ApiErrorSchema } },
+    },
+    409: {
+      description: 'Conflict: open dispute already exists',
       content: { 'application/json': { schema: ApiErrorSchema } },
     },
     422: {
@@ -1275,7 +1290,8 @@ registry.registerPath({
         'application/json': {
           schema: z.object({
             id: z.string(),
-            action: z.enum(['accept', 'reject']),
+            action: z.enum(['accept', 'reject', 'escalate']),
+            rationale: z.string().max(500).optional(),
           }),
         },
       },
@@ -1296,6 +1312,10 @@ registry.registerPath({
     },
     404: {
       description: 'Dispute not found',
+      content: { 'application/json': { schema: ApiErrorSchema } },
+    },
+    409: {
+      description: 'Conflict: dispute not open or cannot escalate',
       content: { 'application/json': { schema: ApiErrorSchema } },
     },
   },

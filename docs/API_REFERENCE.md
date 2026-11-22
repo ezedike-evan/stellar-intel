@@ -110,7 +110,8 @@ Accepts or rejects a dispute. Requires admin authentication.
 | Field | Type | Required | Description |
 | :--- | :--- | :--- | :--- |
 | `id` | `string` | **Yes** | - |
-| `action` | `"accept" | "reject"` | **Yes** | - |
+| `action` | `"accept" | "reject" | "escalate"` | **Yes** | - |
+| `rationale` | `string` | No | - |
 
 #### Responses
 
@@ -120,6 +121,7 @@ Accepts or rejects a dispute. Requires admin authentication.
 | `400` | Invalid request | `application/json` | `ApiError` |
 | `401` | Admin access required | `application/json` | `ApiError` |
 | `404` | Dispute not found | `application/json` | `ApiError` |
+| `409` | Conflict: dispute not open or cannot escalate | `application/json` | `ApiError` |
 
 ---
 
@@ -570,6 +572,7 @@ Submits a dispute against an intent outcome. The request must be Ed25519-signed 
 | `signature` | `string` | **Yes** | - |
 | `anchorId` | `string` | **Yes** | - |
 | `reason` | `string` | **Yes** | - |
+| `category` | `string` | No | - |
 
 #### Responses
 
@@ -578,6 +581,7 @@ Submits a dispute against an intent outcome. The request must be Ed25519-signed 
 | `201` | Dispute created | `application/json` | `DisputeRecord` |
 | `400` | Invalid request | `application/json` | `ApiError` |
 | `403` | Signature verification failed | `application/json` | `ApiError` |
+| `409` | Conflict: open dispute already exists | `application/json` | `ApiError` |
 | `422` | Validation error | `application/json` | `ApiError` |
 | `429` | Rate limited (10/24h) | `application/json` | `ApiError` |
 
