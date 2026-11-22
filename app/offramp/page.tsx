@@ -1,5 +1,5 @@
 'use client';
-import { Suspense, useState, useCallback, useEffect, useRef } from 'react';
+import { Suspense, useState, useCallback, useEffect, useRef, useMemo } from 'react';
 import dynamic from 'next/dynamic';
 import { useRouter, useSearchParams } from 'next/navigation';
 import { TERMINAL_STATES } from '@/lib/stellar/sep24';
@@ -34,6 +34,13 @@ import { quotedAllInRate } from '@/lib/stellar/realized-rate';
 import type { Intent } from '@/lib/intent/hash';
 import type { AnchorRate } from '@/types';
 import { MIN_RECEIVE_TOLERANCE } from '@/lib/rate-ranking';
+import { DueRemindersBanner } from '@/components/recurring/DueRemindersBanner';
+import {
+  parseRecurringParams,
+  filterRatesToAllowlist,
+  exceedsRemainingCap,
+  withRecurringFields,
+} from '@/lib/recurring/offramp-mode';
 
 // Not needed until the user picks a rate to execute — split into its own
 // chunk so it doesn't pad the initial /offramp bundle.
@@ -56,8 +63,10 @@ function OfframpContent() {
   const router = useRouter();
   const searchParams = useSearchParams();
 
-  const initialCorridorParam = searchParams.get('corridor');
-  const initialAmountParam = searchParams.get('amount');
+  const recurringMode = useMemo(() => parseRecurringParams(searchParams), [searchParams]);
+
+  const initialCorridorParam = searchParams.get('corridor') || recurringMode?.corridorId;
+  const initialAmountParam = searchParams.get('amount') || recurringMode?.amount;
 
   const [corridorId, setCorridorId] = useState(
     initialCorridorParam && VALID_CORRIDOR_IDS.has(initialCorridorParam)
@@ -85,6 +94,19 @@ function OfframpContent() {
   const { isConnected, publicKey, network } = useWallet();
   const { rates, anchorErrors, isLoading, error, mutate, refreshInflight, lastFetchedAt } =
     useAnchorRates(corridorId, amount);
+
+  const displayedRates = useMemo(() => {
+    if (!rates) return rates;
+    if (!recurringMode?.allowlist) return rates;
+    return {
+      ...rates,
+      rates: filterRatesToAllowlist(rates.rates, recurringMode.allowlist),
+    };
+  }, [rates, recurringMode]);
+
+  const capExceeded = useMemo(() => {
+    return recurringMode?.remainingCap ? exceedsRemainingCap(amount, recurringMode.remainingCap) : false;
+  }, [amount, recurringMode]);
   const { secondsRemaining, elapsedSeconds, prefersReducedMotion, progress, totalSeconds } =
     useCountdown(RATES_REFRESH_INTERVAL_MS, lastFetchedAt);
   // The asset is derived from the corridor so `?corridor=` stays the only URL
@@ -185,7 +207,7 @@ function OfframpContent() {
       // simply isn't recorded.
       if (selectedRate && selectedRate.exchangeRate !== null && publicKey) {
         const [sourceAsset = '', destinationAsset = ''] = selectedRate.corridorId.split('-');
-        const intent: Intent = {
+        const baseIntent: Intent = {
           type: 'offramp-outcome',
           sourceAsset: sourceAsset.toUpperCase(),
           destinationAsset: destinationAsset.toUpperCase(),
@@ -196,6 +218,9 @@ function OfframpContent() {
           corridor: selectedRate.corridorId,
           transactionId,
         };
+        const intent: Intent = recurringMode
+          ? (withRecurringFields(baseIntent, recurringMode) as unknown as Intent)
+          : baseIntent;
         const quote = {
           anchorId: selectedRate.anchorId,
           corridor: selectedRate.corridorId,
@@ -214,7 +239,7 @@ function OfframpContent() {
           });
       }
     },
-    [router, selectedRate, amount, publicKey]
+    [router, selectedRate, amount, publicKey, recurringMode]
   );
 
   useEffect(() => {
@@ -297,6 +322,31 @@ function OfframpContent() {
 
       <DisclaimerBanner />
 
+      <DueRemindersBanner currentAuthId={recurringMode?.authId} />
+
+      {recurringMode && (
+        <div
+          role="region"
+          aria-label="Standing order mode banner"
+          className="rounded-xl border border-blue-500/30 bg-blue-500/10 p-4 text-blue-200"
+        >
+          <div className="flex items-center justify-between">
+            <div>
+              <span className="font-semibold text-blue-100">Standing Order Execution Mode</span>
+              <p className="mt-0.5 text-xs text-blue-300">
+                Executing against authorization {recurringMode.authId.slice(0, 8)}…{' '}
+                {recurringMode.remainingCap ? `(Remaining cap: ${recurringMode.remainingCap})` : ''}
+              </p>
+            </div>
+          </div>
+          {capExceeded && (
+            <p className="mt-2 text-xs font-semibold text-red-400">
+              Warning: Amount ({amount}) exceeds remaining period cap ({recurringMode.remainingCap}). Execution will fail.
+            </p>
+          )}
+        </div>
+      )}
+
       <div className="grid grid-cols-1 gap-4 rounded-xl border border-border bg-bg-sunken p-4 /50 sm:grid-cols-3">
         <AssetSelector
           value={selectedAsset}
@@ -356,7 +406,7 @@ function OfframpContent() {
           )}
         >
           <RateTable
-            rates={rates}
+            rates={displayedRates}
             anchorErrors={anchorErrors}
             isLoading={isLoading}
             refreshInflight={refreshInflight}

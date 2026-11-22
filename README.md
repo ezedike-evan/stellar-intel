@@ -161,6 +161,7 @@ the stack that needs the variable.
 | Variable                  | Required            | Description                                                                                                                         |
 | ------------------------- | ------------------- | ----------------------------------------------------------------------------------------------------------------------------------- |
 | `NEXT_PUBLIC_INTENT_FLOW` | No                  | Feature flag: the signed-intent off-ramp path is off unless set to `true`.                                                          |
+| `CALLER_TOKEN_SECRET`     | No                  | HMAC-SHA256 secret for signed caller tokens. Falls back to JWT_SECRET or test secret in dev/test.                    |
 | `ROUTING_STRATEGY`        | No                  | Router selection strategy: `first-match` (default) or `scored` (multi-factor solver).                                               |
 | `FEE_BUDGET_PCT`          | No                  | Router fee budget as a percentage of the amount, e.g. `1` for 1%. `lib/env.ts` uses `100` when unset.                               |
 | `SOROSWAP_API_KEY`        | Swap hops           | Soroswap aggregator API key for the swap hop connector, which throws `SoroswapConfigError` when it is unset.                        |

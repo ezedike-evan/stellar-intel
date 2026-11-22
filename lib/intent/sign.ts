@@ -1,4 +1,4 @@
-import type { Intent } from './hash';
+import type { HashableIntent } from './hash';
 import { hashIntent } from './hash';
 
 export interface SignedIntentEnvelope {
@@ -36,7 +36,7 @@ function toBase64Signature(value: unknown): string {
  * Sign an intent hash using Freighter's signMessage API.
  * Returns the intent hash, Freighter's base64 signature, and the signer's public key.
  */
-export async function signIntent(intent: Intent): Promise<SignedIntentEnvelope> {
+export async function signIntent(intent: HashableIntent): Promise<SignedIntentEnvelope> {
   const { signMessage, getAddress } = await import('@stellar/freighter-api').catch(() => {
     throw new IntentSignError('Freighter extension is not available', 'FREIGHTER_UNAVAILABLE');
   });

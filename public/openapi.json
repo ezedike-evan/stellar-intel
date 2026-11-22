@@ -4271,6 +4271,361 @@
           }
         }
       }
+    },
+    "/api/recurring": {
+      "post": {
+        "summary": "Create and register a signed standing authorization",
+        "tags": [
+          "Recurring"
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "properties": {
+                  "terms": {
+                    "type": "object",
+                    "additionalProperties": {}
+                  },
+                  "termsHash": {
+                    "type": "string",
+                    "pattern": "^[0-9a-f]{64}$"
+                  },
+                  "signature": {
+                    "type": "string",
+                    "minLength": 1
+                  },
+                  "publicKey": {
+                    "type": "string",
+                    "pattern": "^G[A-Z2-7]{55}$"
+                  }
+                },
+                "required": [
+                  "terms",
+                  "termsHash",
+                  "signature",
+                  "publicKey"
+                ]
+              }
+            }
+          }
+        },
+        "responses": {
+          "201": {
+            "description": "Standing authorization registered successfully",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "authorization": {
+                      "type": "object",
+                      "additionalProperties": {}
+                    }
+                  },
+                  "required": [
+                    "authorization"
+                  ]
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Invalid terms or signature verification failure"
+          },
+          "503": {
+            "description": "Recurring standing orders disabled by feature flag"
+          }
+        }
+      }
+    },
+    "/api/recurring/{id}": {
+      "get": {
+        "summary": "Get standing authorization and due reminder by id",
+        "tags": [
+          "Recurring"
+        ],
+        "parameters": [
+          {
+            "schema": {
+              "type": "string",
+              "pattern": "^[0-9a-f]{64}$"
+            },
+            "required": true,
+            "name": "id",
+            "in": "path"
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Standing authorization details",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "authorization": {
+                      "type": "object",
+                      "additionalProperties": {}
+                    },
+                    "reminder": {
+                      "type": "object",
+                      "additionalProperties": {}
+                    }
+                  },
+                  "required": [
+                    "authorization",
+                    "reminder"
+                  ]
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Standing authorization not found"
+          }
+        }
+      }
+    },
+    "/api/recurring/due": {
+      "get": {
+        "summary": "Query due reminders for a list of standing order IDs or sender",
+        "tags": [
+          "Recurring"
+        ],
+        "parameters": [
+          {
+            "schema": {
+              "type": "string",
+              "description": "Comma-separated termsHashes"
+            },
+            "required": false,
+            "description": "Comma-separated termsHashes",
+            "name": "ids",
+            "in": "query"
+          },
+          {
+            "schema": {
+              "type": "string",
+              "description": "Sender Stellar public key"
+            },
+            "required": false,
+            "description": "Sender Stellar public key",
+            "name": "sender",
+            "in": "query"
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Due reminders list",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "reminders": {
+                      "type": "array",
+                      "items": {
+                        "type": "object",
+                        "additionalProperties": {}
+                      }
+                    }
+                  },
+                  "required": [
+                    "reminders"
+                  ]
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/recurring/{id}/control": {
+      "post": {
+        "summary": "Apply a lifecycle control action (pause, resume, cancel) to a standing authorization",
+        "tags": [
+          "Recurring"
+        ],
+        "parameters": [
+          {
+            "schema": {
+              "type": "string",
+              "pattern": "^[0-9a-f]{64}$"
+            },
+            "required": true,
+            "name": "id",
+            "in": "path"
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "properties": {
+                  "action": {
+                    "type": "string",
+                    "enum": [
+                      "pause",
+                      "resume",
+                      "cancel"
+                    ]
+                  },
+                  "timestamp": {
+                    "type": "integer",
+                    "exclusiveMinimum": 0
+                  },
+                  "nonce": {
+                    "type": "string",
+                    "minLength": 1
+                  },
+                  "signature": {
+                    "type": "string",
+                    "minLength": 1
+                  }
+                },
+                "required": [
+                  "action",
+                  "timestamp",
+                  "nonce",
+                  "signature"
+                ]
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Standing authorization status updated"
+          },
+          "400": {
+            "description": "Invalid control action or state transition"
+          },
+          "401": {
+            "description": "Invalid signature"
+          }
+        }
+      }
+    },
+    "/api/recurring/{id}/executions": {
+      "post": {
+        "summary": "Confirm a due execution against the standing authorization with one signature",
+        "tags": [
+          "Recurring"
+        ],
+        "parameters": [
+          {
+            "schema": {
+              "type": "string",
+              "pattern": "^[0-9a-f]{64}$"
+            },
+            "required": true,
+            "name": "id",
+            "in": "path"
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "properties": {
+                  "intent": {
+                    "type": "object",
+                    "properties": {
+                      "type": {
+                        "type": "string",
+                        "enum": [
+                          "recurring-execution"
+                        ]
+                      },
+                      "version": {
+                        "type": "number",
+                        "enum": [
+                          1
+                        ]
+                      },
+                      "authorizationId": {
+                        "type": "string",
+                        "pattern": "^[0-9a-f]{64}$"
+                      },
+                      "sender": {
+                        "type": "string",
+                        "pattern": "^G[A-Z2-7]{55}$"
+                      },
+                      "anchorId": {
+                        "type": "string",
+                        "minLength": 1
+                      },
+                      "amount": {
+                        "type": "string",
+                        "pattern": "^\\d+(\\.\\d+)?$"
+                      },
+                      "minReceive": {
+                        "type": "string"
+                      },
+                      "cycleIndex": {
+                        "type": "number"
+                      },
+                      "timestamp": {
+                        "type": "number"
+                      },
+                      "nonce": {
+                        "type": "string",
+                        "minLength": 1
+                      }
+                    },
+                    "required": [
+                      "type",
+                      "version",
+                      "authorizationId",
+                      "sender",
+                      "anchorId",
+                      "amount",
+                      "timestamp",
+                      "nonce"
+                    ]
+                  },
+                  "intentHash": {
+                    "type": "string",
+                    "pattern": "^[0-9a-f]{64}$"
+                  },
+                  "signature": {
+                    "type": "string",
+                    "minLength": 1
+                  },
+                  "publicKey": {
+                    "type": "string",
+                    "pattern": "^G[A-Z2-7]{55}$"
+                  }
+                },
+                "required": [
+                  "intent",
+                  "intentHash",
+                  "signature",
+                  "publicKey"
+                ]
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Execution already confirmed (idempotent)"
+          },
+          "201": {
+            "description": "Execution confirmed"
+          },
+          "400": {
+            "description": "Policy violation or cap exceeded"
+          },
+          "401": {
+            "description": "Signature verification failure"
+          }
+        }
+      }
     }
   },
   "webhooks": {}

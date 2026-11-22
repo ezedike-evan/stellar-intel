@@ -952,6 +952,12 @@ the hardening contract (see `lib/api/v1.ts`):
   - [`GET /api/rates/{corridor}`](#get-apiratescorridor)
   - [`GET /api/snapshot`](#get-apisnapshot)
   - [`GET /api/v1/corridors/{corridor}/volume-savings`](#get-apiv1corridorscorridorvolume-savings)
+- **Recurring**
+  - [`POST /api/recurring`](#post-apirecurring)
+  - [`GET /api/recurring/due`](#get-apirecurringdue)
+  - [`GET /api/recurring/{id}`](#get-apirecurringid)
+  - [`POST /api/recurring/{id}/control`](#post-apirecurringidcontrol)
+  - [`POST /api/recurring/{id}/executions`](#post-apirecurringidexecutions)
 - **Reputation**
   - [`GET /api/reputation/actuarial`](#get-apireputationactuarial)
   - [`POST /api/reputation/append`](#post-apireputationappend)
@@ -1400,6 +1406,134 @@ Reads the on-chain volume/savings oracle for one corridor: cumulative USDC route
 | `400` | Invalid corridor ID | `application/json` | `ApiError` |
 | `429` | Rate limited | `application/json` | `ApiError` |
 | `500` | Oracle read failed | `application/json` | `ApiError` |
+
+---
+
+## Recurring
+
+### `POST /api/recurring`
+
+**Summary:** Create and register a signed standing authorization  
+
+#### Request Body
+
+**Content-Type:** `application/json`
+
+| Field | Type | Required | Description |
+| :--- | :--- | :--- | :--- |
+| `terms` | `object` | **Yes** | - |
+| `termsHash` | `string` | **Yes** | - |
+| `signature` | `string` | **Yes** | - |
+| `publicKey` | `string` | **Yes** | - |
+
+#### Responses
+
+| Status | Description | Content-Type | Schema |
+| :--- | :--- | :--- | :--- |
+| `201` | Standing authorization registered successfully | `application/json` | `object` |
+| `400` | Invalid terms or signature verification failure | - | - |
+| `503` | Recurring standing orders disabled by feature flag | - | - |
+
+---
+
+### `GET /api/recurring/due`
+
+**Summary:** Query due reminders for a list of standing order IDs or sender  
+
+#### Parameters
+
+| Name | In | Type | Required | Description |
+| :--- | :--- | :--- | :--- | :--- |
+| `ids` | `query` | `string` | No | Comma-separated termsHashes |
+| `sender` | `query` | `string` | No | Sender Stellar public key |
+
+#### Responses
+
+| Status | Description | Content-Type | Schema |
+| :--- | :--- | :--- | :--- |
+| `200` | Due reminders list | `application/json` | `object` |
+
+---
+
+### `GET /api/recurring/{id}`
+
+**Summary:** Get standing authorization and due reminder by id  
+
+#### Parameters
+
+| Name | In | Type | Required | Description |
+| :--- | :--- | :--- | :--- | :--- |
+| `id` | `path` | `string` | **Yes** | - |
+
+#### Responses
+
+| Status | Description | Content-Type | Schema |
+| :--- | :--- | :--- | :--- |
+| `200` | Standing authorization details | `application/json` | `object` |
+| `404` | Standing authorization not found | - | - |
+
+---
+
+### `POST /api/recurring/{id}/control`
+
+**Summary:** Apply a lifecycle control action (pause, resume, cancel) to a standing authorization  
+
+#### Parameters
+
+| Name | In | Type | Required | Description |
+| :--- | :--- | :--- | :--- | :--- |
+| `id` | `path` | `string` | **Yes** | - |
+
+#### Request Body
+
+**Content-Type:** `application/json`
+
+| Field | Type | Required | Description |
+| :--- | :--- | :--- | :--- |
+| `action` | `"pause" | "resume" | "cancel"` | **Yes** | - |
+| `timestamp` | `integer` | **Yes** | - |
+| `nonce` | `string` | **Yes** | - |
+| `signature` | `string` | **Yes** | - |
+
+#### Responses
+
+| Status | Description | Content-Type | Schema |
+| :--- | :--- | :--- | :--- |
+| `200` | Standing authorization status updated | - | - |
+| `400` | Invalid control action or state transition | - | - |
+| `401` | Invalid signature | - | - |
+
+---
+
+### `POST /api/recurring/{id}/executions`
+
+**Summary:** Confirm a due execution against the standing authorization with one signature  
+
+#### Parameters
+
+| Name | In | Type | Required | Description |
+| :--- | :--- | :--- | :--- | :--- |
+| `id` | `path` | `string` | **Yes** | - |
+
+#### Request Body
+
+**Content-Type:** `application/json`
+
+| Field | Type | Required | Description |
+| :--- | :--- | :--- | :--- |
+| `intent` | `object` | **Yes** | - |
+| `intentHash` | `string` | **Yes** | - |
+| `signature` | `string` | **Yes** | - |
+| `publicKey` | `string` | **Yes** | - |
+
+#### Responses
+
+| Status | Description | Content-Type | Schema |
+| :--- | :--- | :--- | :--- |
+| `200` | Execution already confirmed (idempotent) | - | - |
+| `201` | Execution confirmed | - | - |
+| `400` | Policy violation or cap exceeded | - | - |
+| `401` | Signature verification failure | - | - |
 
 ---
 

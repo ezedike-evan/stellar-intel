@@ -243,3 +243,80 @@ export type CycleEvaluationResult =
       reason: 'max_cycles_reached' | 'stop_date_passed' | 'expired';
       message: string;
     };
+
+// ─── Standing Authorization (REC001 - REC013) ─────────────────────────────────
+
+export const STANDING_AUTHORIZATION_PERIODS = ['daily', 'weekly', 'monthly'] as const;
+export type StandingAuthorizationPeriod = (typeof STANDING_AUTHORIZATION_PERIODS)[number];
+
+export interface PeriodWindow {
+  startMs: number;
+  endMs: number;
+}
+
+export const StandingAuthorizationTermsSchema = z.object({
+  type: z.literal('recurring-authorization'),
+  version: z.literal(1),
+  sender: z.string().regex(/^G[A-Z0-9]{55}$/, {
+    message: 'sender must be a valid Stellar public key (G…, 56 chars)',
+  }),
+  corridorId: z.string().min(1, { message: 'corridorId is required' }),
+  sourceAsset: z.string().min(1, { message: 'sourceAsset is required' }),
+  destinationAsset: z.string().min(1, { message: 'destinationAsset is required' }),
+  amount: z
+    .string()
+    .regex(/^\d+(\.\d+)?$/, { message: 'amount must be a non-negative decimal string' })
+    .refine((v) => parseFloat(v) > 0, { message: 'amount must be greater than zero' }),
+  perPeriodCap: z
+    .string()
+    .regex(/^\d+(\.\d+)?$/, { message: 'perPeriodCap must be a non-negative decimal string' })
+    .refine((v) => parseFloat(v) > 0, { message: 'perPeriodCap must be greater than zero' }),
+  period: z.enum(STANDING_AUTHORIZATION_PERIODS),
+  startDate: z.string().datetime({ message: 'startDate must be an ISO 8601 UTC string' }),
+  stopDate: z.string().datetime({ message: 'stopDate must be an ISO 8601 UTC string' }).optional(),
+  anchorAllowlist: z
+    .array(z.string().min(1))
+    .min(1, { message: 'anchorAllowlist must contain at least one anchor' }),
+  nonce: z.string().min(1, { message: 'nonce is required' }),
+});
+
+export type StandingAuthorizationTerms = z.infer<typeof StandingAuthorizationTermsSchema>;
+
+export const SignedStandingAuthorizationSchema = z.object({
+  terms: StandingAuthorizationTermsSchema,
+  termsHash: z.string().regex(/^[0-9a-f]{64}$/, { message: 'termsHash must be a 64-char hex string' }),
+  signature: z.string().min(1, { message: 'signature is required' }),
+  publicKey: z.string().regex(/^G[A-Z0-9]{55}$/, { message: 'publicKey must be a valid Stellar public key' }),
+});
+
+export type SignedStandingAuthorization = z.infer<typeof SignedStandingAuthorizationSchema>;
+
+export type StandingAuthorizationStatus = 'active' | 'paused' | 'cancelled' | 'completed';
+
+export interface ExecutionRecord {
+  id: string;
+  intentHash: string;
+  authorizationId: string;
+  sender: string;
+  anchorId: string;
+  amount: string;
+  executedAt: string;
+  status: 'confirmed' | 'rejected';
+  rejectionReason?: string;
+  feeCharged?: string;
+}
+
+export interface StoredStandingAuthorization {
+  terms: StandingAuthorizationTerms;
+  termsHash: string;
+  signature: string;
+  publicKey: string;
+  createdAt: string;
+  status: StandingAuthorizationStatus;
+  pausedAt?: string;
+  cancelledAt?: string;
+  executions: ExecutionRecord[];
+}
+
+export type { RecurringExecutionIntent, SignedRecurringExecution } from '@/lib/recurring/execution';
+

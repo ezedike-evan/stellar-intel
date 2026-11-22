@@ -1949,6 +1949,184 @@ registry.registerPath({
   },
 });
 
+// ─── Recurring Standing Orders ───────────────────────────────────────────────
+
+registry.registerPath({
+  method: 'post',
+  path: '/api/recurring',
+  summary: 'Create and register a signed standing authorization',
+  tags: ['Recurring'],
+  request: {
+    body: {
+      content: {
+        'application/json': {
+          schema: z.object({
+            terms: z.record(z.string(), z.unknown()),
+            termsHash: z.string().regex(/^[0-9a-f]{64}$/),
+            signature: z.string().min(1),
+            publicKey: z.string().regex(STELLAR_PUBKEY_PATTERN),
+          }),
+        },
+      },
+    },
+  },
+  responses: {
+    201: {
+      description: 'Standing authorization registered successfully',
+      content: {
+        'application/json': {
+          schema: z.object({
+            authorization: z.record(z.string(), z.unknown()),
+          }),
+        },
+      },
+    },
+    400: {
+      description: 'Invalid terms or signature verification failure',
+    },
+    503: {
+      description: 'Recurring standing orders disabled by feature flag',
+    },
+  },
+});
+
+registry.registerPath({
+  method: 'get',
+  path: '/api/recurring/{id}',
+  summary: 'Get standing authorization and due reminder by id',
+  tags: ['Recurring'],
+  request: {
+    params: z.object({
+      id: z.string().regex(/^[0-9a-f]{64}$/).openapi({ param: { name: 'id', in: 'path' } }),
+    }),
+  },
+  responses: {
+    200: {
+      description: 'Standing authorization details',
+      content: {
+        'application/json': {
+          schema: z.object({
+            authorization: z.record(z.string(), z.unknown()),
+            reminder: z.record(z.string(), z.unknown()),
+          }),
+        },
+      },
+    },
+    404: {
+      description: 'Standing authorization not found',
+    },
+  },
+});
+
+registry.registerPath({
+  method: 'get',
+  path: '/api/recurring/due',
+  summary: 'Query due reminders for a list of standing order IDs or sender',
+  tags: ['Recurring'],
+  request: {
+    query: z.object({
+      ids: z.string().optional().openapi({ param: { name: 'ids', in: 'query' }, description: 'Comma-separated termsHashes' }),
+      sender: z.string().optional().openapi({ param: { name: 'sender', in: 'query' }, description: 'Sender Stellar public key' }),
+    }),
+  },
+  responses: {
+    200: {
+      description: 'Due reminders list',
+      content: {
+        'application/json': {
+          schema: z.object({
+            reminders: z.array(z.record(z.string(), z.unknown())),
+          }),
+        },
+      },
+    },
+  },
+});
+
+registry.registerPath({
+  method: 'post',
+  path: '/api/recurring/{id}/control',
+  summary: 'Apply a lifecycle control action (pause, resume, cancel) to a standing authorization',
+  tags: ['Recurring'],
+  request: {
+    params: z.object({
+      id: z.string().regex(/^[0-9a-f]{64}$/).openapi({ param: { name: 'id', in: 'path' } }),
+    }),
+    body: {
+      content: {
+        'application/json': {
+          schema: z.object({
+            action: z.enum(['pause', 'resume', 'cancel']),
+            timestamp: z.number().int().positive(),
+            nonce: z.string().min(1),
+            signature: z.string().min(1),
+          }),
+        },
+      },
+    },
+  },
+  responses: {
+    200: {
+      description: 'Standing authorization status updated',
+    },
+    400: {
+      description: 'Invalid control action or state transition',
+    },
+    401: {
+      description: 'Invalid signature',
+    },
+  },
+});
+
+registry.registerPath({
+  method: 'post',
+  path: '/api/recurring/{id}/executions',
+  summary: 'Confirm a due execution against the standing authorization with one signature',
+  tags: ['Recurring'],
+  request: {
+    params: z.object({
+      id: z.string().regex(/^[0-9a-f]{64}$/).openapi({ param: { name: 'id', in: 'path' } }),
+    }),
+    body: {
+      content: {
+        'application/json': {
+          schema: z.object({
+            intent: z.object({
+              type: z.literal('recurring-execution'),
+              version: z.literal(1),
+              authorizationId: z.string().regex(/^[0-9a-f]{64}$/),
+              sender: z.string().regex(STELLAR_PUBKEY_PATTERN),
+              anchorId: z.string().min(1),
+              amount: z.string().regex(AMOUNT_PATTERN),
+              minReceive: z.string().optional(),
+              cycleIndex: z.number().optional(),
+              timestamp: z.number(),
+              nonce: z.string().min(1),
+            }),
+            intentHash: z.string().regex(/^[0-9a-f]{64}$/),
+            signature: z.string().min(1),
+            publicKey: z.string().regex(STELLAR_PUBKEY_PATTERN),
+          }),
+        },
+      },
+    },
+  },
+  responses: {
+    201: {
+      description: 'Execution confirmed',
+    },
+    200: {
+      description: 'Execution already confirmed (idempotent)',
+    },
+    400: {
+      description: 'Policy violation or cap exceeded',
+    },
+    401: {
+      description: 'Signature verification failure',
+    },
+  },
+});
+
 // ─── Spec builder ────────────────────────────────────────────────────────────
 
 export function buildOpenApiSpec() {
