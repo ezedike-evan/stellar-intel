@@ -963,6 +963,7 @@ the hardening contract (see `lib/api/v1.ts`):
   - [`GET /api/reputation/{anchor}/history`](#get-apireputationanchorhistory)
   - [`GET /api/v1/slippage-breaches`](#get-apiv1slippage-breaches)
   - [`GET /api/v1/slippage-breaches/{intentHash}`](#get-apiv1slippage-breachesintenthash)
+  - [`GET /api/v1/slippage-compliance`](#get-apiv1slippage-compliance)
   - [`GET /v1/public/scores`](#get-v1publicscores)
 - **SEP-10**
   - [`POST /api/sep10/client-domain`](#post-apisep10client-domain)
@@ -1629,6 +1630,29 @@ Returns detailed information about a slippage breach, including full evidence an
 | `200` | Slippage breach detail with evidence | `application/json` | `object` |
 | `400` | Invalid intentHash format | `application/json` | `ApiError` |
 | `404` | Breach not found | `application/json` | `ApiError` |
+| `429` | Rate limited | `application/json` | `ApiError` |
+| `503` | Store unavailable | `application/json` | `ApiError` |
+
+---
+
+### `GET /api/v1/slippage-compliance`
+
+**Summary:** Get slippage compliance metrics  
+
+Returns slippage compliance metrics and release gate status for the specified rolling window (30, 90 days, or all).
+
+#### Parameters
+
+| Name | In | Type | Required | Description |
+| :--- | :--- | :--- | :--- | :--- |
+| `window` | `query` | `"30" | "90" | "all"` | No | Evaluation window: 30, 90, or all (default 30) |
+
+#### Responses
+
+| Status | Description | Content-Type | Schema |
+| :--- | :--- | :--- | :--- |
+| `200` | Slippage compliance metrics and release gate status | `application/json` | `SlippageCompliance` |
+| `400` | Validation error | `application/json` | `ApiError` |
 | `429` | Rate limited | `application/json` | `ApiError` |
 | `503` | Store unavailable | `application/json` | `ApiError` |
 

@@ -3,10 +3,14 @@ import { NextRequest } from 'next/server';
 import { GET, POST } from '@/app/api/metrics/route';
 import { recordIntentSuccess, resetMetrics } from '@/lib/metrics';
 import { clearRateLimitStore } from '@/lib/api/rate-limit';
+import { _setReputationStore, createReputationStore } from '@/lib/reputation/store';
+import { _resetSlippageBreachStore } from '@/lib/reputation/slippage-breaches';
 
 beforeEach(() => {
   resetMetrics();
   clearRateLimitStore();
+  _setReputationStore(createReputationStore({ backend: 'memory' }));
+  _resetSlippageBreachStore();
 });
 
 function postSample(sample: unknown): NextRequest {
@@ -18,7 +22,7 @@ function postSample(sample: unknown): NextRequest {
 }
 
 describe('GET /api/metrics', () => {
-  it('exposes the in-process snapshot', async () => {
+  it('exposes the in-process snapshot and slippage compliance', async () => {
     recordIntentSuccess();
     const res = await GET(new NextRequest('http://localhost/api/metrics'));
     const body = await res.json();
@@ -26,7 +30,34 @@ describe('GET /api/metrics', () => {
     expect(res.status).toBe(200);
     expect(body.intents.success).toBe(1);
     expect(body).toHaveProperty('anchorLatency');
+    expect(body).toHaveProperty('slippageCompliance');
+    expect(body.slippageCompliance).toMatchObject({
+      window: 30,
+      eligibleIntents: 0,
+      breaches: 0,
+      verifiedBreaches: 0,
+      compliancePct: null,
+      gate: {
+        targetPct: 99.0,
+        minIntents: 100,
+        met: false,
+      },
+    });
     expect(res.headers.get('x-correlation-id')).toBeTruthy();
+  });
+
+  it('exposes null slippageCompliance when store is unavailable', async () => {
+    const broken = {
+      query: async () => {
+        throw new Error('db down');
+      },
+    } as unknown as Parameters<typeof _setReputationStore>[0];
+    _setReputationStore(broken);
+    const res = await GET(new NextRequest('http://localhost/api/metrics'));
+    const body = await res.json();
+
+    expect(res.status).toBe(200);
+    expect(body.slippageCompliance).toBeNull();
   });
 });
 

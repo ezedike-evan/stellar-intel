@@ -282,6 +282,7 @@ export const OPERATIONS = {
   getVolumeSavings: 'GET /api/v1/corridors/{corridor}/volume-savings',
   getSlippageBreaches: 'GET /api/v1/slippage-breaches',
   getSlippageBreach: 'GET /api/v1/slippage-breaches/{intentHash}',
+  getSlippageCompliance: 'GET /api/v1/slippage-compliance',
 } as const;
 
 export type OperationName = keyof typeof OPERATIONS;

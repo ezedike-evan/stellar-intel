@@ -715,6 +715,84 @@
           "staleSinceMs"
         ]
       },
+      "SlippageCompliance": {
+        "type": "object",
+        "properties": {
+          "window": {
+            "anyOf": [
+              {
+                "type": "number",
+                "enum": [
+                  30
+                ]
+              },
+              {
+                "type": "number",
+                "enum": [
+                  90
+                ]
+              },
+              {
+                "type": "string",
+                "enum": [
+                  "all"
+                ]
+              }
+            ],
+            "description": "Evaluation window in days or \"all\""
+          },
+          "eligibleIntents": {
+            "type": "integer",
+            "description": "Total withdraw intents settled in the window"
+          },
+          "breaches": {
+            "type": "integer",
+            "description": "Total slippage breaches detected in the window"
+          },
+          "verifiedBreaches": {
+            "type": "integer",
+            "description": "Total verified breaches in the window"
+          },
+          "compliancePct": {
+            "type": [
+              "number",
+              "null"
+            ],
+            "description": "Percentage of withdraws meeting slippage floor (0-100), null if eligibleIntents is 0"
+          },
+          "gate": {
+            "type": "object",
+            "properties": {
+              "targetPct": {
+                "type": "number",
+                "description": "Target compliance percentage required to pass gate (99.0)"
+              },
+              "minIntents": {
+                "type": "integer",
+                "description": "Minimum number of eligible intents required (100)"
+              },
+              "met": {
+                "type": "boolean",
+                "description": "Whether the release gate criteria are met"
+              }
+            },
+            "required": [
+              "targetPct",
+              "minIntents",
+              "met"
+            ],
+            "description": "V3 release gate compliance criteria"
+          }
+        },
+        "required": [
+          "window",
+          "eligibleIntents",
+          "breaches",
+          "verifiedBreaches",
+          "compliancePct",
+          "gate"
+        ]
+      },
       "MetricsSnapshot": {
         "type": "object",
         "properties": {
@@ -779,13 +857,28 @@
           },
           "publisherHealth": {
             "$ref": "#/components/schemas/PublisherHealth"
+          },
+          "slippageCompliance": {
+            "allOf": [
+              {
+                "$ref": "#/components/schemas/SlippageCompliance"
+              },
+              {
+                "type": [
+                  "object",
+                  "null"
+                ],
+                "description": "Slippage compliance metrics for 30-day window, or null if store is unavailable"
+              }
+            ]
           }
         },
         "required": [
           "intents",
           "anchorLatency",
           "ratesCache",
-          "publisherHealth"
+          "publisherHealth",
+          "slippageCompliance"
         ]
       },
       "OnrampIntentRequest": {
@@ -4692,6 +4785,75 @@
           },
           "404": {
             "description": "Breach not found",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiError"
+                }
+              }
+            }
+          },
+          "429": {
+            "description": "Rate limited",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiError"
+                }
+              }
+            }
+          },
+          "503": {
+            "description": "Store unavailable",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/slippage-compliance": {
+      "get": {
+        "summary": "Get slippage compliance metrics",
+        "description": "Returns slippage compliance metrics and release gate status for the specified rolling window (30, 90 days, or all).",
+        "tags": [
+          "Reputation"
+        ],
+        "parameters": [
+          {
+            "schema": {
+              "type": "string",
+              "enum": [
+                "30",
+                "90",
+                "all"
+              ],
+              "description": "Evaluation window: 30, 90, or all (default 30)",
+              "example": "30"
+            },
+            "required": false,
+            "description": "Evaluation window: 30, 90, or all (default 30)",
+            "name": "window",
+            "in": "query"
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Slippage compliance metrics and release gate status",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/SlippageCompliance"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Validation error",
             "content": {
               "application/json": {
                 "schema": {
