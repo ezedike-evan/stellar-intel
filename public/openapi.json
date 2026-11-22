@@ -547,6 +547,9 @@
           "id": {
             "type": "string"
           },
+          "ref": {
+            "type": "string"
+          },
           "intentHash": {
             "type": "string"
           },
@@ -559,6 +562,15 @@
           "reason": {
             "type": "string"
           },
+          "category": {
+            "type": "string"
+          },
+          "level": {
+            "type": "string"
+          },
+          "levelDeadline": {
+            "type": "string"
+          },
           "disputed": {
             "type": "boolean"
           },
@@ -568,10 +580,14 @@
         },
         "required": [
           "id",
+          "ref",
           "intentHash",
           "publicKey",
           "anchorId",
           "reason",
+          "category",
+          "level",
+          "levelDeadline",
           "disputed",
           "createdAt"
         ]
@@ -610,6 +626,30 @@
               "string",
               "null"
             ]
+          },
+          "category": {
+            "type": "string"
+          },
+          "level": {
+            "type": "string"
+          },
+          "levelDeadline": {
+            "type": "string"
+          },
+          "subjectKind": {
+            "type": "string"
+          },
+          "subjectRef": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "appealedAt": {
+            "type": [
+              "string",
+              "null"
+            ]
           }
         },
         "required": [
@@ -620,7 +660,13 @@
           "reason",
           "status",
           "createdAt",
-          "resolvedAt"
+          "resolvedAt",
+          "category",
+          "level",
+          "levelDeadline",
+          "subjectKind",
+          "subjectRef",
+          "appealedAt"
         ]
       },
       "LeaderboardEntry": {
@@ -2485,6 +2531,9 @@
                   },
                   "reason": {
                     "type": "string"
+                  },
+                  "category": {
+                    "type": "string"
                   }
                 },
                 "required": [
@@ -2521,6 +2570,16 @@
           },
           "403": {
             "description": "Signature verification failed",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiError"
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "Conflict: open dispute already exists",
             "content": {
               "application/json": {
                 "schema": {
@@ -3135,8 +3194,13 @@
                     "type": "string",
                     "enum": [
                       "accept",
-                      "reject"
+                      "reject",
+                      "escalate"
                     ]
+                  },
+                  "rationale": {
+                    "type": "string",
+                    "maxLength": 500
                   }
                 },
                 "required": [
@@ -3180,6 +3244,16 @@
           },
           "404": {
             "description": "Dispute not found",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiError"
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "Conflict: dispute not open or cannot escalate",
             "content": {
               "application/json": {
                 "schema": {
