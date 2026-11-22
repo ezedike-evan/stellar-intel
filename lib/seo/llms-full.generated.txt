@@ -961,6 +961,8 @@ the hardening contract (see `lib/api/v1.ts`):
   - [`GET /api/reputation/sdf-export`](#get-apireputationsdf-export)
   - [`GET /api/reputation/{anchor}`](#get-apireputationanchor)
   - [`GET /api/reputation/{anchor}/history`](#get-apireputationanchorhistory)
+  - [`GET /api/v1/slippage-breaches`](#get-apiv1slippage-breaches)
+  - [`GET /api/v1/slippage-breaches/{intentHash}`](#get-apiv1slippage-breachesintenthash)
   - [`GET /v1/public/scores`](#get-v1publicscores)
 - **SEP-10**
   - [`POST /api/sep10/client-domain`](#post-apisep10client-domain)
@@ -1580,6 +1582,55 @@ Returns bucketed outcome history for a specific anchor over a configurable time 
 | `200` | Bucketed history data | `application/json` | `object` |
 | `400` | Validation error | `application/json` | `ApiError` |
 | `404` | Unknown anchor | `application/json` | `ApiError` |
+
+---
+
+### `GET /api/v1/slippage-breaches`
+
+**Summary:** List slippage breaches  
+
+Returns a list of detected slippage breaches, newest first. Excludes sensitive signerAccount, recipient and raw evidence.
+
+#### Parameters
+
+| Name | In | Type | Required | Description |
+| :--- | :--- | :--- | :--- | :--- |
+| `anchorId` | `query` | `string` | No | Filter by anchor identifier |
+| `status` | `query` | `"detected" | "verified" | "rejected"` | No | Filter by breach status |
+| `limit` | `query` | `object` | No | Maximum number of breaches to return (1-500, default 100) |
+
+#### Responses
+
+| Status | Description | Content-Type | Schema |
+| :--- | :--- | :--- | :--- |
+| `200` | List of slippage breaches | `application/json` | `object` |
+| `400` | Validation error | `application/json` | `ApiError` |
+| `429` | Rate limited | `application/json` | `ApiError` |
+| `503` | Store unavailable | `application/json` | `ApiError` |
+
+---
+
+### `GET /api/v1/slippage-breaches/{intentHash}`
+
+**Summary:** Get slippage breach detail  
+
+Returns detailed information about a slippage breach, including full evidence and canonical evidence JSON string for independent SHA-256 verification.
+
+#### Parameters
+
+| Name | In | Type | Required | Description |
+| :--- | :--- | :--- | :--- | :--- |
+| `intentHash` | `path` | `string` | **Yes** | 64-character lowercase hex SHA-256 intent hash |
+
+#### Responses
+
+| Status | Description | Content-Type | Schema |
+| :--- | :--- | :--- | :--- |
+| `200` | Slippage breach detail with evidence | `application/json` | `object` |
+| `400` | Invalid intentHash format | `application/json` | `ApiError` |
+| `404` | Breach not found | `application/json` | `ApiError` |
+| `429` | Rate limited | `application/json` | `ApiError` |
+| `503` | Store unavailable | `application/json` | `ApiError` |
 
 ---
 

@@ -280,6 +280,8 @@ export const OPERATIONS = {
   getCorridorVolumeSavings: 'GET /api/v1/corridors/{corridor}/volume-savings',
   getHealth: 'GET /api/v1/health',
   getVolumeSavings: 'GET /api/v1/corridors/{corridor}/volume-savings',
+  getSlippageBreaches: 'GET /api/v1/slippage-breaches',
+  getSlippageBreach: 'GET /api/v1/slippage-breaches/{intentHash}',
 } as const;
 
 export type OperationName = keyof typeof OPERATIONS;
