@@ -8,6 +8,9 @@ import { getReputationStore, ReputationStoreUnavailableError } from '@/lib/reput
 import { AnchorProfile, type AnchorProfileData } from '@/components/offramp/AnchorProfile';
 import { ScorecardCard } from '@/components/offramp/ScorecardCard';
 import { QuoteGapCard } from '@/components/anchors/QuoteGapCard';
+import { ExecutionSlaCard } from '@/components/anchors/ExecutionSlaCard';
+import { buildExecutionSlaReport } from '@/lib/reputation/execution-sla';
+import { flags } from '@/lib/flags';
 
 const SITE_URL = process.env.NEXT_PUBLIC_SITE_URL ?? 'https://stellar-intel.vercel.app';
 const DEFAULT_TITLE = 'Anchor profile — Stellar Intel';
@@ -101,6 +104,7 @@ export default async function AnchorDetailPage({
     .find((row) => row.oracleTxHash !== null && row.publishedAt !== null);
 
   const quoteGap = computeQuoteGapStats(rows, { windowDays: 30 });
+  const slaReport = flags.executionSla ? buildExecutionSlaReport(rows, anchor.id) : null;
 
   const scorecards = buildScorecards(outcomeRows, Date.now(), lastPublished?.publishedAt ?? null);
 
@@ -156,6 +160,7 @@ export default async function AnchorDetailPage({
         latestOracleTxHash={lastPublished?.oracleTxHash ?? undefined}
       />
       <QuoteGapCard {...quoteGap} />
+      {flags.executionSla && slaReport ? <ExecutionSlaCard report={slaReport} /> : null}
     </div>
   );
 }

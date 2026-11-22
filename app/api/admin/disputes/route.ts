@@ -5,6 +5,7 @@ import { withRequestLogger } from '@/lib/logger';
 import type { ApiError } from '@/types';
 import { enforceRateLimit } from '@/lib/api/response';
 import { getDisputeStore } from '@/lib/reputation/disputes';
+import { emitWebhookEvent } from '@/lib/webhooks/emit';
 
 const ResolveBodySchema = z.object({
   id: z.string().min(1).max(200),
@@ -84,6 +85,14 @@ export async function POST(request: NextRequest): Promise<NextResponse> {
         { status: 404 }
       );
     }
+
+    emitWebhookEvent('dispute.resolved', {
+      disputeId: dispute.id,
+      intentHash: dispute.intentHash,
+      anchorId: dispute.anchorId,
+      status: dispute.status as 'accepted' | 'rejected',
+      resolvedAt: dispute.resolvedAt!,
+    });
 
     logger.info({ event: 'dispute_resolved', disputeId: id, action });
     return NextResponse.json(dispute);

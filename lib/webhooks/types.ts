@@ -3,7 +3,9 @@ export type WebhookEventKind =
   | 'intent.settled'
   | 'intent.failed'
   | 'reputation.event_written'
-  | 'anchor.health_status_changed';
+  | 'anchor.health_status_changed'
+  | 'dispute.opened'
+  | 'dispute.resolved';
 
 export interface WebhookEvent {
   id: string;

@@ -10,6 +10,7 @@ import { enforceRateLimit } from '@/lib/api/response';
 import { checkDurableStore } from '@/lib/api/store-guard';
 import { getReputationStore } from '@/lib/reputation/store';
 import { ANCHORS } from '@/constants/anchors';
+import { emitWebhookEvent } from '@/lib/webhooks/emit';
 
 const DisputeBodySchema = z.object({
   intentHash: z.string().regex(/^[0-9a-f]{64}$/, {
@@ -167,6 +168,13 @@ export async function POST(request: NextRequest): Promise<NextResponse> {
       status: 'open',
       createdAt: record.createdAt,
       resolvedAt: null,
+    });
+
+    emitWebhookEvent('dispute.opened', {
+      disputeId: record.id,
+      intentHash,
+      anchorId,
+      createdAt: record.createdAt,
     });
 
     logger.info({ event: 'dispute_created', disputeId: record.id });

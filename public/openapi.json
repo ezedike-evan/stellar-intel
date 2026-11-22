@@ -788,6 +788,421 @@
           "publisherHealth"
         ]
       },
+      "ExecutionSlaReport": {
+        "type": "object",
+        "properties": {
+          "anchorId": {
+            "type": "string"
+          },
+          "windowDays": {
+            "type": "integer",
+            "exclusiveMinimum": 0
+          },
+          "computedAt": {
+            "type": "string"
+          },
+          "thresholds": {
+            "type": "object",
+            "properties": {
+              "p95Ms": {
+                "type": "number"
+              },
+              "p99Ms": {
+                "type": "number"
+              }
+            },
+            "required": [
+              "p95Ms",
+              "p99Ms"
+            ]
+          },
+          "overall": {
+            "type": "object",
+            "properties": {
+              "sla": {
+                "oneOf": [
+                  {
+                    "type": "object",
+                    "properties": {
+                      "state": {
+                        "type": "string",
+                        "enum": [
+                          "ok"
+                        ]
+                      },
+                      "anchorId": {
+                        "type": "string"
+                      },
+                      "corridor": {
+                        "type": [
+                          "string",
+                          "null"
+                        ]
+                      },
+                      "windowDays": {
+                        "type": "integer",
+                        "exclusiveMinimum": 0
+                      },
+                      "computedAt": {
+                        "type": "string"
+                      },
+                      "sampleSize": {
+                        "type": "integer",
+                        "minimum": 0
+                      },
+                      "terminalTxCount": {
+                        "type": "integer",
+                        "minimum": 0
+                      },
+                      "p50Ms": {
+                        "type": "number"
+                      },
+                      "p95Ms": {
+                        "type": "number"
+                      },
+                      "p99Ms": {
+                        "type": [
+                          "number",
+                          "null"
+                        ]
+                      }
+                    },
+                    "required": [
+                      "state",
+                      "anchorId",
+                      "corridor",
+                      "windowDays",
+                      "computedAt",
+                      "sampleSize",
+                      "terminalTxCount",
+                      "p50Ms",
+                      "p95Ms",
+                      "p99Ms"
+                    ]
+                  },
+                  {
+                    "type": "object",
+                    "properties": {
+                      "state": {
+                        "type": "string",
+                        "enum": [
+                          "insufficient_data"
+                        ]
+                      },
+                      "anchorId": {
+                        "type": "string"
+                      },
+                      "corridor": {
+                        "type": [
+                          "string",
+                          "null"
+                        ]
+                      },
+                      "windowDays": {
+                        "type": "integer",
+                        "exclusiveMinimum": 0
+                      },
+                      "computedAt": {
+                        "type": "string"
+                      },
+                      "sampleSize": {
+                        "type": "integer",
+                        "minimum": 0
+                      },
+                      "terminalTxCount": {
+                        "type": "integer",
+                        "minimum": 0
+                      },
+                      "p50Ms": {
+                        "type": "null"
+                      },
+                      "p95Ms": {
+                        "type": "null"
+                      },
+                      "p99Ms": {
+                        "type": "null"
+                      }
+                    },
+                    "required": [
+                      "state",
+                      "anchorId",
+                      "corridor",
+                      "windowDays",
+                      "computedAt",
+                      "sampleSize",
+                      "terminalTxCount",
+                      "p50Ms",
+                      "p95Ms",
+                      "p99Ms"
+                    ]
+                  }
+                ]
+              },
+              "breach": {
+                "type": "object",
+                "properties": {
+                  "status": {
+                    "type": "string",
+                    "enum": [
+                      "within",
+                      "breach",
+                      "unknown"
+                    ]
+                  },
+                  "breaches": {
+                    "type": "array",
+                    "items": {
+                      "type": "object",
+                      "properties": {
+                        "metric": {
+                          "type": "string",
+                          "enum": [
+                            "p95",
+                            "p99"
+                          ]
+                        },
+                        "observedMs": {
+                          "type": "number"
+                        },
+                        "thresholdMs": {
+                          "type": "number"
+                        }
+                      },
+                      "required": [
+                        "metric",
+                        "observedMs",
+                        "thresholdMs"
+                      ]
+                    }
+                  }
+                },
+                "required": [
+                  "status",
+                  "breaches"
+                ]
+              }
+            },
+            "required": [
+              "sla",
+              "breach"
+            ]
+          },
+          "corridors": {
+            "type": "array",
+            "items": {
+              "type": "object",
+              "properties": {
+                "sla": {
+                  "oneOf": [
+                    {
+                      "type": "object",
+                      "properties": {
+                        "state": {
+                          "type": "string",
+                          "enum": [
+                            "ok"
+                          ]
+                        },
+                        "anchorId": {
+                          "type": "string"
+                        },
+                        "corridor": {
+                          "type": [
+                            "string",
+                            "null"
+                          ]
+                        },
+                        "windowDays": {
+                          "type": "integer",
+                          "exclusiveMinimum": 0
+                        },
+                        "computedAt": {
+                          "type": "string"
+                        },
+                        "sampleSize": {
+                          "type": "integer",
+                          "minimum": 0
+                        },
+                        "terminalTxCount": {
+                          "type": "integer",
+                          "minimum": 0
+                        },
+                        "p50Ms": {
+                          "type": "number"
+                        },
+                        "p95Ms": {
+                          "type": "number"
+                        },
+                        "p99Ms": {
+                          "type": [
+                            "number",
+                            "null"
+                          ]
+                        }
+                      },
+                      "required": [
+                        "state",
+                        "anchorId",
+                        "corridor",
+                        "windowDays",
+                        "computedAt",
+                        "sampleSize",
+                        "terminalTxCount",
+                        "p50Ms",
+                        "p95Ms",
+                        "p99Ms"
+                      ]
+                    },
+                    {
+                      "type": "object",
+                      "properties": {
+                        "state": {
+                          "type": "string",
+                          "enum": [
+                            "insufficient_data"
+                          ]
+                        },
+                        "anchorId": {
+                          "type": "string"
+                        },
+                        "corridor": {
+                          "type": [
+                            "string",
+                            "null"
+                          ]
+                        },
+                        "windowDays": {
+                          "type": "integer",
+                          "exclusiveMinimum": 0
+                        },
+                        "computedAt": {
+                          "type": "string"
+                        },
+                        "sampleSize": {
+                          "type": "integer",
+                          "minimum": 0
+                        },
+                        "terminalTxCount": {
+                          "type": "integer",
+                          "minimum": 0
+                        },
+                        "p50Ms": {
+                          "type": "null"
+                        },
+                        "p95Ms": {
+                          "type": "null"
+                        },
+                        "p99Ms": {
+                          "type": "null"
+                        }
+                      },
+                      "required": [
+                        "state",
+                        "anchorId",
+                        "corridor",
+                        "windowDays",
+                        "computedAt",
+                        "sampleSize",
+                        "terminalTxCount",
+                        "p50Ms",
+                        "p95Ms",
+                        "p99Ms"
+                      ]
+                    }
+                  ]
+                },
+                "breach": {
+                  "type": "object",
+                  "properties": {
+                    "status": {
+                      "type": "string",
+                      "enum": [
+                        "within",
+                        "breach",
+                        "unknown"
+                      ]
+                    },
+                    "breaches": {
+                      "type": "array",
+                      "items": {
+                        "type": "object",
+                        "properties": {
+                          "metric": {
+                            "type": "string",
+                            "enum": [
+                              "p95",
+                              "p99"
+                            ]
+                          },
+                          "observedMs": {
+                            "type": "number"
+                          },
+                          "thresholdMs": {
+                            "type": "number"
+                          }
+                        },
+                        "required": [
+                          "metric",
+                          "observedMs",
+                          "thresholdMs"
+                        ]
+                      }
+                    }
+                  },
+                  "required": [
+                    "status",
+                    "breaches"
+                  ]
+                },
+                "corridor": {
+                  "type": "string"
+                }
+              },
+              "required": [
+                "sla",
+                "breach",
+                "corridor"
+              ]
+            }
+          },
+          "history": {
+            "type": "array",
+            "items": {
+              "type": "object",
+              "properties": {
+                "day": {
+                  "type": "string",
+                  "pattern": "^\\d{4}-\\d{2}-\\d{2}$"
+                },
+                "p95Ms": {
+                  "type": [
+                    "number",
+                    "null"
+                  ]
+                },
+                "sampleSize": {
+                  "type": "integer",
+                  "minimum": 0
+                }
+              },
+              "required": [
+                "day",
+                "p95Ms",
+                "sampleSize"
+              ]
+            }
+          }
+        },
+        "required": [
+          "anchorId",
+          "windowDays",
+          "computedAt",
+          "thresholds",
+          "overall",
+          "corridors",
+          "history"
+        ]
+      },
       "OnrampIntentRequest": {
         "type": "object",
         "properties": {
@@ -2232,6 +2647,81 @@
           },
           "404": {
             "description": "Unknown anchor",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/reputation/{anchor}/sla": {
+      "get": {
+        "summary": "Get anchor execution SLA",
+        "description": "Returns trailing 30-day settlement SLA percentiles (nearest-rank, no trimming) for an anchor, requiring at least 30 completed samples (and 100 for p99), evaluated against breach thresholds.",
+        "tags": [
+          "Reputation"
+        ],
+        "parameters": [
+          {
+            "schema": {
+              "type": "string",
+              "example": "cowrie",
+              "description": "Anchor ID from the registry"
+            },
+            "required": true,
+            "description": "Anchor ID from the registry",
+            "name": "anchor",
+            "in": "path"
+          },
+          {
+            "schema": {
+              "type": "string",
+              "example": "usdc-ngn",
+              "description": "Filter by corridor ID"
+            },
+            "required": false,
+            "description": "Filter by corridor ID",
+            "name": "corridor",
+            "in": "query"
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Execution SLA report",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ExecutionSlaReport"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Validation error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiError"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Unknown anchor",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiError"
+                }
+              }
+            }
+          },
+          "429": {
+            "description": "Rate limited",
             "content": {
               "application/json": {
                 "schema": {

@@ -33,6 +33,16 @@ const EVENTS: { kind: string; description: string; emitted: boolean }[] = [
     description: "An anchor's health status transitions (e.g. healthy to degraded)",
     emitted: false,
   },
+  {
+    kind: 'dispute.opened',
+    description: 'A signed dispute is submitted against an outcome',
+    emitted: true,
+  },
+  {
+    kind: 'dispute.resolved',
+    description: 'An admin accepts or rejects a dispute',
+    emitted: true,
+  },
 ];
 
 export default function WebhooksPage() {
@@ -47,7 +57,7 @@ export default function WebhooksPage() {
 
       <div className="rounded-xl border border-status-unknown/40 bg-bg-sunken p-5 /50">
         <p className="text-sm font-medium text-status-unknown">
-          Status: Rolling out — delivery is live for four of the five event kinds.
+          Status: Rolling out — delivery is live for six of the seven event kinds.
         </p>
         <p className="mt-1 text-sm text-status-unknown">
           <code>anchor.health_status_changed</code> can be subscribed to but is not yet emitted.

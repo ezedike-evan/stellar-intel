@@ -8,6 +8,8 @@ export const WEBHOOK_EVENT_KINDS = [
   'intent.failed',
   'reputation.event_written',
   'anchor.health_status_changed',
+  'dispute.opened',
+  'dispute.resolved',
 ] as const satisfies WebhookEventKind[];
 
 export const WebhookEventKindSchema = z.enum(WEBHOOK_EVENT_KINDS);
