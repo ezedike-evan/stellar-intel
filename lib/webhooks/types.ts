@@ -1,12 +1,9 @@
-export type WebhookEventKind =
-  | 'intent.created'
-  | 'intent.settled'
-  | 'intent.failed'
-  | 'reputation.event_written'
-  | 'anchor.health_status_changed';
+export type { WebhookEventKind, WebhookEventPayloadMap } from '@/types/webhooks';
+import type { WebhookEventKind } from '@/types/webhooks';
 
 export interface WebhookEvent {
   id: string;
+  idempotencyKey: string;
   kind: WebhookEventKind;
   createdAt: string;
   payload: Record<string, unknown>;

@@ -11,6 +11,25 @@ const SUB: WebhookSubscription = {
   createdAt: new Date().toISOString(),
 };
 
+const SAMPLE_CREATED = {
+  intentHash: 'a'.repeat(64),
+  direction: 'offramp' as const,
+  corridorId: 'usdc-ngn',
+  anchorId: 'cowrie',
+  quoteId: 'quote-1',
+  amount: '100',
+  sourceAsset: 'USDC',
+  destinationAsset: 'NGN',
+};
+
+const SAMPLE_SETTLED = {
+  intentHash: 'a'.repeat(64),
+  anchorId: 'cowrie',
+  corridor: 'usdc-ngn',
+  quotedAmount: '100',
+  stellarTransactionId: 'b'.repeat(64),
+};
+
 let store: InMemoryWebhookStore;
 
 // Delivery runs on a detached promise chain; flush the microtask/macrotask
@@ -38,7 +57,7 @@ describe('emitWebhookEvent', () => {
     vi.stubGlobal('fetch', vi.fn().mockResolvedValue({ ok: true, status: 200 }));
     await store.saveSubscription(SUB);
 
-    emitWebhookEvent('intent.created', { intentId: 'i-1' });
+    emitWebhookEvent('intent.created', SAMPLE_CREATED);
     await flush();
 
     const letters = await store.listDeadLetters();
@@ -49,12 +68,12 @@ describe('emitWebhookEvent', () => {
     vi.stubGlobal('fetch', vi.fn().mockRejectedValue(new Error('network down')));
     await store.saveSubscription(SUB);
 
-    expect(() => emitWebhookEvent('intent.created', { intentId: 'i-2' })).not.toThrow();
+    expect(() => emitWebhookEvent('intent.created', SAMPLE_CREATED)).not.toThrow();
     await flush();
   });
 
   it('does not throw outside a request scope', () => {
-    expect(() => emitWebhookEvent('intent.created', { intentId: 'i-3' })).not.toThrow();
+    expect(() => emitWebhookEvent('intent.created', SAMPLE_CREATED)).not.toThrow();
   });
 
   it('delivers the seam a (kind, payload) pair instead of dispatching', async () => {
@@ -64,9 +83,9 @@ describe('emitWebhookEvent', () => {
     });
     vi.stubGlobal('fetch', vi.fn());
 
-    emitWebhookEvent('intent.settled', { intentId: 'i-4' });
+    emitWebhookEvent('intent.settled', SAMPLE_SETTLED);
 
-    expect(seen).toEqual([['intent.settled', { intentId: 'i-4' }]]);
+    expect(seen).toEqual([['intent.settled', SAMPLE_SETTLED]]);
     expect(fetch).not.toHaveBeenCalled();
   });
 });

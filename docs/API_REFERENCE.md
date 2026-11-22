@@ -39,6 +39,7 @@ the hardening contract (see `lib/api/v1.ts`):
 - **Intent**
   - [`POST /api/intent`](#post-apiintent)
   - [`POST /api/intent/offramp`](#post-apiintentofframp)
+  - [`POST /api/intent/status`](#post-apiintentstatus)
   - [`POST /api/v1/intent/offramp`](#post-apiv1intentofframp)
   - [`POST /api/v1/intent/onramp`](#post-apiv1intentonramp)
 - **On-ramp**
@@ -313,6 +314,43 @@ Resolves an anchor route for the given asset corridor, builds an unsigned Stella
 | `400` | Validation error or no route found | `application/json` | `ApiError` |
 | `429` | Rate limited | `application/json` | `ApiError` |
 | `500` | Transaction build failure | `application/json` | `ApiError` |
+
+---
+
+### `POST /api/intent/status`
+
+**Summary:** Observe anchor transaction status  
+
+Observes the current settlement status of a SEP-24 or SEP-6 transaction server-side. Forwards the caller-provided SEP-10 JWT for a single read of the anchor transfer server without storing or logging it. Tracks status transitions to support webhook notifications.
+
+#### Parameters
+
+| Name | In | Type | Required | Description |
+| :--- | :--- | :--- | :--- | :--- |
+| `authorization` | `header` | `string` | **Yes** | Bearer <jwt> containing SEP-10 authentication token |
+
+#### Request Body
+
+**Content-Type:** `application/json`
+
+| Field | Type | Required | Description |
+| :--- | :--- | :--- | :--- |
+| `anchorId` | `string` | **Yes** | Registered anchor ID |
+| `transferServer` | `string` | **Yes** | HTTPS URL of the anchor transfer server |
+| `transactionId` | `string` | **Yes** | Anchor transaction ID |
+| `protocol` | `"sep24" | "sep6"` | **Yes** | Transfer protocol used |
+| `direction` | `"withdraw" | "deposit"` | **Yes** | Transaction direction |
+| `intentHash` | `string` | No | 64-hex canonical intent hash |
+
+#### Responses
+
+| Status | Description | Content-Type | Schema |
+| :--- | :--- | :--- | :--- |
+| `200` | Status observation recorded | `application/json` | `object` |
+| `400` | Validation error or transfer server not allowed | `application/json` | `ApiError` |
+| `401` | Bearer authorization token required | `application/json` | `ApiError` |
+| `429` | Rate limit exceeded | `application/json` | `ApiError` |
+| `502` | Upstream anchor returned an error | `application/json` | `ApiError` |
 
 ---
 

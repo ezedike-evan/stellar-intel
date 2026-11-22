@@ -3,11 +3,15 @@ import { getLogger } from '@/lib/logger';
 import { dispatchEvent } from './dispatch';
 import { makeWebhookEvent } from './events';
 import { getWebhookStore } from './store';
-import type { WebhookEventKind } from './types';
+import type { WebhookEventKind, WebhookEventPayloadMap } from './types';
 
 const logger = getLogger('webhooks');
 
-type WebhookEmitter = (kind: WebhookEventKind, payload: Record<string, unknown>) => void;
+type WebhookEmitter = (
+  kind: WebhookEventKind,
+  payload: Record<string, unknown>,
+  opts?: { idempotencyKey?: string }
+) => void;
 
 let testEmitter: WebhookEmitter | null = null;
 
@@ -24,13 +28,17 @@ export function _setWebhookEmitter(fn: WebhookEmitter | null): void {
  * retry backoff up to 15 s) runs after the response is sent via `after()`,
  * and a delivery failure is logged, never thrown back into the request.
  */
-export function emitWebhookEvent(kind: WebhookEventKind, payload: Record<string, unknown>): void {
+export function emitWebhookEvent<K extends WebhookEventKind>(
+  kind: K,
+  payload: WebhookEventPayloadMap[K],
+  opts?: { idempotencyKey?: string }
+): void {
   if (testEmitter) {
-    testEmitter(kind, payload);
+    testEmitter(kind, payload as unknown as Record<string, unknown>, opts);
     return;
   }
 
-  const event = makeWebhookEvent(kind, payload);
+  const event = makeWebhookEvent(kind, payload as unknown as Record<string, unknown>, opts);
   const task = dispatchEvent(event, getWebhookStore()).catch((err) => {
     logger.warn({ event: 'webhook_dispatch_failed', kind, error: String(err) });
   });

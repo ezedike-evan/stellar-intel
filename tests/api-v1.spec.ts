@@ -140,6 +140,8 @@ describe('POST /api/v1/intent/offramp — intent.created webhook (#1340)', () =>
       {
         kind: 'intent.created',
         payload: {
+          intentHash: expect.stringMatching(/^[0-9a-f]{64}$/),
+          direction: 'offramp',
           corridorId: data.route.corridorId,
           anchorId: data.route.anchorId,
           quoteId: data.quoteId,
@@ -160,12 +162,24 @@ describe('POST /api/v1/intent/offramp — intent.created webhook (#1340)', () =>
     expect(emitted).toEqual([]);
   });
 
-  it('emits nothing on NO_ROUTE', async () => {
+  it('emits intent.rejected on NO_ROUTE', async () => {
     vi.stubEnv('ANCHOR_PAYMENT_ACCOUNTS', JSON.stringify({}));
 
     const res = await POST(postV1(VALID_INTENT));
     expect((await res.json()).error.code).toBe('no_route');
-    expect(emitted).toEqual([]);
+    expect(emitted).toEqual([
+      {
+        kind: 'intent.rejected',
+        payload: {
+          intentHash: expect.stringMatching(/^[0-9a-f]{64}$/),
+          direction: 'offramp',
+          reason: 'no_route',
+          sourceAsset: 'USDC',
+          destinationAsset: 'NGN',
+          amount: '100',
+        },
+      },
+    ]);
   });
 
   it('emits nothing on an idempotent replay', async () => {

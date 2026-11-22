@@ -137,12 +137,31 @@ export function useWithdrawStatus(
     refreshInterval: pollIntervalMs,
     onSuccess(data) {
       setAttemptCount((c) => c + 1);
+      const isStatusChanged = lastStatusRef.current !== data.status;
+      if (isStatusChanged && outcomeContext && transferServer && transactionId && jwt) {
+        void fetch('/api/intent/status', {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+            Authorization: `Bearer ${jwt}`,
+          },
+          body: JSON.stringify({
+            anchorId: outcomeContext.anchorId,
+            transferServer,
+            transactionId,
+            protocol: 'sep24',
+            direction: outcomeContext.direction ?? 'withdraw',
+            intentHash: outcomeContext.intentHash,
+          }),
+        }).catch(() => {});
+      }
       // 0 stops the poll, which is what a terminal state should do.
       if (TERMINAL_STATES.has(data.status)) {
+        lastStatusRef.current = data.status;
         applyPollInterval(0);
         return;
       }
-      if (lastStatusRef.current !== data.status) {
+      if (isStatusChanged) {
         lastStatusRef.current = data.status;
         applyPollInterval(WITHDRAW_POLL_INITIAL_MS);
         return;

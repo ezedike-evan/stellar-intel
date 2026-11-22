@@ -59,6 +59,8 @@ export async function deliverToSubscription(
           'content-type': 'application/json',
           'x-webhook-signature': sigHeader,
           'x-webhook-timestamp': String(timestampSec),
+          'x-webhook-id': event.id,
+          'x-webhook-idempotency-key': event.idempotencyKey,
         },
         body: rawBody,
         redirect: 'manual',

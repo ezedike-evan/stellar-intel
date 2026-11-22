@@ -5,6 +5,7 @@ import { clearIdempotencyStore } from '@/lib/api/v1';
 import { clearRateLimitStore } from '@/lib/api/rate-limit';
 import { hashIntent } from '@/lib/intent/hash';
 import type { OnrampResult } from '@/lib/intent/onramp';
+import { _setWebhookEmitter } from '@/lib/webhooks/emit';
 
 const createOnrampIntent = vi.fn();
 vi.mock('@/lib/intent/onramp', () => ({
@@ -139,5 +140,60 @@ describe('POST /api/v1/intent/onramp (#1474)', () => {
 
     expect(res.status).toBe(status);
     expect(body.error).toMatchObject({ code: envelopeCode, message: 'nope' });
+  });
+
+  describe('intent.created webhook', () => {
+    let emitted: Array<{ kind: string; payload: Record<string, unknown> }>;
+
+    beforeEach(() => {
+      emitted = [];
+      _setWebhookEmitter((kind, payload) => emitted.push({ kind, payload }));
+    });
+
+    afterEach(() => {
+      _setWebhookEmitter(null);
+    });
+
+    it('emits exactly one intent.created on success with direction: onramp, 64-hex intentHash, and no account/memo keys', async () => {
+      const res = await POST(post(INTENT));
+      expect(res.status).toBe(200);
+
+      expect(emitted).toHaveLength(1);
+      expect(emitted[0]).toEqual({
+        kind: 'intent.created',
+        payload: {
+          intentHash: expect.stringMatching(/^[0-9a-f]{64}$/),
+          direction: 'onramp',
+          corridorId: 'usdc-ngn',
+          anchorId: 'anchor-a',
+          quoteId: null,
+          amount: '10000',
+          sourceAsset: 'NGN',
+          destinationAsset: 'USDC',
+        },
+      });
+      expect(emitted[0]?.payload).not.toHaveProperty('account');
+      expect(emitted[0]?.payload).not.toHaveProperty('memo');
+      expect(emitted[0]?.payload).not.toHaveProperty('sender');
+      expect(emitted[0]?.payload).not.toHaveProperty('destination');
+    });
+
+    it('emits nothing on validation error', async () => {
+      const res = await POST(post({ ...INTENT, amount: '-1' }));
+      expect(res.status).toBe(400);
+      expect(emitted).toEqual([]);
+    });
+
+    it('emits nothing on an idempotent replay', async () => {
+      const headers = { 'Idempotency-Key': 'onramp-webhook-key-1' };
+      const first = await POST(post(INTENT, headers));
+      expect(first.status).toBe(200);
+      expect(emitted).toHaveLength(1);
+
+      const replay = await POST(post(INTENT, headers));
+      expect(replay.status).toBe(200);
+      expect(replay.headers.get('Idempotency-Replayed')).toBe('true');
+      expect(emitted).toHaveLength(1);
+    });
   });
 });
