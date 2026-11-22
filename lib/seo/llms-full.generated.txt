@@ -1444,6 +1444,8 @@ The single server-side write path for reputation outcome rows. The body must car
 | `stellarTransactionId` | `object` | No | - |
 | `publicKey` | `string` | **Yes** | The sender account that signed intentHash |
 | `signature` | `string` | **Yes** | Base64 Ed25519 signature by publicKey over intentHash |
+| `minReceive` | `object` | No | Minimum receive floor amount signed in the outcome intent |
+| `outcomeIntent` | `object` | No | The exact outcome intent signed by sender |
 
 #### Responses
 
