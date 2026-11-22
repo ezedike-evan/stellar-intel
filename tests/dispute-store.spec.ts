@@ -109,6 +109,31 @@ describe('InMemoryDisputeStore', () => {
     expect(found.map((d) => d.id)).toEqual(['d2', 'd1']);
   });
 
+  it('opens an appeal on a resolved dispute and transitions to open at appeal level', async () => {
+    await store.create(dispute({ id: 'd-1', status: 'rejected', resolvedAt: '2026-10-05T00:00:00.000Z' }));
+    const appealed = await store.openAppeal('d-1', '2026-10-06T00:00:00.000Z', '2026-10-20T00:00:00.000Z');
+    expect(appealed).not.toBeNull();
+    expect(appealed?.status).toBe('open');
+    expect(appealed?.level).toBe('appeal');
+    expect(appealed?.appealedAt).toBe('2026-10-06T00:00:00.000Z');
+    expect(appealed?.levelDeadline).toBe('2026-10-20T00:00:00.000Z');
+    expect(appealed?.resolvedAt).toBeNull();
+  });
+
+  it('refuses openAppeal when dispute is open or already appealed', async () => {
+    await store.create(dispute({ id: 'd-open', status: 'open' }));
+    expect(await store.openAppeal('d-open', '2026-10-06T00:00:00.000Z', '2026-10-20T00:00:00.000Z')).toBeNull();
+
+    await store.create(
+      dispute({
+        id: 'd-appealed',
+        status: 'rejected',
+        appealedAt: '2026-10-05T00:00:00.000Z',
+      })
+    );
+    expect(await store.openAppeal('d-appealed', '2026-10-06T00:00:00.000Z', '2026-10-20T00:00:00.000Z')).toBeNull();
+  });
+
   it('does not let callers mutate stored state', async () => {
     await store.create(dispute());
     const fetched = await store.get('d-1');
@@ -172,6 +197,27 @@ describe('PostgresDisputeStore', () => {
         const found = rows.get(String(id));
         if (!found || found['status'] !== 'open') return { rows: [] };
         const updated = { ...found, level, level_deadline: levelDeadline };
+        rows.set(String(id), updated);
+        return { rows: [updated] };
+      }
+      if (sql.includes("SET status = 'open', level = 'appeal'")) {
+        const [id, appealedAt, levelDeadline] = params;
+        const found = rows.get(String(id));
+        if (
+          !found ||
+          (found['status'] !== 'accepted' && found['status'] !== 'rejected') ||
+          found['appealed_at'] != null
+        ) {
+          return { rows: [] };
+        }
+        const updated = {
+          ...found,
+          status: 'open',
+          level: 'appeal',
+          appealed_at: appealedAt,
+          level_deadline: levelDeadline,
+          resolved_at: null,
+        };
         rows.set(String(id), updated);
         return { rows: [updated] };
       }
@@ -259,6 +305,26 @@ describe('PostgresDisputeStore', () => {
     const res = await store.escalate('esc-1', 'review', '2026-10-10T00:00:00.000Z');
     expect(res?.level).toBe('review');
     expect(res?.levelDeadline).toBe('2026-10-10T00:00:00.000Z');
+  });
+
+  it('opens appeal in postgres and asserts SQL guards on appealed_at IS NULL', async () => {
+    const store = new PostgresDisputeStore();
+    await store.create(dispute({ id: 'pg-app-1', status: 'rejected', resolvedAt: '2026-10-05T00:00:00.000Z' }));
+
+    const res = await store.openAppeal('pg-app-1', '2026-10-06T00:00:00.000Z', '2026-10-20T00:00:00.000Z');
+    expect(res?.status).toBe('open');
+    expect(res?.level).toBe('appeal');
+    expect(res?.appealedAt).toBe('2026-10-06T00:00:00.000Z');
+    expect(res?.levelDeadline).toBe('2026-10-20T00:00:00.000Z');
+
+    // Find the UPDATE query and verify guards
+    const updateCall = executor.query.mock.calls.find(([sql]) =>
+      String(sql).includes("level = 'appeal'")
+    );
+    expect(updateCall).toBeDefined();
+    const updateSql = String(updateCall?.[0]);
+    expect(updateSql).toContain('appealed_at IS NULL');
+    expect(updateSql).toContain("status IN ('accepted', 'rejected')");
   });
 });
 

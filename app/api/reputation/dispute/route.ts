@@ -231,3 +231,42 @@ export async function POST(request: NextRequest): Promise<NextResponse> {
     return NextResponse.json(record, { status: 201 });
   });
 }
+
+export async function GET(request: NextRequest): Promise<NextResponse> {
+  return withRequestLogger(request, 'api.reputation.dispute.lookup', async () => {
+    const limited = await enforceRateLimit(request, {
+      bucket: 'api.reputation.dispute.lookup',
+      maxRequests: 60,
+    });
+    if (limited) return limited;
+
+    const { searchParams } = new URL(request.url);
+    const intentHash = searchParams.get('intentHash');
+    if (!intentHash || !/^[0-9a-f]{64}$/.test(intentHash)) {
+      return NextResponse.json<ApiError>(
+        {
+          code: 'VALIDATION_ERROR',
+          message: 'intentHash must be a lowercase hex-encoded SHA-256 (64 chars)',
+        },
+        { status: 422 }
+      );
+    }
+
+    const list = await getDisputeStore().findByIntentHash(intentHash);
+    const sorted = [...list].sort(
+      (a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime()
+    );
+
+    const disputes = sorted.map((d) => ({
+      ref: publicDisputeRef(d.id),
+      category: d.category,
+      level: d.level,
+      levelDeadline: d.levelDeadline,
+      status: d.status,
+      createdAt: d.createdAt,
+      resolvedAt: d.resolvedAt,
+    }));
+
+    return NextResponse.json({ disputes }, { status: 200 });
+  });
+}

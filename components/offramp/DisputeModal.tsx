@@ -1,17 +1,13 @@
 'use client';
 
 import { useState } from 'react';
+import Link from 'next/link';
 import type { WithdrawStatusValue } from '@/types';
-
-const DISPUTE_REASONS = [
-  { value: 'wrong_amount', label: 'Wrong amount received' },
-  { value: 'not_received', label: 'Funds not received' },
-  { value: 'delayed', label: 'Unreasonable delay' },
-  { value: 'wrong_account', label: 'Sent to wrong account' },
-  { value: 'other', label: 'Other' },
-] as const;
-
-type DisputeReason = (typeof DISPUTE_REASONS)[number]['value'];
+import {
+  DISPUTE_CATEGORIES,
+  DISPUTE_CATEGORY_LABELS,
+  type DisputeCategory,
+} from '@/lib/reputation/dispute-ladder';
 
 const DISPUTABLE_STATUSES: WithdrawStatusValue[] = ['completed', 'refunded', 'error'];
 
@@ -21,27 +17,29 @@ interface DisputeModalProps {
   onClose: () => void;
   onSubmit: (data: {
     transactionId: string;
-    reason: DisputeReason;
+    category: DisputeCategory;
     notes: string;
-  }) => Promise<void>;
+  }) => Promise<{ ref: string }>;
 }
 
 export function DisputeModal({ transactionId, status, onClose, onSubmit }: DisputeModalProps) {
-  const [reason, setReason] = useState<DisputeReason | ''>('');
+  const [category, setCategory] = useState<DisputeCategory | ''>('');
   const [notes, setNotes] = useState('');
   const [submitting, setSubmitting] = useState(false);
   const [submitted, setSubmitted] = useState(false);
+  const [ref, setRef] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
 
   if (!DISPUTABLE_STATUSES.includes(status)) return null;
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (!reason) return;
+    if (!category) return;
     setSubmitting(true);
     setError(null);
     try {
-      await onSubmit({ transactionId, reason, notes });
+      const result = await onSubmit({ transactionId, category, notes });
+      setRef(result.ref);
       setSubmitted(true);
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Submission failed. Please try again.');
@@ -100,9 +98,16 @@ export function DisputeModal({ transactionId, status, onClose, onSubmit }: Dispu
               </div>
               <p className="text-sm font-medium text-primary-text">Dispute submitted</p>
               <p className="mt-1 text-xs text-fg-muted">
-                Your report has been queued for review. We&apos;ll follow up via your registered
-                contact.
+                Dispute filed. Reference: {ref}
               </p>
+              <div className="mt-2">
+                <Link
+                  href="/disputes"
+                  className="text-xs text-accent underline hover:text-accent"
+                >
+                  Track it on the public dispute log
+                </Link>
+              </div>
               <button
                 onClick={onClose}
                 className="mt-4 rounded-lg bg-accent px-4 py-2 text-sm font-medium text-background hover:opacity-90"
@@ -119,18 +124,18 @@ export function DisputeModal({ transactionId, status, onClose, onSubmit }: Dispu
 
               <div>
                 <label className="mb-1.5 block text-sm font-medium text-secondary-text">
-                  Reason <span className="text-status-down">*</span>
+                  Category <span className="text-status-down">*</span>
                 </label>
                 <select
-                  value={reason}
-                  onChange={(e) => setReason(e.target.value as DisputeReason)}
+                  value={category}
+                  onChange={(e) => setCategory(e.target.value as DisputeCategory)}
                   required
                   className="w-full rounded-lg border border-control-border bg-bg-subtle px-3 py-2 text-sm text-primary-text focus:border-accent focus:outline-none focus:ring-1 focus:ring-accent"
                 >
-                  <option value="">Select a reason…</option>
-                  {DISPUTE_REASONS.map((r) => (
-                    <option key={r.value} value={r.value}>
-                      {r.label}
+                  <option value="">Select a category…</option>
+                  {DISPUTE_CATEGORIES.map((cat) => (
+                    <option key={cat} value={cat}>
+                      {DISPUTE_CATEGORY_LABELS[cat]}
                     </option>
                   ))}
                 </select>
@@ -165,7 +170,7 @@ export function DisputeModal({ transactionId, status, onClose, onSubmit }: Dispu
                 </button>
                 <button
                   type="submit"
-                  disabled={!reason || submitting}
+                  disabled={!category || submitting}
                   className="flex-1 rounded-lg bg-status-down px-4 py-2 text-sm font-medium text-background hover:opacity-90 disabled:cursor-not-allowed disabled:opacity-50"
                 >
                   {submitting ? 'Submitting…' : 'Submit Dispute'}

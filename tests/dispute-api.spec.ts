@@ -1,12 +1,17 @@
 // @vitest-environment node
 import { describe, it, expect, beforeEach, beforeAll, afterEach } from 'vitest';
 import { Keypair } from '@stellar/stellar-sdk';
-import { POST, clearDisputeStores } from '@/app/api/reputation/dispute/route';
+import { POST, GET, clearDisputeStores } from '@/app/api/reputation/dispute/route';
 import { GET as ADMIN_GET, POST as ADMIN_POST } from '@/app/api/admin/disputes/route';
 import { NextRequest } from 'next/server';
 import { InMemoryReputationStore, _setReputationStore } from '@/lib/reputation/store';
 import { toOutcomeLogRow } from '@/lib/reputation/schema';
-import { getAdjudicationLog, _setAdjudicationLog, InMemoryAdjudicationLog } from '@/lib/reputation/adjudication-log';
+import {
+  getAdjudicationLog,
+  _setAdjudicationLog,
+  InMemoryAdjudicationLog,
+  publicDisputeRef,
+} from '@/lib/reputation/adjudication-log';
 
 // ─── Helpers ──────────────────────────────────────────────────────────────────
 
@@ -394,5 +399,76 @@ describe('disputes filed via the public route reach the admin queue (#1356)', ()
   it('answers 404 when resolving an id that was never filed', async () => {
     const res = await ADMIN_POST(adminRequest('POST', { id: 'nope', action: 'reject' }));
     expect(res.status).toBe(404);
+  });
+});
+
+describe('GET /api/reputation/dispute — lookup by intentHash (#2136)', () => {
+  const intentHash = makeIntentHash();
+  let signer: Keypair;
+
+  beforeAll(() => {
+    signer = Keypair.random();
+  });
+
+  beforeEach(async () => {
+    clearDisputeStores();
+    await seedOutcome(signer, intentHash);
+  });
+
+  it('returns 422 for a malformed intentHash', async () => {
+    const req = new NextRequest('http://localhost/api/reputation/dispute?intentHash=not-a-hash');
+    const res = await GET(req);
+    expect(res.status).toBe(422);
+    expect((await res.json()).code).toBe('VALIDATION_ERROR');
+  });
+
+  it('returns empty array when no dispute exists for intentHash', async () => {
+    const req = new NextRequest(
+      `http://localhost/api/reputation/dispute?intentHash=${'f'.repeat(64)}`
+    );
+    const res = await GET(req);
+    expect(res.status).toBe(200);
+    expect(await res.json()).toEqual({ disputes: [] });
+  });
+
+  it('returns one item with ref, without id, publicKey, reason, or subjectRef', async () => {
+    const fileRes = await POST(
+      makeRequest({
+        intentHash,
+        publicKey: signer.publicKey(),
+        signature: signHash(signer, intentHash),
+        anchorId: 'moneygram',
+        reason: 'Super secret private reason',
+        category: 'delayed',
+      })
+    );
+    expect(fileRes.status).toBe(201);
+    const filed = await fileRes.json();
+
+    const req = new NextRequest(
+      `http://localhost/api/reputation/dispute?intentHash=${intentHash}`
+    );
+    const res = await GET(req);
+    expect(res.status).toBe(200);
+    const body = await res.json();
+    expect(body.disputes).toHaveLength(1);
+
+    const dispute = body.disputes[0];
+    expect(dispute.ref).toBe(publicDisputeRef(filed.id));
+    expect(dispute.category).toBe('delayed');
+    expect(dispute.level).toBe('anchor');
+    expect(dispute.status).toBe('open');
+    expect(dispute.createdAt).toBeDefined();
+
+    // Verify sensitive/internal fields are NOT present in JSON
+    expect(dispute.id).toBeUndefined();
+    expect(dispute.publicKey).toBeUndefined();
+    expect(dispute.reason).toBeUndefined();
+    expect(dispute.subjectRef).toBeUndefined();
+
+    const jsonStr = JSON.stringify(dispute);
+    expect(jsonStr).not.toContain('Super secret private reason');
+    expect(jsonStr).not.toContain(signer.publicKey());
+    expect(jsonStr).not.toContain(filed.id);
   });
 });

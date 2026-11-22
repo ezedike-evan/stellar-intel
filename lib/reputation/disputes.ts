@@ -47,6 +47,8 @@ export interface DisputeStore {
   resolve(id: string, status: 'accepted' | 'rejected', resolvedAt: string): Promise<Dispute | null>;
   /** Escalates a dispute to the given level; null when id unknown or not open. */
   escalate(id: string, level: DisputeLevel, levelDeadline: string): Promise<Dispute | null>;
+  /** Opens an appeal for an accepted or rejected dispute; null when not resolved or already appealed. */
+  openAppeal(id: string, appealedAt: string, levelDeadline: string): Promise<Dispute | null>;
   /** Finds all disputes for an intent hash, newest first. */
   findByIntentHash(intentHash: string): Promise<Dispute[]>;
   /** Finds all disputes for a given subject kind and reference, newest first. */
@@ -93,6 +95,31 @@ export class InMemoryDisputeStore implements DisputeStore {
     const found = this.disputes.get(id);
     if (!found || found.status !== 'open') return null;
     const updated: Dispute = { ...found, level, levelDeadline };
+    this.disputes.set(id, updated);
+    return { ...updated };
+  }
+
+  async openAppeal(
+    id: string,
+    appealedAt: string,
+    levelDeadline: string
+  ): Promise<Dispute | null> {
+    const found = this.disputes.get(id);
+    if (
+      !found ||
+      (found.status !== 'accepted' && found.status !== 'rejected') ||
+      found.appealedAt !== null
+    ) {
+      return null;
+    }
+    const updated: Dispute = {
+      ...found,
+      status: 'open',
+      level: 'appeal',
+      appealedAt,
+      levelDeadline,
+      resolvedAt: null,
+    };
     this.disputes.set(id, updated);
     return { ...updated };
   }
@@ -258,6 +285,22 @@ export class PostgresDisputeStore implements DisputeStore {
     const { rows } = await getSqlExecutor().query(
       'UPDATE disputes SET level = $2, level_deadline = $3 WHERE id = $1 AND status = $4 RETURNING *',
       [id, level, levelDeadline, 'open']
+    );
+    return rows[0] ? toDispute(rows[0]) : null;
+  }
+
+  async openAppeal(
+    id: string,
+    appealedAt: string,
+    levelDeadline: string
+  ): Promise<Dispute | null> {
+    await ensureSchema();
+    const { rows } = await getSqlExecutor().query(
+      `UPDATE disputes
+       SET status = 'open', level = 'appeal', appealed_at = $2, level_deadline = $3, resolved_at = NULL
+       WHERE id = $1 AND status IN ('accepted', 'rejected') AND appealed_at IS NULL
+       RETURNING *`,
+      [id, appealedAt, levelDeadline]
     );
     return rows[0] ? toDispute(rows[0]) : null;
   }

@@ -51,7 +51,9 @@ the hardening contract (see `lib/api/v1.ts`):
 - **Reputation**
   - [`GET /api/reputation/actuarial`](#get-apireputationactuarial)
   - [`POST /api/reputation/append`](#post-apireputationappend)
+  - [`GET /api/reputation/dispute`](#get-apireputationdispute)
   - [`POST /api/reputation/dispute`](#post-apireputationdispute)
+  - [`POST /api/reputation/dispute/appeal`](#post-apireputationdisputeappeal)
   - [`GET /api/reputation/leaderboard`](#get-apireputationleaderboard)
   - [`GET /api/reputation/probe-coverage`](#get-apireputationprobe-coverage)
   - [`GET /api/reputation/sdf-export`](#get-apireputationsdf-export)
@@ -555,6 +557,28 @@ The single server-side write path for reputation outcome rows. The body must car
 
 ---
 
+### `GET /api/reputation/dispute`
+
+**Summary:** Look up disputes for an intent  
+
+Retrieves public dispute summaries for a given off-ramp intent hash. Returns newest first. Never includes personal data.
+
+#### Parameters
+
+| Name | In | Type | Required | Description |
+| :--- | :--- | :--- | :--- | :--- |
+| `intentHash` | `query` | `string` | **Yes** | Lowercase hex-encoded SHA-256 intent hash (64 chars) |
+
+#### Responses
+
+| Status | Description | Content-Type | Schema |
+| :--- | :--- | :--- | :--- |
+| `200` | List of disputes for the intent | `application/json` | `object` |
+| `422` | Invalid intentHash format | `application/json` | `ApiError` |
+| `429` | Rate limited | `application/json` | `ApiError` |
+
+---
+
 ### `POST /api/reputation/dispute`
 
 **Summary:** Submit a reputation dispute  
@@ -584,6 +608,38 @@ Submits a dispute against an intent outcome. The request must be Ed25519-signed 
 | `409` | Conflict: open dispute already exists | `application/json` | `ApiError` |
 | `422` | Validation error | `application/json` | `ApiError` |
 | `429` | Rate limited (10/24h) | `application/json` | `ApiError` |
+
+---
+
+### `POST /api/reputation/dispute/appeal`
+
+**Summary:** Appeal a resolved dispute  
+
+Appeals a resolved dispute (accepted or rejected) within the 14-day window. Must be signed by the original filer.
+
+#### Request Body
+
+**Content-Type:** `application/json`
+
+| Field | Type | Required | Description |
+| :--- | :--- | :--- | :--- |
+| `intentHash` | `string` | **Yes** | - |
+| `publicKey` | `string` | **Yes** | - |
+| `signature` | `string` | **Yes** | - |
+| `ref` | `string` | **Yes** | - |
+
+#### Responses
+
+| Status | Description | Content-Type | Schema |
+| :--- | :--- | :--- | :--- |
+| `200` | Appeal accepted and dispute reopened at appeal level | `application/json` | `object` |
+| `400` | Invalid request body | `application/json` | `ApiError` |
+| `403` | Invalid signature or caller is not original filer | `application/json` | `ApiError` |
+| `404` | Dispute not found | `application/json` | `ApiError` |
+| `409` | Dispute not resolved or already appealed | `application/json` | `ApiError` |
+| `410` | Appeal window closed (past 14 days) | `application/json` | `ApiError` |
+| `422` | Validation error | `application/json` | `ApiError` |
+| `429` | Rate limited | `application/json` | `ApiError` |
 
 ---
 
