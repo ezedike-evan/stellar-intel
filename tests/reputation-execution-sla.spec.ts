@@ -2,9 +2,9 @@ import { describe, it, expect } from 'vitest';
 import {
   computeExecutionSla,
   computeExecutionSlaByCorridor,
+  type ExecutionSla,
   ExecutionSlaSchema,
   SLA_MIN_SAMPLES,
-  SLA_P99_MIN_SAMPLES,
   SLA_WINDOW_DAYS,
   settleSamplesMs,
 } from '@/lib/reputation/execution-sla';
@@ -15,6 +15,11 @@ const DAY_MS = 86_400_000;
 
 function createdAt(offsetMs: number): string {
   return new Date(NOW + offsetMs).toISOString();
+}
+
+function expectOk(sla: ExecutionSla): Extract<ExecutionSla, { state: 'ok' }> {
+  if (sla.state !== 'ok') throw new Error(`expected ok, got ${sla.state}`);
+  return sla;
 }
 
 /** Rows with `settleSeconds` values drawn from `seconds(i)`, all in-window. */
@@ -45,15 +50,26 @@ describe('computeExecutionSla', () => {
     expect('p50Ms' in result).toBe(false);
   });
 
-  it('computes p50 and p95 with nearest rank and withholds p99 under 100 samples', () => {
+  it('reports insufficient_data for an empty window even when minSamples is 0', () => {
     const result = computeExecutionSla(
-      rowsWith(30, (index) => index + 1),
+      [],
       { anchorId: 'moneygram' },
-      { nowMs: NOW }
+      { nowMs: NOW, minSamples: 0 }
     );
 
-    expect(result.state).toBe('ok');
-    if (result.state !== 'ok') throw new Error('unreachable');
+    expect(result.state).toBe('insufficient_data');
+    expect(result.sampleSize).toBe(0);
+  });
+
+  it('computes p50 and p95 with nearest rank and withholds p99 under 100 samples', () => {
+    const result = expectOk(
+      computeExecutionSla(
+        rowsWith(30, (index) => index + 1),
+        { anchorId: 'moneygram' },
+        { nowMs: NOW }
+      )
+    );
+
     expect(result.sampleSize).toBe(30);
     expect(result.p50Ms).toBe(15_000);
     expect(result.p95Ms).toBe(29_000);
@@ -61,18 +77,17 @@ describe('computeExecutionSla', () => {
   });
 
   it('computes p50/p95/p99 from 100 samples', () => {
-    const result = computeExecutionSla(
-      rowsWith(100, (index) => index + 1),
-      { anchorId: 'moneygram' },
-      { nowMs: NOW }
+    const result = expectOk(
+      computeExecutionSla(
+        rowsWith(100, (index) => index + 1),
+        { anchorId: 'moneygram' },
+        { nowMs: NOW }
+      )
     );
 
-    expect(result.state).toBe('ok');
-    if (result.state !== 'ok') throw new Error('unreachable');
     expect(result.p50Ms).toBe(50_000);
     expect(result.p95Ms).toBe(95_000);
     expect(result.p99Ms).toBe(99_000);
-    expect(SLA_P99_MIN_SAMPLES).toBe(100);
   });
 
   it('does not trim the slow tail', () => {
@@ -90,10 +105,8 @@ describe('computeExecutionSla', () => {
       }),
     ];
 
-    const result = computeExecutionSla(slow, { anchorId: 'moneygram' }, { nowMs: NOW });
+    const result = expectOk(computeExecutionSla(slow, { anchorId: 'moneygram' }, { nowMs: NOW }));
 
-    expect(result.state).toBe('ok');
-    if (result.state !== 'ok') throw new Error('unreachable');
     expect(result.sampleSize).toBe(100);
     expect(result.p99Ms).toBe(86_400_000);
   });

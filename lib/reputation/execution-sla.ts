@@ -135,7 +135,9 @@ export function computeExecutionSla(
     computedAt: new Date(nowMs).toISOString(),
   };
 
-  if (samplesMs.length < minSamples) {
+  // The empty check keeps `minSamples: 0` from producing an `ok` state whose
+  // percentiles have no sample to read.
+  if (samplesMs.length === 0 || samplesMs.length < minSamples) {
     return { ...base, state: 'insufficient_data' };
   }
 
@@ -167,36 +169,28 @@ export function computeExecutionSlaByCorridor(
 
   const sharedOptions: ExecutionSlaOptions = { ...options, nowMs };
 
-  return [...corridors]
-    .sort((a, b) => (a < b ? -1 : a > b ? 1 : 0))
-    .map((corridor) => ({
-      corridor,
-      sla: computeExecutionSla(rows, { anchorId, corridor }, sharedOptions),
-    }));
+  return [...corridors].sort().map((corridor) => ({
+    corridor,
+    sla: computeExecutionSla(rows, { anchorId, corridor }, sharedOptions),
+  }));
 }
 
+const executionSlaBaseSchema = z.object({
+  windowDays: z.number(),
+  windowStart: z.string(),
+  windowEnd: z.string(),
+  sampleSize: z.number().int().nonnegative(),
+  terminalCount: z.number().int().nonnegative(),
+  minSamples: z.number().int().nonnegative(),
+  computedAt: z.string(),
+});
+
 export const ExecutionSlaSchema = z.discriminatedUnion('state', [
-  z.object({
+  executionSlaBaseSchema.extend({
     state: z.literal('ok'),
-    windowDays: z.number(),
-    windowStart: z.string(),
-    windowEnd: z.string(),
-    sampleSize: z.number().int().nonnegative(),
-    terminalCount: z.number().int().nonnegative(),
-    minSamples: z.number().int().nonnegative(),
-    computedAt: z.string(),
     p50Ms: z.number(),
     p95Ms: z.number(),
     p99Ms: z.number().nullable(),
   }),
-  z.object({
-    state: z.literal('insufficient_data'),
-    windowDays: z.number(),
-    windowStart: z.string(),
-    windowEnd: z.string(),
-    sampleSize: z.number().int().nonnegative(),
-    terminalCount: z.number().int().nonnegative(),
-    minSamples: z.number().int().nonnegative(),
-    computedAt: z.string(),
-  }),
+  executionSlaBaseSchema.extend({ state: z.literal('insufficient_data') }),
 ]);
