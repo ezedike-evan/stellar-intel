@@ -9,6 +9,8 @@ import {
 } from './idempotency';
 import { API_VERSION } from './response';
 import { getLogger } from '@/lib/logger';
+import { resolveCaller, type Caller } from '@/lib/auth/caller';
+import { limitForTier } from './rate-limit-tiers';
 
 /**
  * lib/api/v1.ts
@@ -97,6 +99,7 @@ export async function storeIdempotentResponse(
 export interface V1Context {
   requestId: string;
   ip: string;
+  caller: Caller;
   /** Build a standard-envelope error result from inside a handler. */
   error(code: string, message: string, status: number): V1HandlerResult;
 }
@@ -135,8 +138,33 @@ export async function withV1(
   const requestId = request.headers.get('x-request-id') ?? globalThis.crypto.randomUUID();
   const ip = getClientIp(request.headers);
 
-  const rl = await checkRateLimit(ip, { bucket: options.bucket, maxRequests: options.maxRequests });
-  const baseHeaders = { 'X-Request-Id': requestId, ...rateLimitHeaders(options.maxRequests, rl) };
+  const resolution = await resolveCaller(request.headers);
+  if (!resolution.ok) {
+    const invalidRl = await checkRateLimit(ip, { bucket: 'auth.invalid', maxRequests: 30 });
+    const invalidHeaders = {
+      'X-Request-Id': requestId,
+      ...rateLimitHeaders(30, invalidRl),
+    };
+    if (!invalidRl.allowed) {
+      return v1Error('rate_limited', 'Too many requests', requestId, 429, invalidHeaders);
+    }
+    return v1Error(resolution.code, resolution.message, requestId, 401, {
+      ...invalidHeaders,
+      'WWW-Authenticate': 'Bearer realm="stellar-intel", error="invalid_token"',
+    });
+  }
+
+  const caller = resolution.caller;
+  const limit = limitForTier(options.maxRequests, caller.tier);
+  const rl = await checkRateLimit(caller.rateLimitKey, {
+    bucket: options.bucket,
+    maxRequests: limit,
+  });
+  const baseHeaders = {
+    'X-Request-Id': requestId,
+    'X-Caller-Tier': caller.tier,
+    ...rateLimitHeaders(limit, rl),
+  };
 
   if (!rl.allowed) {
     return v1Error('rate_limited', 'Too many requests', requestId, 429, baseHeaders);
@@ -157,6 +185,7 @@ export async function withV1(
   const ctx: V1Context = {
     requestId,
     ip,
+    caller,
     error: (code, message, status) => ({
       status,
       body: { error: { code, message, requestId } },

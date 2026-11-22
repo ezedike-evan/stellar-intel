@@ -34,6 +34,8 @@ import { quotedAllInRate } from '@/lib/stellar/realized-rate';
 import type { Intent } from '@/lib/intent/hash';
 import type { AnchorRate } from '@/types';
 import { MIN_RECEIVE_TOLERANCE } from '@/lib/rate-ranking';
+import { flags } from '@/lib/flags';
+import { RefundAckCard } from '@/components/refunds/RefundAckCard';
 
 // Not needed until the user picks a rate to execute — split into its own
 // chunk so it doesn't pad the initial /offramp bundle.
@@ -388,6 +390,21 @@ function OfframpContent() {
           onAdjust={handleOffRampAnother}
         />
       )}
+
+      {flags.refundGuarantees &&
+        outcomeContext &&
+        trackingTransactionId &&
+        (withdrawStatus.status === 'refunded' ||
+          withdrawStatus.status === 'error' ||
+          withdrawStatus.status === 'expired') && (
+          <RefundAckCard
+            intentHash={outcomeContext.intentHash}
+            anchorId={outcomeContext.anchorId}
+            account={outcomeContext.publicKey}
+            refunds={withdrawStatus.refunds}
+            assetLabel="USDC"
+          />
+        )}
 
       <ExecuteDrawer
         rate={selectedRate}

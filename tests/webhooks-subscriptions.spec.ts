@@ -145,14 +145,14 @@ describe('GET /api/webhooks/subscriptions', () => {
     expect(res.status).toBe(403);
   });
 
-  it('rate-limits the list: the 31st GET in a window is 429, even with a wrong admin key', async () => {
+  it('rate-limits the list: the 11th GET in a window is 429, even with a wrong admin key', async () => {
     const guess = () =>
       new NextRequest('http://localhost/api/webhooks/subscriptions', {
         method: 'GET',
         headers: { 'x-admin-key': 'a-wrong-guess', 'x-forwarded-for': '198.51.100.40' },
       });
 
-    for (let i = 0; i < 30; i += 1) {
+    for (let i = 0; i < 10; i += 1) {
       expect((await GET(guess())).status).toBe(403);
     }
     const throttled = await GET(guess());

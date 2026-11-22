@@ -952,6 +952,9 @@ the hardening contract (see `lib/api/v1.ts`):
   - [`GET /api/rates/{corridor}`](#get-apiratescorridor)
   - [`GET /api/snapshot`](#get-apisnapshot)
   - [`GET /api/v1/corridors/{corridor}/volume-savings`](#get-apiv1corridorscorridorvolume-savings)
+- **Refunds**
+  - [`POST /api/refunds/ack`](#post-apirefundsack)
+  - [`GET /api/refunds/{intentHash}`](#get-apirefundsintenthash)
 - **Reputation**
   - [`GET /api/reputation/actuarial`](#get-apireputationactuarial)
   - [`POST /api/reputation/append`](#post-apireputationappend)
@@ -1403,6 +1406,60 @@ Reads the on-chain volume/savings oracle for one corridor: cumulative USDC route
 
 ---
 
+## Refunds
+
+### `POST /api/refunds/ack`
+
+**Summary:** Record user-signed refund acknowledgement  
+
+Secured write route to record a user-signed refund acknowledgement for an owed or refunded case. The server validates that only the original transfer signer can acknowledge, verifies the cryptographic signature over the canonical payload hash, and confirms the refunded amount does not exceed the paid amount.
+
+#### Request Body
+
+**Content-Type:** `application/json`
+
+| Field | Type | Required | Description |
+| :--- | :--- | :--- | :--- |
+| `ack` | `RefundAckPayload` | **Yes** | - |
+| `signature` | `string` | **Yes** | Cryptographic signature over the canonical refund-ack payload hash |
+
+#### Responses
+
+| Status | Description | Content-Type | Schema |
+| :--- | :--- | :--- | :--- |
+| `200` | Refund acknowledgement recorded | `application/json` | `RefundAckResponse` |
+| `400` | Invalid JSON | `application/json` | `ApiError` |
+| `401` | Missing or invalid credentials | `application/json` | `ApiError` |
+| `403` | Signer mismatch | `application/json` | `ApiError` |
+| `404` | No refund case found | `application/json` | `ApiError` |
+| `409` | Case already acknowledged | `application/json` | `ApiError` |
+| `422` | Validation error | `application/json` | `ApiError` |
+| `429` | Rate limited | `application/json` | `ApiError` |
+
+---
+
+### `GET /api/refunds/{intentHash}`
+
+**Summary:** Look up tracked refunds for an intent  
+
+Returns all non-sensitive refund cases tracked for the given intentHash.
+
+#### Parameters
+
+| Name | In | Type | Required | Description |
+| :--- | :--- | :--- | :--- | :--- |
+| `intentHash` | `path` | `string` | **Yes** | 64-character lowercase hex intent hash |
+
+#### Responses
+
+| Status | Description | Content-Type | Schema |
+| :--- | :--- | :--- | :--- |
+| `200` | Refund cases for this intent (oldest first) | `application/json` | `object` |
+| `400` | Invalid intentHash format | `application/json` | `ApiError` |
+| `429` | Rate limited | `application/json` | `ApiError` |
+
+---
+
 ## Reputation
 
 ### `GET /api/reputation/actuarial`
@@ -1444,6 +1501,8 @@ The single server-side write path for reputation outcome rows. The body must car
 | `stellarTransactionId` | `object` | No | - |
 | `publicKey` | `string` | **Yes** | The sender account that signed intentHash |
 | `signature` | `string` | **Yes** | Base64 Ed25519 signature by publicKey over intentHash |
+| `minReceive` | `object` | No | Minimum receive floor amount signed in the outcome intent |
+| `outcomeIntent` | `object` | No | The exact outcome intent signed by sender |
 
 #### Responses
 
