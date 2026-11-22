@@ -48,6 +48,8 @@ the hardening contract (see `lib/api/v1.ts`):
   - [`GET /api/rates/{corridor}`](#get-apiratescorridor)
   - [`GET /api/snapshot`](#get-apisnapshot)
   - [`GET /api/v1/corridors/{corridor}/volume-savings`](#get-apiv1corridorscorridorvolume-savings)
+- **Recurring**
+  - [`POST /api/recurring/{id}/control`](#post-apirecurringidcontrol)
 - **Reputation**
   - [`GET /api/reputation/actuarial`](#get-apireputationactuarial)
   - [`POST /api/reputation/append`](#post-apireputationappend)
@@ -503,6 +505,45 @@ Reads the on-chain volume/savings oracle for one corridor: cumulative USDC route
 | `400` | Invalid corridor ID | `application/json` | `ApiError` |
 | `429` | Rate limited | `application/json` | `ApiError` |
 | `500` | Oracle read failed | `application/json` | `ApiError` |
+
+---
+
+## Recurring
+
+### `POST /api/recurring/{id}/control`
+
+**Summary:** Pause, resume or cancel a standing authorization  
+
+Applies a signed control message with replay protection to a standing authorization.
+
+#### Parameters
+
+| Name | In | Type | Required | Description |
+| :--- | :--- | :--- | :--- | :--- |
+| `id` | `path` | `string` | **Yes** | Standing authorization ID (UUID) |
+
+#### Request Body
+
+**Content-Type:** `application/json`
+
+| Field | Type | Required | Description |
+| :--- | :--- | :--- | :--- |
+| `control` | `RecurringControl` | **Yes** | - |
+| `signature` | `string` | **Yes** | - |
+| `publicKey` | `string` | **Yes** | - |
+
+#### Responses
+
+| Status | Description | Content-Type | Schema |
+| :--- | :--- | :--- | :--- |
+| `200` | Control action applied | `application/json` | `RecurringControlResponse` |
+| `400` | Validation error | `application/json` | `ApiError` |
+| `401` | Missing or invalid credentials | `application/json` | `ApiError` |
+| `403` | Forbidden - signer or terms mismatch | `application/json` | `ApiError` |
+| `404` | Not found or standing authorization not found | `application/json` | `ApiError` |
+| `409` | Invalid transition or replay detected | `application/json` | `ApiError` |
+| `410` | Deadline expired | `application/json` | `ApiError` |
+| `429` | Rate limited | `application/json` | `ApiError` |
 
 ---
 

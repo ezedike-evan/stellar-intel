@@ -19,22 +19,27 @@ import { RateTable } from '@/components/offramp/RateTable';
 import { RateTableHeader } from '@/components/offramp/RateTableHeader';
 import { StatusTracker } from '@/components/offramp/StatusTracker';
 import { DisclaimerBanner } from '@/components/offramp/DisclaimerBanner';
+import { TemplatePicker } from '@/components/templates/TemplatePicker';
+import { TemplateManager } from '@/components/templates/TemplateManager';
+import { SaveTemplateForm } from '@/components/templates/SaveTemplateForm';
 import { TrustBar } from '@/components/offramp/TrustBar';
 import { ErrorBoundary } from '@/components/ui/ErrorBoundary';
 import { useAnchorRates, RATES_REFRESH_INTERVAL_MS } from '@/hooks/useAnchorRates';
 import { useCountdown } from '@/hooks/useCountdown';
 import { useWallet } from '@/contexts/WalletContext';
+import { useIntentTemplates } from '@/hooks/useIntentTemplates';
 import { useWithdrawStatus, type OutcomeAppendContext } from '@/hooks/useWithdrawStatus';
 import { useWalletBalance } from '@/hooks/useWalletBalance';
-import { amountBucket, FUNNEL_EVENTS, trackFunnelEvent } from '@/lib/analytics';
+import { amountBucket, FUNNEL_EVENTS, TEMPLATE_EVENTS, trackFunnelEvent } from '@/lib/analytics';
+import { flags } from '@/lib/flags';
 import { VISIBLE_CORRIDORS } from '@/constants/anchors';
 import { getCorridorAsset, getCorridorById } from '@/lib/stellar/anchors';
 import { signIntent } from '@/lib/intent/sign';
 import { quotedAllInRate } from '@/lib/stellar/realized-rate';
 import type { Intent } from '@/lib/intent/hash';
+import type { IntentTemplate, IntentTemplateDraft } from '@/lib/templates/schema';
 import type { AnchorRate } from '@/types';
 import { MIN_RECEIVE_TOLERANCE } from '@/lib/rate-ranking';
-import { flags } from '@/lib/flags';
 import { submitDispute } from '@/lib/reputation/dispute-client';
 import { DisputeModal } from '@/components/offramp/DisputeModal';
 import { DisputeStatusBadge } from '@/components/offramp/DisputeStatusBadge';
@@ -88,6 +93,31 @@ function OfframpContent() {
   const [outcomeContext, setOutcomeContext] = useState<OutcomeAppendContext | null>(null);
 
   const { isConnected, publicKey, network } = useWallet();
+
+  const templatesEnabled =
+    flags.intentTemplates && isConnected && !!publicKey && !trackingTransactionId;
+  const templatesApi = useIntentTemplates(
+    flags.intentTemplates && isConnected ? publicKey : null,
+    'offramp'
+  );
+  const [managerOpen, setManagerOpen] = useState(false);
+  const manageButtonRef = useRef<HTMLButtonElement>(null);
+  const [templateDraft, setTemplateDraft] = useState<IntentTemplateDraft | null>(null);
+
+  const handleApplyTemplate = useCallback(
+    (t: IntentTemplate) => {
+      if (t.direction !== 'offramp' || !VALID_CORRIDOR_IDS.has(t.corridorId)) return;
+      setCorridorId(t.corridorId);
+      setAmount(t.amount);
+      templatesApi.markUsed(t.id);
+      trackFunnelEvent(TEMPLATE_EVENTS.templateApplied, {
+        direction: 'offramp',
+        corridor: t.corridorId,
+        amount_bucket: amountBucket(t.amount),
+      });
+    },
+    [templatesApi, setCorridorId, setAmount]
+  );
   const { rates, anchorErrors, isLoading, error, mutate, refreshInflight, lastFetchedAt } =
     useAnchorRates(corridorId, amount);
   const { secondsRemaining, elapsedSeconds, prefersReducedMotion, progress, totalSeconds } =
@@ -178,6 +208,15 @@ function OfframpContent() {
       setTrackingNonce(nonce);
       setTrackingAnchorHomeDomain(anchorHomeDomain);
 
+      if (selectedRate) {
+        setTemplateDraft({
+          direction: 'offramp',
+          corridorId: selectedRate.corridorId,
+          amount,
+          anchorId: selectedRate.anchorId,
+        });
+      }
+
       // Capture the quote so the terminal outcome of this real transaction is
       // logged to the reputation store (#799). A null exchangeRate can't be
       // quoted so it's skipped (the user can't execute against an unreachable
@@ -252,6 +291,7 @@ function OfframpContent() {
     setTrackingNonce(null);
     setTrackingAnchorHomeDomain(null);
     setOutcomeContext(null);
+    setTemplateDraft(null);
     rateTableRef.current?.scrollIntoView({ behavior: 'smooth', block: 'start' });
   }, []);
 
@@ -301,6 +341,26 @@ function OfframpContent() {
       </div>
 
       <DisclaimerBanner />
+
+      {templatesEnabled && (
+        <>
+          <TemplatePicker
+            templates={templatesApi.templates}
+            visibleCorridorIds={VALID_CORRIDOR_IDS}
+            onApply={handleApplyTemplate}
+            onManage={() => setManagerOpen(true)}
+            manageButtonRef={manageButtonRef}
+          />
+          <TemplateManager
+            open={managerOpen}
+            onClose={() => {
+              setManagerOpen(false);
+              manageButtonRef.current?.focus();
+            }}
+            api={templatesApi}
+          />
+        </>
+      )}
 
       <div className="grid grid-cols-1 gap-4 rounded-xl border border-border bg-bg-sunken p-4 /50 sm:grid-cols-3">
         <AssetSelector
@@ -402,7 +462,7 @@ function OfframpContent() {
         </>
       )}
 
-      {disputeOpen &&
+{disputeOpen &&
         flags.disputeLadder &&
         outcomeContext &&
         withdrawStatus.status &&
@@ -421,6 +481,17 @@ function OfframpContent() {
                 notes,
               });
             }}
+          />
+        )}
+
+      {flags.intentTemplates &&
+        publicKey &&
+        templateDraft &&
+        withdrawStatus.status === 'completed' && (
+          <SaveTemplateForm
+            draft={templateDraft}
+            onSave={templatesApi.save}
+            onDismiss={() => setTemplateDraft(null)}
           />
         )}
 

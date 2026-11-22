@@ -2216,6 +2216,98 @@ registry.registerPath({
   },
 });
 
+const RecurringControlSchema = registry.register(
+  'RecurringControl',
+  z.object({
+    type: z.literal('recurring-control'),
+    action: z.enum(['pause', 'resume', 'cancel']),
+    authorizationId: z.string().uuid(),
+    sender: z.string().regex(STELLAR_PUBKEY_PATTERN),
+    sourceAsset: z.string().min(1),
+    destinationAsset: z.string().min(1),
+    amount: z.string().regex(AMOUNT_PATTERN),
+    nonce: z.string().regex(/^[0-9a-f]{32}$/),
+    deadline: z.string().datetime(),
+  })
+);
+
+const RecurringControlRequestBodySchema = registry.register(
+  'RecurringControlRequestBody',
+  z.object({
+    control: RecurringControlSchema,
+    signature: z.string().min(1),
+    publicKey: z.string().regex(STELLAR_PUBKEY_PATTERN),
+  })
+);
+
+const RecurringControlResponseSchema = registry.register(
+  'RecurringControlResponse',
+  z.object({
+    id: z.string().uuid(),
+    status: z.enum(['active', 'paused', 'cancelled']),
+    state: z.object({}).passthrough(),
+  })
+);
+
+registry.registerPath({
+  method: 'post',
+  path: '/api/recurring/{id}/control',
+  summary: 'Pause, resume or cancel a standing authorization',
+  description:
+    'Applies a signed control message with replay protection to a standing authorization.',
+  tags: ['Recurring'],
+  request: {
+    params: z.object({
+      id: z
+        .string()
+        .uuid()
+        .openapi({
+          param: { name: 'id', in: 'path' },
+          description: 'Standing authorization ID (UUID)',
+        }),
+    }),
+    body: {
+      content: {
+        'application/json': {
+          schema: RecurringControlRequestBodySchema,
+        },
+      },
+    },
+  },
+  responses: {
+    200: {
+      description: 'Control action applied',
+      content: {
+        'application/json': {
+          schema: RecurringControlResponseSchema,
+        },
+      },
+    },
+    400: {
+      description: 'Validation error',
+      content: { 'application/json': { schema: ApiErrorSchema } },
+    },
+    401: UNAUTHORIZED_401,
+    403: {
+      description: 'Forbidden - signer or terms mismatch',
+      content: { 'application/json': { schema: ApiErrorSchema } },
+    },
+    404: {
+      description: 'Not found or standing authorization not found',
+      content: { 'application/json': { schema: ApiErrorSchema } },
+    },
+    409: {
+      description: 'Invalid transition or replay detected',
+      content: { 'application/json': { schema: ApiErrorSchema } },
+    },
+    410: {
+      description: 'Deadline expired',
+      content: { 'application/json': { schema: ApiErrorSchema } },
+    },
+    429: RATE_LIMITED_429,
+  },
+});
+
 // ─── Spec builder ────────────────────────────────────────────────────────────
 
 export function buildOpenApiSpec() {

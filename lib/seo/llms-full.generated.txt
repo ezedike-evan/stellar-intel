@@ -853,7 +853,7 @@ cross-reference for reviewers and contributors.
 | `NEXT_PUBLIC_REPUTATION_WRITES`   | No                     | on                                                      | `lib/flags.ts`                                    | Gates submitting outcome tuples after a completed off-ramp. Set to `'off'` to disable.                                                                                                      |
 | `NEXT_PUBLIC_MCP_ADVERTISE`       | No                     | on                                                      | `lib/flags.ts`                                    | Controls the MCP install banner in the UI. Set to `'off'` to hide.                                                                                                                          |
 | `NEXT_PUBLIC_V11_CORRIDORS`       | No                     | off                                                     | `lib/flags.ts`                                    | Enables v1.1 corridors (ZAR, XOF). Must be `'on'`; a corridor still stays hidden until at least one anchor serves it.                                                                       |
-| `NEXT_PUBLIC_RECURRING_INTENTS`   | No                     | off                                                     | `lib/flags.ts`                                    | Enables the sign-once recurring-intent engine. Must be `'on'`; effective only when `NEXT_PUBLIC_INTENT_FLOW` is also enabled.                                                               |
+| `NEXT_PUBLIC_RECURRING_INTENTS`   | No                     | off                                                     | `lib/flags.ts`                                    | Enables the recurring-intent engine (`/recurring`, `/api/recurring/*`, and the due banner on `/offramp`). Must be `'on'`; effective only when `NEXT_PUBLIC_INTENT_FLOW` is also enabled.    |
 | `NEXT_PUBLIC_FIRM_QUOTE_BONUS`    | No                     | off                                                     | `lib/flags.ts`                                    | Ranks a firm SEP-38 quote above an estimate that is up to 0.5% better (`FIRM_QUOTE_BONUS_PCT`). Must be `'on'`. Changes ordering only, never a displayed amount.                            |
 | `NEXT_PUBLIC_MIN_OUTCOMES`        | No                     | `30`                                                    | `lib/reputation/thresholds.ts`                    | Minimum recorded outcomes before a reputation score is considered statistically meaningful.                                                                                                 |
 | `ADMIN_SECRET_KEY`                | Yes (admin routes)     | —                                                       | `lib/auth/admin.ts`                               | Bearer secret for `/admin/*` API routes and the dispute management surface.                                                                                                                 |
@@ -955,6 +955,8 @@ the hardening contract (see `lib/api/v1.ts`):
   - [`GET /api/rates/{corridor}`](#get-apiratescorridor)
   - [`GET /api/snapshot`](#get-apisnapshot)
   - [`GET /api/v1/corridors/{corridor}/volume-savings`](#get-apiv1corridorscorridorvolume-savings)
+- **Recurring**
+  - [`POST /api/recurring/{id}/control`](#post-apirecurringidcontrol)
 - **Reputation**
   - [`GET /api/reputation/actuarial`](#get-apireputationactuarial)
   - [`POST /api/reputation/append`](#post-apireputationappend)
@@ -1410,6 +1412,45 @@ Reads the on-chain volume/savings oracle for one corridor: cumulative USDC route
 | `400` | Invalid corridor ID | `application/json` | `ApiError` |
 | `429` | Rate limited | `application/json` | `ApiError` |
 | `500` | Oracle read failed | `application/json` | `ApiError` |
+
+---
+
+## Recurring
+
+### `POST /api/recurring/{id}/control`
+
+**Summary:** Pause, resume or cancel a standing authorization  
+
+Applies a signed control message with replay protection to a standing authorization.
+
+#### Parameters
+
+| Name | In | Type | Required | Description |
+| :--- | :--- | :--- | :--- | :--- |
+| `id` | `path` | `string` | **Yes** | Standing authorization ID (UUID) |
+
+#### Request Body
+
+**Content-Type:** `application/json`
+
+| Field | Type | Required | Description |
+| :--- | :--- | :--- | :--- |
+| `control` | `RecurringControl` | **Yes** | - |
+| `signature` | `string` | **Yes** | - |
+| `publicKey` | `string` | **Yes** | - |
+
+#### Responses
+
+| Status | Description | Content-Type | Schema |
+| :--- | :--- | :--- | :--- |
+| `200` | Control action applied | `application/json` | `RecurringControlResponse` |
+| `400` | Validation error | `application/json` | `ApiError` |
+| `401` | Missing or invalid credentials | `application/json` | `ApiError` |
+| `403` | Forbidden - signer or terms mismatch | `application/json` | `ApiError` |
+| `404` | Not found or standing authorization not found | `application/json` | `ApiError` |
+| `409` | Invalid transition or replay detected | `application/json` | `ApiError` |
+| `410` | Deadline expired | `application/json` | `ApiError` |
+| `429` | Rate limited | `application/json` | `ApiError` |
 
 ---
 

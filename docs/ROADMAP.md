@@ -664,7 +664,7 @@ Scope is decomposed post-v2; the shape is already committed.
 - [ ] **Slippage bounds** — `minReceive` enforced at settlement; refund on
       breach with on-chain evidence
 - [ ] **Recurring intents** — standing-order semantics (signed
-      authorization with per-period cap and hard stop date)
+      authorization with per-period cap, hard stop date, due reminders, and single-signature execution; see [docs/RECURRING.md](docs/RECURRING.md))
 - [ ] **Execution SLA** — per-anchor SLA card: p50/p95/p99 settle latency
       with 30-day trailing window
 - [ ] **Refund guarantees** — automatic refund flow with user-signed
@@ -807,13 +807,14 @@ above. Each is gated on something that does not exist yet, which is why no
 wave claimed them. Recorded here so the sequencing is not lost; placement is
 still open.
 
-- [-] **Recurring intents / subscription remittance** — sign once, later
-  executions run without a fresh signature. A flag-gated implementation
-  exists (`lib/recurring/`, `types/recurring.ts`, behind
-  `NEXT_PUBLIC_RECURRING_INTENTS` in `lib/flags.ts`, off by default).
-  Still gated on wallet pre-auth standards: Freighter exposes no
-  pre-authorization primitive today, so executions without a fresh
-  signature cannot ship until that lands upstream
+- [-] **Recurring intents / subscription remittance** — standing-order
+  semantics with signed authorization terms, server-enforced limits, due
+  reminders, and single-signature payment confirmation (see [docs/RECURRING.md](docs/RECURRING.md)).
+  A flag-gated implementation exists (`lib/recurring/`, `types/recurring.ts`,
+  behind `NEXT_PUBLIC_RECURRING_INTENTS` in `lib/flags.ts`, off by default).
+  Fully automated execution without a fresh signature remains parked on
+  wallet pre-authorization standards: Freighter exposes no pre-authorization
+  primitive today.
 - [ ] **Settlement-guaranteed SLA** — gated on ~10k actuarial observations
       before a guarantee can be priced; start with $100 caps. Reads the same
       outcome log the reputation write path already produces
