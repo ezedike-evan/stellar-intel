@@ -52,11 +52,13 @@ the hardening contract (see `lib/api/v1.ts`):
   - [`GET /api/reputation/actuarial`](#get-apireputationactuarial)
   - [`POST /api/reputation/append`](#post-apireputationappend)
   - [`POST /api/reputation/dispute`](#post-apireputationdispute)
+  - [`GET /api/reputation/dispute-sweep`](#get-apireputationdispute-sweep)
   - [`GET /api/reputation/leaderboard`](#get-apireputationleaderboard)
   - [`GET /api/reputation/probe-coverage`](#get-apireputationprobe-coverage)
   - [`GET /api/reputation/sdf-export`](#get-apireputationsdf-export)
   - [`GET /api/reputation/{anchor}`](#get-apireputationanchor)
   - [`GET /api/reputation/{anchor}/history`](#get-apireputationanchorhistory)
+  - [`GET /api/reputation/{anchor}/sla`](#get-apireputationanchorsla)
   - [`GET /v1/public/scores`](#get-v1publicscores)
 - **SEP-10**
   - [`POST /api/sep10/client-domain`](#post-apisep10client-domain)
@@ -540,6 +542,8 @@ The single server-side write path for reputation outcome rows. The body must car
 | `stellarTransactionId` | `object` | No | - |
 | `publicKey` | `string` | **Yes** | The sender account that signed intentHash |
 | `signature` | `string` | **Yes** | Base64 Ed25519 signature by publicKey over intentHash |
+| `minReceive` | `object` | No | Minimum receive floor amount signed in the outcome intent |
+| `outcomeIntent` | `object` | No | The exact intent signed by the sender |
 
 #### Responses
 
@@ -580,6 +584,21 @@ Submits a dispute against an intent outcome. The request must be Ed25519-signed 
 | `403` | Signature verification failed | `application/json` | `ApiError` |
 | `422` | Validation error | `application/json` | `ApiError` |
 | `429` | Rate limited (10/24h) | `application/json` | `ApiError` |
+
+---
+
+### `GET /api/reputation/dispute-sweep`
+
+**Summary:** Sweep overdue disputes and owed refunds  
+
+Cron-only route bearer-gated on CRON_SECRET. Escalates overdue anchor-level disputes and opens disputes for overdue owed refunds.
+
+#### Responses
+
+| Status | Description | Content-Type | Schema |
+| :--- | :--- | :--- | :--- |
+| `200` | Sweep completed | `application/json` | `object` |
+| `401` | Missing or invalid credentials | `application/json` | `ApiError` |
 
 ---
 
@@ -674,6 +693,29 @@ Returns bucketed outcome history for a specific anchor over a configurable time 
 | Status | Description | Content-Type | Schema |
 | :--- | :--- | :--- | :--- |
 | `200` | Bucketed history data | `application/json` | `object` |
+| `400` | Validation error | `application/json` | `ApiError` |
+| `404` | Unknown anchor | `application/json` | `ApiError` |
+
+---
+
+### `GET /api/reputation/{anchor}/sla`
+
+**Summary:** Get anchor execution SLA  
+
+Returns trailing 30-day settlement SLA percentiles (nearest-rank, no trimming) for an anchor, requiring at least 30 completed samples (and 100 for p99), evaluated against breach thresholds.
+
+#### Parameters
+
+| Name | In | Type | Required | Description |
+| :--- | :--- | :--- | :--- | :--- |
+| `anchor` | `path` | `string` | **Yes** | Anchor ID from the registry |
+| `corridor` | `query` | `string` | No | Filter by corridor ID |
+
+#### Responses
+
+| Status | Description | Content-Type | Schema |
+| :--- | :--- | :--- | :--- |
+| `200` | Execution SLA report | `application/json` | `ExecutionSlaReport` |
 | `400` | Validation error | `application/json` | `ApiError` |
 | `404` | Unknown anchor | `application/json` | `ApiError` |
 
@@ -868,7 +910,7 @@ Triggers a batch of reputation outcome submissions to the Soroban oracle contrac
 | Status | Description | Content-Type | Schema |
 | :--- | :--- | :--- | :--- |
 | `200` | Tick completed, or withheld by the publish gate | `application/json` | `object` |
-| `401` | Unauthorized | `application/json` | `ApiError` |
+| `401` | Missing or invalid credentials | `application/json` | `ApiError` |
 | `409` | Tick already in progress | `application/json` | `ApiError` |
 
 ---

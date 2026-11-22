@@ -1,7 +1,11 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { withRequestLogger } from '@/lib/logger';
 import { getReputationStore } from '@/lib/reputation/store';
-import { AppendOutcomeInputSchema, toOutcomeLogRow } from '@/lib/reputation/schema';
+import {
+  AppendOutcomeInputSchema,
+  toOutcomeLogRow,
+  outcomeIntentMatchesHash,
+} from '@/lib/reputation/schema';
 import { verifyIntentSignature } from '@/lib/intent/verify';
 import type { ApiError } from '@/types';
 import { enforceRateLimit } from '@/lib/api/response';
@@ -109,6 +113,14 @@ export async function POST(request: NextRequest): Promise<NextResponse> {
       return NextResponse.json<ApiError>(
         { code: 'UNAUTHORIZED', message: 'Signature verification failed' },
         { status: 401 }
+      );
+    }
+
+    if (!(await outcomeIntentMatchesHash(parsed.data))) {
+      logger.warn({ event: 'append_outcome_intent_mismatch' });
+      return NextResponse.json<ApiError>(
+        { code: 'VALIDATION_ERROR', message: 'outcomeIntent does not hash to intentHash' },
+        { status: 400 }
       );
     }
 

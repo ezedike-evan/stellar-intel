@@ -5,6 +5,7 @@ import {
 } from '@asteasolutions/zod-to-openapi';
 import { z } from 'zod';
 import { STELLAR_PUBKEY_PATTERN, AMOUNT_PATTERN, AMOUNT_7DP_PATTERN } from '@/lib/patterns';
+import { ExecutionSlaReportSchema } from '@/lib/reputation/execution-sla';
 
 extendZodWithOpenApi(z);
 
@@ -122,6 +123,16 @@ const ApiErrorSchema = registry.register(
       .describe('Seconds until the client may retry. Only present for code === "RATE_LIMITED"'),
   })
 );
+
+const RATE_LIMITED_429 = {
+  description: 'Rate limited',
+  content: { 'application/json': { schema: ApiErrorSchema } },
+} as const;
+
+const UNAUTHORIZED_401 = {
+  description: 'Missing or invalid credentials',
+  content: { 'application/json': { schema: ApiErrorSchema } },
+} as const;
 
 const IntentRequestSchema = registry.register(
   'IntentRequest',
@@ -897,6 +908,24 @@ registry.registerPath({
             signature: z
               .string()
               .openapi({ description: 'Base64 Ed25519 signature by publicKey over intentHash' }),
+            minReceive: z.string().regex(AMOUNT_PATTERN).nullable().optional().openapi({
+              description: 'Minimum receive floor amount signed in the outcome intent',
+            }),
+            outcomeIntent: z
+              .object({
+                type: z.literal('offramp-outcome'),
+                sourceAsset: z.string(),
+                destinationAsset: z.string(),
+                amount: z.string(),
+                sender: z.string(),
+                recipient: z.string(),
+                anchorId: z.string(),
+                corridor: z.string(),
+                transactionId: z.string(),
+                minReceive: z.string(),
+              })
+              .optional()
+              .openapi({ description: 'The exact intent signed by the sender' }),
           }),
         },
       },
@@ -927,6 +956,64 @@ registry.registerPath({
       description: 'Rate limited',
       content: { 'application/json': { schema: ApiErrorSchema } },
     },
+  },
+});
+
+registry.registerPath({
+  method: 'get',
+  path: '/api/reputation/{anchor}/sla',
+  summary: 'Get anchor execution SLA',
+  description:
+    'Returns trailing 30-day settlement SLA percentiles (nearest-rank, no trimming) for an anchor, requiring at least 30 completed samples (and 100 for p99), evaluated against breach thresholds.',
+  tags: ['Reputation'],
+  request: {
+    params: z.object({ anchor: AnchorPathParam }),
+    query: z.object({ corridor: CorridorQueryParam }),
+  },
+  responses: {
+    200: {
+      description: 'Execution SLA report',
+      content: {
+        'application/json': {
+          schema: registry.register('ExecutionSlaReport', ExecutionSlaReportSchema),
+        },
+      },
+    },
+    400: {
+      description: 'Validation error',
+      content: { 'application/json': { schema: ApiErrorSchema } },
+    },
+    404: {
+      description: 'Unknown anchor',
+      content: { 'application/json': { schema: ApiErrorSchema } },
+    },
+  },
+});
+
+registry.registerPath({
+  method: 'get',
+  path: '/api/reputation/dispute-sweep',
+  summary: 'Sweep overdue disputes and owed refunds',
+  description:
+    'Cron-only route bearer-gated on CRON_SECRET. Escalates overdue anchor-level disputes and opens disputes for overdue owed refunds.',
+  tags: ['Reputation'],
+  security: [{ bearerAuth: [] }],
+  responses: {
+    200: {
+      description: 'Sweep completed',
+      content: {
+        'application/json': {
+          schema: z.object({
+            ok: z.boolean(),
+            scanned: z.number(),
+            escalated: z.number(),
+            refundDisputesOpened: z.number(),
+            sweptAt: z.string(),
+          }),
+        },
+      },
+    },
+    401: UNAUTHORIZED_401,
   },
 });
 
@@ -1162,10 +1249,7 @@ registry.registerPath({
         },
       },
     },
-    401: {
-      description: 'Unauthorized',
-      content: { 'application/json': { schema: ApiErrorSchema } },
-    },
+    401: UNAUTHORIZED_401,
     409: {
       description: 'Tick already in progress',
       content: { 'application/json': { schema: ApiErrorSchema } },
@@ -1339,16 +1423,6 @@ registry.registerPath({
 // description above claimed the hardening contract applied to "every response".
 // A generated SDK built from the old spec would have covered just over half the
 // API.
-
-const RATE_LIMITED_429 = {
-  description: 'Rate limited',
-  content: { 'application/json': { schema: ApiErrorSchema } },
-} as const;
-
-const UNAUTHORIZED_401 = {
-  description: 'Missing or invalid credentials',
-  content: { 'application/json': { schema: ApiErrorSchema } },
-} as const;
 
 registry.registerPath({
   method: 'post',

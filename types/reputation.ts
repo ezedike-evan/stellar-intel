@@ -54,6 +54,8 @@ export interface OutcomeLogRow {
   attested: boolean;
   /** Stellar account (G...) whose signature attested this row; null when unattested. */
   signerAccount: string | null;
+  /** Minimum receive floor amount signed in the outcome intent; null when no floor. */
+  minReceive?: string | null | undefined;
 }
 
 // ─── Uptime / quote-latency / issuer-mismatch / toml-integrity probe ledger ────

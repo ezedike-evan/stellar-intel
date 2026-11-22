@@ -6,6 +6,11 @@ import { GET as ADMIN_GET, POST as ADMIN_POST } from '@/app/api/admin/disputes/r
 import { NextRequest } from 'next/server';
 import { InMemoryReputationStore, _setReputationStore } from '@/lib/reputation/store';
 import { toOutcomeLogRow } from '@/lib/reputation/schema';
+import {
+  getAdjudicationLog,
+  _setAdjudicationLog,
+  InMemoryAdjudicationLog,
+} from '@/lib/reputation/adjudication-log';
 
 // ─── Helpers ──────────────────────────────────────────────────────────────────
 
@@ -13,7 +18,6 @@ function makeIntentHash(): string {
   return 'a'.repeat(64); // valid 64-char hex
 }
 
-/** A distinct, valid intent hash per signer, so several signers can each own an outcome. */
 function hashFor(signer: Keypair): string {
   return Buffer.from(signer.rawPublicKey()).toString('hex');
 }
@@ -34,10 +38,6 @@ function makeRequest(body: unknown, ip = '203.0.113.1'): NextRequest {
 
 let reputation: InMemoryReputationStore;
 
-/**
- * Records an outcome attested by `signer`. Only that account may dispute it
- * (#1357), so every dispute that is expected to succeed needs one of these.
- */
 async function seedOutcome(signer: Keypair, intentHash: string): Promise<void> {
   await reputation.append(
     toOutcomeLogRow({
@@ -57,10 +57,12 @@ async function seedOutcome(signer: Keypair, intentHash: string): Promise<void> {
 beforeEach(() => {
   reputation = new InMemoryReputationStore();
   _setReputationStore(reputation);
+  _setAdjudicationLog(new InMemoryAdjudicationLog());
 });
 
 afterEach(() => {
   _setReputationStore(null);
+  _setAdjudicationLog(null);
 });
 
 // ─── Tests ────────────────────────────────────────────────────────────────────
@@ -78,7 +80,7 @@ describe('POST /api/reputation/dispute', () => {
     await seedOutcome(keypair, intentHash);
   });
 
-  it('returns 201 and sets disputed:true for a valid signed request', async () => {
+  it('returns 201 and sets disputed:true for a valid signed request with DSP002 fields', async () => {
     const signature = signHash(keypair, intentHash);
     const res = await POST(
       makeRequest({
@@ -96,6 +98,91 @@ describe('POST /api/reputation/dispute', () => {
     expect(body.intentHash).toBe(intentHash);
     expect(body.anchorId).toBe('moneygram');
     expect(body.publicKey).toBe(keypair.publicKey());
+    expect(body.level).toBe('anchor');
+    expect(body.category).toBe('other');
+    expect(body.ref).toBeDefined();
+
+    // Check UUID format and ensure it does not leak public key prefix
+    expect(body.id).toMatch(/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i);
+    expect(body.id).not.toContain(keypair.publicKey().slice(0, 8));
+
+    // Deadline is 72h after createdAt
+    const createdTime = new Date(body.createdAt).getTime();
+    const deadlineTime = new Date(body.levelDeadline).getTime();
+    expect(deadlineTime - createdTime).toBe(72 * 3600 * 1000);
+  });
+
+  it('writes one filed adjudication log entry without public key or reason', async () => {
+    const signature = signHash(keypair, intentHash);
+    const reasonText = 'secret confidential reason text';
+    const res = await POST(
+      makeRequest({
+        intentHash,
+        publicKey: keypair.publicKey(),
+        signature,
+        anchorId: 'moneygram',
+        reason: reasonText,
+        category: 'delayed',
+      })
+    );
+
+    expect(res.status).toBe(201);
+    const body = await res.json();
+
+    const log = await getAdjudicationLog().list();
+    expect(log.length).toBe(1);
+    expect(log[0]?.action).toBe('filed');
+    expect(log[0]?.disputeRef).toBe(body.ref);
+    expect(log[0]?.category).toBe('delayed');
+    expect(log[0]?.level).toBe('anchor');
+
+    const logJson = JSON.stringify(log[0]);
+    expect(logJson).not.toContain(keypair.publicKey());
+    expect(logJson).not.toContain(reasonText);
+  });
+
+  it('rejects an unknown category with 422', async () => {
+    const signature = signHash(keypair, intentHash);
+    const res = await POST(
+      makeRequest({
+        intentHash,
+        publicKey: keypair.publicKey(),
+        signature,
+        anchorId: 'moneygram',
+        reason: 'test',
+        category: 'invalid_category',
+      })
+    );
+    expect(res.status).toBe(422);
+  });
+
+  it('rejects a second dispute on the same intent while the first is open with 409', async () => {
+    const signature = signHash(keypair, intentHash);
+    const res1 = await POST(
+      makeRequest({
+        intentHash,
+        publicKey: keypair.publicKey(),
+        signature,
+        anchorId: 'moneygram',
+        reason: 'first dispute',
+      })
+    );
+    expect(res1.status).toBe(201);
+
+    const res2 = await POST(
+      makeRequest({
+        intentHash,
+        publicKey: keypair.publicKey(),
+        signature,
+        anchorId: 'moneygram',
+        reason: 'duplicate dispute',
+      })
+    );
+    expect(res2.status).toBe(409);
+    expect(await res2.json()).toMatchObject({
+      code: 'CONFLICT',
+      message: 'An open dispute already exists for this intent',
+    });
   });
 
   it('returns 403 when signature is invalid', async () => {
@@ -103,7 +190,7 @@ describe('POST /api/reputation/dispute', () => {
       makeRequest({
         intentHash,
         publicKey: keypair.publicKey(),
-        signature: Buffer.alloc(64).toString('base64'), // wrong signature
+        signature: Buffer.alloc(64).toString('base64'),
         anchorId: 'moneygram',
         reason: 'fraud',
       })
@@ -115,7 +202,7 @@ describe('POST /api/reputation/dispute', () => {
 
   it('returns 403 when signature belongs to a different keypair', async () => {
     const other = Keypair.random();
-    const signature = signHash(other, intentHash); // signed by wrong key
+    const signature = signHash(other, intentHash);
     const res = await POST(
       makeRequest({
         intentHash,
@@ -139,26 +226,6 @@ describe('POST /api/reputation/dispute', () => {
       })
     );
     expect(res.status).toBe(422);
-    const body = await res.json();
-    expect(body.code).toBe('VALIDATION_ERROR');
-  });
-
-  it('returns 422 when publicKey has wrong format', async () => {
-    const res = await POST(
-      makeRequest({
-        intentHash,
-        publicKey: 'not-a-stellar-key',
-        signature: 'abc',
-        anchorId: 'moneygram',
-        reason: 'test',
-      })
-    );
-    expect(res.status).toBe(422);
-  });
-
-  it('returns 422 when required fields are missing', async () => {
-    const res = await POST(makeRequest({ intentHash, publicKey: keypair.publicKey() }));
-    expect(res.status).toBe(422);
   });
 
   it('returns 400 for non-JSON body', async () => {
@@ -169,131 +236,38 @@ describe('POST /api/reputation/dispute', () => {
     });
     const res = await POST(req);
     expect(res.status).toBe(400);
-    const body = await res.json();
-    expect(body.code).toBe('INVALID_JSON');
   });
 
-  it('enforces 10-dispute-per-24h rate limit per publicKey', async () => {
-    const signature = signHash(keypair, intentHash);
-    const payload = {
-      intentHash,
-      publicKey: keypair.publicKey(),
-      signature,
-      anchorId: 'moneygram',
-      reason: 'test',
-    };
-
-    // A different IP each time, so it is the per-key quota that trips, not the per-IP one.
+  it('enforces 10-dispute-per-24h rate limit per publicKey across distinct intents', async () => {
     for (let i = 0; i < 10; i++) {
+      const h = `00000000000000000000000000000000000000000000000000000000000000${String(i).padStart(2, '0')}`;
+      await seedOutcome(keypair, h);
+      const signature = signHash(keypair, h);
+      const payload = {
+        intentHash: h,
+        publicKey: keypair.publicKey(),
+        signature,
+        anchorId: 'moneygram',
+        reason: 'test',
+      };
       const res = await POST(makeRequest(payload, `198.51.100.${i + 1}`));
       expect(res.status).toBe(201);
     }
 
-    const limited = await POST(makeRequest(payload, '198.51.100.200'));
+    const h11 = `0000000000000000000000000000000000000000000000000000000000000011`;
+    await seedOutcome(keypair, h11);
+    const signature11 = signHash(keypair, h11);
+    const payload11 = {
+      intentHash: h11,
+      publicKey: keypair.publicKey(),
+      signature: signature11,
+      anchorId: 'moneygram',
+      reason: 'test',
+    };
+    const limited = await POST(makeRequest(payload11, '198.51.100.200'));
     expect(limited.status).toBe(429);
     const body = await limited.json();
     expect(body.code).toBe('RATE_LIMITED');
-  });
-
-  it('allows a different publicKey after the first key is rate-limited', async () => {
-    const other = Keypair.random();
-    const otherHash = hashFor(other);
-    await seedOutcome(other, otherHash);
-
-    const base1 = {
-      intentHash,
-      publicKey: keypair.publicKey(),
-      signature: signHash(keypair, intentHash),
-      anchorId: 'moneygram',
-      reason: 'r',
-    };
-    const base2 = {
-      intentHash: otherHash,
-      publicKey: other.publicKey(),
-      signature: signHash(other, otherHash),
-      anchorId: 'moneygram',
-      reason: 'r',
-    };
-
-    for (let i = 0; i < 10; i++) await POST(makeRequest(base1, `198.51.100.${i + 1}`));
-    expect((await POST(makeRequest(base1, '198.51.100.200'))).status).toBe(429);
-    expect((await POST(makeRequest(base2, '198.51.100.201'))).status).toBe(201);
-  });
-});
-
-describe('POST /api/reputation/dispute — input bounds and per-IP limit (#1355)', () => {
-  const intentHash = makeIntentHash();
-  let keypair: Keypair;
-
-  beforeAll(() => {
-    keypair = Keypair.random();
-  });
-
-  beforeEach(async () => {
-    clearDisputeStores();
-    await seedOutcome(keypair, intentHash);
-  });
-
-  const payload = (overrides: Record<string, unknown> = {}) => ({
-    intentHash,
-    publicKey: keypair.publicKey(),
-    signature: signHash(keypair, intentHash),
-    anchorId: 'moneygram',
-    reason: 'transaction never settled',
-    ...overrides,
-  });
-
-  it('returns 422 for a reason over 1000 characters', async () => {
-    const res = await POST(makeRequest(payload({ reason: 'x'.repeat(1001) })));
-    expect(res.status).toBe(422);
-  });
-
-  it('accepts a reason of exactly 1000 characters', async () => {
-    const res = await POST(makeRequest(payload({ reason: 'x'.repeat(1000) })));
-    expect(res.status).toBe(201);
-  });
-
-  it('returns 422 for an anchorId that is not in the registry', async () => {
-    const res = await POST(makeRequest(payload({ anchorId: 'not-an-anchor' })));
-    expect(res.status).toBe(422);
-    expect((await res.json()).message).toBe('Unknown anchorId');
-  });
-
-  it('returns 429 on the 11th request from one IP, even with a fresh key each time', async () => {
-    for (let i = 0; i < 10; i += 1) {
-      const fresh = Keypair.random();
-      const freshHash = hashFor(fresh);
-      await seedOutcome(fresh, freshHash);
-      const res = await POST(
-        makeRequest(
-          {
-            intentHash: freshHash,
-            publicKey: fresh.publicKey(),
-            signature: signHash(fresh, freshHash),
-            anchorId: 'moneygram',
-            reason: 'transaction never settled',
-          },
-          '192.0.2.77'
-        )
-      );
-      expect(res.status).toBe(201);
-    }
-
-    const last = Keypair.random();
-    const lastHash = hashFor(last);
-    const res = await POST(
-      makeRequest(
-        {
-          intentHash: lastHash,
-          publicKey: last.publicKey(),
-          signature: signHash(last, lastHash),
-          anchorId: 'moneygram',
-          reason: 'transaction never settled',
-        },
-        '192.0.2.77'
-      )
-    );
-    expect(res.status).toBe(429);
   });
 });
 

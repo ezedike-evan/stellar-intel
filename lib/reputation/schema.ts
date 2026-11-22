@@ -9,6 +9,7 @@ import {
 } from '@/types/reputation';
 import { AMOUNT_PATTERN, SIGNED_AMOUNT_PATTERN, STELLAR_PUBKEY_PATTERN } from '@/lib/patterns';
 import { ANCHORS } from '@/constants/anchors';
+import { hashIntent } from '@/lib/intent/hash';
 
 // ─── Zod schema for the outcome log row (Issue #127 / #218) ────────────────────
 
@@ -35,6 +36,7 @@ export const OutcomeLogRowSchema = z.object({
   oracleTxHash: z.string().min(1).nullable(),
   attested: z.boolean(),
   signerAccount: z.string().regex(STELLAR_PUBKEY_PATTERN).nullable(),
+  minReceive: decimalString.nullish(),
 }) satisfies z.ZodType<OutcomeLogRow>;
 
 // ─── Quote history row (Q38012) ───────────────────────────────────────────────
@@ -85,6 +87,23 @@ const ANCHOR_CORRIDORS: ReadonlyMap<string, ReadonlySet<string>> = new Map(
   ANCHORS.map((anchor) => [anchor.id, new Set(anchor.corridors)])
 );
 
+export const OutcomeIntentSchema = z
+  .object({
+    type: z.literal('offramp-outcome'),
+    sourceAsset: z.string().min(1).max(16),
+    destinationAsset: z.string().min(1).max(16),
+    amount: z.string().max(40).regex(AMOUNT_PATTERN),
+    sender: z.string().regex(STELLAR_PUBKEY_PATTERN),
+    recipient: z.string().min(1).max(64),
+    anchorId: z.string().min(1).max(64),
+    corridor: z.string().min(1).max(32),
+    transactionId: z.string().min(1).max(128),
+    minReceive: z.string().max(40).regex(AMOUNT_PATTERN),
+  })
+  .strict();
+
+export type OutcomeIntent = z.infer<typeof OutcomeIntentSchema>;
+
 /**
  * The shape a client may POST to /api/reputation/append.
  *
@@ -117,6 +136,8 @@ export const AppendOutcomeInputSchema = z
     publicKey: z.string().regex(STELLAR_PUBKEY_PATTERN, 'publicKey must be a Stellar public key'),
     // A 64-byte Ed25519 signature is 88 base64 characters; leave room for padding variants.
     signature: z.string().min(1, 'signature is required').max(128),
+    minReceive: boundedDecimal(MAX_OUTCOME_AMOUNT, 'minReceive').nullish(),
+    outcomeIntent: OutcomeIntentSchema.optional(),
   })
   .superRefine((input, ctx) => {
     const served = ANCHOR_CORRIDORS.get(input.anchorId);
@@ -127,9 +148,61 @@ export const AppendOutcomeInputSchema = z
         message: `corridor ${input.corridor} is not served by ${input.anchorId}`,
       });
     }
+
+    if (input.minReceive != null && !input.outcomeIntent) {
+      ctx.addIssue({
+        code: 'custom',
+        path: ['outcomeIntent'],
+        message: 'minReceive must be covered by the signed outcomeIntent',
+      });
+    }
+
+    if (input.outcomeIntent) {
+      if (input.outcomeIntent.minReceive !== input.minReceive) {
+        ctx.addIssue({
+          code: 'custom',
+          path: ['minReceive'],
+          message: 'outcomeIntent.minReceive does not match minReceive',
+        });
+      }
+      if (input.outcomeIntent.sender !== input.publicKey) {
+        ctx.addIssue({
+          code: 'custom',
+          path: ['publicKey'],
+          message: 'outcomeIntent.sender does not match publicKey',
+        });
+      }
+      if (input.outcomeIntent.anchorId !== input.anchorId) {
+        ctx.addIssue({
+          code: 'custom',
+          path: ['anchorId'],
+          message: 'outcomeIntent.anchorId does not match anchorId',
+        });
+      }
+      if (input.outcomeIntent.corridor !== input.corridor) {
+        ctx.addIssue({
+          code: 'custom',
+          path: ['corridor'],
+          message: 'outcomeIntent.corridor does not match corridor',
+        });
+      }
+    }
+
+    if ((input.direction ?? 'withdraw') !== 'withdraw' && input.minReceive != null) {
+      ctx.addIssue({
+        code: 'custom',
+        path: ['minReceive'],
+        message: 'minReceive is only supported for withdrawals',
+      });
+    }
   });
 
 export type AppendOutcomeInput = z.infer<typeof AppendOutcomeInputSchema>;
+
+export async function outcomeIntentMatchesHash(input: AppendOutcomeInput): Promise<boolean> {
+  if (!input.outcomeIntent) return true;
+  return (await hashIntent(input.outcomeIntent)) === input.intentHash;
+}
 
 /**
  * Normalizes a validated, signature-verified append input into a full outcome
@@ -157,6 +230,7 @@ export function toOutcomeLogRow(input: AppendOutcomeInput, now = new Date()): Ou
     oracleTxHash: null,
     attested: true,
     signerAccount: input.publicKey,
+    minReceive: input.minReceive ?? null,
   };
 }
 

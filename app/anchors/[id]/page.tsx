@@ -4,6 +4,8 @@ import { ANCHORS, CORRIDORS } from '@/constants';
 import { buildScorecards, mapOutcomeRows } from '@/lib/reputation/aggregate';
 import { getHistoryBuckets } from '@/lib/reputation/buckets';
 import { computeQuoteGapStats } from '@/lib/reputation/quote-gap';
+import { getRefundStore } from '@/lib/refunds/store';
+import { computeAnchorRefundStats } from '@/lib/refunds/anchor-stats';
 import { getReputationStore, ReputationStoreUnavailableError } from '@/lib/reputation/store';
 import { AnchorProfile, type AnchorProfileData } from '@/components/offramp/AnchorProfile';
 import { ScorecardCard } from '@/components/offramp/ScorecardCard';
@@ -124,6 +126,15 @@ export default async function AnchorDetailPage({
 
   const score = scorecards[30].state === 'ok' ? scorecards[30].fillRate : null;
 
+  let refunds = null;
+  try {
+    const openedSince = new Date(Date.now() - 90 * 24 * 60 * 60 * 1000).toISOString();
+    const cases = await getRefundStore().list({ anchorId: anchor.id, openedSince });
+    refunds = computeAnchorRefundStats(cases);
+  } catch {
+    refunds = null;
+  }
+
   const profileData: AnchorProfileData = {
     id: anchor.id,
     name: anchor.name,
@@ -145,6 +156,7 @@ export default async function AnchorDetailPage({
     history: history.buckets,
     disputes,
     oracleTxId: lastPublished?.oracleTxHash ?? null,
+    refunds,
   };
 
   return (
