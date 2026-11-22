@@ -2644,6 +2644,35 @@ prefix using the provided `publicKey`. The request body carries `signature` and
 > Implementation note: treat `lib/intent` as authoritative for the exact ordering
 > and serialization, and verify against its tests rather than hand-ordering keys.
 
+## Other signed payloads
+
+In addition to intents, the canonical JSON serialization and hashing rules apply to other signed protocol messages:
+
+### Refund acknowledgements (`type: 'refund-ack'`)
+
+Defined in [`lib/refunds/ack.ts`](../lib/refunds/ack.ts). When a user acknowledges receipt of a refund issued by an anchor, the payload is signed using Freighter and submitted to `POST /api/refunds/ack`:
+
+```jsonc
+{
+  "type": "refund-ack",
+  "version": 1,
+  "intentHash": "f24f63585861ffb5fc8d06ddb5d572215650e15332831af81f62a71b056b562e",
+  "anchorId": "test-anchor",
+  "account": "GABCDEFGHIJKLMNOPQRSTUVWXYZ012345678901234567890123456789",
+  "amountRefunded": "95.00",
+  "refundFee": "5.00",
+  "payments": [
+    {
+      "id": "pay_1",
+      "idType": "stellar",
+      "amount": "95.00"
+    }
+  ]
+}
+```
+
+The payload is canonicalized using `canonicalJsonValue(ack)` (keys sorted recursively, payments array preserving order) and hashed via `hashRefundAck(ack)` (`hashCanonical(ack)`). The resulting 64-character lowercase hex digest is signed via `signHash(hash)`.
+
 ## Related
 
 - [`docs/INTENT_API.md`](INTENT_API.md) — the envelope and endpoint.
