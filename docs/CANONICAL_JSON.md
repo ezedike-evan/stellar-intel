@@ -90,9 +90,9 @@ Defined in [`lib/refunds/ack.ts`](../lib/refunds/ack.ts). When a user acknowledg
     {
       "id": "pay_1",
       "idType": "stellar",
-      "amount": "95.00"
-    }
-  ]
+      "amount": "95.00",
+    },
+  ],
 }
 ```
 
