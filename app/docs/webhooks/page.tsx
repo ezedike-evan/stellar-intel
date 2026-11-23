@@ -31,9 +31,42 @@ const EVENTS: { kind: string; description: string; emitted: boolean }[] = [
   {
     kind: 'anchor.health_status_changed',
     description: "An anchor's health status transitions (e.g. healthy to degraded)",
+    emitted: true,
+  },
+  {
+    kind: 'intent.rejected',
+    description: 'An intent is refused before routing: a bad signature, a replay, or no route',
+    emitted: false,
+  },
+  {
+    kind: 'intent.expired',
+    description: 'An intent passes its deadline without settling',
+    emitted: false,
+  },
+  {
+    kind: 'settlement.status_changed',
+    description: "An anchor transaction's status changes",
+    emitted: false,
+  },
+  {
+    kind: 'dispute.opened',
+    description: 'A dispute is opened against an outcome',
+    emitted: false,
+  },
+  {
+    kind: 'dispute.resolved',
+    description: 'A dispute is accepted or rejected',
+    emitted: false,
+  },
+  {
+    kind: 'oracle.published',
+    description: 'The oracle writes a batch of outcomes and rates on chain',
     emitted: false,
   },
 ];
+
+/** How many of the kinds above a producer emits today. The banner is computed, never typed. */
+const LIVE_KINDS = EVENTS.filter((event) => event.emitted).length;
 
 export default function WebhooksPage() {
   return (
@@ -47,10 +80,8 @@ export default function WebhooksPage() {
 
       <div className="rounded-xl border border-status-unknown/40 bg-bg-sunken p-5 /50">
         <p className="text-sm font-medium text-status-unknown">
-          Status: Rolling out — delivery is live for four of the five event kinds.
-        </p>
-        <p className="mt-1 text-sm text-status-unknown">
-          <code>anchor.health_status_changed</code> can be subscribed to but is not yet emitted.
+          Live for {LIVE_KINDS} of {EVENTS.length} kinds; the rest can be subscribed to and will
+          start arriving as producers ship.
         </p>
       </div>
 
