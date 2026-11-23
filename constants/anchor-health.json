@@ -59,8 +59,8 @@
       "lastError": null
     },
     "perahub": {
-      "consecutiveFailures": 1,
-      "degraded": false,
+      "consecutiveFailures": 23,
+      "degraded": true,
       "lastCheckedAt": "2026-11-23T14:40:43.609Z",
       "lastStatus": "fail",
       "lastError": "HTTP 403"
