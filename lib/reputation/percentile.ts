@@ -1,13 +1,14 @@
 /**
- * Nearest-rank percentile over a sorted-ascending array.
- *
- * `rank = ceil(p / 100 * n)`, clamped to `[1, n]`, then read as a 0-based
- * index. A percentile is therefore always one of the observed values, never a
- * number between two of them. Returns `null` for an empty input.
+ * Nearest-rank percentile of an ascending-sorted array (the caller sorts).
+ * rank = ceil(p/100 * n), 1-based, clamped to [1, n]. p = 0 returns the minimum.
  */
-export function nearestRankPercentile(sortedValues: readonly number[], p: number): number | null {
-  if (sortedValues.length === 0) return null;
-  const rank = Math.ceil((p / 100) * sortedValues.length) - 1;
-  const index = Math.min(Math.max(rank, 0), sortedValues.length - 1);
-  return sortedValues[index] ?? null;
+export function nearestRankPercentile(sorted: readonly number[], p: number): number | null {
+  if (!Number.isFinite(p) || p < 0 || p > 100) {
+    throw new RangeError('p must be a finite number in [0, 100]');
+  }
+  const n = sorted.length;
+  if (n === 0) return null;
+  const rank = Math.ceil((p / 100) * n) - 1;
+  const index = Math.min(Math.max(rank, 0), n - 1);
+  return sorted[index]!;
 }
