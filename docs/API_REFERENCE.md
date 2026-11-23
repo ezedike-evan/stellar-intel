@@ -59,6 +59,7 @@ the hardening contract (see `lib/api/v1.ts`):
   - [`GET /api/reputation/sdf-export`](#get-apireputationsdf-export)
   - [`GET /api/reputation/{anchor}`](#get-apireputationanchor)
   - [`GET /api/reputation/{anchor}/history`](#get-apireputationanchorhistory)
+  - [`GET /api/v1/disputes/log`](#get-apiv1disputeslog)
   - [`GET /v1/public/scores`](#get-v1publicscores)
 - **SEP-10**
   - [`POST /api/sep10/client-domain`](#post-apisep10client-domain)
@@ -741,6 +742,29 @@ Returns bucketed outcome history for a specific anchor over a configurable time 
 | `200` | Bucketed history data | `application/json` | `object` |
 | `400` | Validation error | `application/json` | `ApiError` |
 | `404` | Unknown anchor | `application/json` | `ApiError` |
+
+---
+
+### `GET /api/v1/disputes/log`
+
+**Summary:** Get the public dispute adjudication log  
+
+Serves the public, append-only, hash-chained dispute adjudication log, along with verification status and summary counts. Required scope: quotes:read.
+
+#### Parameters
+
+| Name | In | Type | Required | Description |
+| :--- | :--- | :--- | :--- | :--- |
+| `afterSeq` | `query` | `string` | No | Return entries strictly after this sequence number (integer >= 0, default 0) |
+| `limit` | `query` | `string` | No | Maximum number of entries to return (1-500, default 200) |
+
+#### Responses
+
+| Status | Description | Content-Type | Schema |
+| :--- | :--- | :--- | :--- |
+| `200` | The adjudication log entries and chain verification | `application/json` | `AdjudicationLogResponse` |
+| `400` | Invalid afterSeq or limit parameters | `application/json` | `ApiError` |
+| `429` | Rate limited | `application/json` | `ApiError` |
 
 ---
 

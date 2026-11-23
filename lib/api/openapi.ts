@@ -310,6 +310,67 @@ const DisputeAdminSchema = registry.register(
   })
 );
 
+const AdjudicationEntrySchema = registry.register(
+  'AdjudicationEntry',
+  z.object({
+    seq: z.number().int().describe('1-based sequential entry number in the hash chain'),
+    disputeRef: z.string().describe('Public dispute reference identifier'),
+    anchorId: z.string().describe('Identifier of the anchor involved'),
+    category: z
+      .string()
+      .describe(
+        'Dispute category (e.g. wrong_amount, not_received, delayed, wrong_account, refund_missing, other)'
+      ),
+    level: z.string().describe('Dispute ladder level (e.g. anchor, review, appeal)'),
+    action: z
+      .string()
+      .describe('Adjudication action (filed, escalated, accepted, rejected, appealed)'),
+    rationale: z.string().describe('Public rationale for the decision'),
+    decidedAt: z.string().describe('ISO 8601 timestamp of when the action was decided'),
+    prevHash: z.string().describe('SHA-256 hash of previous entry or 64 zeros for genesis'),
+    entryHash: z.string().describe('SHA-256 hash of this entry canonical representation'),
+  })
+);
+
+const AdjudicationSummarySchema = registry.register(
+  'AdjudicationSummary',
+  z.object({
+    filed: z.number().int().describe('Total number of distinct disputes filed'),
+    resolved: z.number().int().describe('Total number of resolved disputes (accepted or rejected)'),
+    accepted: z.number().int().describe('Number of disputes accepted'),
+    rejected: z.number().int().describe('Number of disputes rejected'),
+    open: z.number().int().describe('Number of disputes currently open'),
+    appealed: z.number().int().describe('Number of disputes with at least one appeal action'),
+  })
+);
+
+const AdjudicationLogResponseSchema = registry.register(
+  'AdjudicationLogResponse',
+  z.object({
+    entries: z.array(AdjudicationEntrySchema).describe('Adjudication entries matching the query'),
+    head: z
+      .object({
+        seq: z.number().int(),
+        entryHash: z.string(),
+      })
+      .nullable()
+      .describe('Latest entry in the adjudication log, or null if empty'),
+    verification: z
+      .object({
+        ok: z.boolean(),
+        length: z.number().int().optional(),
+        head: z.string().optional(),
+        brokenAtSeq: z.number().int().optional(),
+        reason: z.string().optional(),
+      })
+      .describe('Hash chain verification result across all entries'),
+    summary: AdjudicationSummarySchema.describe('Summary statistics across all disputes'),
+    hashFormat: z
+      .string()
+      .describe('Canonical hash format descriptor, e.g. stellar-intel/adjudication/v1'),
+  })
+);
+
 const LeaderboardEntrySchema = registry.register(
   'LeaderboardEntry',
   z.object({
@@ -368,6 +429,9 @@ void SignedIntentEnvelopeSchema;
 void AnchorRateSchema;
 void DisputeRecordSchema;
 void DisputeAdminSchema;
+void AdjudicationEntrySchema;
+void AdjudicationSummarySchema;
+void AdjudicationLogResponseSchema;
 void LeaderboardResponseSchema;
 void PublisherHealthSchema;
 void MetricsSnapshotSchema;
@@ -2015,6 +2079,49 @@ registry.registerPath({
     },
     400: {
       description: 'Invalid `tier` value',
+      content: { 'application/json': { schema: ApiErrorSchema } },
+    },
+    429: RATE_LIMITED_429,
+  },
+});
+
+registry.registerPath({
+  method: 'get',
+  path: '/api/v1/disputes/log',
+  summary: 'Get the public dispute adjudication log',
+  description:
+    'Serves the public, append-only, hash-chained dispute adjudication log, along with ' +
+    'verification status and summary counts. Required scope: quotes:read.',
+  tags: ['Reputation'],
+  security: [{}, { callerKey: [] }],
+  request: {
+    query: z.object({
+      afterSeq: z
+        .string()
+        .optional()
+        .openapi({
+          param: { name: 'afterSeq', in: 'query' },
+          example: '0',
+          description:
+            'Return entries strictly after this sequence number (integer >= 0, default 0)',
+        }),
+      limit: z
+        .string()
+        .optional()
+        .openapi({
+          param: { name: 'limit', in: 'query' },
+          example: '200',
+          description: 'Maximum number of entries to return (1-500, default 200)',
+        }),
+    }),
+  },
+  responses: {
+    200: {
+      description: 'The adjudication log entries and chain verification',
+      content: { 'application/json': { schema: AdjudicationLogResponseSchema } },
+    },
+    400: {
+      description: 'Invalid afterSeq or limit parameters',
       content: { 'application/json': { schema: ApiErrorSchema } },
     },
     429: RATE_LIMITED_429,
