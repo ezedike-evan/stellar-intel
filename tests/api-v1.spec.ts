@@ -184,7 +184,7 @@ describe('withV1 unhandled errors (#1349)', () => {
   it('returns a generic 500 that keeps the requestId but not the thrown message', async () => {
     const res = await withV1(
       new Request('http://localhost/api/v1/x', { headers: { 'x-request-id': 'req-123' } }),
-      { bucket: 'api.v1.test-throw', maxRequests: 10 },
+      { bucket: 'api.v1.test-throw', maxRequests: 10, scope: null /* handler authorizes itself */ },
       async () => {
         throw new Error('secret detail');
       }

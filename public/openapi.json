@@ -565,6 +565,9 @@
           "id": {
             "type": "string"
           },
+          "ref": {
+            "type": "string"
+          },
           "intentHash": {
             "type": "string"
           },
@@ -577,6 +580,15 @@
           "reason": {
             "type": "string"
           },
+          "category": {
+            "type": "string"
+          },
+          "level": {
+            "type": "string"
+          },
+          "levelDeadline": {
+            "type": "string"
+          },
           "disputed": {
             "type": "boolean"
           },
@@ -586,10 +598,14 @@
         },
         "required": [
           "id",
+          "ref",
           "intentHash",
           "publicKey",
           "anchorId",
           "reason",
+          "category",
+          "level",
+          "levelDeadline",
           "disputed",
           "createdAt"
         ]
@@ -628,6 +644,30 @@
               "string",
               "null"
             ]
+          },
+          "category": {
+            "type": "string"
+          },
+          "level": {
+            "type": "string"
+          },
+          "levelDeadline": {
+            "type": "string"
+          },
+          "subjectKind": {
+            "type": "string"
+          },
+          "subjectRef": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "appealedAt": {
+            "type": [
+              "string",
+              "null"
+            ]
           }
         },
         "required": [
@@ -638,7 +678,13 @@
           "reason",
           "status",
           "createdAt",
-          "resolvedAt"
+          "resolvedAt",
+          "category",
+          "level",
+          "levelDeadline",
+          "subjectKind",
+          "subjectRef",
+          "appealedAt"
         ]
       },
       "LeaderboardEntry": {
@@ -1415,9 +1461,15 @@
     "/api/v1/anchors/{id}/health": {
       "get": {
         "summary": "Get anchor health status",
-        "description": "Returns the anchor's current health status, last-probe timestamp, and score breakdown. Returns 'unknown' or 'stale' when probes haven't run recently — honest degradation rather than fabricated data.",
+        "description": "Returns the anchor's current health status, last-probe timestamp, and score breakdown. Returns 'unknown' or 'stale' when probes haven't run recently — honest degradation rather than fabricated data. Required scope: quotes:read.",
         "tags": [
           "Anchors"
+        ],
+        "security": [
+          {},
+          {
+            "callerKey": []
+          }
         ],
         "parameters": [
           {
@@ -1491,9 +1543,15 @@
     "/api/v1/anchors/{id}/price-history": {
       "get": {
         "summary": "Get anchor SEP-38 price history",
-        "description": "Returns recorded SEP-38 price observations for an anchor corridor, downsampled to at most 500 points (evenly spaced; first and last retained).",
+        "description": "Returns recorded SEP-38 price observations for an anchor corridor, downsampled to at most 500 points (evenly spaced; first and last retained). Required scope: quotes:read.",
         "tags": [
           "Anchors"
+        ],
+        "security": [
+          {},
+          {
+            "callerKey": []
+          }
         ],
         "parameters": [
           {
@@ -1627,9 +1685,15 @@
     "/api/v1/onramp/quote": {
       "get": {
         "summary": "Get indicative deposit (on-ramp) quotes",
-        "description": "Returns an indicative estimate per anchor for depositing a fiat amount into a Stellar asset. SEP-24 publishes deposit fees but the anchor sets the final conversion inside its interactive deposit window, so every figure is an estimate.",
+        "description": "Returns an indicative estimate per anchor for depositing a fiat amount into a Stellar asset. SEP-24 publishes deposit fees but the anchor sets the final conversion inside its interactive deposit window, so every figure is an estimate. Required scope: quotes:read.",
         "tags": [
           "On-ramp"
+        ],
+        "security": [
+          {},
+          {
+            "callerKey": []
+          }
         ],
         "parameters": [
           {
@@ -1874,9 +1938,15 @@
     "/api/v1/anchors/{id}/quote-gap": {
       "get": {
         "summary": "Get how far an anchor lands from the rate it quoted",
-        "description": "Signed gap between the rate shown before execution and the rate that landed, over completed, undisputed withdrawals in the window. Negative means users received less than quoted. Stands in for SEP-38 firm quotes, which most anchors do not offer. Null statistics mean no samples.",
+        "description": "Signed gap between the rate shown before execution and the rate that landed, over completed, undisputed withdrawals in the window. Negative means users received less than quoted. Stands in for SEP-38 firm quotes, which most anchors do not offer. Null statistics mean no samples. Required scope: quotes:read.",
         "tags": [
           "Anchors"
+        ],
+        "security": [
+          {},
+          {
+            "callerKey": []
+          }
         ],
         "parameters": [
           {
@@ -2036,9 +2106,15 @@
     "/api/v1/sep38/readiness": {
       "get": {
         "summary": "Get SEP-38 firm-quote readiness per anchor",
-        "description": "For each registered anchor: whether the operator declares SEP-38, whether its stellar.toml advertises a quote server, whether that server’s /info answers, and whether it lists the anchor’s registered asset. Checked live and cached for ten minutes.",
+        "description": "For each registered anchor: whether the operator declares SEP-38, whether its stellar.toml advertises a quote server, whether that server’s /info answers, and whether it lists the anchor’s registered asset. Checked live and cached for ten minutes. Required scope: quotes:read.",
         "tags": [
           "Anchors"
+        ],
+        "security": [
+          {},
+          {
+            "callerKey": []
+          }
         ],
         "responses": {
           "200": {
@@ -2389,6 +2465,65 @@
                   "signature": {
                     "type": "string",
                     "description": "Base64 Ed25519 signature by publicKey over intentHash"
+                  },
+                  "minReceive": {
+                    "type": [
+                      "string",
+                      "null"
+                    ],
+                    "pattern": "^\\d+(\\.\\d+)?$",
+                    "description": "Minimum receive floor amount signed in the outcome intent"
+                  },
+                  "outcomeIntent": {
+                    "type": "object",
+                    "properties": {
+                      "type": {
+                        "type": "string",
+                        "enum": [
+                          "offramp-outcome"
+                        ]
+                      },
+                      "sourceAsset": {
+                        "type": "string"
+                      },
+                      "destinationAsset": {
+                        "type": "string"
+                      },
+                      "amount": {
+                        "type": "string"
+                      },
+                      "sender": {
+                        "type": "string"
+                      },
+                      "recipient": {
+                        "type": "string"
+                      },
+                      "anchorId": {
+                        "type": "string"
+                      },
+                      "corridor": {
+                        "type": "string"
+                      },
+                      "transactionId": {
+                        "type": "string"
+                      },
+                      "minReceive": {
+                        "type": "string"
+                      }
+                    },
+                    "required": [
+                      "type",
+                      "sourceAsset",
+                      "destinationAsset",
+                      "amount",
+                      "sender",
+                      "recipient",
+                      "anchorId",
+                      "corridor",
+                      "transactionId",
+                      "minReceive"
+                    ],
+                    "description": "The exact outcome intent signed by sender"
                   }
                 },
                 "required": [
@@ -2421,12 +2556,22 @@
                     },
                     "attested": {
                       "type": "boolean"
+                    },
+                    "slippage": {
+                      "type": "string",
+                      "enum": [
+                        "not_applicable",
+                        "met",
+                        "breach",
+                        "unrecorded"
+                      ]
                     }
                   },
                   "required": [
                     "ok",
                     "intentHash",
-                    "attested"
+                    "attested",
+                    "slippage"
                   ]
                 }
               }
@@ -2503,6 +2648,9 @@
                   },
                   "reason": {
                     "type": "string"
+                  },
+                  "category": {
+                    "type": "string"
                   }
                 },
                 "required": [
@@ -2547,6 +2695,16 @@
               }
             }
           },
+          "409": {
+            "description": "Conflict: open dispute already exists",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiError"
+                }
+              }
+            }
+          },
           "422": {
             "description": "Validation error",
             "content": {
@@ -2559,6 +2717,263 @@
           },
           "429": {
             "description": "Rate limited (10/24h)",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiError"
+                }
+              }
+            }
+          }
+        }
+      },
+      "get": {
+        "summary": "Look up disputes for an intent",
+        "description": "Retrieves public dispute summaries for a given off-ramp intent hash. Returns newest first. Never includes personal data.",
+        "tags": [
+          "Reputation"
+        ],
+        "parameters": [
+          {
+            "schema": {
+              "type": "string",
+              "pattern": "^[0-9a-f]{64}$",
+              "example": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+              "description": "Lowercase hex-encoded SHA-256 intent hash (64 chars)"
+            },
+            "required": true,
+            "description": "Lowercase hex-encoded SHA-256 intent hash (64 chars)",
+            "name": "intentHash",
+            "in": "query"
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "List of disputes for the intent",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "disputes": {
+                      "type": "array",
+                      "items": {
+                        "type": "object",
+                        "properties": {
+                          "ref": {
+                            "type": "string",
+                            "description": "Public dispute reference identifier"
+                          },
+                          "category": {
+                            "type": "string",
+                            "description": "Dispute category"
+                          },
+                          "level": {
+                            "type": "string",
+                            "description": "Current dispute ladder level"
+                          },
+                          "levelDeadline": {
+                            "type": "string",
+                            "description": "ISO 8601 deadline for current level"
+                          },
+                          "status": {
+                            "type": "string",
+                            "enum": [
+                              "open",
+                              "accepted",
+                              "rejected"
+                            ],
+                            "description": "Dispute status"
+                          },
+                          "createdAt": {
+                            "type": "string",
+                            "description": "ISO 8601 timestamp when dispute was filed"
+                          },
+                          "resolvedAt": {
+                            "type": [
+                              "string",
+                              "null"
+                            ],
+                            "description": "ISO 8601 timestamp when dispute was resolved"
+                          }
+                        },
+                        "required": [
+                          "ref",
+                          "category",
+                          "level",
+                          "levelDeadline",
+                          "status",
+                          "createdAt",
+                          "resolvedAt"
+                        ]
+                      }
+                    }
+                  },
+                  "required": [
+                    "disputes"
+                  ]
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Invalid intentHash format",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiError"
+                }
+              }
+            }
+          },
+          "429": {
+            "description": "Rate limited",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/reputation/dispute/appeal": {
+      "post": {
+        "summary": "Appeal a resolved dispute",
+        "description": "Appeals a resolved dispute (accepted or rejected) within the 14-day window. Must be signed by the original filer.",
+        "tags": [
+          "Reputation"
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "properties": {
+                  "intentHash": {
+                    "type": "string",
+                    "pattern": "^[0-9a-f]{64}$"
+                  },
+                  "publicKey": {
+                    "type": "string",
+                    "pattern": "^G[A-Z2-7]{55}$"
+                  },
+                  "signature": {
+                    "type": "string"
+                  },
+                  "ref": {
+                    "type": "string",
+                    "pattern": "^[0-9a-f]{16}$"
+                  }
+                },
+                "required": [
+                  "intentHash",
+                  "publicKey",
+                  "signature",
+                  "ref"
+                ]
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Appeal accepted and dispute reopened at appeal level",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "ref": {
+                      "type": "string",
+                      "description": "Dispute reference"
+                    },
+                    "level": {
+                      "type": "string",
+                      "enum": [
+                        "appeal"
+                      ],
+                      "description": "New dispute level"
+                    },
+                    "levelDeadline": {
+                      "type": "string",
+                      "description": "ISO 8601 deadline for appeal"
+                    }
+                  },
+                  "required": [
+                    "ref",
+                    "level",
+                    "levelDeadline"
+                  ]
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Invalid request body",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiError"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Invalid signature or caller is not original filer",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiError"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Dispute not found",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiError"
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "Dispute not resolved or already appealed",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiError"
+                }
+              }
+            }
+          },
+          "410": {
+            "description": "Appeal window closed (past 14 days)",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiError"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiError"
+                }
+              }
+            }
+          },
+          "429": {
+            "description": "Rate limited",
             "content": {
               "application/json": {
                 "schema": {
@@ -3153,8 +3568,13 @@
                     "type": "string",
                     "enum": [
                       "accept",
-                      "reject"
+                      "reject",
+                      "escalate"
                     ]
+                  },
+                  "rationale": {
+                    "type": "string",
+                    "maxLength": 500
                   }
                 },
                 "required": [
@@ -3198,6 +3618,16 @@
           },
           "404": {
             "description": "Dispute not found",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiError"
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "Conflict: dispute not open or cannot escalate",
             "content": {
               "application/json": {
                 "schema": {
@@ -3338,9 +3768,15 @@
     "/api/v1/intent/offramp": {
       "post": {
         "summary": "Submit an off-ramp intent (v1)",
-        "description": "The public v1 intent endpoint. Honours `Idempotency-Key`: a retried request replays the original response with `Idempotency-Replayed: true` rather than creating a second intent.",
+        "description": "The public v1 intent endpoint. Honours `Idempotency-Key`: a retried request replays the original response with `Idempotency-Replayed: true` rather than creating a second intent. Required scope: intents:write.",
         "tags": [
           "Intent"
+        ],
+        "security": [
+          {},
+          {
+            "callerKey": []
+          }
         ],
         "responses": {
           "200": {
@@ -3355,6 +3791,16 @@
           },
           "400": {
             "description": "Validation error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiError"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Forbidden: insufficient scope",
             "content": {
               "application/json": {
                 "schema": {
@@ -3379,9 +3825,15 @@
     "/api/v1/intent/onramp": {
       "post": {
         "summary": "Submit an on-ramp intent (v1)",
-        "description": "Routes a deposit intent to the best indicative anchor and returns the /onramp handoff URL, plus an unsigned changeTrust XDR when the destination account has no trustline. No anchor session is opened: KYC and the interactive deposit run in the browser. Honours `Idempotency-Key` like the off-ramp endpoint.",
+        "description": "Routes a deposit intent to the best indicative anchor and returns the /onramp handoff URL, plus an unsigned changeTrust XDR when the destination account has no trustline. No anchor session is opened: KYC and the interactive deposit run in the browser. Honours `Idempotency-Key` like the off-ramp endpoint. Required scope: intents:write.",
         "tags": [
           "Intent"
+        ],
+        "security": [
+          {},
+          {
+            "callerKey": []
+          }
         ],
         "parameters": [
           {
@@ -3436,6 +3888,16 @@
               }
             }
           },
+          "403": {
+            "description": "Forbidden: insufficient scope",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiError"
+                }
+              }
+            }
+          },
           "404": {
             "description": "No anchor serves this corridor",
             "content": {
@@ -3482,9 +3944,15 @@
     "/api/v1/health": {
       "get": {
         "summary": "Service health (v1)",
-        "description": "Liveness and dependency status for the public v1 surface.",
+        "description": "Liveness and dependency status for the public v1 surface. Required scope: quotes:read.",
         "tags": [
           "System"
+        ],
+        "security": [
+          {},
+          {
+            "callerKey": []
+          }
         ],
         "responses": {
           "200": {
@@ -3757,9 +4225,15 @@
     "/api/v1/corridors/{corridor}/volume-savings": {
       "get": {
         "summary": "Get cumulative volume and fees saved for a corridor",
-        "description": "Reads the on-chain volume/savings oracle for one corridor: cumulative USDC routed, USDC saved against the baseline rate, and the settlement count behind both. Amounts are microUSDC. Served from the contract, so the aggregate is checkable without trusting this app's own database. Zeroes are returned when the corridor has no on-chain entry yet.",
+        "description": "Reads the on-chain volume/savings oracle for one corridor: cumulative USDC routed, USDC saved against the baseline rate, and the settlement count behind both. Amounts are microUSDC. Served from the contract, so the aggregate is checkable without trusting this app's own database. Zeroes are returned when the corridor has no on-chain entry yet. Required scope: quotes:read.",
         "tags": [
           "Rates"
+        ],
+        "security": [
+          {},
+          {
+            "callerKey": []
+          }
         ],
         "parameters": [
           {
@@ -3845,9 +4319,15 @@
     "/api/v1/anchor-health/ledger": {
       "get": {
         "summary": "Get the anchor health ledger for a date",
-        "description": "Publishes the nightly anchor health ledger as a dated artifact. Without `date`, returns the ledger this deployment was built with. With `date` (YYYY-MM-DD), returns the ledger as it stood on that date, resolved from the git history of `constants/anchor-health.json` — so the series is fetchable without cloning the repository. The committed file remains the source of truth; nothing is mirrored server-side. A dated response is immutable and cached as such.",
+        "description": "Publishes the nightly anchor health ledger as a dated artifact. Without `date`, returns the ledger this deployment was built with. With `date` (YYYY-MM-DD), returns the ledger as it stood on that date, resolved from the git history of `constants/anchor-health.json` — so the series is fetchable without cloning the repository. The committed file remains the source of truth; nothing is mirrored server-side. A dated response is immutable and cached as such. Required scope: quotes:read.",
         "tags": [
           "Anchors"
+        ],
+        "security": [
+          {},
+          {
+            "callerKey": []
+          }
         ],
         "parameters": [
           {
@@ -3919,9 +4399,15 @@
     "/api/v1/anchors/census": {
       "get": {
         "summary": "Get the anchor census",
-        "description": "Serves the committed anchor census (constants/anchor-census-rows.json), covering every surveyed anchor — routable, health-only, or merely listed — not only the anchors registered for routing. Optionally filtered to a single tier.",
+        "description": "Serves the committed anchor census (constants/anchor-census-rows.json), covering every surveyed anchor — routable, health-only, or merely listed — not only the anchors registered for routing. Optionally filtered to a single tier. Required scope: quotes:read.",
         "tags": [
           "Anchors"
+        ],
+        "security": [
+          {},
+          {
+            "callerKey": []
+          }
         ],
         "parameters": [
           {

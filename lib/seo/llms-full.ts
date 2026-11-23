@@ -87,6 +87,7 @@ export const LLMS_FULL_SECTIONS: LlmsFullSection[] = [
     files: [
       'ANCHOR_REPUTATION.md',
       'SETTLEMENT_SLA.md',
+      'REFUNDS.md',
       'ORACLE_SPEC.md',
       'VOLUME_SAVINGS.md',
       'SEP_COMPLIANCE.md',

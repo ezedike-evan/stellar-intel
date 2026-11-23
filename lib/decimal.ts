@@ -43,3 +43,12 @@ export function compareDecimals(a: string, b: string): number {
   if (bigA > bigB) return 1;
   return 0;
 }
+
+/** Renders a 7-dp-scaled BigInt back to a trimmed decimal string. */
+export function formatDecimal(scaled: bigint): string {
+  const negative = scaled < 0n;
+  const digits = (negative ? -scaled : scaled).toString().padStart(8, '0');
+  const intPart = digits.slice(0, -7);
+  const fracPart = digits.slice(-7).replace(/0+$/, '');
+  return `${negative ? '-' : ''}${intPart}${fracPart ? `.${fracPart}` : ''}`;
+}

@@ -11,6 +11,13 @@ import {
 } from '@/lib/reputation/store';
 import { SqliteReputationStore } from '@/lib/reputation/sqlite';
 import { _setWebhookEmitter } from '@/lib/webhooks/emit';
+import {
+  InMemorySlippageBreachStore,
+  _setSlippageBreachStore,
+  getSlippageBreachStore,
+  type SlippageBreachStore,
+} from '@/lib/reputation/slippage-breaches';
+import { hashIntent } from '@/lib/intent/hash';
 
 let store: ReputationStore;
 let emitted: Array<{ kind: string; payload: Record<string, unknown> }>;
@@ -19,12 +26,14 @@ beforeEach(() => {
   clearRateLimitStore();
   store = new InMemoryReputationStore();
   _setReputationStore(store);
+  _setSlippageBreachStore(new InMemorySlippageBreachStore());
   emitted = [];
   _setWebhookEmitter((kind, payload) => emitted.push({ kind, payload }));
 });
 
 afterEach(async () => {
   _setWebhookEmitter(null);
+  _setSlippageBreachStore(null);
   vi.restoreAllMocks();
   vi.unstubAllGlobals();
   await store.close();
@@ -358,5 +367,170 @@ describe('append -> reconcile end-to-end (#220 + #221 + #219)', () => {
     expect(row?.deliveredRate).toBe('1490.00000000'); // 149000 / 100
     expect(row?.reconciledAt).not.toBeNull();
     expect(await store.query({ pendingReconciliationOnly: true })).toHaveLength(0);
+  });
+});
+
+describe('POST /api/reputation/append — slippage detection (SLP008)', () => {
+  it('signed POST (with outcomeIntent) and deliveredAmount below minReceive → 201 slippage: "breach", and getSlippageBreachStore().get(intentHash) is not null', async () => {
+    const outcomeIntent = {
+      type: 'offramp-outcome' as const,
+      sourceAsset: 'USDC',
+      destinationAsset: 'NGN',
+      amount: '100',
+      sender: sender.publicKey(),
+      recipient: 'user@example.com',
+      anchorId: 'cowrie',
+      corridor: 'ngnt-ngn',
+      transactionId: 'anchor-tx-100',
+      minReceive: '1400',
+    };
+    const intentHash = await hashIntent(outcomeIntent);
+    const body = {
+      intentHash,
+      anchorId: 'cowrie',
+      corridor: 'ngnt-ngn',
+      direction: 'withdraw',
+      quotedRate: '1500.0',
+      quotedAmount: '100',
+      deliveredAmount: '1350',
+      outcome: 'completed',
+      minReceive: '1400',
+      outcomeIntent,
+      publicKey: sender.publicKey(),
+      signature: signRaw(intentHash, sender),
+    };
+
+    const res = await appendPOST(req(body));
+    expect(res.status).toBe(201);
+    const data = await res.json();
+    expect(data.slippage).toBe('breach');
+
+    const breach = await getSlippageBreachStore().get(intentHash);
+    expect(breach).not.toBeNull();
+    expect(breach?.amountOut).toBe('1350');
+    expect(breach?.minReceive).toBe('1400');
+    expect(breach?.shortfall).toBe('50');
+    expect(breach?.anchorTransactionId).toBe('anchor-tx-100');
+  });
+
+  it('above the floor → "met"', async () => {
+    const outcomeIntent = {
+      type: 'offramp-outcome' as const,
+      sourceAsset: 'USDC',
+      destinationAsset: 'NGN',
+      amount: '100',
+      sender: sender.publicKey(),
+      recipient: 'user@example.com',
+      anchorId: 'cowrie',
+      corridor: 'ngnt-ngn',
+      transactionId: 'anchor-tx-101',
+      minReceive: '1400',
+    };
+    const intentHash = await hashIntent(outcomeIntent);
+    const body = {
+      intentHash,
+      anchorId: 'cowrie',
+      corridor: 'ngnt-ngn',
+      direction: 'withdraw',
+      quotedRate: '1500.0',
+      quotedAmount: '100',
+      deliveredAmount: '1450',
+      outcome: 'completed',
+      minReceive: '1400',
+      outcomeIntent,
+      publicKey: sender.publicKey(),
+      signature: signRaw(intentHash, sender),
+    };
+
+    const res = await appendPOST(req(body));
+    expect(res.status).toBe(201);
+    const data = await res.json();
+    expect(data.slippage).toBe('met');
+    expect(await getSlippageBreachStore().get(intentHash)).toBeNull();
+  });
+
+  it('a duplicate POST → 409, still one breach', async () => {
+    const outcomeIntent = {
+      type: 'offramp-outcome' as const,
+      sourceAsset: 'USDC',
+      destinationAsset: 'NGN',
+      amount: '100',
+      sender: sender.publicKey(),
+      recipient: 'user@example.com',
+      anchorId: 'cowrie',
+      corridor: 'ngnt-ngn',
+      transactionId: 'anchor-tx-102',
+      minReceive: '1400',
+    };
+    const intentHash = await hashIntent(outcomeIntent);
+    const body = {
+      intentHash,
+      anchorId: 'cowrie',
+      corridor: 'ngnt-ngn',
+      direction: 'withdraw',
+      quotedRate: '1500.0',
+      quotedAmount: '100',
+      deliveredAmount: '1350',
+      outcome: 'completed',
+      minReceive: '1400',
+      outcomeIntent,
+      publicKey: sender.publicKey(),
+      signature: signRaw(intentHash, sender),
+    };
+
+    const res1 = await appendPOST(req(body));
+    expect(res1.status).toBe(201);
+    expect((await res1.json()).slippage).toBe('breach');
+
+    const res2 = await appendPOST(req(body));
+    expect(res2.status).toBe(409);
+
+    const list = await getSlippageBreachStore().list();
+    expect(list.filter((b) => b.intentHash === intentHash)).toHaveLength(1);
+  });
+
+  it('breach store failing → still 201 with "unrecorded"', async () => {
+    const failingStore: SlippageBreachStore = {
+      create: async () => {
+        throw new Error('Store failure');
+      },
+      get: async () => null,
+      list: async () => [],
+      resolveVerification: async () => null,
+    };
+    _setSlippageBreachStore(failingStore);
+
+    const outcomeIntent = {
+      type: 'offramp-outcome' as const,
+      sourceAsset: 'USDC',
+      destinationAsset: 'NGN',
+      amount: '100',
+      sender: sender.publicKey(),
+      recipient: 'user@example.com',
+      anchorId: 'cowrie',
+      corridor: 'ngnt-ngn',
+      transactionId: 'anchor-tx-103',
+      minReceive: '1400',
+    };
+    const intentHash = await hashIntent(outcomeIntent);
+    const body = {
+      intentHash,
+      anchorId: 'cowrie',
+      corridor: 'ngnt-ngn',
+      direction: 'withdraw',
+      quotedRate: '1500.0',
+      quotedAmount: '100',
+      deliveredAmount: '1350',
+      outcome: 'completed',
+      minReceive: '1400',
+      outcomeIntent,
+      publicKey: sender.publicKey(),
+      signature: signRaw(intentHash, sender),
+    };
+
+    const res = await appendPOST(req(body));
+    expect(res.status).toBe(201);
+    const data = await res.json();
+    expect(data.slippage).toBe('unrecorded');
   });
 });
