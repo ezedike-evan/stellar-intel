@@ -158,21 +158,21 @@ NEXT_PUBLIC_HORIZON_URL=https://horizon-testnet.stellar.org
 `.env.example` also assigns the variables below. Where Required is not No, it names the part of
 the stack that needs the variable.
 
-| Variable                  | Required            | Description                                                                                                                         |
-| ------------------------- | ------------------- | ----------------------------------------------------------------------------------------------------------------------------------- |
+| Variable                             | Required            | Description                                                                                                                         |
+| ------------------------------------ | ------------------- | ----------------------------------------------------------------------------------------------------------------------------------- |
 | `NEXT_PUBLIC_INTENT_FLOW`            | No                  | Feature flag: the signed-intent off-ramp path is off unless set to `true`.                                                          |
-| `NEXT_PUBLIC_REQUIRE_KEY_FOR_WRITES` | No                  | Feature flag: require a caller key with write scope for intents, reputation appends, and disputes.                                   |
-| `ROUTING_STRATEGY`        | No                  | Router selection strategy: `first-match` (default) or `scored` (multi-factor solver).                                               |
-| `FEE_BUDGET_PCT`          | No                  | Router fee budget as a percentage of the amount, e.g. `1` for 1%. `lib/env.ts` uses `100` when unset.                               |
-| `SOROSWAP_API_KEY`        | Swap hops           | Soroswap aggregator API key for the swap hop connector, which throws `SoroswapConfigError` when it is unset.                        |
-| `CRON_SECRET`             | Reputation pipeline | Shared secret required by the cron-triggered routes (publisher tick, reconcile, refresh).                                           |
-| `REPUTATION_BACKEND`      | No                  | Reputation store backend: `sqlite` (default) or `postgres`.                                                                         |
-| `DATABASE_URL`            | Reputation pipeline | Postgres connection string for the reputation store. Setting it implies the postgres backend.                                       |
-| `LOG_LEVEL`               | No                  | Pino log level: `trace`, `debug`, `info`, `warn` or `error` (default `info`).                                                       |
-| `METRICS_RESET_WINDOW_MS` | No                  | Metrics rolling-window length in milliseconds (default `3600000`, one hour).                                                        |
-| `ORACLE_CONTRACT_ID`      | Publisher           | Soroban reputation oracle contract address, required by `scripts/init-oracle-registry.ts` and the publisher.                        |
-| `STELLAR_NETWORK`         | Publisher           | Network the publisher signs against: `mainnet` or `testnet`. No default, since it signs real transactions.                          |
-| `PUBLISHER_SECRET`        | Publisher           | Secret key of an account registered as a publisher on the oracle contract, required by the publisher CLI and `/api/publisher/tick`. |
+| `NEXT_PUBLIC_REQUIRE_KEY_FOR_WRITES` | No                  | Feature flag: require a caller key with write scope for intents, reputation appends, and disputes.                                  |
+| `ROUTING_STRATEGY`                   | No                  | Router selection strategy: `first-match` (default) or `scored` (multi-factor solver).                                               |
+| `FEE_BUDGET_PCT`                     | No                  | Router fee budget as a percentage of the amount, e.g. `1` for 1%. `lib/env.ts` uses `100` when unset.                               |
+| `SOROSWAP_API_KEY`                   | Swap hops           | Soroswap aggregator API key for the swap hop connector, which throws `SoroswapConfigError` when it is unset.                        |
+| `CRON_SECRET`                        | Reputation pipeline | Shared secret required by the cron-triggered routes (publisher tick, reconcile, refresh).                                           |
+| `REPUTATION_BACKEND`                 | No                  | Reputation store backend: `sqlite` (default) or `postgres`.                                                                         |
+| `DATABASE_URL`                       | Reputation pipeline | Postgres connection string for the reputation store. Setting it implies the postgres backend.                                       |
+| `LOG_LEVEL`                          | No                  | Pino log level: `trace`, `debug`, `info`, `warn` or `error` (default `info`).                                                       |
+| `METRICS_RESET_WINDOW_MS`            | No                  | Metrics rolling-window length in milliseconds (default `3600000`, one hour).                                                        |
+| `ORACLE_CONTRACT_ID`                 | Publisher           | Soroban reputation oracle contract address, required by `scripts/init-oracle-registry.ts` and the publisher.                        |
+| `STELLAR_NETWORK`                    | Publisher           | Network the publisher signs against: `mainnet` or `testnet`. No default, since it signs real transactions.                          |
+| `PUBLISHER_SECRET`                   | Publisher           | Secret key of an account registered as a publisher on the oracle contract, required by the publisher CLI and `/api/publisher/tick`. |
 
 [`docs/ARCHITECTURE.md` §11](docs/ARCHITECTURE.md#11-environment-variable-schema) is the
 exhaustive list, including the optional variables left commented out in `.env.example`.

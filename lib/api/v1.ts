@@ -223,9 +223,9 @@ export async function withV1(
     if (entry) {
       const intentHash =
         typeof entry.body === 'object' && entry.body !== null
-          ? ((entry.body as Record<string, unknown>).quoteId as string | undefined) ??
+          ? (((entry.body as Record<string, unknown>).quoteId as string | undefined) ??
             ((entry.body as Record<string, unknown>).intentHash as string | undefined) ??
-            null
+            null)
           : null;
       recordAudit(caller.id, caller.kind, 'ok', entry.status, intentHash);
       return NextResponse.json(entry.body, {

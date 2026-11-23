@@ -6,6 +6,30 @@ import type { WebhookSubscription } from '@/lib/webhooks/types';
 
 const noopSleep = () => Promise.resolve();
 
+const CREATED_PAYLOAD = {
+  corridorId: 'usdc-ngn',
+  anchorId: 'cowrie',
+  quoteId: 'q-1',
+  amount: '100',
+  sourceAsset: 'USDC',
+  destinationAsset: 'NGN',
+};
+
+const SETTLED_PAYLOAD = {
+  intentHash: 'a'.repeat(64),
+  anchorId: 'cowrie',
+  corridor: 'usdc-ngn',
+  quotedAmount: '100',
+  stellarTransactionId: 'b'.repeat(64),
+};
+
+const FAILED_PAYLOAD = {
+  intentHash: 'a'.repeat(64),
+  anchorId: 'cowrie',
+  corridor: 'usdc-ngn',
+  outcome: 'error' as const,
+};
+
 const SUB: WebhookSubscription = {
   id: 'sub-1',
   url: 'https://example.com/webhook',
@@ -28,7 +52,7 @@ describe('deliverToSubscription — success path', () => {
   it('records a success entry when the endpoint responds 2xx', async () => {
     vi.stubGlobal('fetch', vi.fn().mockResolvedValueOnce({ ok: true, status: 200 }));
 
-    const event = makeWebhookEvent('intent.created', { intentId: 'i-1' });
+    const event = makeWebhookEvent('intent.created', CREATED_PAYLOAD);
     await deliverToSubscription(SUB, event, store, noopSleep);
 
     const letters = await store.listDeadLetters();
@@ -39,7 +63,7 @@ describe('deliverToSubscription — success path', () => {
     const mockFetch = vi.fn().mockResolvedValueOnce({ ok: true, status: 200 });
     vi.stubGlobal('fetch', mockFetch);
 
-    const event = makeWebhookEvent('intent.created', {});
+    const event = makeWebhookEvent('intent.created', CREATED_PAYLOAD);
     await deliverToSubscription(SUB, event, store, noopSleep);
 
     const [, init] = mockFetch.mock.calls[0] as [string, RequestInit];
@@ -53,7 +77,7 @@ describe('deliverToSubscription — success path', () => {
     const mockFetch = vi.fn().mockResolvedValueOnce({ ok: true, status: 200 });
     vi.stubGlobal('fetch', mockFetch);
 
-    const event = makeWebhookEvent('intent.created', {});
+    const event = makeWebhookEvent('intent.created', CREATED_PAYLOAD);
     await deliverToSubscription(SUB, event, store, noopSleep);
 
     expect(mockFetch.mock.calls[0]?.[0]).toBe(SUB.url);
@@ -63,7 +87,7 @@ describe('deliverToSubscription — success path', () => {
     const mockFetch = vi.fn().mockResolvedValueOnce({ ok: true, status: 200 });
     vi.stubGlobal('fetch', mockFetch);
 
-    const event = makeWebhookEvent('intent.created', {});
+    const event = makeWebhookEvent('intent.created', CREATED_PAYLOAD);
     await deliverToSubscription(SUB, event, store, noopSleep);
 
     const [, init] = mockFetch.mock.calls[0] as [string, RequestInit];
@@ -76,7 +100,7 @@ describe('deliverToSubscription — retry and dead-letter', () => {
   it('retries up to 5 times on non-2xx responses before dead-lettering', async () => {
     vi.stubGlobal('fetch', vi.fn().mockResolvedValue({ ok: false, status: 500 }));
 
-    const event = makeWebhookEvent('intent.failed', { reason: 'timeout' });
+    const event = makeWebhookEvent('intent.failed', FAILED_PAYLOAD);
     await deliverToSubscription(SUB, event, store, noopSleep);
 
     const letters = await store.listDeadLetters();
@@ -95,7 +119,7 @@ describe('deliverToSubscription — retry and dead-letter', () => {
         .mockResolvedValueOnce({ ok: true, status: 200 })
     );
 
-    const event = makeWebhookEvent('intent.settled', { intentId: 'i-2' });
+    const event = makeWebhookEvent('intent.settled', SETTLED_PAYLOAD);
     await deliverToSubscription(SUB, event, store, noopSleep);
 
     const letters = await store.listDeadLetters();
@@ -105,7 +129,7 @@ describe('deliverToSubscription — retry and dead-letter', () => {
   it('records the last status code on dead-letter', async () => {
     vi.stubGlobal('fetch', vi.fn().mockResolvedValue({ ok: false, status: 429 }));
 
-    const event = makeWebhookEvent('intent.failed', {});
+    const event = makeWebhookEvent('intent.failed', FAILED_PAYLOAD);
     await deliverToSubscription(SUB, event, store, noopSleep);
 
     const letters = await store.listDeadLetters();
@@ -115,7 +139,7 @@ describe('deliverToSubscription — retry and dead-letter', () => {
   it('dead-letters after network errors with attempt count preserved', async () => {
     vi.stubGlobal('fetch', vi.fn().mockRejectedValue(new Error('ECONNREFUSED')));
 
-    const event = makeWebhookEvent('intent.created', {});
+    const event = makeWebhookEvent('intent.created', CREATED_PAYLOAD);
     await deliverToSubscription(SUB, event, store, noopSleep);
 
     const letters = await store.listDeadLetters();
@@ -126,7 +150,7 @@ describe('deliverToSubscription — retry and dead-letter', () => {
   it('dead-letters a redirect response without following it', async () => {
     vi.stubGlobal('fetch', vi.fn().mockResolvedValue({ ok: false, status: 302 }));
 
-    const event = makeWebhookEvent('intent.created', {});
+    const event = makeWebhookEvent('intent.created', CREATED_PAYLOAD);
     await deliverToSubscription(SUB, event, store, noopSleep);
 
     const letters = await store.listDeadLetters();
@@ -140,7 +164,7 @@ describe('deliverToSubscription — retry and dead-letter', () => {
     vi.stubGlobal('fetch', mockFetch);
 
     const blockedSub: WebhookSubscription = { ...SUB, url: 'http://internal.example.com/hook' };
-    const event = makeWebhookEvent('intent.created', {});
+    const event = makeWebhookEvent('intent.created', CREATED_PAYLOAD);
     await deliverToSubscription(blockedSub, event, store, noopSleep);
 
     expect(mockFetch).not.toHaveBeenCalled();
@@ -159,7 +183,7 @@ describe('deliverToSubscription — retry and dead-letter', () => {
       return Promise.resolve();
     };
 
-    const event = makeWebhookEvent('intent.created', {});
+    const event = makeWebhookEvent('intent.created', CREATED_PAYLOAD);
     await deliverToSubscription(SUB, event, store, captureSleep);
 
     // 5 attempts = 4 sleeps between them
@@ -183,7 +207,7 @@ describe('dispatchEvent — fan-out', () => {
       events: ['anchor.health_status_changed'],
     });
 
-    const event = makeWebhookEvent('intent.created', {});
+    const event = makeWebhookEvent('intent.created', CREATED_PAYLOAD);
     await dispatchEvent(event, store, noopSleep);
 
     // Only SUB (sub-1) subscribes to intent.created
@@ -196,7 +220,7 @@ describe('dispatchEvent — fan-out', () => {
 
     await store.saveSubscription({ ...SUB, events: ['anchor.health_status_changed'] });
 
-    const event = makeWebhookEvent('intent.created', {});
+    const event = makeWebhookEvent('intent.created', CREATED_PAYLOAD);
     await dispatchEvent(event, store, noopSleep);
 
     expect(mockFetch).not.toHaveBeenCalled();
@@ -219,7 +243,7 @@ describe('dispatchEvent — fan-out', () => {
     await store.saveSubscription(SUB);
     await store.saveSubscription(sub2);
 
-    const event = makeWebhookEvent('intent.created', {});
+    const event = makeWebhookEvent('intent.created', CREATED_PAYLOAD);
     await dispatchEvent(event, store, noopSleep);
 
     const letters = await store.listDeadLetters();
