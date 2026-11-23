@@ -33,12 +33,29 @@ afterEach(() => {
   vi.restoreAllMocks();
 });
 
+const CREATED_PAYLOAD = {
+  corridorId: 'usdc-ngn',
+  anchorId: 'cowrie',
+  quoteId: 'q-1',
+  amount: '100',
+  sourceAsset: 'USDC',
+  destinationAsset: 'NGN',
+};
+
+const SETTLED_PAYLOAD = {
+  intentHash: 'a'.repeat(64),
+  anchorId: 'cowrie',
+  corridor: 'usdc-ngn',
+  quotedAmount: '100',
+  stellarTransactionId: 'b'.repeat(64),
+};
+
 describe('emitWebhookEvent', () => {
   it('eventually records one success delivery for a matching subscription', async () => {
     vi.stubGlobal('fetch', vi.fn().mockResolvedValue({ ok: true, status: 200 }));
     await store.saveSubscription(SUB);
 
-    emitWebhookEvent('intent.created', { intentId: 'i-1' });
+    emitWebhookEvent('intent.created', CREATED_PAYLOAD);
     await flush();
 
     const letters = await store.listDeadLetters();
@@ -49,12 +66,12 @@ describe('emitWebhookEvent', () => {
     vi.stubGlobal('fetch', vi.fn().mockRejectedValue(new Error('network down')));
     await store.saveSubscription(SUB);
 
-    expect(() => emitWebhookEvent('intent.created', { intentId: 'i-2' })).not.toThrow();
+    expect(() => emitWebhookEvent('intent.created', CREATED_PAYLOAD)).not.toThrow();
     await flush();
   });
 
   it('does not throw outside a request scope', () => {
-    expect(() => emitWebhookEvent('intent.created', { intentId: 'i-3' })).not.toThrow();
+    expect(() => emitWebhookEvent('intent.created', CREATED_PAYLOAD)).not.toThrow();
   });
 
   it('delivers the seam a (kind, payload) pair instead of dispatching', async () => {
@@ -64,9 +81,9 @@ describe('emitWebhookEvent', () => {
     });
     vi.stubGlobal('fetch', vi.fn());
 
-    emitWebhookEvent('intent.settled', { intentId: 'i-4' });
+    emitWebhookEvent('intent.settled', SETTLED_PAYLOAD);
 
-    expect(seen).toEqual([['intent.settled', { intentId: 'i-4' }]]);
+    expect(seen).toEqual([['intent.settled', SETTLED_PAYLOAD]]);
     expect(fetch).not.toHaveBeenCalled();
   });
 });
