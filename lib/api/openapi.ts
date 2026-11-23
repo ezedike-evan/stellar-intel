@@ -10,6 +10,26 @@ extendZodWithOpenApi(z);
 
 export const registry = new OpenAPIRegistry();
 
+registry.registerComponent('securitySchemes', 'adminKey', {
+  type: 'apiKey',
+  in: 'header',
+  name: 'x-admin-key',
+  description: 'Server-side ADMIN_SECRET_KEY. Operator only.',
+});
+
+registry.registerComponent('securitySchemes', 'bearerAuth', {
+  type: 'http',
+  scheme: 'bearer',
+  description: 'CRON_SECRET. Vercel Cron and the operator only.',
+});
+
+registry.registerComponent('securitySchemes', 'callerKey', {
+  type: 'http',
+  scheme: 'bearer',
+  description:
+    'Caller API key (sik_…) or a short-lived caller token. Optional on public routes: anonymous calls are served at the anonymous tier.',
+});
+
 // ─── Reusable param helpers ─────────────────────────────────────────────────
 
 const CorridorPathParam = z.string().openapi({
@@ -1868,6 +1888,7 @@ registry.registerPath({
   summary: 'Invalidate cached rates',
   description: 'Drops cached rate comparisons for one anchor or all of them. Admin only.',
   tags: ['System'],
+  security: [{ adminKey: [] }],
   responses: {
     200: {
       description: 'Cache invalidated',
@@ -1884,6 +1905,7 @@ registry.registerPath({
   summary: 'List webhook subscriptions',
   description: 'Admin only. See docs/WEBHOOKS.md for the delivery and signing contract.',
   tags: ['System'],
+  security: [{ adminKey: [] }],
   responses: {
     200: {
       description: 'Subscriptions',
@@ -1901,6 +1923,7 @@ registry.registerPath({
   description:
     'Admin only. Returns the per-subscription HMAC signing secret once, at creation time.',
   tags: ['System'],
+  security: [{ adminKey: [] }],
   responses: {
     201: {
       description: 'Subscription created',
@@ -1921,6 +1944,7 @@ registry.registerPath({
   summary: 'Delete a webhook subscription',
   description: 'Admin only.',
   tags: ['System'],
+  security: [{ adminKey: [] }],
   responses: {
     204: { description: 'Deleted' },
     401: UNAUTHORIZED_401,
@@ -1939,6 +1963,7 @@ registry.registerPath({
   description:
     'Admin only. Deliveries that exhausted their retries and were dead-lettered (see docs/WEBHOOKS.md).',
   tags: ['System'],
+  security: [{ adminKey: [] }],
   responses: {
     200: {
       description: 'Dead-lettered deliveries',
