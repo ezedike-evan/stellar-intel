@@ -128,6 +128,28 @@ the browser. The steps fire from `app/onramp/page.tsx`,
 `components/onramp/TrustlinePreflight.tsx`, `components/onramp/DepositDrawer.tsx`
 and `components/onramp/DepositStatusTracker.tsx`.
 
+### Template events
+
+Intent templates sit behind the `intentTemplates` flag
+(`NEXT_PUBLIC_INTENT_TEMPLATES=on`, off by default). Their event names are
+defined once, in `TEMPLATE_EVENTS` (`lib/analytics.ts`), and are valid
+`FunnelEventName`s. The names exist now so the funnel can show whether templates
+get used; nothing fires them until the template UI ships.
+
+| Event name           | Fires when                                      | Properties (aggregate, no PII)           |
+| -------------------- | ----------------------------------------------- | ---------------------------------------- |
+| `template_saved`     | A new template is saved for a corridor          | `direction`, `corridor`, `amount_bucket` |
+| `template_applied`   | A saved template fills the form                 | `direction`, `corridor`, `amount_bucket` |
+| `template_updated`   | An existing template is changed and saved again | `direction`, `corridor`, `amount_bucket` |
+| `template_deleted`   | A template is removed                           | `direction`, `corridor`, `amount_bucket` |
+| `templates_exported` | The wallet's templates are exported to a file   | `direction`, `corridor`, `amount_bucket` |
+| `templates_imported` | Templates are imported from a file              | `direction`, `corridor`, `amount_bucket` |
+
+Each event sends at most those three properties. A template's label never leaves
+the browser. Neither does its id or its raw amount: templates live only in this
+browser's `localStorage`, the events take no property that could carry them, and
+only the coarse `amount_bucket` is sent.
+
 ---
 
 ## Funnel definition
