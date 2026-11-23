@@ -24,6 +24,24 @@
     }
   ],
   "components": {
+    "securitySchemes": {
+      "adminKey": {
+        "type": "apiKey",
+        "in": "header",
+        "name": "x-admin-key",
+        "description": "Server-side ADMIN_SECRET_KEY. Operator only."
+      },
+      "bearerAuth": {
+        "type": "http",
+        "scheme": "bearer",
+        "description": "CRON_SECRET. Vercel Cron and the operator only."
+      },
+      "callerKey": {
+        "type": "http",
+        "scheme": "bearer",
+        "description": "Caller API key (sik_…) or a short-lived caller token. Optional on public routes: anonymous calls are served at the anonymous tier."
+      }
+    },
     "schemas": {
       "OfframpIntent": {
         "type": "object",
@@ -4049,6 +4067,11 @@
         "tags": [
           "System"
         ],
+        "security": [
+          {
+            "adminKey": []
+          }
+        ],
         "responses": {
           "200": {
             "description": "Cache invalidated",
@@ -4091,6 +4114,11 @@
         "description": "Admin only. See docs/WEBHOOKS.md for the delivery and signing contract.",
         "tags": [
           "System"
+        ],
+        "security": [
+          {
+            "adminKey": []
+          }
         ],
         "responses": {
           "200": {
@@ -4135,6 +4163,11 @@
         "description": "Admin only. Returns the per-subscription HMAC signing secret once, at creation time.",
         "tags": [
           "System"
+        ],
+        "security": [
+          {
+            "adminKey": []
+          }
         ],
         "responses": {
           "201": {
@@ -4189,6 +4222,11 @@
         "tags": [
           "System"
         ],
+        "security": [
+          {
+            "adminKey": []
+          }
+        ],
         "responses": {
           "204": {
             "description": "Deleted"
@@ -4233,6 +4271,11 @@
         "tags": [
           "System"
         ],
+        "security": [
+          {
+            "adminKey": []
+          }
+        ],
         "responses": {
           "200": {
             "description": "Dead-lettered deliveries",
@@ -4245,6 +4288,119 @@
                     "properties": {},
                     "additionalProperties": {}
                   }
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Missing or invalid credentials",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiError"
+                }
+              }
+            }
+          },
+          "429": {
+            "description": "Rate limited",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/webhooks/deliveries": {
+      "get": {
+        "summary": "List webhook delivery records",
+        "description": "Admin only. Returns webhook delivery records filtered by status, subscription, or event, newest first.",
+        "tags": [
+          "System"
+        ],
+        "parameters": [
+          {
+            "schema": {
+              "type": "string",
+              "enum": [
+                "success",
+                "failed",
+                "dead_letter"
+              ],
+              "example": "dead_letter",
+              "description": "Filter by delivery status (success, failed, dead_letter)"
+            },
+            "required": false,
+            "description": "Filter by delivery status (success, failed, dead_letter)",
+            "name": "status",
+            "in": "query"
+          },
+          {
+            "schema": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 100,
+              "example": "sub-1",
+              "description": "Filter by subscription ID"
+            },
+            "required": false,
+            "description": "Filter by subscription ID",
+            "name": "subscriptionId",
+            "in": "query"
+          },
+          {
+            "schema": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 100,
+              "example": "evt-1",
+              "description": "Filter by event ID"
+            },
+            "required": false,
+            "description": "Filter by event ID",
+            "name": "eventId",
+            "in": "query"
+          },
+          {
+            "schema": {
+              "type": "integer",
+              "minimum": 1,
+              "maximum": 500,
+              "example": 100,
+              "description": "Maximum number of deliveries to return (1-500, default 100)"
+            },
+            "required": false,
+            "description": "Maximum number of deliveries to return (1-500, default 100)",
+            "name": "limit",
+            "in": "query"
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Webhook delivery records",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "array",
+                  "items": {
+                    "type": "object",
+                    "properties": {},
+                    "additionalProperties": {}
+                  }
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Validation error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiError"
                 }
               }
             }

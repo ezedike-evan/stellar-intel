@@ -67,6 +67,7 @@ The security posture, the threat model, the regulatory basis, and the terms.
 - Threat Model (docs/THREAT_MODEL.md)
 - Jurisdictional Memo (docs/JURISDICTIONAL.md)
 - Governance: Multisig Contract Administration (docs/GOVERNANCE.md)
+- Disputes (docs/DISPUTES.md)
 - Terms of Service (docs/TERMS_OF_SERVICE.md)
 
 ==============================================================================
@@ -684,7 +685,6 @@ See [`docs/ORACLE_SPEC.md`](ORACLE_SPEC.md) for full function signatures, argume
 
 - **Admin** — an M-of-N Stellar multisig account (target threshold in docs/GOVERNANCE.md). The admin can enable/disable publishers;
   it cannot rewrite outcomes.
-- **Upgradability** — `upgrade(new_wasm_hash)` is gated by a separate upgrade admin (rotatable via `propose_upgrade_admin`/`accept_upgrade_admin`); there is **no** time-lock today (a 7-day on-chain time-lock is not implemented).
 - **Upgradability** — `upgrade(new_wasm_hash)` is gated by a separate upgrade admin (rotatable via `propose_upgrade_admin`/`accept_upgrade_admin`) and time-locked: the hash must first be announced with `propose_upgrade`, and can be applied only after 7 days (`UPGRADE_DELAY_SECONDS`) and only with that exact hash. The pending upgrade is readable via `pending_upgrade`, and `cancel_upgrade` withdraws it.
 - **Publisher whitelist** — starts at one (Stellar Intel's publisher). Over
   time, third-party publishers onboard; governance lives in
@@ -980,6 +980,7 @@ the hardening contract (see `lib/api/v1.ts`):
   - [`POST /api/reputation/refresh`](#post-apireputationrefresh)
   - [`GET /api/status`](#get-apistatus)
   - [`GET /api/v1/health`](#get-apiv1health)
+  - [`GET /api/webhooks/deliveries`](#get-apiwebhooksdeliveries)
   - [`GET /api/webhooks/failures`](#get-apiwebhooksfailures)
   - [`GET /api/webhooks/subscriptions`](#get-apiwebhookssubscriptions)
   - [`POST /api/webhooks/subscriptions`](#post-apiwebhookssubscriptions)
@@ -1856,6 +1857,32 @@ Liveness and dependency status for the public v1 surface.
 
 ---
 
+### `GET /api/webhooks/deliveries`
+
+**Summary:** List webhook delivery records  
+
+Admin only. Returns webhook delivery records filtered by status, subscription, or event, newest first.
+
+#### Parameters
+
+| Name | In | Type | Required | Description |
+| :--- | :--- | :--- | :--- | :--- |
+| `status` | `query` | `"success" | "failed" | "dead_letter"` | No | Filter by delivery status (success, failed, dead_letter) |
+| `subscriptionId` | `query` | `string` | No | Filter by subscription ID |
+| `eventId` | `query` | `string` | No | Filter by event ID |
+| `limit` | `query` | `integer` | No | Maximum number of deliveries to return (1-500, default 100) |
+
+#### Responses
+
+| Status | Description | Content-Type | Schema |
+| :--- | :--- | :--- | :--- |
+| `200` | Webhook delivery records | `application/json` | `object[]` |
+| `400` | Validation error | `application/json` | `ApiError` |
+| `401` | Missing or invalid credentials | `application/json` | `ApiError` |
+| `429` | Rate limited | `application/json` | `ApiError` |
+
+---
+
 ### `GET /api/webhooks/failures`
 
 **Summary:** List dead-lettered webhook deliveries  
@@ -1976,28 +2003,6 @@ The route accepts a **flat JSON object** containing the intent fields above, plu
 3. **Sign** the hex hash — sign the hex string via Freighter's `signMessage` ([`lib/intent/sign.ts`](../lib/intent/sign.ts)), which returns a base64 signature and the signer's public key.
 4. **Submit** the flat payload containing the intent fields together with `signature` and `publicKey`.
 
-
-- `nonce` (optional string): exactly 32 hex characters (`/^[0-9a-f]{32}$/i`), providing 128 bits of randomness.
-- `deadline` (optional string): ISO 8601 datetime string (`z.iso.datetime()`).
-
-Both fields are part of the canonical intent schema and covered by the signature when present.
-
-## Signed envelope — Wire format
-
-The route accepts a **flat JSON object** containing the intent fields above, plus optional top-level `signature` and `publicKey` attestation fields. Both attestation fields must be supplied together:
-
-| Field       | Type   | Rule                                                            |
-| ----------- | ------ | --------------------------------------------------------------- |
-| `signature` | string | Optional base64-encoded Ed25519 signature over the intent hash. |
-| `publicKey` | string | Optional Stellar public key (`G…`, 56 chars).                   |
-
-### Construction
-
-1. **Canonicalize** the intent — sort keys recursively, then serialize with `canonicalJson` (in [`lib/intent/hash.ts`](../lib/intent/hash.ts); see [`docs/CANONICAL_JSON.md`](CANONICAL_JSON.md)).
-2. **Hash** the canonical JSON bytes — compute SHA-256 via `hashIntent` ([`lib/intent/hash.ts`](../lib/intent/hash.ts)) to produce `intentHash` (a 64-character lowercase hex string).
-3. **Sign** the hex hash — sign the hex string via Freighter's `signMessage` ([`lib/intent/sign.ts`](../lib/intent/sign.ts)), which returns a base64 signature and the signer's public key.
-4. **Submit** the flat payload containing the intent fields together with `signature` and `publicKey`.
-
 ### Verification
 
 On the server, `verifyOptionalIntentAttestation` in [`lib/intent/verify.ts`](../lib/intent/verify.ts) reads `signature` and `publicKey` off the root of the raw request body:
@@ -2059,9 +2064,6 @@ Idempotency-Key: <optional-unique-string>
 
 Request body:
 
-
-Request body:
-
 ```jsonc
 {
   "type": "offramp",
@@ -2096,65 +2098,6 @@ curl -sX POST https://stellar-intel.vercel.app/api/intent/offramp \
     "sender": "GBBD67IFNZMSW54QOX7SZOCBWW5HDKG54G7QOWPHNHOC4YDTQG2Z4O2U",
     "recipient": "08012345678"
   }'
-```
-
-## On-ramp — `POST /api/v1/intent/onramp`
-
-> **Status.** The `OnrampIntent` schema below is shipped
-> (`OnrampIntentSchema` in [`types/intent.ts`](../types/intent.ts), re-exported
-> from [`lib/intent/onramp-schema.ts`](../lib/intent/onramp-schema.ts)). The
-> endpoint itself is **not live yet**; the request body is final, the response
-> fields are the planned contract. The full deposit flow — preflight/trustline,
-> SEP-10, interactive deposit, payment, tracking — is in
-> [`docs/ONRAMP.md`](ONRAMP.md).
-
-The on-ramp intent is the mirror image of the off-ramp intent: the user pays in
-fiat and the anchor credits a Stellar asset. It is a distinct schema with
-`type: "onramp"` (not a `CanonicalIntentV1` `kind`), and it carries the
-Stellar `destination` that the anchor credits, which the off-ramp's free-form
-`recipient` does not.
-
-### Payload — `OnrampIntent`
-
-| Field              | Type   | Required | Rule                                                                   |
-| ------------------ | ------ | -------- | ---------------------------------------------------------------------- |
-| `type`             | string | yes      | Literal `"onramp"` — the off-ramp discriminator is rejected.           |
-| `sourceAsset`      | string | yes      | Non-empty; the fiat paid in (e.g. `NGN`).                              |
-| `destinationAsset` | string | yes      | Non-empty; the Stellar asset bought (e.g. `USDC`).                     |
-| `amount`           | string | yes      | Positive decimal string (`/^\d+(\.\d+)?$/`, `parseFloat > 0`).         |
-| `sender`           | string | yes      | Non-empty; the fiat rail's reference (bank account, wallet, agent id). |
-| `destination`      | string | yes      | Stellar public key (`G…`, 56 chars); rejects muxed `M…` accounts.      |
-| `depositMethod`    | enum   | yes      | `bank_transfer`, `cash`, `mobile_money` or `card`.                     |
-| `memo`             | string | no       | Non-empty when present; attributing memo for pooled-account anchors.   |
-| `memoType`         | enum   | no       | `text`, `id` or `hash`; required together with `memo`.                 |
-
-Memo rules (enforced by `superRefine`): `memo` and `memoType` must be supplied
-together; a `text` memo must be at most 28 bytes once UTF-8 encoded; an `id`
-memo must be an unsigned 64-bit integer; a `hash` memo must be 64 lowercase
-hex characters. A `type` of `"offramp"` is rejected, as is a non-`G…`
-`destination`.
-
-```jsonc
-// request
-{
-  "type": "onramp",
-  "sourceAsset": "NGN",
-  "destinationAsset": "USDC",
-  "amount": "150000.00",
-  "sender": "NG123456789012345678",
-  "destination": "GA5ZSEJYB37JRC5AVCIA5MOP4RHTM335X2KGX3IHOJAPP5RE34K4KZVN",
-  "depositMethod": "bank_transfer",
-}
-// response (planned)
-{
-  "intentId": "onramp_intent_9a4f21",
-  "status": "pending_trustline",
-  "unsignedChangeTrustXdr": "AAAAAgAAAABn...",
-  "handoffUrl": "https://cowrie.exchange/sep24/deposit?transaction_id=...",
-  "createdAt": "2026-10-17T12:05:00Z",
-}
-```
-
 ```
 
 ## On-ramp — `POST /api/v1/intent/onramp`
@@ -2729,6 +2672,35 @@ prefix using the provided `publicKey`. The request body carries `signature` and
 > Implementation note: treat `lib/intent` as authoritative for the exact ordering
 > and serialization, and verify against its tests rather than hand-ordering keys.
 
+## Other signed payloads
+
+In addition to intents, the canonical JSON serialization and hashing rules apply to other signed protocol messages:
+
+### Refund acknowledgements (`type: 'refund-ack'`)
+
+Defined in [`lib/refunds/ack.ts`](../lib/refunds/ack.ts). When a user acknowledges receipt of a refund issued by an anchor, the payload is signed using Freighter and submitted to `POST /api/refunds/ack`:
+
+```jsonc
+{
+  "type": "refund-ack",
+  "version": 1,
+  "intentHash": "f24f63585861ffb5fc8d06ddb5d572215650e15332831af81f62a71b056b562e",
+  "anchorId": "test-anchor",
+  "account": "GABCDEFGHIJKLMNOPQRSTUVWXYZ012345678901234567890123456789",
+  "amountRefunded": "95.00",
+  "refundFee": "5.00",
+  "payments": [
+    {
+      "id": "pay_1",
+      "idType": "stellar",
+      "amount": "95.00",
+    },
+  ],
+}
+```
+
+The payload is canonicalized using `canonicalJsonValue(ack)` (keys sorted recursively, payments array preserving order) and hashed via `hashRefundAck(ack)` (`hashCanonical(ack)`). The resulting 64-character lowercase hex digest is signed via `signHash(hash)`.
+
 ## Related
 
 - [`docs/INTENT_API.md`](INTENT_API.md) — the envelope and endpoint.
@@ -2873,10 +2845,6 @@ the fiat, never holds the asset, and never holds a key. It resolves an anchor,
 prepares the pieces the user signs, and tracks the anchor's own SEP flow.
 
 > **Status.** The on-ramp intent schema and the SEP-24 deposit primitives are
-> shipped. The `GET /api/v1/onramp/quote` and `POST /api/v1/intent/onramp`
-> endpoints and the `intel.onramp.*` MCP tools are **planned and not live
-> yet** — the planned contract is recorded here so the implementation has a
-> target. The in-app guide at `/docs/onramp` carries the same status.
 > shipped, and the `intel.onramp.quote` and `intel.onramp.prepare` MCP tools
 > are live on the hosted `/api/mcp` endpoint. The `GET /api/v1/onramp/quote`
 > and `POST /api/v1/intent/onramp` endpoints are **planned and not live yet** —
@@ -2890,7 +2858,6 @@ prepares the pieces the user signs, and tracks the anchor's own SEP flow.
 | SEP-6 deposit request — `buildSep6DepositRequest`                                                                                   | **Not implemented** |
 | `GET /api/v1/onramp/quote`                                                                                                          | **Planned**         |
 | `POST /api/v1/intent/onramp`                                                                                                        | **Planned**         |
-| MCP `intel.onramp.quote`, `intel.onramp.prepare`                                                                                    | **Planned**         |
 | MCP `intel.onramp.quote`, `intel.onramp.prepare` ([`lib/mcp/onramp.ts`](../lib/mcp/onramp.ts))                                      | Shipped             |
 
 ## Flow
@@ -3253,10 +3220,6 @@ The entry points expose the full tool set:
 The on-ramp tools are registered by the shared `lib/mcp` server, so every
 entry point has them. See [On-ramp tools](#on-ramp-tools) below.
 
-The on-ramp tools `intel.onramp.quote` and `intel.onramp.prepare` are
-specified but **not registered on any transport** — see
-[Planned: on-ramp tools](#planned-on-ramp-tools) below.
-
 **Scope:** Stellar Intel abstracts anchors, not chains. These tools answer
 "what's my best fiat exit price, and which Stellar anchor should I trust to
 execute it" — not "move this value across chains." For cross-chain pay/bridge
@@ -3582,21 +3545,6 @@ Flag-gated corridors hidden in the UI are omitted.
 - **Input:** none
 - **Output:** `{ count: number, corridors: CorridorSummary[] }`
 
-### Planned: on-ramp tools
-
-Two on-ramp tools are specified but not yet registered on any transport. Both
-would be annotated `readOnlyHint: true` and both take an on-ramp intent
-([`docs/INTENT_API.md`](INTENT_API.md)) rather than an off-ramp one.
-
-- **`intel.onramp.quote`** — an indicative quote across anchors.
-  **Input:** `{ sourceAsset, destinationAsset, amount, depositMethod }`.
-  **Output:** `{ anchor, quoteId, sourceAmount, destinationAmount, rate, fee, expiresAt }`,
-  an estimate derived from the anchor's published fee schedule — never a firm
-  quote. See [docs/ONRAMP.md](ONRAMP.md) for what "indicative" means.
-- **`intel.onramp.prepare`** — the unsigned on-ramp intent plus the anchor
-  handoff URL. **Input:** an `OnrampIntent` without a signature.
-  **Output:** `{ unsignedEnvelope: { intent, intentHash }, handoffUrl }`, where
-  `handoffUrl` is the anchor's hosted SEP-24 deposit page.
 ### On-ramp tools
 
 Both on-ramp tools are annotated `readOnlyHint: true` and use the same
@@ -3837,7 +3785,7 @@ SECTION: DATA AND METHODOLOGY
 
 # Anchor Reputation
 
-**Last reviewed:** 2026-08-26
+**Last reviewed:** 2026-11-21
 
 Every quote, fill, failure, and settlement latency an anchor produces is recorded
 as an **outcome**. Outcomes aggregate into a public, user-verifiable score. The
@@ -4065,9 +4013,9 @@ roadmap gate (see [`docs/MAINNET_LAUNCH.md`](MAINNET_LAUNCH.md), the 90-day prob
 
 ## Disputes
 
-Terminal-state rows expose a "flag incorrect outcome" path. A dispute records the
-contesting party and the disputed outcome id; because every outcome carries the
-user's signature and is replayable from the ledger, adjudication is evidence-based.
+The account that attested an outcome can dispute it, and a maintainer accepts or
+rejects the dispute. See [`DISPUTES.md`](DISPUTES.md) for who can file, how
+resolution works and which routes are involved.
 
 ---
 
@@ -4183,7 +4131,7 @@ UI, as the built-in
 
 # Settlement SLA ($100-capped)
 
-**Last reviewed:** 2026-08-26
+**Last reviewed:** 2026-11-21
 
 Primitive III of the execution layer ([`docs/ROADMAP.md`](ROADMAP.md), issue
 #814): a settlement-guarantee product. For a **covered** off-ramp, Stellar Intel promises
@@ -4230,9 +4178,14 @@ Breach claims reuse the **existing reputation dispute surface** — no second
 dispute path is introduced:
 
 - `POST /api/reputation/dispute` (intentHash, publicKey, signature, anchorId,
-  reason) marks the outcome row `disputed` with `disputedReason`.
-- The disputed outcome is adjudicated through the same reputation flow; a
-  confirmed breach on a covered intent is what authorizes the capped payout.
+  reason) records an `open` dispute. Filing does not change the outcome row; it
+  is not flagged `disputed` and keeps counting in scoring while the dispute is
+  open.
+- A maintainer accepts or rejects the dispute through `POST /api/admin/disputes`,
+  which sets the dispute's status to `accepted` or `rejected`. A confirmed
+  breach on a covered intent is what authorizes the capped payout.
+
+See [`docs/DISPUTES.md`](DISPUTES.md) for the full dispute flow.
 
 ## Activation checklist (maintainer)
 
@@ -5904,6 +5857,66 @@ HSM key. This is documented in `docs/SECURITY.md`.
 - [`docs/SECURITY.md`](SECURITY.md) - key handling and custody boundary
 - [`docs/CONTRIBUTOR_LADDER.md`](CONTRIBUTOR_LADDER.md) - how contributors
   become maintainers and then signer candidates
+
+<!-- source: docs/DISPUTES.md -->
+
+# Disputes
+
+**Last reviewed:** 2026-11-21
+
+This document describes how a user contests a recorded outcome and how a maintainer resolves it. Every claim cites the source file that implements it.
+
+## Who can file and how
+
+A dispute is filed with `POST /api/reputation/dispute` ([`app/api/reputation/dispute/route.ts`](../app/api/reputation/dispute/route.ts)). The JSON body carries five fields.
+
+| Field        | Rule                                                                                  |
+| ------------ | ------------------------------------------------------------------------------------- |
+| `intentHash` | Lowercase hex SHA-256, 64 characters.                                                 |
+| `publicKey`  | A Stellar public key (`G...`, 56 characters).                                         |
+| `signature`  | Ed25519 signature over the raw `intentHash` bytes, made with the key for `publicKey`. |
+| `anchorId`   | The `id` of an anchor in `constants/anchors.ts`.                                      |
+| `reason`     | Free text, 1 to 1000 characters.                                                      |
+
+The route applies these checks in order.
+
+1. A per-IP limit of 10 requests (bucket `api.reputation.dispute.ip`).
+2. Body parsing and validation. Malformed JSON returns 400 `INVALID_JSON`; a body that fails the schema returns 422 `VALIDATION_ERROR`.
+3. Signature verification through `verifyIntentSignature` ([`lib/intent/verify.ts`](../lib/intent/verify.ts)). A failure returns 403.
+4. A durable reputation store must be configured. Without one the route returns the store-unavailable response from [`lib/api/store-guard.ts`](../lib/api/store-guard.ts).
+5. An outcome must exist for the `intentHash` (404 `NOT_FOUND` otherwise), and `publicKey` must equal the outcome's `signerAccount`. Only the account that attested the outcome can dispute it; any other signer gets 403.
+6. A per-signer quota of 10 disputes per 24 hours (429 `RATE_LIMITED` once exceeded).
+
+A successful request returns 201 with the dispute record (`id`, `intentHash`, `publicKey`, `anchorId`, `reason`, `disputed: true`, `createdAt`). The record is stored with status `open` by `getDisputeStore()` ([`lib/reputation/disputes.ts`](../lib/reputation/disputes.ts)).
+
+## What filing changes
+
+Filing creates the dispute record and nothing else. The outcome row is not flagged `disputed`, and it keeps counting toward the anchor's scores while the dispute is open. The `disputed` flag on an outcome row is set only by the reconcile job, when the Horizon payment source does not match the account that signed the intent hash ([`app/api/reputation/reconcile/route.ts`](../app/api/reputation/reconcile/route.ts)). Rows flagged `disputed` are excluded from the corridor aggregates ([`lib/reputation/aggregate.ts`](../lib/reputation/aggregate.ts)).
+
+## Resolution
+
+A dispute is `open` until a maintainer resolves it. The status values are `open`, `accepted` and `rejected` (`DisputeStatus` in [`lib/reputation/disputes.ts`](../lib/reputation/disputes.ts)).
+
+Maintainers use `/api/admin/disputes` ([`app/api/admin/disputes/route.ts`](../app/api/admin/disputes/route.ts)). Both methods require the `x-admin-key` header to match `ADMIN_SECRET_KEY` ([`lib/auth/admin.ts`](../lib/auth/admin.ts)); a missing or wrong key returns 401.
+
+- `GET` lists every dispute, newest first, limited to 60 requests per window.
+- `POST` takes `{ "id": "<dispute id>", "action": "accept" | "reject" }`, limited to 30 requests per window. It sets the status to `accepted` or `rejected`, records `resolvedAt`, and returns the updated dispute. An unknown id returns 404.
+
+Resolving a dispute updates the dispute record only. It does not modify the outcome row.
+
+## Storage
+
+Disputes live in an in-memory store by default and in Postgres when `DATABASE_URL` is set. The table definition is the `SCHEMA_SQL` constant in [`lib/reputation/disputes.ts`](../lib/reputation/disputes.ts), which runs once per process.
+
+## API summary
+
+| Route                     | Method | Auth          | Purpose                     |
+| ------------------------- | ------ | ------------- | --------------------------- |
+| `/api/reputation/dispute` | POST   | Signed body   | File a dispute.             |
+| `/api/admin/disputes`     | GET    | `x-admin-key` | List all disputes.          |
+| `/api/admin/disputes`     | POST   | `x-admin-key` | Accept or reject a dispute. |
+
+For how disputes relate to the settlement guarantee, see [`SETTLEMENT_SLA.md`](SETTLEMENT_SLA.md).
 
 <!-- source: docs/TERMS_OF_SERVICE.md -->
 

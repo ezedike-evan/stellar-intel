@@ -2,8 +2,6 @@ import { z } from 'zod';
 import {
   OUTCOME_DIRECTIONS,
   OUTCOME_STATUSES,
-  type OutcomeLogRow,
-  type OutcomeStatus,
   QUOTE_SOURCES,
   type OutcomeLogRow,
   type OutcomeStatus,

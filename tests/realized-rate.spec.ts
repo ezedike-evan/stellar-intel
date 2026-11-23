@@ -1,5 +1,4 @@
 import { describe, expect, it } from 'vitest';
-import { realizedRate, realizedRateFromSep6 } from '@/lib/stellar/realized-rate';
 import { quotedAllInRate, realizedRate, realizedRateFromSep6 } from '@/lib/stellar/realized-rate';
 import type { Sep6Transaction } from '@/lib/stellar/sep6';
 
