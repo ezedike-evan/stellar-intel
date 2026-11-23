@@ -251,3 +251,61 @@ describe('dispatchEvent — fan-out', () => {
     expect(letters[0]?.subscriptionId).toBe('sub-1');
   });
 });
+
+describe('dispatchEvent — idempotency (WHK004)', () => {
+  it('delivers two events with the same idempotency key once', async () => {
+    const mockFetch = vi.fn().mockResolvedValue({ ok: true, status: 200 });
+    vi.stubGlobal('fetch', mockFetch);
+    await store.saveSubscription(SUB);
+
+    const first = makeWebhookEvent('intent.created', CREATED_PAYLOAD, { idempotencyKey: 'k-1' });
+    const retry = makeWebhookEvent('intent.created', CREATED_PAYLOAD, { idempotencyKey: 'k-1' });
+    expect(retry.id).not.toBe(first.id);
+
+    await dispatchEvent(first, store, noopSleep);
+    await dispatchEvent(retry, store, noopSleep);
+
+    expect(mockFetch).toHaveBeenCalledTimes(1);
+    expect(await store.getEvent(first.id)).toEqual(first);
+    expect(await store.getEvent(retry.id)).toBeNull();
+  });
+
+  it('delivers events with different idempotency keys twice', async () => {
+    const mockFetch = vi.fn().mockResolvedValue({ ok: true, status: 200 });
+    vi.stubGlobal('fetch', mockFetch);
+    await store.saveSubscription(SUB);
+
+    await dispatchEvent(
+      makeWebhookEvent('intent.created', CREATED_PAYLOAD, { idempotencyKey: 'k-1' }),
+      store,
+      noopSleep
+    );
+    await dispatchEvent(
+      makeWebhookEvent('intent.created', CREATED_PAYLOAD, { idempotencyKey: 'k-2' }),
+      store,
+      noopSleep
+    );
+
+    expect(mockFetch).toHaveBeenCalledTimes(2);
+  });
+
+  it('sends the x-webhook-id and x-webhook-idempotency-key headers', async () => {
+    const mockFetch = vi.fn().mockResolvedValue({ ok: true, status: 200 });
+    vi.stubGlobal('fetch', mockFetch);
+    await store.saveSubscription(SUB);
+
+    const event = makeWebhookEvent('intent.created', CREATED_PAYLOAD, { idempotencyKey: 'k-9' });
+    await dispatchEvent(event, store, noopSleep);
+
+    const headers = (mockFetch.mock.calls[0]![1] as RequestInit).headers as Record<string, string>;
+    expect(headers['x-webhook-id']).toBe(event.id);
+    expect(headers['x-webhook-idempotency-key']).toBe('k-9');
+  });
+
+  it('stores every dispatched event so it can be fetched by id', async () => {
+    vi.stubGlobal('fetch', vi.fn().mockResolvedValue({ ok: true, status: 200 }));
+    const event = makeWebhookEvent('intent.settled', SETTLED_PAYLOAD);
+    await dispatchEvent(event, store, noopSleep);
+    expect(await store.getEvent(event.id)).toEqual(event);
+  });
+});
