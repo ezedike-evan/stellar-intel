@@ -1,7 +1,12 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { withRequestLogger } from '@/lib/logger';
 import { getReputationStore } from '@/lib/reputation/store';
-import { AppendOutcomeInputSchema, toOutcomeLogRow } from '@/lib/reputation/schema';
+import {
+  AppendOutcomeInputSchema,
+  outcomeIntentMatchesHash,
+  toOutcomeLogRow,
+} from '@/lib/reputation/schema';
+import { detectSlippageBreach } from '@/lib/reputation/slippage-detect';
 import { verifyIntentSignature } from '@/lib/intent/verify';
 import type { ApiError } from '@/types';
 import { enforceRateLimit } from '@/lib/api/response';
@@ -112,6 +117,14 @@ export async function POST(request: NextRequest): Promise<NextResponse> {
       );
     }
 
+    if (!(await outcomeIntentMatchesHash(parsed.data))) {
+      logger.warn({ event: 'append_outcome_intent_mismatch' });
+      return NextResponse.json<ApiError>(
+        { code: 'VALIDATION_ERROR', message: 'outcomeIntent does not hash to intentHash' },
+        { status: 400 }
+      );
+    }
+
     const row = toOutcomeLogRow(parsed.data);
     const inserted = await getReputationStore().append(row);
     if (!inserted) {
@@ -122,6 +135,30 @@ export async function POST(request: NextRequest): Promise<NextResponse> {
       );
     }
 
+    const slippageResult = await detectSlippageBreach(
+      row,
+      parsed.data.outcomeIntent?.transactionId ?? null
+    );
+
+    let slippage: 'not_applicable' | 'met' | 'breach' | 'unrecorded';
+    if (slippageResult.kind === 'breach') {
+      slippage = 'breach';
+      logger.info({
+        event: 'slippage_breach_detected',
+        anchorId: row.anchorId,
+        intentHash: row.intentHash,
+        shortfallBps: slippageResult.breach.shortfallBps,
+      });
+    } else if (slippageResult.kind === 'error') {
+      slippage = 'unrecorded';
+      logger.warn({
+        event: 'slippage_breach_write_failed',
+        message: slippageResult.message,
+      });
+    } else {
+      slippage = slippageResult.kind;
+    }
+
     logger.info({
       event: 'outcome_appended',
       anchorId: row.anchorId,
@@ -130,7 +167,7 @@ export async function POST(request: NextRequest): Promise<NextResponse> {
     });
     emitOutcomeEvents(row);
     return NextResponse.json(
-      { ok: true, intentHash: row.intentHash, attested: true },
+      { ok: true, intentHash: row.intentHash, attested: true, slippage },
       { status: 201 }
     );
   });

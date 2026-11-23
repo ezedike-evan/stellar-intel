@@ -2389,6 +2389,65 @@
                   "signature": {
                     "type": "string",
                     "description": "Base64 Ed25519 signature by publicKey over intentHash"
+                  },
+                  "minReceive": {
+                    "type": [
+                      "string",
+                      "null"
+                    ],
+                    "pattern": "^\\d+(\\.\\d+)?$",
+                    "description": "Minimum receive floor amount signed in the outcome intent"
+                  },
+                  "outcomeIntent": {
+                    "type": "object",
+                    "properties": {
+                      "type": {
+                        "type": "string",
+                        "enum": [
+                          "offramp-outcome"
+                        ]
+                      },
+                      "sourceAsset": {
+                        "type": "string"
+                      },
+                      "destinationAsset": {
+                        "type": "string"
+                      },
+                      "amount": {
+                        "type": "string"
+                      },
+                      "sender": {
+                        "type": "string"
+                      },
+                      "recipient": {
+                        "type": "string"
+                      },
+                      "anchorId": {
+                        "type": "string"
+                      },
+                      "corridor": {
+                        "type": "string"
+                      },
+                      "transactionId": {
+                        "type": "string"
+                      },
+                      "minReceive": {
+                        "type": "string"
+                      }
+                    },
+                    "required": [
+                      "type",
+                      "sourceAsset",
+                      "destinationAsset",
+                      "amount",
+                      "sender",
+                      "recipient",
+                      "anchorId",
+                      "corridor",
+                      "transactionId",
+                      "minReceive"
+                    ],
+                    "description": "The exact outcome intent signed by sender"
                   }
                 },
                 "required": [
@@ -2421,12 +2480,22 @@
                     },
                     "attested": {
                       "type": "boolean"
+                    },
+                    "slippage": {
+                      "type": "string",
+                      "enum": [
+                        "not_applicable",
+                        "met",
+                        "breach",
+                        "unrecorded"
+                      ]
                     }
                   },
                   "required": [
                     "ok",
                     "intentHash",
-                    "attested"
+                    "attested",
+                    "slippage"
                   ]
                 }
               }

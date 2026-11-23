@@ -917,6 +917,24 @@ registry.registerPath({
             signature: z
               .string()
               .openapi({ description: 'Base64 Ed25519 signature by publicKey over intentHash' }),
+            minReceive: z.string().regex(AMOUNT_PATTERN).nullable().optional().openapi({
+              description: 'Minimum receive floor amount signed in the outcome intent',
+            }),
+            outcomeIntent: z
+              .object({
+                type: z.literal('offramp-outcome'),
+                sourceAsset: z.string(),
+                destinationAsset: z.string(),
+                amount: z.string(),
+                sender: z.string(),
+                recipient: z.string(),
+                anchorId: z.string(),
+                corridor: z.string(),
+                transactionId: z.string(),
+                minReceive: z.string(),
+              })
+              .optional()
+              .openapi({ description: 'The exact outcome intent signed by sender' }),
           }),
         },
       },
@@ -927,7 +945,12 @@ registry.registerPath({
       description: 'Outcome appended and attested',
       content: {
         'application/json': {
-          schema: z.object({ ok: z.boolean(), intentHash: z.string(), attested: z.boolean() }),
+          schema: z.object({
+            ok: z.boolean(),
+            intentHash: z.string(),
+            attested: z.boolean(),
+            slippage: z.enum(['not_applicable', 'met', 'breach', 'unrecorded']),
+          }),
         },
       },
     },
