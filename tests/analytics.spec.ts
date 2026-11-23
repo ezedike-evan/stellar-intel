@@ -2,12 +2,15 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import {
   FUNNEL_EVENTS,
   ONRAMP_FUNNEL_EVENTS,
+  TEMPLATE_EVENTS,
   type FunnelEventName,
+  type FunnelEventProps,
   amountBucket,
   redactProperties,
   trackAnalyticsEvent,
   trackFunnelEvent,
 } from '@/lib/analytics';
+import { flags, isFlag } from '@/lib/flags';
 
 type PlausibleCall = [string, { props?: Record<string, string | number | boolean> } | undefined];
 
@@ -227,5 +230,82 @@ describe('on-ramp funnel events (#1491)', () => {
     expect((plausible.mock.calls as PlausibleCall[])[0]?.[1]?.props).toEqual({
       corridor: 'usdc-ngn',
     });
+  });
+});
+
+describe('template events (TPL004)', () => {
+  let plausible: ReturnType<typeof vi.fn>;
+
+  beforeEach(() => {
+    plausible = vi.fn();
+    // @ts-expect-error test shim
+    globalThis.window = { plausible };
+  });
+
+  afterEach(() => {
+    // @ts-expect-error cleanup
+    delete globalThis.window;
+  });
+
+  it('defines the six documented names, once', () => {
+    expect(TEMPLATE_EVENTS).toEqual({
+      templateSaved: 'template_saved',
+      templateApplied: 'template_applied',
+      templateUpdated: 'template_updated',
+      templateDeleted: 'template_deleted',
+      templatesExported: 'templates_exported',
+      templatesImported: 'templates_imported',
+    });
+    // None of them reuses a funnel name, so a template is never counted as a funnel step.
+    const funnel = new Set<string>([
+      ...Object.values(FUNNEL_EVENTS),
+      ...Object.values(ONRAMP_FUNNEL_EVENTS),
+    ]);
+    for (const name of Object.values(TEMPLATE_EVENTS)) {
+      expect(funnel.has(name), name).toBe(false);
+      expect(name, name).toMatch(/^templates?_[a-z]+$/);
+    }
+  });
+
+  it('sends every template event through trackFunnelEvent with only the allowed props', () => {
+    const names: FunnelEventName[] = Object.values(TEMPLATE_EVENTS);
+    // A caller that tries to send the label, the id and the raw amount as well.
+    const props: FunnelEventProps & Record<string, unknown> = {
+      direction: 'offramp',
+      corridor: 'usdc-ngn',
+      amount_bucket: amountBucket(250),
+      label: 'Rent for Mum',
+      id: 'tpl-1',
+      amount: '250',
+    };
+    for (const name of names) trackFunnelEvent(name, props);
+
+    const calls = plausible.mock.calls as PlausibleCall[];
+    expect(calls.map(([name]) => name)).toEqual(names);
+    for (const [name, options] of calls) {
+      expect(options?.props, name).toEqual({
+        direction: 'offramp',
+        corridor: 'usdc-ngn',
+        amount_bucket: '100-500',
+      });
+    }
+    expect(JSON.stringify(calls)).not.toContain('Rent for Mum');
+  });
+
+  it('redacts a label that is wrongly sent as `name` through trackAnalyticsEvent', () => {
+    trackAnalyticsEvent(TEMPLATE_EVENTS.templateSaved, {
+      name: 'Rent for Mum',
+      corridor: 'usdc-ngn',
+    });
+
+    expect((plausible.mock.calls as PlausibleCall[])[0]).toEqual([
+      'template_saved',
+      { props: { name: '[REDACTED]', corridor: 'usdc-ngn' } },
+    ]);
+  });
+
+  it('sits behind a flag that is off unless it is turned on', () => {
+    expect(flags.intentTemplates).toBe(false);
+    expect(isFlag('intentTemplates')).toBe(false);
   });
 });

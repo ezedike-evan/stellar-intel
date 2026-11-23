@@ -1,7 +1,6 @@
 import { getHealthSnapshot, setHealthSnapshot } from '@/lib/api/shared-state';
 import { getAnchorHealthLedger } from '@/lib/stellar/anchors';
 import { emitWebhookEvent } from './emit';
-import type { WebhookEventKind } from './types';
 
 export type HealthState = 'healthy' | 'degraded';
 
@@ -43,7 +42,7 @@ export interface HealthDiffDeps {
   ledger?: () => ReturnType<typeof getAnchorHealthLedger>;
   getSnapshot?: () => Promise<string | null>;
   setSnapshot?: (json: string) => Promise<void>;
-  emit?: (kind: WebhookEventKind, payload: Record<string, unknown>) => void;
+  emit?: typeof emitWebhookEvent;
 }
 
 function parseSnapshot(json: string): Record<string, boolean> | null {
