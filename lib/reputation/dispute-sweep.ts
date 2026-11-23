@@ -2,13 +2,13 @@ import { publicDisputeRef, type AdjudicationLogStore } from './adjudication-log'
 import { isOverdue, levelDeadline } from './dispute-ladder';
 import type { DisputeStore } from './disputes';
 
-export interface DisputeSweepDeps {
+export interface SweepDeps {
   disputes: DisputeStore;
   log: AdjudicationLogStore;
   now?: Date;
 }
 
-export interface DisputeSweepResult {
+export interface SweepResult {
   scanned: number;
   escalated: number;
 }
@@ -23,9 +23,7 @@ const ANCHOR_TIMEOUT_RATIONALE = 'Anchor did not respond within 72 hours.';
  * to decide those. A second run finds nothing left at the anchor rung, so the
  * sweep is idempotent.
  */
-export async function escalateOverdueDisputes(
-  deps: DisputeSweepDeps
-): Promise<DisputeSweepResult> {
+export async function escalateOverdueDisputes(deps: SweepDeps): Promise<SweepResult> {
   const now = deps.now ?? new Date();
   const nowIso = now.toISOString();
 
