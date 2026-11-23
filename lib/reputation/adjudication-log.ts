@@ -119,6 +119,64 @@ export function verifyChain(entries: readonly AdjudicationEntry[]): ChainVerific
   return { ok: true, length: entries.length, head: expectedPrevHash };
 }
 
+export interface AdjudicationSummary {
+  filed: number;
+  resolved: number;
+  accepted: number;
+  rejected: number;
+  open: number;
+  appealed: number;
+}
+
+export function summarizeLog(entries: readonly AdjudicationEntry[]): AdjudicationSummary {
+  const byRef = new Map<
+    string,
+    { lastSeq: number; lastAction: AdjudicationAction; hasAppealed: boolean }
+  >();
+
+  for (const entry of entries) {
+    const existing = byRef.get(entry.disputeRef);
+    if (!existing) {
+      byRef.set(entry.disputeRef, {
+        lastSeq: entry.seq,
+        lastAction: entry.action,
+        hasAppealed: entry.action === 'appealed',
+      });
+    } else {
+      if (entry.seq >= existing.lastSeq) {
+        existing.lastSeq = entry.seq;
+        existing.lastAction = entry.action;
+      }
+      if (entry.action === 'appealed') {
+        existing.hasAppealed = true;
+      }
+    }
+  }
+
+  let accepted = 0;
+  let rejected = 0;
+  let appealed = 0;
+
+  for (const info of byRef.values()) {
+    if (info.lastAction === 'accepted') accepted++;
+    else if (info.lastAction === 'rejected') rejected++;
+    if (info.hasAppealed) appealed++;
+  }
+
+  const filed = byRef.size;
+  const resolved = accepted + rejected;
+  const open = filed - resolved;
+
+  return {
+    filed,
+    resolved,
+    accepted,
+    rejected,
+    open,
+    appealed,
+  };
+}
+
 export interface AdjudicationLogStore {
   append(input: AdjudicationEntryInput): Promise<AdjudicationEntry>;
   list(opts?: { afterSeq?: number; limit?: number }): Promise<AdjudicationEntry[]>;
