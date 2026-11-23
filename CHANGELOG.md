@@ -26,6 +26,8 @@ This project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.htm
 - `StatusTracker`: when `stellar_transaction_id` is a valid 64-char hex, render a link to `{STELLAR_EXPERT_URL}/tx/{id}` opening in a new tab (`target="_blank" rel="noopener noreferrer"`) ([#47](https://github.com/Ezedike-Evan/stellar-intel/issues/47))
 - `lib/reporter`: pluggable error reporter with noop default; wire via `configureReporter()` at app startup (#184)
 - Six webhook event kinds can be subscribed to: `intent.rejected`, `intent.expired`, `settlement.status_changed`, `dispute.opened`, `dispute.resolved` and `oracle.published` (#2181, WHK003). Each has a strict payload schema in `types/webhooks.ts`; none carries a sender, recipient, public key, signature, dispute reason text or JWT. Nothing emits them yet. `/docs/webhooks` lists all eleven kinds, marks the six as not yet emitted, and now counts the live kinds in its banner instead of stating a number.
+- `intentTemplates` flag (`NEXT_PUBLIC_INTENT_TEMPLATES=on`, off by default) and the six `TEMPLATE_EVENTS` analytics names (#2157, TPL004). The names are valid `FunnelEventName`s and take only `direction`, `corridor` and `amount_bucket`; a template's label, id and raw amount never leave the browser. Nothing fires them yet.
+- `lib/auth/api-keys.ts`: the building blocks for caller API keys (#2194, AGS001). The four scopes with `isApiScope` and `hasScope` (`admin` implies the rest), the key format `sik_<keyId>_<secret>` with `generateApiKey` and `parseApiKey`, and `hashApiKey` (SHA-256) with a constant-time `hashesEqual`. Pure: nothing is stored, no route uses it yet.
 
 ### Changed
 
@@ -38,6 +40,7 @@ This project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.htm
 - `QuotePill`: the `sep6-fee` badge visibly read "SEP-6" with no indication it was an estimate, unlike the `sep6-info` badge's "Indicative (SEP-6)" — both are now labeled "Indicative (SEP-6)" so a SEP-6 rate is never mistaken for a firm quote (#802)
 - Stellar public-key validation now uses the correct base32 alphabet (`G[A-Z2-7]{55}`), rejecting keys containing `0`, `1`, `8`, or `9` that the previous `[A-Z0-9]` pattern wrongly accepted.
 - `NEXT_PUBLIC_INTENT_FLOW` no longer had two flag accessors with opposite defaults; `lib/flags.ts` now exposes a single accessor (intent flow OFF unless explicitly `"true"`).
+- An anchor's `refunds` object is validated instead of cast (#2112, RFD001). `parseRefunds` (`lib/stellar/refunds.ts`) rebuilds it field by field: amounts must be plain decimal amounts, a payment's `id_type` must be `stellar` or `external`, payments that fail are dropped, and an object without a usable `amount_refunded` is omitted altogether. A malformed or hostile response could previously put arbitrary values into the refund panel. `getSep6Transaction` now returns the same parsed `refunds`; it used to drop the field.
 
 ### Removed
 
