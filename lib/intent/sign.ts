@@ -33,17 +33,19 @@ function toBase64Signature(value: unknown): string {
 }
 
 /**
- * Sign an intent hash using Freighter's signMessage API.
- * Returns the intent hash, Freighter's base64 signature, and the signer's public key.
+ * Sign a 64-character lowercase hex hash using Freighter's signMessage API.
+ * Returns the hash as intentHash, Freighter's base64 signature, and the signer's public key.
  */
-export async function signIntent(intent: Intent): Promise<SignedIntentEnvelope> {
+export async function signHash(hash: string): Promise<SignedIntentEnvelope> {
+  if (!/^[0-9a-f]{64}$/.test(hash)) {
+    throw new IntentSignError('hash must be 64 lowercase hex chars', 'SIGN_FAILED');
+  }
+
   const { signMessage, getAddress } = await import('@stellar/freighter-api').catch(() => {
     throw new IntentSignError('Freighter extension is not available', 'FREIGHTER_UNAVAILABLE');
   });
 
-  const intentHash = await hashIntent(intent);
-
-  const signResult = await signMessage(intentHash).catch((err: unknown) => {
+  const signResult = await signMessage(hash).catch((err: unknown) => {
     const msg = err instanceof Error ? err.message : 'Sign request failed';
     throw new IntentSignError(msg, 'SIGN_FAILED');
   });
@@ -75,5 +77,13 @@ export async function signIntent(intent: Intent): Promise<SignedIntentEnvelope> 
     throw new IntentSignError('Freighter returned no signature', 'SIGN_FAILED');
   }
 
-  return { intentHash, signature, publicKey };
+  return { intentHash: hash, signature, publicKey };
+}
+
+/**
+ * Sign an intent using Freighter's signMessage API.
+ * Computes the canonical hash of the intent and delegates to signHash.
+ */
+export async function signIntent(intent: Intent): Promise<SignedIntentEnvelope> {
+  return signHash(await hashIntent(intent));
 }
