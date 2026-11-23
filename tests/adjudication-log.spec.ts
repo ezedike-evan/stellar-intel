@@ -5,6 +5,7 @@ import {
   PostgresAdjudicationLog,
   computeEntryHash,
   verifyChain,
+  summarizeLog,
   publicDisputeRef,
   assertPublicSafe,
   PublicTextError,
@@ -281,6 +282,154 @@ describe('adjudication-log', () => {
           decidedAt: '2026-01-01T00:00:00.000Z',
         })
       ).rejects.toThrow(TypeError);
+    });
+  });
+
+  describe('summarizeLog', () => {
+    it('summarizes empty log', () => {
+      expect(summarizeLog([])).toEqual({
+        filed: 0,
+        resolved: 0,
+        accepted: 0,
+        rejected: 0,
+        open: 0,
+        appealed: 0,
+      });
+    });
+
+    it('handles filed only -> open 1', () => {
+      const entries: AdjudicationEntry[] = [
+        {
+          seq: 1,
+          disputeRef: 'ref-1',
+          anchorId: 'cowrie',
+          category: 'delayed',
+          level: 'anchor',
+          action: 'filed',
+          rationale: 'Filed',
+          decidedAt: '2026-01-01T00:00:00.000Z',
+          prevHash: GENESIS_HASH,
+          entryHash: 'hash-1',
+        },
+      ];
+      expect(summarizeLog(entries)).toEqual({
+        filed: 1,
+        resolved: 0,
+        accepted: 0,
+        rejected: 0,
+        open: 1,
+        appealed: 0,
+      });
+    });
+
+    it('handles filed + escalated + accepted -> resolved 1, accepted 1', () => {
+      const entries: AdjudicationEntry[] = [
+        {
+          seq: 1,
+          disputeRef: 'ref-1',
+          anchorId: 'cowrie',
+          category: 'delayed',
+          level: 'anchor',
+          action: 'filed',
+          rationale: 'Filed',
+          decidedAt: '2026-01-01T00:00:00.000Z',
+          prevHash: GENESIS_HASH,
+          entryHash: 'hash-1',
+        },
+        {
+          seq: 2,
+          disputeRef: 'ref-1',
+          anchorId: 'cowrie',
+          category: 'delayed',
+          level: 'review',
+          action: 'escalated',
+          rationale: 'Escalated',
+          decidedAt: '2026-01-02T00:00:00.000Z',
+          prevHash: 'hash-1',
+          entryHash: 'hash-2',
+        },
+        {
+          seq: 3,
+          disputeRef: 'ref-1',
+          anchorId: 'cowrie',
+          category: 'delayed',
+          level: 'review',
+          action: 'accepted',
+          rationale: 'Accepted',
+          decidedAt: '2026-01-03T00:00:00.000Z',
+          prevHash: 'hash-2',
+          entryHash: 'hash-3',
+        },
+      ];
+      expect(summarizeLog(entries)).toEqual({
+        filed: 1,
+        resolved: 1,
+        accepted: 1,
+        rejected: 0,
+        open: 0,
+        appealed: 0,
+      });
+    });
+
+    it('handles two disputes, one rejected -> resolved 1 open 1; appealed counted', () => {
+      const entries: AdjudicationEntry[] = [
+        {
+          seq: 1,
+          disputeRef: 'ref-1',
+          anchorId: 'cowrie',
+          category: 'delayed',
+          level: 'anchor',
+          action: 'filed',
+          rationale: 'Filed 1',
+          decidedAt: '2026-01-01T00:00:00.000Z',
+          prevHash: GENESIS_HASH,
+          entryHash: 'hash-1',
+        },
+        {
+          seq: 2,
+          disputeRef: 'ref-1',
+          anchorId: 'cowrie',
+          category: 'delayed',
+          level: 'anchor',
+          action: 'rejected',
+          rationale: 'Rejected 1',
+          decidedAt: '2026-01-02T00:00:00.000Z',
+          prevHash: 'hash-1',
+          entryHash: 'hash-2',
+        },
+        {
+          seq: 3,
+          disputeRef: 'ref-2',
+          anchorId: 'mykobo',
+          category: 'wrong_amount',
+          level: 'anchor',
+          action: 'filed',
+          rationale: 'Filed 2',
+          decidedAt: '2026-01-03T00:00:00.000Z',
+          prevHash: 'hash-2',
+          entryHash: 'hash-3',
+        },
+        {
+          seq: 4,
+          disputeRef: 'ref-2',
+          anchorId: 'mykobo',
+          category: 'wrong_amount',
+          level: 'anchor',
+          action: 'appealed',
+          rationale: 'Appealed 2',
+          decidedAt: '2026-01-04T00:00:00.000Z',
+          prevHash: 'hash-3',
+          entryHash: 'hash-4',
+        },
+      ];
+      expect(summarizeLog(entries)).toEqual({
+        filed: 2,
+        resolved: 1,
+        accepted: 0,
+        rejected: 1,
+        open: 1,
+        appealed: 1,
+      });
     });
   });
 });
