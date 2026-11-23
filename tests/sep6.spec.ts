@@ -259,6 +259,45 @@ describe('getSep6Transaction', () => {
     expect(result.updatedAt).toBeInstanceOf(Date);
   });
 
+  it('returns the anchor refunds object parsed, and omits one it cannot use', async () => {
+    const respond = (transaction: Record<string, unknown>) =>
+      vi.stubGlobal(
+        'fetch',
+        vi.fn(async () => ({
+          ok: true,
+          json: async () => ({
+            transaction: { id: TRANSACTION_ID, status: 'refunded', ...transaction },
+          }),
+        }))
+      );
+
+    respond({
+      refunds: {
+        amount_refunded: '50',
+        payments: [
+          { id: 'stellar-refund-hash', id_type: 'stellar', amount: 50 },
+          { id: '', id_type: 'external', amount: '1', fee: '0' },
+        ],
+      },
+    });
+    const refunded = await getSep6Transaction(TRANSFER_SERVER, TRANSACTION_ID, JWT);
+    expect(refunded.refunds).toEqual({
+      amount_refunded: '50',
+      amount_fee: '0',
+      payments: [{ id: 'stellar-refund-hash', id_type: 'stellar', amount: '50', fee: '0' }],
+    });
+
+    // Not an object: the field is absent. So is it when the anchor sent none.
+    respond({ refunds: ['not', 'an', 'object'] });
+    expect('refunds' in (await getSep6Transaction(TRANSFER_SERVER, TRANSACTION_ID, JWT))).toBe(
+      false
+    );
+    respond({});
+    expect('refunds' in (await getSep6Transaction(TRANSFER_SERVER, TRANSACTION_ID, JWT))).toBe(
+      false
+    );
+  });
+
   it('maps a known status correctly (pending_anchor stays pending_anchor, normalizedStatus is pending_anchor)', async () => {
     vi.stubGlobal(
       'fetch',

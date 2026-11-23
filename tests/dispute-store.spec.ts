@@ -89,8 +89,12 @@ describe('InMemoryDisputeStore', () => {
 
   it('finds disputes by intentHash newest first', async () => {
     const hash = 'b'.repeat(64);
-    await store.create(dispute({ id: 'd1', intentHash: hash, createdAt: '2026-10-01T10:00:00.000Z' }));
-    await store.create(dispute({ id: 'd2', intentHash: hash, createdAt: '2026-10-02T10:00:00.000Z' }));
+    await store.create(
+      dispute({ id: 'd1', intentHash: hash, createdAt: '2026-10-01T10:00:00.000Z' })
+    );
+    await store.create(
+      dispute({ id: 'd2', intentHash: hash, createdAt: '2026-10-02T10:00:00.000Z' })
+    );
     await store.create(dispute({ id: 'other', intentHash: 'c'.repeat(64) }));
 
     const found = await store.findByIntentHash(hash);
@@ -99,10 +103,20 @@ describe('InMemoryDisputeStore', () => {
 
   it('finds disputes by subject newest first', async () => {
     await store.create(
-      dispute({ id: 'd1', subjectKind: 'refund', subjectRef: 'ref-1', createdAt: '2026-10-01T10:00:00.000Z' })
+      dispute({
+        id: 'd1',
+        subjectKind: 'refund',
+        subjectRef: 'ref-1',
+        createdAt: '2026-10-01T10:00:00.000Z',
+      })
     );
     await store.create(
-      dispute({ id: 'd2', subjectKind: 'refund', subjectRef: 'ref-1', createdAt: '2026-10-02T10:00:00.000Z' })
+      dispute({
+        id: 'd2',
+        subjectKind: 'refund',
+        subjectRef: 'ref-1',
+        createdAt: '2026-10-02T10:00:00.000Z',
+      })
     );
 
     const found = await store.findBySubject('refund', 'ref-1');
@@ -110,8 +124,14 @@ describe('InMemoryDisputeStore', () => {
   });
 
   it('opens an appeal on a resolved dispute and transitions to open at appeal level', async () => {
-    await store.create(dispute({ id: 'd-1', status: 'rejected', resolvedAt: '2026-10-05T00:00:00.000Z' }));
-    const appealed = await store.openAppeal('d-1', '2026-10-06T00:00:00.000Z', '2026-10-20T00:00:00.000Z');
+    await store.create(
+      dispute({ id: 'd-1', status: 'rejected', resolvedAt: '2026-10-05T00:00:00.000Z' })
+    );
+    const appealed = await store.openAppeal(
+      'd-1',
+      '2026-10-06T00:00:00.000Z',
+      '2026-10-20T00:00:00.000Z'
+    );
     expect(appealed).not.toBeNull();
     expect(appealed?.status).toBe('open');
     expect(appealed?.level).toBe('appeal');
@@ -122,7 +142,9 @@ describe('InMemoryDisputeStore', () => {
 
   it('refuses openAppeal when dispute is open or already appealed', async () => {
     await store.create(dispute({ id: 'd-open', status: 'open' }));
-    expect(await store.openAppeal('d-open', '2026-10-06T00:00:00.000Z', '2026-10-20T00:00:00.000Z')).toBeNull();
+    expect(
+      await store.openAppeal('d-open', '2026-10-06T00:00:00.000Z', '2026-10-20T00:00:00.000Z')
+    ).toBeNull();
 
     await store.create(
       dispute({
@@ -131,7 +153,9 @@ describe('InMemoryDisputeStore', () => {
         appealedAt: '2026-10-05T00:00:00.000Z',
       })
     );
-    expect(await store.openAppeal('d-appealed', '2026-10-06T00:00:00.000Z', '2026-10-20T00:00:00.000Z')).toBeNull();
+    expect(
+      await store.openAppeal('d-appealed', '2026-10-06T00:00:00.000Z', '2026-10-20T00:00:00.000Z')
+    ).toBeNull();
   });
 
   it('does not let callers mutate stored state', async () => {
@@ -146,7 +170,11 @@ describe('PostgresDisputeStore', () => {
   function fakeTable() {
     const rows = new Map<string, Record<string, unknown>>();
     executor.query.mockImplementation(async (sql: string, params: unknown[] = []) => {
-      if (sql.includes('CREATE TABLE') || sql.includes('ALTER TABLE') || sql.includes('CREATE INDEX')) {
+      if (
+        sql.includes('CREATE TABLE') ||
+        sql.includes('ALTER TABLE') ||
+        sql.includes('CREATE INDEX')
+      ) {
         return { rows: [] };
       }
       if (sql.includes('INSERT INTO disputes')) {
@@ -309,9 +337,15 @@ describe('PostgresDisputeStore', () => {
 
   it('opens appeal in postgres and asserts SQL guards on appealed_at IS NULL', async () => {
     const store = new PostgresDisputeStore();
-    await store.create(dispute({ id: 'pg-app-1', status: 'rejected', resolvedAt: '2026-10-05T00:00:00.000Z' }));
+    await store.create(
+      dispute({ id: 'pg-app-1', status: 'rejected', resolvedAt: '2026-10-05T00:00:00.000Z' })
+    );
 
-    const res = await store.openAppeal('pg-app-1', '2026-10-06T00:00:00.000Z', '2026-10-20T00:00:00.000Z');
+    const res = await store.openAppeal(
+      'pg-app-1',
+      '2026-10-06T00:00:00.000Z',
+      '2026-10-20T00:00:00.000Z'
+    );
     expect(res?.status).toBe('open');
     expect(res?.level).toBe('appeal');
     expect(res?.appealedAt).toBe('2026-10-06T00:00:00.000Z');

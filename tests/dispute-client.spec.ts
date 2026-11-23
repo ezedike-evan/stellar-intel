@@ -64,10 +64,7 @@ describe('dispute-client — submitDispute (#2135)', () => {
       } as Response;
     });
 
-    await submitDispute(
-      { ...baseInput, notes: '   ' },
-      mockFetch as unknown as typeof fetch
-    );
+    await submitDispute({ ...baseInput, notes: '   ' }, mockFetch as unknown as typeof fetch);
 
     expect(capturedBody.reason).toBe(DISPUTE_CATEGORY_LABELS['delayed']);
   });
@@ -135,9 +132,7 @@ describe('dispute-client — submitDispute (#2135)', () => {
 
     await expect(
       submitDispute(baseInput, mockFetch as unknown as typeof fetch)
-    ).rejects.toThrowError(
-      new DisputeSubmitError('Database connection failed', 500)
-    );
+    ).rejects.toThrowError(new DisputeSubmitError('Database connection failed', 500));
   });
 
   it('uses fallback message on error without body message', async () => {
@@ -150,8 +145,6 @@ describe('dispute-client — submitDispute (#2135)', () => {
 
     await expect(
       submitDispute(baseInput, mockFetch as unknown as typeof fetch)
-    ).rejects.toThrowError(
-      new DisputeSubmitError('Could not submit the dispute.', 502)
-    );
+    ).rejects.toThrowError(new DisputeSubmitError('Could not submit the dispute.', 502));
   });
 });

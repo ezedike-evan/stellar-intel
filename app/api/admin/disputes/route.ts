@@ -75,7 +75,10 @@ export async function POST(request: NextRequest): Promise<NextResponse> {
     if (!parsed.success) {
       logger.warn({ event: 'validation_failed', issues: parsed.error.issues.length });
       return NextResponse.json<ApiError>(
-        { code: 'VALIDATION_ERROR', message: 'id and action (accept|reject|escalate) are required' },
+        {
+          code: 'VALIDATION_ERROR',
+          message: 'id and action (accept|reject|escalate) are required',
+        },
         { status: 400 }
       );
     }

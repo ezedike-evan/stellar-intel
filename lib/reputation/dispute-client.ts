@@ -1,7 +1,4 @@
-import {
-  type DisputeCategory,
-  DISPUTE_CATEGORY_LABELS,
-} from '@/lib/reputation/dispute-ladder';
+import { type DisputeCategory, DISPUTE_CATEGORY_LABELS } from '@/lib/reputation/dispute-ladder';
 
 export interface SubmitDisputeInput {
   intentHash: string;

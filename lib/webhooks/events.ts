@@ -1,9 +1,9 @@
 import { randomUUID } from 'crypto';
-import type { WebhookEvent, WebhookEventKind } from './types';
+import type { WebhookEvent, WebhookEventKind, WebhookEventPayloadMap } from './types';
 
-export function makeWebhookEvent(
-  kind: WebhookEventKind,
-  payload: Record<string, unknown>
+export function makeWebhookEvent<K extends WebhookEventKind>(
+  kind: K,
+  payload: WebhookEventPayloadMap[K]
 ): WebhookEvent {
   return {
     id: randomUUID(),

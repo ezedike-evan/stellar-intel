@@ -6,14 +6,8 @@ import type { ApiError } from '@/types';
 import { getDisputeStore } from '@/lib/reputation/disputes';
 import { verifyIntentSignature } from '@/lib/intent/verify';
 import { enforceRateLimit } from '@/lib/api/response';
-import {
-  APPEAL_WINDOW_MS,
-  levelDeadline,
-} from '@/lib/reputation/dispute-ladder';
-import {
-  getAdjudicationLog,
-  publicDisputeRef,
-} from '@/lib/reputation/adjudication-log';
+import { APPEAL_WINDOW_MS, levelDeadline } from '@/lib/reputation/dispute-ladder';
+import { getAdjudicationLog, publicDisputeRef } from '@/lib/reputation/adjudication-log';
 
 const AppealBodySchema = z
   .object({

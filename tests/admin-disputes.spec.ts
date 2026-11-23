@@ -143,7 +143,10 @@ describe('POST /api/admin/disputes — lifecycle, logging and reputation flag (#
     expect(log[0]?.rationale).toBe('Valid user complaint');
 
     // Verify reputation outcome is flagged disputed
-    const [outcome] = await getReputationStore().query({ intentHash: d.intentHash, includeUnattested: true });
+    const [outcome] = await getReputationStore().query({
+      intentHash: d.intentHash,
+      includeUnattested: true,
+    });
     expect(outcome?.disputed).toBe(true);
     expect(outcome?.disputedReason).toContain('accepted');
   });
@@ -173,7 +176,10 @@ describe('POST /api/admin/disputes — lifecycle, logging and reputation flag (#
     expect(log.length).toBe(1);
     expect(log[0]?.action).toBe('rejected');
 
-    const [outcome] = await getReputationStore().query({ intentHash: d.intentHash, includeUnattested: true });
+    const [outcome] = await getReputationStore().query({
+      intentHash: d.intentHash,
+      includeUnattested: true,
+    });
     expect(outcome?.disputed).toBe(false);
   });
 
@@ -181,7 +187,9 @@ describe('POST /api/admin/disputes — lifecycle, logging and reputation flag (#
     const d = makeDispute({ id: 'disp-esc', level: 'anchor' });
     await getDisputeStore().create(d);
 
-    const res = await POST(post({ id: 'disp-esc', action: 'escalate', rationale: 'Anchor did not reply' }));
+    const res = await POST(
+      post({ id: 'disp-esc', action: 'escalate', rationale: 'Anchor did not reply' })
+    );
     expect(res.status).toBe(200);
     const body = await res.json();
     expect(body.level).toBe('review');

@@ -4,6 +4,7 @@ export type FlagName =
   | 'mcpAdvertisement'
   | 'v11Corridors'
   | 'recurringIntents'
+  | 'intentTemplates'
   | 'firmQuoteBonus'
   | 'disputeLadder';
 
@@ -19,6 +20,8 @@ export const flags: Record<FlagName, boolean> = {
   // Recurring intents: sign-once execution engine. Default OFF — gated behind
   // the signed-intent flow. Opt in with NEXT_PUBLIC_RECURRING_INTENTS=on.
   recurringIntents: (process.env.NEXT_PUBLIC_RECURRING_INTENTS || 'off') === 'on',
+  // Per-corridor intent templates, saved in the browser per wallet. Default OFF.
+  intentTemplates: (process.env.NEXT_PUBLIC_INTENT_TEMPLATES || 'off') === 'on',
   // Ranking bonus for firm (SEP-38) quotes over estimates of nearly the same size.
   // Default OFF; opt in with NEXT_PUBLIC_FIRM_QUOTE_BONUS=on. It reorders rows and
   // never changes a displayed amount.

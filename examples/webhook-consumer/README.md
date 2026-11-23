@@ -3,6 +3,7 @@
 This example demonstrates how to build a production-grade webhook receiver for Stellar Intel in Node.js with zero dependencies (`node:crypto` and `node:http`).
 
 It shows how to:
+
 1. Verify the `x-webhook-signature` header (`t={timestamp},v1={hmac}`) using constant-time comparison (`timingSafeEqual`).
 2. Reject stale signatures older than the tolerance window (default 300s) to prevent replay attacks.
 3. De-duplicate delivery attempts using `x-webhook-idempotency-key` via a bounded in-memory eviction set.

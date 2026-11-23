@@ -104,9 +104,7 @@ describe('POST /api/reputation/dispute', () => {
     expect(body.ref).toBeDefined();
 
     // Check UUID format and ensure it does not leak public key prefix
-    expect(body.id).toMatch(
-      /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i
-    );
+    expect(body.id).toMatch(/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i);
     expect(body.id).not.toContain(keypair.publicKey().slice(0, 8));
 
     // Deadline is 72h after createdAt
@@ -445,9 +443,7 @@ describe('GET /api/reputation/dispute — lookup by intentHash (#2136)', () => {
     expect(fileRes.status).toBe(201);
     const filed = await fileRes.json();
 
-    const req = new NextRequest(
-      `http://localhost/api/reputation/dispute?intentHash=${intentHash}`
-    );
+    const req = new NextRequest(`http://localhost/api/reputation/dispute?intentHash=${intentHash}`);
     const res = await GET(req);
     expect(res.status).toBe(200);
     const body = await res.json();

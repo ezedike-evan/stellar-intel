@@ -79,10 +79,7 @@ export function DisputeStatusBadge({ intentHash }: DisputeStatusBadgeProps) {
     >
       <span>
         Dispute {newest.status} · reference{' '}
-        <Link
-          href="/disputes"
-          className="font-mono text-accent underline hover:text-accent"
-        >
+        <Link href="/disputes" className="font-mono text-accent underline hover:text-accent">
           {newest.ref}
         </Link>
       </span>

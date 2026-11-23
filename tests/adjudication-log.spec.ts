@@ -231,9 +231,7 @@ describe('adjudication-log', () => {
 
   describe('public safety assertions', () => {
     it('accepts safe rationale', () => {
-      expect(() =>
-        assertPublicSafe('Anchor confirmed the payout on 2026-11-02.')
-      ).not.toThrow();
+      expect(() => assertPublicSafe('Anchor confirmed the payout on 2026-11-02.')).not.toThrow();
     });
 
     it('rejects a Stellar G-address', () => {

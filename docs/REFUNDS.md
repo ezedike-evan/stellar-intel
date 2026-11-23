@@ -56,12 +56,12 @@ To prevent disputes where an anchor claims a refund was made while the user clai
 
 ```typescript
 export interface RefundAckPayload {
-  caseId: string;         // UUID of the refund case
-  intentHash: string;     // SHA-256 hash of original payment intent
-  userAddress: string;    // Stellar G... address of recipient
-  amount: string;         // Refunded amount as decimal string (e.g. "100.00")
-  asset: string;          // Asset identifier (e.g. "USDC:GA5ZSEJY..." or "native")
-  txHash: string;         // 64-character hex hash of on-chain refund tx
+  caseId: string; // UUID of the refund case
+  intentHash: string; // SHA-256 hash of original payment intent
+  userAddress: string; // Stellar G... address of recipient
+  amount: string; // Refunded amount as decimal string (e.g. "100.00")
+  asset: string; // Asset identifier (e.g. "USDC:GA5ZSEJY..." or "native")
+  txHash: string; // 64-character hex hash of on-chain refund tx
   acknowledgedAt: string; // ISO 8601 UTC timestamp
 }
 ```
@@ -69,6 +69,7 @@ export interface RefundAckPayload {
 ### Canonical digest and signing
 
 The payload is normalized and digested using canonical JSON via `hashRefundAck(payload)`:
+
 - Keys are sorted lexicographically.
 - Whitespace is stripped.
 - The string is hashed with SHA-256.

@@ -1,9 +1,5 @@
 import { getSqlExecutor, hasDatabaseUrl } from '@/lib/reputation/pool';
-import {
-  type DisputeCategory,
-  type DisputeLevel,
-  levelDeadline,
-} from './dispute-ladder';
+import { type DisputeCategory, type DisputeLevel, levelDeadline } from './dispute-ladder';
 
 // ─── Dispute store ──────────────────────────────────────────────────────────────
 //
@@ -87,11 +83,7 @@ export class InMemoryDisputeStore implements DisputeStore {
     return { ...updated };
   }
 
-  async escalate(
-    id: string,
-    level: DisputeLevel,
-    levelDeadline: string
-  ): Promise<Dispute | null> {
+  async escalate(id: string, level: DisputeLevel, levelDeadline: string): Promise<Dispute | null> {
     const found = this.disputes.get(id);
     if (!found || found.status !== 'open') return null;
     const updated: Dispute = { ...found, level, levelDeadline };
@@ -99,11 +91,7 @@ export class InMemoryDisputeStore implements DisputeStore {
     return { ...updated };
   }
 
-  async openAppeal(
-    id: string,
-    appealedAt: string,
-    levelDeadline: string
-  ): Promise<Dispute | null> {
+  async openAppeal(id: string, appealedAt: string, levelDeadline: string): Promise<Dispute | null> {
     const found = this.disputes.get(id);
     if (
       !found ||
@@ -200,9 +188,7 @@ function toDispute(row: Record<string, unknown>): Dispute {
         : null
       : String(row['subject_ref']);
   const levelDeadlineStr =
-    row['level_deadline'] == null
-      ? levelDeadline(level, createdAt)
-      : String(row['level_deadline']);
+    row['level_deadline'] == null ? levelDeadline(level, createdAt) : String(row['level_deadline']);
 
   return {
     id: String(row['id']),
@@ -276,11 +262,7 @@ export class PostgresDisputeStore implements DisputeStore {
     return rows[0] ? toDispute(rows[0]) : null;
   }
 
-  async escalate(
-    id: string,
-    level: DisputeLevel,
-    levelDeadline: string
-  ): Promise<Dispute | null> {
+  async escalate(id: string, level: DisputeLevel, levelDeadline: string): Promise<Dispute | null> {
     await ensureSchema();
     const { rows } = await getSqlExecutor().query(
       'UPDATE disputes SET level = $2, level_deadline = $3 WHERE id = $1 AND status = $4 RETURNING *',
@@ -289,11 +271,7 @@ export class PostgresDisputeStore implements DisputeStore {
     return rows[0] ? toDispute(rows[0]) : null;
   }
 
-  async openAppeal(
-    id: string,
-    appealedAt: string,
-    levelDeadline: string
-  ): Promise<Dispute | null> {
+  async openAppeal(id: string, appealedAt: string, levelDeadline: string): Promise<Dispute | null> {
     await ensureSchema();
     const { rows } = await getSqlExecutor().query(
       `UPDATE disputes

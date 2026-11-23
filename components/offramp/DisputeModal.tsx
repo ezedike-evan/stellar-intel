@@ -97,14 +97,9 @@ export function DisputeModal({ transactionId, status, onClose, onSubmit }: Dispu
                 </svg>
               </div>
               <p className="text-sm font-medium text-primary-text">Dispute submitted</p>
-              <p className="mt-1 text-xs text-fg-muted">
-                Dispute filed. Reference: {ref}
-              </p>
+              <p className="mt-1 text-xs text-fg-muted">Dispute filed. Reference: {ref}</p>
               <div className="mt-2">
-                <Link
-                  href="/disputes"
-                  className="text-xs text-accent underline hover:text-accent"
-                >
+                <Link href="/disputes" className="text-xs text-accent underline hover:text-accent">
                   Track it on the public dispute log
                 </Link>
               </div>

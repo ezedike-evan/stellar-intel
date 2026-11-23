@@ -10,6 +10,26 @@ extendZodWithOpenApi(z);
 
 export const registry = new OpenAPIRegistry();
 
+registry.registerComponent('securitySchemes', 'adminKey', {
+  type: 'apiKey',
+  in: 'header',
+  name: 'x-admin-key',
+  description: 'Server-side ADMIN_SECRET_KEY. Operator only.',
+});
+
+registry.registerComponent('securitySchemes', 'bearerAuth', {
+  type: 'http',
+  scheme: 'bearer',
+  description: 'CRON_SECRET. Vercel Cron and the operator only.',
+});
+
+registry.registerComponent('securitySchemes', 'callerKey', {
+  type: 'http',
+  scheme: 'bearer',
+  description:
+    'Caller API key (sik_…) or a short-lived caller token. Optional on public routes: anonymous calls are served at the anonymous tier.',
+});
+
 // ─── Reusable param helpers ─────────────────────────────────────────────────
 
 const CorridorPathParam = z.string().openapi({
@@ -2003,6 +2023,7 @@ registry.registerPath({
   summary: 'Invalidate cached rates',
   description: 'Drops cached rate comparisons for one anchor or all of them. Admin only.',
   tags: ['System'],
+  security: [{ adminKey: [] }],
   responses: {
     200: {
       description: 'Cache invalidated',
@@ -2019,6 +2040,7 @@ registry.registerPath({
   summary: 'List webhook subscriptions',
   description: 'Admin only. See docs/WEBHOOKS.md for the delivery and signing contract.',
   tags: ['System'],
+  security: [{ adminKey: [] }],
   responses: {
     200: {
       description: 'Subscriptions',
@@ -2036,6 +2058,7 @@ registry.registerPath({
   description:
     'Admin only. Returns the per-subscription HMAC signing secret once, at creation time.',
   tags: ['System'],
+  security: [{ adminKey: [] }],
   responses: {
     201: {
       description: 'Subscription created',
@@ -2056,6 +2079,7 @@ registry.registerPath({
   summary: 'Delete a webhook subscription',
   description: 'Admin only.',
   tags: ['System'],
+  security: [{ adminKey: [] }],
   responses: {
     204: { description: 'Deleted' },
     401: UNAUTHORIZED_401,
@@ -2074,10 +2098,75 @@ registry.registerPath({
   description:
     'Admin only. Deliveries that exhausted their retries and were dead-lettered (see docs/WEBHOOKS.md).',
   tags: ['System'],
+  security: [{ adminKey: [] }],
   responses: {
     200: {
       description: 'Dead-lettered deliveries',
       content: { 'application/json': { schema: z.array(z.object({}).passthrough()) } },
+    },
+    401: UNAUTHORIZED_401,
+    429: RATE_LIMITED_429,
+  },
+});
+
+registry.registerPath({
+  method: 'get',
+  path: '/api/webhooks/deliveries',
+  summary: 'List webhook delivery records',
+  description:
+    'Admin only. Returns webhook delivery records filtered by status, subscription, or event, newest first.',
+  tags: ['System'],
+  request: {
+    query: z.object({
+      status: z
+        .enum(['success', 'failed', 'dead_letter'])
+        .optional()
+        .openapi({
+          param: { name: 'status', in: 'query' },
+          example: 'dead_letter',
+          description: 'Filter by delivery status (success, failed, dead_letter)',
+        }),
+      subscriptionId: z
+        .string()
+        .min(1)
+        .max(100)
+        .optional()
+        .openapi({
+          param: { name: 'subscriptionId', in: 'query' },
+          example: 'sub-1',
+          description: 'Filter by subscription ID',
+        }),
+      eventId: z
+        .string()
+        .min(1)
+        .max(100)
+        .optional()
+        .openapi({
+          param: { name: 'eventId', in: 'query' },
+          example: 'evt-1',
+          description: 'Filter by event ID',
+        }),
+      limit: z.coerce
+        .number()
+        .int()
+        .min(1)
+        .max(500)
+        .optional()
+        .openapi({
+          param: { name: 'limit', in: 'query' },
+          example: 100,
+          description: 'Maximum number of deliveries to return (1-500, default 100)',
+        }),
+    }),
+  },
+  responses: {
+    200: {
+      description: 'Webhook delivery records',
+      content: { 'application/json': { schema: z.array(z.object({}).passthrough()) } },
+    },
+    400: {
+      description: 'Validation error',
+      content: { 'application/json': { schema: ApiErrorSchema } },
     },
     401: UNAUTHORIZED_401,
     429: RATE_LIMITED_429,

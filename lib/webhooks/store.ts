@@ -1,6 +1,13 @@
 import { hasDatabaseUrl } from '@/lib/reputation/pool';
 import { PostgresWebhookStore } from './postgres';
-import type { WebhookSubscription, DeliveryRecord } from './types';
+import type { WebhookSubscription, DeliveryRecord, DeliveryStatus } from './types';
+
+export interface DeliveryQuery {
+  status?: DeliveryStatus | undefined;
+  subscriptionId?: string | undefined;
+  eventId?: string | undefined;
+  limit?: number | undefined;
+}
 
 export interface WebhookStore {
   saveSubscription(sub: WebhookSubscription): Promise<void>;
@@ -9,6 +16,7 @@ export interface WebhookStore {
   deleteSubscription(id: string): Promise<boolean>;
   recordDelivery(record: DeliveryRecord): Promise<void>;
   listDeadLetters(): Promise<DeliveryRecord[]>;
+  listDeliveries(query: DeliveryQuery): Promise<DeliveryRecord[]>;
 }
 
 export class InMemoryWebhookStore implements WebhookStore {
@@ -37,6 +45,24 @@ export class InMemoryWebhookStore implements WebhookStore {
 
   async listDeadLetters(): Promise<DeliveryRecord[]> {
     return this.deliveries.filter((r) => r.status === 'dead_letter').map((r) => ({ ...r }));
+  }
+
+  async listDeliveries(query: DeliveryQuery): Promise<DeliveryRecord[]> {
+    const rawLimit = query.limit ?? 100;
+    const limit = Math.max(1, Math.min(500, rawLimit));
+
+    let results = this.deliveries.slice();
+    if (query.status !== undefined) {
+      results = results.filter((r) => r.status === query.status);
+    }
+    if (query.subscriptionId !== undefined) {
+      results = results.filter((r) => r.subscriptionId === query.subscriptionId);
+    }
+    if (query.eventId !== undefined) {
+      results = results.filter((r) => r.eventId === query.eventId);
+    }
+    results.sort((a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime());
+    return results.slice(0, limit).map((r) => ({ ...r }));
   }
 }
 
