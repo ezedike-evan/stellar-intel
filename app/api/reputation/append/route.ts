@@ -10,6 +10,7 @@ import { detectSlippageBreach } from '@/lib/reputation/slippage-detect';
 import { verifyIntentSignature } from '@/lib/intent/verify';
 import type { ApiError } from '@/types';
 import { enforceRateLimit } from '@/lib/api/response';
+import { requireCallerScope } from '@/lib/auth/caller';
 import { emitWebhookEvent } from '@/lib/webhooks/emit';
 import type { OutcomeLogRow } from '@/types/reputation';
 
@@ -85,6 +86,9 @@ export async function POST(request: NextRequest): Promise<NextResponse> {
       maxRequests: 20,
     });
     if (limited) return limited;
+
+    const auth = await requireCallerScope(request, 'reputation:write');
+    if (!auth.ok) return auth.response;
 
     const body: unknown = await request.json().catch(() => null);
 

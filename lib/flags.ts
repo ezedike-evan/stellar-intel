@@ -4,6 +4,7 @@ export type FlagName =
   | 'mcpAdvertisement'
   | 'v11Corridors'
   | 'recurringIntents'
+  | 'requireKeyForWrites'
   | 'intentTemplates'
   | 'firmQuoteBonus'
   | 'disputeLadder';
@@ -20,6 +21,9 @@ export const flags: Record<FlagName, boolean> = {
   // Recurring intents: sign-once execution engine. Default OFF — gated behind
   // the signed-intent flow. Opt in with NEXT_PUBLIC_RECURRING_INTENTS=on.
   recurringIntents: (process.env.NEXT_PUBLIC_RECURRING_INTENTS || 'off') === 'on',
+  // Require an API key for writes (intents, reputation, disputes). Default OFF —
+  // anonymous callers keep writes. Opt in with NEXT_PUBLIC_REQUIRE_KEY_FOR_WRITES=on.
+  requireKeyForWrites: (process.env.NEXT_PUBLIC_REQUIRE_KEY_FOR_WRITES || 'off') === 'on',
   // Per-corridor intent templates, saved in the browser per wallet. Default OFF.
   intentTemplates: (process.env.NEXT_PUBLIC_INTENT_TEMPLATES || 'off') === 'on',
   // Ranking bonus for firm (SEP-38) quotes over estimates of nearly the same size.

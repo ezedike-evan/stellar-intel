@@ -20,26 +20,30 @@ const VALID_TIERS: ReadonlySet<AnchorCensusRow['tier']> = new Set([
  * not only the anchors registered in constants/anchors.ts.
  */
 export async function GET(request: NextRequest): Promise<NextResponse> {
-  return withV1(request, { bucket: 'v1.anchors.census', maxRequests: 60 }, async (ctx) => {
-    const tier = request.nextUrl.searchParams.get('tier');
-    if (tier !== null && !VALID_TIERS.has(tier as AnchorCensusRow['tier'])) {
-      return ctx.error(
-        'validation_error',
-        `Invalid tier "${tier}" — expected one of routable, health-only, listed.`,
-        400
-      );
+  return withV1(
+    request,
+    { bucket: 'v1.anchors.census', maxRequests: 60, scope: 'quotes:read' },
+    async (ctx) => {
+      const tier = request.nextUrl.searchParams.get('tier');
+      if (tier !== null && !VALID_TIERS.has(tier as AnchorCensusRow['tier'])) {
+        return ctx.error(
+          'validation_error',
+          `Invalid tier "${tier}" — expected one of routable, health-only, listed.`,
+          400
+        );
+      }
+
+      const typedCensus = census as AnchorCensus;
+      const rows = tier ? typedCensus.rows.filter((row) => row.tier === tier) : typedCensus.rows;
+
+      return {
+        status: 200,
+        body: { generatedAt: typedCensus.generatedAt, counts: typedCensus.counts, rows },
+        headers: {
+          'Cache-Control': 'public, max-age=300, stale-while-revalidate=3600',
+          ETag: `"anchor-census-${typedCensus.generatedAt ?? 'empty'}"`,
+        },
+      };
     }
-
-    const typedCensus = census as AnchorCensus;
-    const rows = tier ? typedCensus.rows.filter((row) => row.tier === tier) : typedCensus.rows;
-
-    return {
-      status: 200,
-      body: { generatedAt: typedCensus.generatedAt, counts: typedCensus.counts, rows },
-      headers: {
-        'Cache-Control': 'public, max-age=300, stale-while-revalidate=3600',
-        ETag: `"anchor-census-${typedCensus.generatedAt ?? 'empty'}"`,
-      },
-    };
-  });
+  );
 }
