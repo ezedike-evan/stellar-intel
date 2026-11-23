@@ -35,7 +35,8 @@ export async function escalateOverdueDisputes(
   for (const dispute of open) {
     if (dispute.level !== 'anchor' || !isOverdue(dispute, now)) continue;
 
-    const moved = await deps.disputes.escalate(dispute.id, 'review', levelDeadline('review', nowIso));
+    const reviewDeadline = levelDeadline('review', nowIso);
+    const moved = await deps.disputes.escalate(dispute.id, 'review', reviewDeadline);
     // Resolved by someone else between the list and the escalate; nothing to log.
     if (!moved) continue;
 
