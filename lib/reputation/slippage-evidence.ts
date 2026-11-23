@@ -1,51 +1,9 @@
 import { NETWORK_PASSPHRASE } from '@/lib/config';
 import { canonicalize, sha256Hex } from '@/lib/intent/hash';
-import type { OutcomeLogRow } from '@/types/reputation';
+import type { OutcomeLogRow, SlippageEvidence, SlippageOnChainEvidence } from '@/types/reputation';
+import type { SlippageEvaluation } from '@/lib/reputation/slippage';
 
-declare module '@/types/reputation' {
-  interface OutcomeLogRow {
-    /** Floor amount signed by user in intent; null when no floor was specified. */
-    minReceive?: string | null;
-  }
-}
-
-export interface SlippageOnChainEvidence {
-  txHash: string;
-  ledger: number;
-  closedAt: string;
-  successful: boolean;
-  from: string;
-  to: string;
-  assetCode: string;
-  assetIssuer: string | null;
-  amount: string;
-  memoType: string;
-  memo: string | null;
-}
-
-export interface SlippageEvidence {
-  v: 1;
-  networkPassphrase: string;
-  intentHash: string;
-  anchorId: string;
-  corridor: string;
-  signerAccount: string;
-  minReceive: string;
-  anchorReported: {
-    anchorTransactionId: string | null;
-    amountOut: string;
-    reportedBy: 'sender';
-  };
-  shortfall: string;
-  shortfallBps: number;
-  onChain: SlippageOnChainEvidence | null;
-  detectedAt: string;
-}
-
-export type SlippageEvaluation =
-  | { kind: 'not_applicable'; reason: 'not_completed' | 'no_floor' | 'no_amount_out' }
-  | { kind: 'met'; surplus: string }
-  | { kind: 'breach'; shortfall: string; shortfallBps: number };
+export type { SlippageEvidence, SlippageOnChainEvidence, SlippageEvaluation };
 
 /**
  * Constructs a canonical slippage-evidence object from an outcome row and evaluation.

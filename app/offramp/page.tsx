@@ -34,6 +34,10 @@ import { quotedAllInRate } from '@/lib/stellar/realized-rate';
 import type { Intent } from '@/lib/intent/hash';
 import type { AnchorRate } from '@/types';
 import { MIN_RECEIVE_TOLERANCE } from '@/lib/rate-ranking';
+import { flags } from '@/lib/flags';
+import { submitDispute } from '@/lib/reputation/dispute-client';
+import { DisputeModal } from '@/components/offramp/DisputeModal';
+import { DisputeStatusBadge } from '@/components/offramp/DisputeStatusBadge';
 
 // Not needed until the user picks a rate to execute — split into its own
 // chunk so it doesn't pad the initial /offramp bundle.
@@ -76,6 +80,7 @@ function OfframpContent() {
   const [trackingJwt, setTrackingJwt] = useState<string | null>(null);
   const [trackingNonce, setTrackingNonce] = useState<string | null>(null);
   const [trackingAnchorHomeDomain, setTrackingAnchorHomeDomain] = useState<string | null>(null);
+  const [disputeOpen, setDisputeOpen] = useState(false);
 
   // Quote context captured when execution starts, so the terminal outcome of a
   // real off-ramp can be written to the reputation log (#799). Public data only
@@ -369,25 +374,55 @@ function OfframpContent() {
       </div>
 
       {trackingTransactionId && (
-        <StatusTracker
-          transactionId={trackingTransactionId}
-          {...(trackingAnchorHomeDomain ? { anchorHomeDomain: trackingAnchorHomeDomain } : {})}
-          status={withdrawStatus.status}
-          amountIn={withdrawStatus.amountIn}
-          amountInAsset={withdrawStatus.amountInAsset}
-          amountOut={withdrawStatus.amountOut}
-          amountOutAsset={withdrawStatus.amountOutAsset}
-          amountFee={withdrawStatus.amountFee}
-          currencyCode={corridorId.split('-')[1]?.toUpperCase() ?? 'USD'}
-          stellarTransactionId={withdrawStatus.stellarTransactionId}
-          externalTransactionId={withdrawStatus.externalTransactionId}
-          refunds={withdrawStatus.refunds}
-          isLoading={withdrawStatus.isLoading}
-          error={withdrawStatus.error}
-          attemptCount={withdrawStatus.attemptCount}
-          onAdjust={handleOffRampAnother}
-        />
+        <>
+          <StatusTracker
+            transactionId={trackingTransactionId}
+            {...(trackingAnchorHomeDomain ? { anchorHomeDomain: trackingAnchorHomeDomain } : {})}
+            status={withdrawStatus.status}
+            amountIn={withdrawStatus.amountIn}
+            amountInAsset={withdrawStatus.amountInAsset}
+            amountOut={withdrawStatus.amountOut}
+            amountOutAsset={withdrawStatus.amountOutAsset}
+            amountFee={withdrawStatus.amountFee}
+            currencyCode={corridorId.split('-')[1]?.toUpperCase() ?? 'USD'}
+            stellarTransactionId={withdrawStatus.stellarTransactionId}
+            externalTransactionId={withdrawStatus.externalTransactionId}
+            refunds={withdrawStatus.refunds}
+            isLoading={withdrawStatus.isLoading}
+            error={withdrawStatus.error}
+            attemptCount={withdrawStatus.attemptCount}
+            onAdjust={handleOffRampAnother}
+            {...(flags.disputeLadder && outcomeContext
+              ? { onDisputeOpen: () => setDisputeOpen(true) }
+              : {})}
+          />
+          {flags.disputeLadder && outcomeContext && (
+            <DisputeStatusBadge intentHash={outcomeContext.intentHash} />
+          )}
+        </>
       )}
+
+      {disputeOpen &&
+        flags.disputeLadder &&
+        outcomeContext &&
+        withdrawStatus.status &&
+        trackingTransactionId && (
+          <DisputeModal
+            transactionId={trackingTransactionId}
+            status={withdrawStatus.status}
+            onClose={() => setDisputeOpen(false)}
+            onSubmit={async ({ category, notes }) => {
+              return submitDispute({
+                intentHash: outcomeContext.intentHash,
+                publicKey: outcomeContext.publicKey,
+                signature: outcomeContext.signature,
+                anchorId: outcomeContext.anchorId,
+                category,
+                notes,
+              });
+            }}
+          />
+        )}
 
       <ExecuteDrawer
         rate={selectedRate}

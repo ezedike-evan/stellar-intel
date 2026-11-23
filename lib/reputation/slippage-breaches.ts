@@ -1,116 +1,18 @@
 import { getSqlExecutor, hasDatabaseUrl } from '@/lib/reputation/pool';
 import { canonicalEvidenceJson } from '@/lib/reputation/slippage-evidence';
 
-// ─── Types & Module Augmentation (Issue #2097 / #2103) ─────────────────────────
+import {
+  SLIPPAGE_BREACH_STATUSES,
+  type SlippageBreach,
+  type SlippageBreachStatus,
+  type SlippageEvidence,
+  type SlippageOnChainEvidence,
+} from '@/types/reputation';
 
-export const SLIPPAGE_BREACH_STATUSES = ['detected', 'verified', 'rejected'] as const;
-export type SlippageBreachStatus = (typeof SLIPPAGE_BREACH_STATUSES)[number];
-
-export interface SlippageOnChainEvidence {
-  txHash: string;
-  ledger: number;
-  closedAt: string;
-  successful: boolean;
-  from: string;
-  to: string;
-  assetCode: string;
-  assetIssuer: string | null;
-  amount: string;
-  memoType: string;
-  memo: string | null;
-}
-
-export interface SlippageEvidence {
-  v: 1;
-  networkPassphrase: string;
-  intentHash: string;
-  anchorId: string;
-  corridor: string;
-  signerAccount: string;
-  minReceive: string;
-  anchorReported: {
-    anchorTransactionId: string | null;
-    amountOut: string;
-    reportedBy: 'sender';
-  };
-  shortfall: string;
-  shortfallBps: number;
-  onChain: SlippageOnChainEvidence | null;
-  detectedAt: string;
-}
-
-export interface SlippageBreach {
-  intentHash: string;
-  anchorId: string;
-  corridor: string;
-  signerAccount: string;
-  minReceive: string;
-  amountOut: string;
-  shortfall: string;
-  shortfallBps: number;
-  stellarTransactionId: string | null;
-  anchorTransactionId: string | null;
-  status: SlippageBreachStatus;
-  rejectionReason: string | null;
-  evidence: SlippageEvidence;
-  evidenceHash: string;
-  detectedAt: string;
-  verifiedAt: string | null;
-}
-
-declare module '@/types/reputation' {
-  export const SLIPPAGE_BREACH_STATUSES: readonly ['detected', 'verified', 'rejected'];
-  export type SlippageBreachStatus = (typeof SLIPPAGE_BREACH_STATUSES)[number];
-  export interface SlippageOnChainEvidence {
-    txHash: string;
-    ledger: number;
-    closedAt: string;
-    successful: boolean;
-    from: string;
-    to: string;
-    assetCode: string;
-    assetIssuer: string | null;
-    amount: string;
-    memoType: string;
-    memo: string | null;
-  }
-  export interface SlippageEvidence {
-    v: 1;
-    networkPassphrase: string;
-    intentHash: string;
-    anchorId: string;
-    corridor: string;
-    signerAccount: string;
-    minReceive: string;
-    anchorReported: {
-      anchorTransactionId: string | null;
-      amountOut: string;
-      reportedBy: 'sender';
-    };
-    shortfall: string;
-    shortfallBps: number;
-    onChain: SlippageOnChainEvidence | null;
-    detectedAt: string;
-  }
-  export interface SlippageBreach {
-    intentHash: string;
-    anchorId: string;
-    corridor: string;
-    signerAccount: string;
-    minReceive: string;
-    amountOut: string;
-    shortfall: string;
-    shortfallBps: number;
-    stellarTransactionId: string | null;
-    anchorTransactionId: string | null;
-    status: SlippageBreachStatus;
-    rejectionReason: string | null;
-    evidence: SlippageEvidence;
-    evidenceHash: string;
-    detectedAt: string;
-    verifiedAt: string | null;
-  }
-}
+// The breach and evidence types live in types/reputation.ts (#2104); re-exported
+// here so existing imports from this module keep working.
+export { SLIPPAGE_BREACH_STATUSES };
+export type { SlippageBreach, SlippageBreachStatus, SlippageEvidence, SlippageOnChainEvidence };
 
 // ─── Slippage breach store (Issue #2103) ──────────────────────────────────────
 

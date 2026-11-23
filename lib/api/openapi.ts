@@ -277,10 +277,14 @@ const DisputeRecordSchema = registry.register(
   'DisputeRecord',
   z.object({
     id: z.string(),
+    ref: z.string(),
     intentHash: z.string(),
     publicKey: z.string(),
     anchorId: z.string(),
     reason: z.string(),
+    category: z.string(),
+    level: z.string(),
+    levelDeadline: z.string(),
     disputed: z.boolean(),
     createdAt: z.string(),
   })
@@ -297,6 +301,12 @@ const DisputeAdminSchema = registry.register(
     status: z.enum(['open', 'accepted', 'rejected']),
     createdAt: z.string(),
     resolvedAt: z.string().nullable(),
+    category: z.string(),
+    level: z.string(),
+    levelDeadline: z.string(),
+    subjectKind: z.string(),
+    subjectRef: z.string().nullable(),
+    appealedAt: z.string().nullable(),
   })
 );
 
@@ -922,6 +932,24 @@ registry.registerPath({
             signature: z
               .string()
               .openapi({ description: 'Base64 Ed25519 signature by publicKey over intentHash' }),
+            minReceive: z.string().regex(AMOUNT_PATTERN).nullable().optional().openapi({
+              description: 'Minimum receive floor amount signed in the outcome intent',
+            }),
+            outcomeIntent: z
+              .object({
+                type: z.literal('offramp-outcome'),
+                sourceAsset: z.string(),
+                destinationAsset: z.string(),
+                amount: z.string(),
+                sender: z.string(),
+                recipient: z.string(),
+                anchorId: z.string(),
+                corridor: z.string(),
+                transactionId: z.string(),
+                minReceive: z.string(),
+              })
+              .optional()
+              .openapi({ description: 'The exact outcome intent signed by sender' }),
           }),
         },
       },
@@ -932,7 +960,12 @@ registry.registerPath({
       description: 'Outcome appended and attested',
       content: {
         'application/json': {
-          schema: z.object({ ok: z.boolean(), intentHash: z.string(), attested: z.boolean() }),
+          schema: z.object({
+            ok: z.boolean(),
+            intentHash: z.string(),
+            attested: z.boolean(),
+            slippage: z.enum(['not_applicable', 'met', 'breach', 'unrecorded']),
+          }),
         },
       },
     },
@@ -973,6 +1006,7 @@ registry.registerPath({
             signature: z.string(),
             anchorId: z.string(),
             reason: z.string(),
+            category: z.string().optional(),
           }),
         },
       },
@@ -991,12 +1025,131 @@ registry.registerPath({
       description: 'Signature verification failed',
       content: { 'application/json': { schema: ApiErrorSchema } },
     },
+    409: {
+      description: 'Conflict: open dispute already exists',
+      content: { 'application/json': { schema: ApiErrorSchema } },
+    },
     422: {
       description: 'Validation error',
       content: { 'application/json': { schema: ApiErrorSchema } },
     },
     429: {
       description: 'Rate limited (10/24h)',
+      content: { 'application/json': { schema: ApiErrorSchema } },
+    },
+  },
+});
+
+export const DisputeLookupItemSchema = z.object({
+  ref: z.string().describe('Public dispute reference identifier'),
+  category: z.string().describe('Dispute category'),
+  level: z.string().describe('Current dispute ladder level'),
+  levelDeadline: z.string().describe('ISO 8601 deadline for current level'),
+  status: z.enum(['open', 'accepted', 'rejected']).describe('Dispute status'),
+  createdAt: z.string().describe('ISO 8601 timestamp when dispute was filed'),
+  resolvedAt: z.string().nullable().describe('ISO 8601 timestamp when dispute was resolved'),
+});
+
+registry.registerPath({
+  method: 'get',
+  path: '/api/reputation/dispute',
+  summary: 'Look up disputes for an intent',
+  description:
+    'Retrieves public dispute summaries for a given off-ramp intent hash. Returns newest first. Never includes personal data.',
+  tags: ['Reputation'],
+  request: {
+    query: z.object({
+      intentHash: z
+        .string()
+        .regex(/^[0-9a-f]{64}$/)
+        .openapi({
+          param: { name: 'intentHash', in: 'query' },
+          example: 'a'.repeat(64),
+          description: 'Lowercase hex-encoded SHA-256 intent hash (64 chars)',
+        }),
+    }),
+  },
+  responses: {
+    200: {
+      description: 'List of disputes for the intent',
+      content: {
+        'application/json': {
+          schema: z.object({
+            disputes: z.array(DisputeLookupItemSchema),
+          }),
+        },
+      },
+    },
+    422: {
+      description: 'Invalid intentHash format',
+      content: { 'application/json': { schema: ApiErrorSchema } },
+    },
+    429: {
+      description: 'Rate limited',
+      content: { 'application/json': { schema: ApiErrorSchema } },
+    },
+  },
+});
+
+export const AppealResponseSchema = z.object({
+  ref: z.string().describe('Dispute reference'),
+  level: z.literal('appeal').describe('New dispute level'),
+  levelDeadline: z.string().describe('ISO 8601 deadline for appeal'),
+});
+
+registry.registerPath({
+  method: 'post',
+  path: '/api/reputation/dispute/appeal',
+  summary: 'Appeal a resolved dispute',
+  description:
+    'Appeals a resolved dispute (accepted or rejected) within the 14-day window. Must be signed by the original filer.',
+  tags: ['Reputation'],
+  request: {
+    body: {
+      required: true,
+      content: {
+        'application/json': {
+          schema: z.object({
+            intentHash: z.string().regex(/^[0-9a-f]{64}$/),
+            publicKey: z.string().regex(STELLAR_PUBKEY_PATTERN),
+            signature: z.string(),
+            ref: z.string().regex(/^[0-9a-f]{16}$/),
+          }),
+        },
+      },
+    },
+  },
+  responses: {
+    200: {
+      description: 'Appeal accepted and dispute reopened at appeal level',
+      content: { 'application/json': { schema: AppealResponseSchema } },
+    },
+    400: {
+      description: 'Invalid request body',
+      content: { 'application/json': { schema: ApiErrorSchema } },
+    },
+    403: {
+      description: 'Invalid signature or caller is not original filer',
+      content: { 'application/json': { schema: ApiErrorSchema } },
+    },
+    404: {
+      description: 'Dispute not found',
+      content: { 'application/json': { schema: ApiErrorSchema } },
+    },
+    409: {
+      description: 'Dispute not resolved or already appealed',
+      content: { 'application/json': { schema: ApiErrorSchema } },
+    },
+    410: {
+      description: 'Appeal window closed (past 14 days)',
+      content: { 'application/json': { schema: ApiErrorSchema } },
+    },
+    422: {
+      description: 'Validation error',
+      content: { 'application/json': { schema: ApiErrorSchema } },
+    },
+    429: {
+      description: 'Rate limited',
       content: { 'application/json': { schema: ApiErrorSchema } },
     },
   },
@@ -1300,7 +1453,8 @@ registry.registerPath({
         'application/json': {
           schema: z.object({
             id: z.string(),
-            action: z.enum(['accept', 'reject']),
+            action: z.enum(['accept', 'reject', 'escalate']),
+            rationale: z.string().max(500).optional(),
           }),
         },
       },
@@ -1321,6 +1475,10 @@ registry.registerPath({
     },
     404: {
       description: 'Dispute not found',
+      content: { 'application/json': { schema: ApiErrorSchema } },
+    },
+    409: {
+      description: 'Conflict: dispute not open or cannot escalate',
       content: { 'application/json': { schema: ApiErrorSchema } },
     },
   },
