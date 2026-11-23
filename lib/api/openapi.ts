@@ -2062,6 +2062,32 @@ registry.registerPath({
 
 registry.registerPath({
   method: 'post',
+  path: '/api/reputation/dispute-sweep',
+  summary: 'Escalate overdue disputes',
+  description:
+    'Cron-triggered. Moves every open dispute that sat at the anchor response rung past its ' +
+    '72-hour deadline to maintainer review and records the move in the public adjudication log. ' +
+    'Disputes already at review or appeal are left for a human to decide. Protected by CRON_SECRET.',
+  tags: ['System'],
+  security: [{ bearerAuth: [] }],
+  responses: {
+    200: {
+      description: 'Sweep completed',
+      content: {
+        'application/json': {
+          schema: z.object({
+            scanned: z.number(),
+            escalated: z.number(),
+          }),
+        },
+      },
+    },
+    401: UNAUTHORIZED_401,
+  },
+});
+
+registry.registerPath({
+  method: 'post',
   path: '/api/admin/cache/invalidate',
   summary: 'Invalidate cached rates',
   description: 'Drops cached rate comparisons for one anchor or all of them. Admin only.',
