@@ -105,6 +105,7 @@ export const LLMS_FULL_SECTIONS: LlmsFullSection[] = [
       'THREAT_MODEL.md',
       'JURISDICTIONAL.md',
       'GOVERNANCE.md',
+      'DISPUTES.md',
       'TERMS_OF_SERVICE.md',
     ],
   },

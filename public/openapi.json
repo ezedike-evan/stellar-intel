@@ -24,6 +24,24 @@
     }
   ],
   "components": {
+    "securitySchemes": {
+      "adminKey": {
+        "type": "apiKey",
+        "in": "header",
+        "name": "x-admin-key",
+        "description": "Server-side ADMIN_SECRET_KEY. Operator only."
+      },
+      "bearerAuth": {
+        "type": "http",
+        "scheme": "bearer",
+        "description": "CRON_SECRET. Vercel Cron and the operator only."
+      },
+      "callerKey": {
+        "type": "http",
+        "scheme": "bearer",
+        "description": "Caller API key (sik_…) or a short-lived caller token. Optional on public routes: anonymous calls are served at the anonymous tier."
+      }
+    },
     "schemas": {
       "OfframpIntent": {
         "type": "object",
@@ -4049,6 +4067,11 @@
         "tags": [
           "System"
         ],
+        "security": [
+          {
+            "adminKey": []
+          }
+        ],
         "responses": {
           "200": {
             "description": "Cache invalidated",
@@ -4091,6 +4114,11 @@
         "description": "Admin only. See docs/WEBHOOKS.md for the delivery and signing contract.",
         "tags": [
           "System"
+        ],
+        "security": [
+          {
+            "adminKey": []
+          }
         ],
         "responses": {
           "200": {
@@ -4135,6 +4163,11 @@
         "description": "Admin only. Returns the per-subscription HMAC signing secret once, at creation time.",
         "tags": [
           "System"
+        ],
+        "security": [
+          {
+            "adminKey": []
+          }
         ],
         "responses": {
           "201": {
@@ -4189,6 +4222,11 @@
         "tags": [
           "System"
         ],
+        "security": [
+          {
+            "adminKey": []
+          }
+        ],
         "responses": {
           "204": {
             "description": "Deleted"
@@ -4232,6 +4270,11 @@
         "description": "Admin only. Deliveries that exhausted their retries and were dead-lettered (see docs/WEBHOOKS.md).",
         "tags": [
           "System"
+        ],
+        "security": [
+          {
+            "adminKey": []
+          }
         ],
         "responses": {
           "200": {
