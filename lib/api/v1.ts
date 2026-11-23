@@ -11,6 +11,8 @@ import { API_VERSION } from './response';
 import { getLogger } from '@/lib/logger';
 import { hasScope, type ApiScope } from '@/lib/auth/api-keys';
 import { resolveCaller, type Caller } from '@/lib/auth/caller';
+import { recordAuditEvent } from '@/lib/audit/record';
+import type { AuditOutcome } from '@/lib/audit/types';
 
 /**
  * lib/api/v1.ts
@@ -114,6 +116,8 @@ export interface V1HandlerResult {
    * id or the rate-limit counters.
    */
   headers?: Record<string, string>;
+  /** Intent hash produced by the handler (e.g. quoteId or intentHash) for audit logging. */
+  auditIntentHash?: string;
 }
 
 export interface V1Options {
@@ -143,12 +147,49 @@ export async function withV1(
   const rl = await checkRateLimit(ip, { bucket: options.bucket, maxRequests: options.maxRequests });
   const baseHeaders = { 'X-Request-Id': requestId, ...rateLimitHeaders(options.maxRequests, rl) };
 
+  const recordAudit = (
+    callerId: string,
+    callerKind: 'anonymous' | 'key' | 'token',
+    outcome: AuditOutcome,
+    status: number,
+    intentHash: string | null = null
+  ) => {
+    // Which requests are recorded: every request from a key or token caller.
+    // For anonymous callers, only requests whose options.scope is not 'quotes:read'
+    // (writes and null-scoped routes), plus any denied / rate_limited outcome.
+    const shouldRecord =
+      callerKind !== 'anonymous' ||
+      outcome === 'denied' ||
+      outcome === 'rate_limited' ||
+      options.scope !== 'quotes:read';
+
+    if (shouldRecord) {
+      recordAuditEvent({
+        surface: 'rest',
+        action: options.bucket,
+        scope: options.scope,
+        requestId,
+        callerId,
+        callerKind,
+        outcome,
+        status,
+        intentHash,
+      });
+    }
+  };
+
   if (!rl.allowed) {
+    const callerRes = await resolveCaller(request.headers);
+    const caller = callerRes.ok
+      ? callerRes.caller
+      : { id: 'anonymous', kind: 'anonymous' as const, scopes: [] };
+    recordAudit(caller.id, caller.kind, 'rate_limited', 429);
     return v1Error('rate_limited', 'Too many requests', requestId, 429, baseHeaders);
   }
 
   const callerRes = await resolveCaller(request.headers);
   if (!callerRes.ok) {
+    recordAudit('anonymous', 'anonymous', 'denied', callerRes.status);
     return v1Error(callerRes.code, callerRes.message, requestId, callerRes.status, {
       ...baseHeaders,
       'WWW-Authenticate': 'Bearer error="invalid_token"',
@@ -157,6 +198,7 @@ export async function withV1(
   const caller = callerRes.caller;
 
   if (options.scope && !hasScope(caller.scopes, options.scope)) {
+    recordAudit(caller.id, caller.kind, 'denied', 403);
     return v1Error(
       'insufficient_scope',
       `This call needs the "${options.scope}" scope`,
@@ -177,8 +219,20 @@ export async function withV1(
     ? await scopedIdempotencyKey(options.bucket, clientKey, await request.clone().text())
     : null;
   if (idempotencyKey) {
-    const replay = await getIdempotentResponse(idempotencyKey, baseHeaders);
-    if (replay) return replay;
+    const entry = await getStoredIdempotent(idempotencyKey);
+    if (entry) {
+      const intentHash =
+        typeof entry.body === 'object' && entry.body !== null
+          ? ((entry.body as Record<string, unknown>).quoteId as string | undefined) ??
+            ((entry.body as Record<string, unknown>).intentHash as string | undefined) ??
+            null
+          : null;
+      recordAudit(caller.id, caller.kind, 'ok', entry.status, intentHash);
+      return NextResponse.json(entry.body, {
+        status: entry.status,
+        headers: { ...baseHeaders, 'Idempotency-Replayed': 'true' },
+      });
+    }
   }
 
   const ctx: V1Context = {
@@ -203,6 +257,7 @@ export async function withV1(
       error: err instanceof Error ? err.message : String(err),
       stack: err instanceof Error ? err.stack : undefined,
     });
+    recordAudit(caller.id, caller.kind, 'error', 500);
     return v1Error('internal_error', 'Internal error', requestId, 500, baseHeaders);
   }
 
@@ -210,6 +265,10 @@ export async function withV1(
   if (idempotencyKey && result.status < 400) {
     await storeIdempotentResponse(idempotencyKey, result.status, result.body);
   }
+
+  const outcome: AuditOutcome =
+    result.status < 400 ? 'ok' : result.status < 500 ? 'client_error' : 'error';
+  recordAudit(caller.id, caller.kind, outcome, result.status, result.auditIntentHash ?? null);
 
   return NextResponse.json(result.body, {
     status: result.status,

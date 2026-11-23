@@ -76,7 +76,11 @@ export async function POST(request: NextRequest): Promise<NextResponse> {
         destinationAsset: intent.destinationAsset,
       });
 
-      return { status: 200, body: result.response };
+      return {
+        status: 200,
+        body: result.response,
+        auditIntentHash: result.response.quoteId,
+      };
     }
   );
 }

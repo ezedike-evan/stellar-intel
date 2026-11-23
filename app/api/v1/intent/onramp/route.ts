@@ -50,7 +50,11 @@ export async function POST(request: NextRequest): Promise<NextResponse> {
         return ctx.error(result.code.toLowerCase(), result.message, result.status);
       }
 
-      return { status: 200, body: result.response };
+      return {
+        status: 200,
+        body: result.response,
+        auditIntentHash: result.response.intentHash,
+      };
     }
   );
 }
