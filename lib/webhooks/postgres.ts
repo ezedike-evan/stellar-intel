@@ -1,5 +1,5 @@
 import { getSqlExecutor } from '@/lib/reputation/pool';
-import type { WebhookStore } from './store';
+import type { DeliveryQuery, WebhookStore } from './store';
 import type {
   DeliveryRecord,
   DeliveryStatus,
@@ -47,6 +47,9 @@ const SCHEMA_SQL = `
 
   CREATE INDEX IF NOT EXISTS idx_webhook_delivery_log_status
     ON webhook_delivery_log (status, created_at DESC);
+
+  CREATE INDEX IF NOT EXISTS idx_webhook_delivery_log_subscription
+    ON webhook_delivery_log (subscription_id, created_at DESC);
 `;
 
 let schemaReady: Promise<void> | null = null;
@@ -181,6 +184,42 @@ export class PostgresWebhookStore implements WebhookStore {
         ORDER BY created_at DESC
         LIMIT 500`
     );
+    return rows.map(rowToDelivery);
+  }
+
+  async listDeliveries(query: DeliveryQuery): Promise<DeliveryRecord[]> {
+    await ensureSchema();
+    const rawLimit = query.limit ?? 100;
+    const limit = Math.max(1, Math.min(500, rawLimit));
+
+    const clauses: string[] = [];
+    const params: unknown[] = [];
+
+    if (query.status !== undefined) {
+      params.push(query.status);
+      clauses.push(`status = $${params.length}`);
+    }
+    if (query.subscriptionId !== undefined) {
+      params.push(query.subscriptionId);
+      clauses.push(`subscription_id = $${params.length}`);
+    }
+    if (query.eventId !== undefined) {
+      params.push(query.eventId);
+      clauses.push(`event_id = $${params.length}`);
+    }
+
+    params.push(limit);
+    const limitParamIndex = params.length;
+
+    const whereClause = clauses.length > 0 ? `\n        WHERE ${clauses.join(' AND ')}` : '';
+
+    const sql = `SELECT id, event_id, event_kind, subscription_id, url, status, attempts,
+              last_status_code, last_error, delivered_at, created_at
+         FROM webhook_delivery_log${whereClause}
+        ORDER BY created_at DESC
+        LIMIT $${limitParamIndex}`;
+
+    const { rows } = await getSqlExecutor().query(sql, params);
     return rows.map(rowToDelivery);
   }
 }
