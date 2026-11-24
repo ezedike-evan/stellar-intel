@@ -2349,6 +2349,57 @@ registry.registerPath({
   },
 });
 
+registry.registerPath({
+  method: 'post',
+  path: '/api/webhooks/deliveries/{id}/redeliver',
+  summary: 'Resend a logged webhook delivery',
+  description:
+    'Admin only. Sends the stored event of one logged delivery to its subscription again, with the original event `id` and idempotency key, so a consumer that already processed it de-duplicates. The attempt is logged as a new delivery record. A 202 means the attempt was made, not that the subscriber accepted it. See docs/WEBHOOKS.md.',
+  tags: ['System'],
+  security: [{ adminKey: [] }],
+  request: {
+    params: z.object({
+      id: z
+        .string()
+        .min(1)
+        .describe('Delivery record id, as listed by GET /api/webhooks/deliveries'),
+    }),
+  },
+  responses: {
+    202: {
+      description: 'The delivery was attempted again and logged',
+      content: {
+        'application/json': {
+          schema: z.object({
+            redelivered: z.literal(true),
+            eventId: z.string().describe('Id of the event that was resent'),
+            subscriptionId: z.string().describe('Subscription it was sent to'),
+          }),
+        },
+      },
+    },
+    403: {
+      description: 'Missing or invalid admin key',
+      content: { 'application/json': { schema: ApiErrorSchema } },
+    },
+    404: {
+      description: 'Unknown delivery id (`NOT_FOUND`)',
+      content: { 'application/json': { schema: ApiErrorSchema } },
+    },
+    409: {
+      description:
+        'The subscription no longer subscribes to the event kind (`EVENT_KIND_UNSUBSCRIBED`)',
+      content: { 'application/json': { schema: ApiErrorSchema } },
+    },
+    410: {
+      description:
+        'The event is not in the event store (`EVENT_NOT_RETAINED`), or the subscription was deleted (`SUBSCRIPTION_DELETED`)',
+      content: { 'application/json': { schema: ApiErrorSchema } },
+    },
+    429: RATE_LIMITED_429,
+  },
+});
+
 // ─── Spec builder ────────────────────────────────────────────────────────────
 
 export function buildOpenApiSpec() {
