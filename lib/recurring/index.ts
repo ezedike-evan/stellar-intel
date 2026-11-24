@@ -62,3 +62,4 @@ export {
 
 // Standing authorizations store
 export * from './authorization-store';
+export * from './postgres';

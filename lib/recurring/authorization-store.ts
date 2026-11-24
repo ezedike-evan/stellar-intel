@@ -1,4 +1,6 @@
+import { hasDatabaseUrl } from '@/lib/reputation/pool';
 import type { SignedStandingAuthorization, StandingAuthorizationStatus } from '@/types/recurring';
+import { PostgresStandingAuthorizationStore } from './postgres';
 
 export interface StandingAuthorizationRecord {
   id: string;
@@ -104,7 +106,9 @@ let storeInstance: StandingAuthorizationStore | null = null;
 
 export function getStandingAuthorizationStore(): StandingAuthorizationStore {
   if (!storeInstance) {
-    storeInstance = new InMemoryStandingAuthorizationStore();
+    storeInstance = hasDatabaseUrl()
+      ? new PostgresStandingAuthorizationStore()
+      : new InMemoryStandingAuthorizationStore();
   }
   return storeInstance;
 }
