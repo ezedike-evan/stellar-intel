@@ -12,6 +12,7 @@ const FOOTER_COLUMNS = [
       { href: '/offramp', label: 'Off-ramp' },
       { href: '/onramp', label: 'On-ramp' },
       { href: '/anchors', label: 'Anchors' },
+      { href: '/disputes', label: 'Dispute log' },
     ],
   },
   {

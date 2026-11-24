@@ -3,6 +3,7 @@ import type { DeliveryQuery, WebhookStore } from './store';
 import type {
   DeliveryRecord,
   DeliveryStatus,
+  WebhookEvent,
   WebhookEventKind,
   WebhookSubscription,
 } from './types';
@@ -12,8 +13,9 @@ import type {
 // The in-memory store is per-instance: on serverless a subscription created on
 // one instance does not exist on another, and it vanishes on cold start.
 //
-// The DDL is copied from migrations/001_subscriptions.sql and
-// 002_delivery_log.sql and run inline, because nothing applies those files.
+// The DDL is copied from migrations/001_subscriptions.sql, 002_delivery_log.sql,
+// 003_events.sql and 004_delivery_log_subscription_index.sql and run inline,
+// because nothing applies those files.
 // Same approach as lib/api/shared-state.ts.
 
 const SCHEMA_SQL = `
@@ -50,6 +52,17 @@ const SCHEMA_SQL = `
 
   CREATE INDEX IF NOT EXISTS idx_webhook_delivery_log_subscription
     ON webhook_delivery_log (subscription_id, created_at DESC);
+
+  CREATE TABLE IF NOT EXISTS webhook_events (
+    id               TEXT        PRIMARY KEY,
+    idempotency_key  TEXT        NOT NULL UNIQUE,
+    kind             TEXT        NOT NULL,
+    body             TEXT        NOT NULL, -- JSON envelope, exactly as dispatched
+    created_at       TIMESTAMPTZ NOT NULL
+  );
+
+  CREATE INDEX IF NOT EXISTS idx_webhook_events_created_at
+    ON webhook_events (created_at DESC);
 `;
 
 let schemaReady: Promise<void> | null = null;
@@ -106,6 +119,29 @@ function rowToDelivery(r: Record<string, unknown>): DeliveryRecord {
 }
 
 export class PostgresWebhookStore implements WebhookStore {
+  async recordEvent(event: WebhookEvent): Promise<boolean> {
+    await ensureSchema();
+    // The unique idempotency key makes the insert the dedupe check: a repeat inserts nothing
+    // and RETURNING gives no row (SqlExecutor only exposes `rows`, not rowCount).
+    const { rows } = await getSqlExecutor().query(
+      `INSERT INTO webhook_events (id, idempotency_key, kind, body, created_at)
+            VALUES ($1, $2, $3, $4, $5)
+       ON CONFLICT (idempotency_key) DO NOTHING
+       RETURNING id`,
+      [event.id, event.idempotencyKey, event.kind, JSON.stringify(event), event.createdAt]
+    );
+    return rows.length > 0;
+  }
+
+  async getEvent(id: string): Promise<WebhookEvent | null> {
+    await ensureSchema();
+    const { rows } = await getSqlExecutor().query(`SELECT body FROM webhook_events WHERE id = $1`, [
+      id,
+    ]);
+    const row = rows[0];
+    return row ? (JSON.parse(row['body'] as string) as WebhookEvent) : null;
+  }
+
   async saveSubscription(sub: WebhookSubscription): Promise<void> {
     await ensureSchema();
     // Upsert, matching the in-memory store's Map.set.
