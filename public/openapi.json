@@ -4787,6 +4787,54 @@
         }
       }
     },
+    "/api/reputation/dispute-sweep": {
+      "post": {
+        "summary": "Escalate overdue disputes",
+        "description": "Cron-triggered. Moves every open dispute that sat at the anchor response rung past its 72-hour deadline to maintainer review and records the move in the public adjudication log. Disputes already at review or appeal are left for a human to decide. Protected by CRON_SECRET.",
+        "tags": [
+          "System"
+        ],
+        "security": [
+          {
+            "bearerAuth": []
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Sweep completed",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "scanned": {
+                      "type": "number"
+                    },
+                    "escalated": {
+                      "type": "number"
+                    }
+                  },
+                  "required": [
+                    "scanned",
+                    "escalated"
+                  ]
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Missing or invalid credentials",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
     "/api/admin/cache/invalidate": {
       "post": {
         "summary": "Invalidate cached rates",

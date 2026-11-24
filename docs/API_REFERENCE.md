@@ -73,6 +73,7 @@ the hardening contract (see `lib/api/v1.ts`):
   - [`GET /api/metrics`](#get-apimetrics)
   - [`GET /api/publisher/health`](#get-apipublisherhealth)
   - [`GET /api/publisher/tick`](#get-apipublishertick)
+  - [`POST /api/reputation/dispute-sweep`](#post-apireputationdispute-sweep)
   - [`GET /api/reputation/reconcile`](#get-apireputationreconcile)
   - [`GET /api/reputation/reconcile-volume-savings`](#get-apireputationreconcile-volume-savings)
   - [`POST /api/reputation/refresh`](#post-apireputationrefresh)
@@ -959,6 +960,21 @@ Triggers a batch of reputation outcome submissions to the Soroban oracle contrac
 | `200` | Tick completed, or withheld by the publish gate | `application/json` | `object` |
 | `401` | Unauthorized | `application/json` | `ApiError` |
 | `409` | Tick already in progress | `application/json` | `ApiError` |
+
+---
+
+### `POST /api/reputation/dispute-sweep`
+
+**Summary:** Escalate overdue disputes  
+
+Cron-triggered. Moves every open dispute that sat at the anchor response rung past its 72-hour deadline to maintainer review and records the move in the public adjudication log. Disputes already at review or appeal are left for a human to decide. Protected by CRON_SECRET.
+
+#### Responses
+
+| Status | Description | Content-Type | Schema |
+| :--- | :--- | :--- | :--- |
+| `200` | Sweep completed | `application/json` | `object` |
+| `401` | Missing or invalid credentials | `application/json` | `ApiError` |
 
 ---
 
