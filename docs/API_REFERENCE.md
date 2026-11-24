@@ -59,6 +59,7 @@ the hardening contract (see `lib/api/v1.ts`):
   - [`GET /api/reputation/sdf-export`](#get-apireputationsdf-export)
   - [`GET /api/reputation/{anchor}`](#get-apireputationanchor)
   - [`GET /api/reputation/{anchor}/history`](#get-apireputationanchorhistory)
+  - [`GET /api/v1/disputes/log`](#get-apiv1disputeslog)
   - [`GET /v1/public/scores`](#get-v1publicscores)
 - **SEP-10**
   - [`POST /api/sep10/client-domain`](#post-apisep10client-domain)
@@ -72,6 +73,7 @@ the hardening contract (see `lib/api/v1.ts`):
   - [`GET /api/metrics`](#get-apimetrics)
   - [`GET /api/publisher/health`](#get-apipublisherhealth)
   - [`GET /api/publisher/tick`](#get-apipublishertick)
+  - [`POST /api/reputation/dispute-sweep`](#post-apireputationdispute-sweep)
   - [`GET /api/reputation/reconcile`](#get-apireputationreconcile)
   - [`GET /api/reputation/reconcile-volume-savings`](#get-apireputationreconcile-volume-savings)
   - [`POST /api/reputation/refresh`](#post-apireputationrefresh)
@@ -744,6 +746,29 @@ Returns bucketed outcome history for a specific anchor over a configurable time 
 
 ---
 
+### `GET /api/v1/disputes/log`
+
+**Summary:** Get the public dispute adjudication log  
+
+Serves the public, append-only, hash-chained dispute adjudication log, along with verification status and summary counts. Required scope: quotes:read.
+
+#### Parameters
+
+| Name | In | Type | Required | Description |
+| :--- | :--- | :--- | :--- | :--- |
+| `afterSeq` | `query` | `string` | No | Return entries strictly after this sequence number (integer >= 0, default 0) |
+| `limit` | `query` | `string` | No | Maximum number of entries to return (1-500, default 200) |
+
+#### Responses
+
+| Status | Description | Content-Type | Schema |
+| :--- | :--- | :--- | :--- |
+| `200` | The adjudication log entries and chain verification | `application/json` | `AdjudicationLogResponse` |
+| `400` | Invalid afterSeq or limit parameters | `application/json` | `ApiError` |
+| `429` | Rate limited | `application/json` | `ApiError` |
+
+---
+
 ### `GET /v1/public/scores`
 
 **Summary:** Get public scores  
@@ -935,6 +960,21 @@ Triggers a batch of reputation outcome submissions to the Soroban oracle contrac
 | `200` | Tick completed, or withheld by the publish gate | `application/json` | `object` |
 | `401` | Unauthorized | `application/json` | `ApiError` |
 | `409` | Tick already in progress | `application/json` | `ApiError` |
+
+---
+
+### `POST /api/reputation/dispute-sweep`
+
+**Summary:** Escalate overdue disputes  
+
+Cron-triggered. Moves every open dispute that sat at the anchor response rung past its 72-hour deadline to maintainer review and records the move in the public adjudication log. Disputes already at review or appeal are left for a human to decide. Protected by CRON_SECRET.
+
+#### Responses
+
+| Status | Description | Content-Type | Schema |
+| :--- | :--- | :--- | :--- |
+| `200` | Sweep completed | `application/json` | `object` |
+| `401` | Missing or invalid credentials | `application/json` | `ApiError` |
 
 ---
 

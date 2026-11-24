@@ -289,6 +289,7 @@ describe('the intent, settlement, dispute and oracle kinds (WHK003)', () => {
       id: '3f2a1b4c-0d5e-4f6a-8b7c-9d0e1f2a3b4c',
       kind,
       createdAt: '2026-11-20T12:00:00.000Z',
+      idempotencyKey: `${kind}:3f2a1b4c-0d5e-4f6a-8b7c-9d0e1f2a3b4c`,
       payload,
     });
     for (const kind of WEBHOOK_EVENT_KINDS) {
