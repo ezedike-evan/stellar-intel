@@ -67,14 +67,20 @@ export async function POST(request: NextRequest): Promise<NextResponse> {
 
       // Field by field, never a spread: the intent carries sender and recipient.
       // withV1 answers a replay from the cache before this handler runs.
-      emitWebhookEvent('intent.created', {
-        corridorId: result.response.route.corridorId,
-        anchorId: result.response.route.anchorId,
-        quoteId: result.response.quoteId,
-        amount: intent.amount,
-        sourceAsset: intent.sourceAsset,
-        destinationAsset: intent.destinationAsset,
-      });
+      // The key is the quote id: one accepted intent has one quote, so the event for it
+      // is the same event if this line is ever reached twice.
+      emitWebhookEvent(
+        'intent.created',
+        {
+          corridorId: result.response.route.corridorId,
+          anchorId: result.response.route.anchorId,
+          quoteId: result.response.quoteId,
+          amount: intent.amount,
+          sourceAsset: intent.sourceAsset,
+          destinationAsset: intent.destinationAsset,
+        },
+        { idempotencyKey: `intent.created:${result.response.quoteId}` }
+      );
 
       return {
         status: 200,

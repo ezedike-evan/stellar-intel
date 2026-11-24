@@ -273,6 +273,49 @@ describe('POST /api/reputation/append — webhooks (#1341)', () => {
     ]);
   });
 
+  it('keys the events of a completed outcome on the intent hash (WHK005)', async () => {
+    const keys: Array<{ kind: string; opts: unknown }> = [];
+    _setWebhookEmitter((kind, _payload, opts) => keys.push({ kind, opts }));
+
+    expect((await appendPOST(req(signed()))).status).toBe(201);
+
+    expect(keys).toEqual([
+      {
+        kind: 'reputation.event_written',
+        opts: { idempotencyKey: `reputation.event_written:${HASH}` },
+      },
+      { kind: 'intent.settled', opts: { idempotencyKey: `intent.settled:${HASH}` } },
+    ]);
+  });
+
+  it('keys the events of a refunded outcome on the intent hash (WHK005)', async () => {
+    const keys: Array<{ kind: string; opts: unknown }> = [];
+    _setWebhookEmitter((kind, _payload, opts) => keys.push({ kind, opts }));
+
+    expect((await appendPOST(req(signed({ outcome: 'refunded' })))).status).toBe(201);
+
+    expect(keys).toEqual([
+      {
+        kind: 'reputation.event_written',
+        opts: { idempotencyKey: `reputation.event_written:${HASH}` },
+      },
+      { kind: 'intent.failed', opts: { idempotencyKey: `intent.failed:${HASH}` } },
+    ]);
+  });
+
+  it('gives two outcomes different keys, and the kinds of one outcome different keys', async () => {
+    const keys: string[] = [];
+    _setWebhookEmitter((_kind, _payload, opts) => keys.push(opts?.idempotencyKey ?? '(none)'));
+    const other = 'c'.repeat(64);
+
+    expect((await appendPOST(req(signed()))).status).toBe(201);
+    expect((await appendPOST(req(signed({ intentHash: other })))).status).toBe(201);
+
+    expect(keys).toHaveLength(4);
+    expect(new Set(keys).size).toBe(4);
+    expect(keys).not.toContain('(none)');
+  });
+
   it('keeps stellarTransactionId as null on intent.settled when it was not sent', async () => {
     expect((await appendPOST(req(signed({ stellarTransactionId: undefined })))).status).toBe(201);
 
