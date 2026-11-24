@@ -12,6 +12,8 @@ import {
 import { schema } from '@/lib/graphql/schema';
 import { countRootFields, graphqlValidationRules } from '@/lib/graphql/security';
 import { checkRateLimit, getClientIp } from '@/lib/api/rate-limit';
+import { checkDailyQuota, quotaHeaders } from '@/lib/api/quota';
+import { resolveCaller } from '@/lib/auth/caller';
 import { rateLimitedResponse } from '@/lib/api/response';
 import { getLogger } from '@/lib/logger';
 
@@ -144,6 +146,52 @@ async function handler(request: NextRequest): Promise<Response> {
     );
   }
 
+  // Daily quota (AGS024), shared with REST and MCP: one unit per request.
+  // Anonymous callers have none; a bad credential is rejected, never silently
+  // downgraded to anonymous.
+  const resolution = await resolveCaller(request.headers);
+  if (!resolution.ok) {
+    return NextResponse.json(
+      {
+        data: null,
+        errors: [{ message: resolution.message, extensions: { code: 'UNAUTHENTICATED' } }],
+      },
+      { status: 401 }
+    );
+  }
+  const caller = resolution.caller;
+  let quotaHeadersOut: Record<string, string> = {};
+  if (caller.kind !== 'anonymous') {
+    const quota = await checkDailyQuota(caller);
+    if (quota) {
+      quotaHeadersOut = quotaHeaders(quota);
+      if (!quota.allowed) {
+        return NextResponse.json(
+          {
+            data: null,
+            errors: [{ message: 'Daily quota exceeded', extensions: { code: 'QUOTA_EXCEEDED' } }],
+          },
+          {
+            status: 429,
+            headers: { ...quotaHeadersOut, 'Retry-After': String(quota.retryAfter) },
+          }
+        );
+      }
+    }
+  }
+
+  const response = await handleOperation(request, logger, ip);
+  if (Object.keys(quotaHeadersOut).length === 0) return response;
+  const headers = new Headers(response.headers);
+  for (const [name, value] of Object.entries(quotaHeadersOut)) headers.set(name, value);
+  return new NextResponse(response.body, { status: response.status, headers });
+}
+
+async function handleOperation(
+  request: NextRequest,
+  logger: ReturnType<typeof getLogger>,
+  ip: string
+): Promise<Response> {
   const parsed = await readOperation(request);
   if (!parsed.ok) return parsed.response;
   const { operation } = parsed;
