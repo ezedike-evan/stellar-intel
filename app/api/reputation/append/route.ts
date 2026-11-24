@@ -42,20 +42,27 @@ export const runtime = 'nodejs';
  * is built field by field: the record's `signerAccount`, `evidence` and
  * `anchorTransactionId` never leave the platform. `status` is the literal the record
  * was just written with, not a later verification result.
+ *
+ * The idempotency key is made from the intent hash: there is one breach per intent,
+ * so however often this is emitted for it, a subscriber sees one event.
  */
 function emitSlippageBreachEvent(breach: SlippageBreach): void {
-  emitWebhookEvent('intent.slippage_breach', {
-    intentHash: breach.intentHash,
-    anchorId: breach.anchorId,
-    corridor: breach.corridor,
-    minReceive: breach.minReceive,
-    amountOut: breach.amountOut,
-    shortfall: breach.shortfall,
-    shortfallBps: breach.shortfallBps,
-    evidenceHash: breach.evidenceHash,
-    status: 'detected',
-    detectedAt: breach.detectedAt,
-  });
+  emitWebhookEvent(
+    'intent.slippage_breach',
+    {
+      intentHash: breach.intentHash,
+      anchorId: breach.anchorId,
+      corridor: breach.corridor,
+      minReceive: breach.minReceive,
+      amountOut: breach.amountOut,
+      shortfall: breach.shortfall,
+      shortfallBps: breach.shortfallBps,
+      evidenceHash: breach.evidenceHash,
+      status: 'detected',
+      detectedAt: breach.detectedAt,
+    },
+    { idempotencyKey: `intent.slippage_breach:${breach.intentHash}` }
+  );
 }
 
 function emitOutcomeEvents(row: OutcomeLogRow): void {

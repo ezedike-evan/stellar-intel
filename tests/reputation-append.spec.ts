@@ -411,6 +411,17 @@ describe('POST /api/reputation/append — intent.slippage_breach (SLP014)', () =
     expect(sent).not.toContain('user@example.com');
   });
 
+  it('keys the event on the intent hash, so a retried emission is one event to a subscriber', async () => {
+    const seen: Array<{ kind: string; opts: unknown }> = [];
+    _setWebhookEmitter((kind, _payload, opts) => seen.push({ kind, opts }));
+    const { intentHash, body } = await withMinReceive('anchor-tx-205', '1350');
+    expect((await appendPOST(req(body))).status).toBe(201);
+
+    expect(seen.find((e) => e.kind === 'intent.slippage_breach')?.opts).toEqual({
+      idempotencyKey: `intent.slippage_breach:${intentHash}`,
+    });
+  });
+
   it('emits nothing more when the outcome met its minimum', async () => {
     const { body } = await withMinReceive('anchor-tx-202', '1450');
     const res = await appendPOST(req(body));

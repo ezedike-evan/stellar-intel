@@ -266,6 +266,7 @@ export const WebhookEventEnvelopeSchema = z.discriminatedUnion('kind', [
     id: z.string().uuid(),
     kind: z.literal('intent.slippage_breach'),
     createdAt: z.iso.datetime(),
+    idempotencyKey: z.string().min(1).max(200),
     payload: IntentSlippageBreachPayloadSchema,
   }),
 ]);
