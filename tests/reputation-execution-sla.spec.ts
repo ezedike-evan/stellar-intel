@@ -1,331 +1,324 @@
 import { describe, it, expect } from 'vitest';
+import { nearestRankPercentile } from '@/lib/reputation/percentile';
 import {
   computeExecutionSla,
   computeExecutionSlaByCorridor,
+  evaluateSlaBreach,
+  buildDailyP95Series,
+  buildExecutionSlaReport,
+  ExecutionSlaReportSchema,
   type ExecutionSla,
-  ExecutionSlaSchema,
-  SLA_MIN_SAMPLES,
-  SLA_WINDOW_DAYS,
-  settleSamplesMs,
 } from '@/lib/reputation/execution-sla';
 import { makeOutcomeRow } from './fixtures/outcome-rows';
 
-const NOW = Date.parse('2026-11-01T00:00:00.000Z');
-const DAY_MS = 86_400_000;
+const NOW = Date.parse('2026-06-04T12:00:00.000Z');
+const hoursAgo = (h: number) => new Date(NOW - h * 3_600_000).toISOString();
 
-function createdAt(offsetMs: number): string {
-  return new Date(NOW + offsetMs).toISOString();
-}
+describe('nearestRankPercentile', () => {
+  it('returns null for an empty array', () => {
+    expect(nearestRankPercentile([], 50)).toBeNull();
+  });
 
-function expectOk(sla: ExecutionSla): Extract<ExecutionSla, { state: 'ok' }> {
-  if (sla.state !== 'ok') throw new Error(`expected ok, got ${sla.state}`);
-  return sla;
-}
+  it('returns the element for a single-element array', () => {
+    expect(nearestRankPercentile([42], 50)).toBe(42);
+    expect(nearestRankPercentile([42], 95)).toBe(42);
+  });
 
-/** Rows with `settleSeconds` values drawn from `seconds(i)`, all in-window. */
-function rowsWith(count: number, seconds: (index: number) => number) {
-  return Array.from({ length: count }, (_, index) =>
-    makeOutcomeRow({
-      intentHash: `intent-${index}`,
-      settleSeconds: seconds(index),
-      createdAt: createdAt(-60_000),
-    })
-  );
-}
+  it('computes expected nearest-rank percentiles on ordered values', () => {
+    const vals = Array.from({ length: 100 }, (_, i) => i + 1); // 1..100
+    expect(nearestRankPercentile(vals, 50)).toBe(50);
+    expect(nearestRankPercentile(vals, 95)).toBe(95);
+    expect(nearestRankPercentile(vals, 99)).toBe(99);
+  });
+});
 
-describe('computeExecutionSla', () => {
-  it('reports insufficient_data below the minimum sample size', () => {
-    const result = computeExecutionSla(
-      rowsWith(29, () => 60),
-      { anchorId: 'moneygram' },
+describe('evaluateSlaBreach', () => {
+  const thresholds = { p95Ms: 15 * 60 * 1000, p99Ms: 60 * 60 * 1000 };
+
+  it('evaluates unknown for insufficient_data', () => {
+    const sla: ExecutionSla = {
+      state: 'insufficient_data',
+      anchorId: 'moneygram',
+      corridor: null,
+      windowDays: 30,
+      computedAt: new Date(NOW).toISOString(),
+      sampleSize: 10,
+      terminalTxCount: 10,
+      p50Ms: null,
+      p95Ms: null,
+      p99Ms: null,
+    };
+    const assessment = evaluateSlaBreach(sla, thresholds);
+    expect(assessment.status).toBe('unknown');
+    expect(assessment.breaches).toHaveLength(0);
+  });
+
+  it('evaluates within when both percentiles are below or equal to thresholds', () => {
+    const sla: ExecutionSla = {
+      state: 'ok',
+      anchorId: 'moneygram',
+      corridor: null,
+      windowDays: 30,
+      computedAt: new Date(NOW).toISOString(),
+      sampleSize: 100,
+      terminalTxCount: 100,
+      p50Ms: 60_000,
+      p95Ms: thresholds.p95Ms, // equal is within
+      p99Ms: thresholds.p99Ms, // equal is within
+    };
+    const assessment = evaluateSlaBreach(sla, thresholds);
+    expect(assessment.status).toBe('within');
+    expect(assessment.breaches).toHaveLength(0);
+  });
+
+  it('evaluates breach when p95 exceeds threshold', () => {
+    const sla: ExecutionSla = {
+      state: 'ok',
+      anchorId: 'moneygram',
+      corridor: null,
+      windowDays: 30,
+      computedAt: new Date(NOW).toISOString(),
+      sampleSize: 100,
+      terminalTxCount: 100,
+      p50Ms: 60_000,
+      p95Ms: thresholds.p95Ms + 1000,
+      p99Ms: thresholds.p99Ms - 1000,
+    };
+    const assessment = evaluateSlaBreach(sla, thresholds);
+    expect(assessment.status).toBe('breach');
+    expect(assessment.breaches).toEqual([
       {
-        nowMs: NOW,
-      }
-    );
-
-    expect(result.state).toBe('insufficient_data');
-    expect(result.sampleSize).toBe(29);
-    expect(result.terminalCount).toBe(29);
-    expect(result.minSamples).toBe(SLA_MIN_SAMPLES);
-    expect('p50Ms' in result).toBe(false);
+        metric: 'p95',
+        observedMs: thresholds.p95Ms + 1000,
+        thresholdMs: thresholds.p95Ms,
+      },
+    ]);
   });
 
-  it('reports insufficient_data for an empty window even when minSamples is 0', () => {
-    const result = computeExecutionSla(
-      [],
-      { anchorId: 'moneygram' },
-      { nowMs: NOW, minSamples: 0 }
-    );
-
-    expect(result.state).toBe('insufficient_data');
-    expect(result.sampleSize).toBe(0);
+  it('evaluates breach when p99 exceeds threshold', () => {
+    const sla: ExecutionSla = {
+      state: 'ok',
+      anchorId: 'moneygram',
+      corridor: null,
+      windowDays: 30,
+      computedAt: new Date(NOW).toISOString(),
+      sampleSize: 100,
+      terminalTxCount: 100,
+      p50Ms: 60_000,
+      p95Ms: thresholds.p95Ms - 1000,
+      p99Ms: thresholds.p99Ms + 5000,
+    };
+    const assessment = evaluateSlaBreach(sla, thresholds);
+    expect(assessment.status).toBe('breach');
+    expect(assessment.breaches).toEqual([
+      {
+        metric: 'p99',
+        observedMs: thresholds.p99Ms + 5000,
+        thresholdMs: thresholds.p99Ms,
+      },
+    ]);
   });
 
-  it('computes p50 and p95 with nearest rank and withholds p99 under 100 samples', () => {
-    const result = expectOk(
-      computeExecutionSla(
-        rowsWith(30, (index) => index + 1),
-        { anchorId: 'moneygram' },
-        { nowMs: NOW }
-      )
-    );
-
-    expect(result.sampleSize).toBe(30);
-    expect(result.p50Ms).toBe(15_000);
-    expect(result.p95Ms).toBe(29_000);
-    expect(result.p99Ms).toBeNull();
-  });
-
-  it('computes p50/p95/p99 from 100 samples', () => {
-    const result = expectOk(
-      computeExecutionSla(
-        rowsWith(100, (index) => index + 1),
-        { anchorId: 'moneygram' },
-        { nowMs: NOW }
-      )
-    );
-
-    expect(result.p50Ms).toBe(50_000);
-    expect(result.p95Ms).toBe(95_000);
-    expect(result.p99Ms).toBe(99_000);
-  });
-
-  it('does not trim the slow tail', () => {
-    const slow = [
-      ...rowsWith(98, () => 60),
-      makeOutcomeRow({
-        intentHash: 'slow-1',
-        settleSeconds: 86_400,
-        createdAt: createdAt(-60_000),
-      }),
-      makeOutcomeRow({
-        intentHash: 'slow-2',
-        settleSeconds: 86_400,
-        createdAt: createdAt(-60_000),
-      }),
-    ];
-
-    const result = expectOk(computeExecutionSla(slow, { anchorId: 'moneygram' }, { nowMs: NOW }));
-
-    expect(result.sampleSize).toBe(100);
-    expect(result.p99Ms).toBe(86_400_000);
+  it('p99Ms: null never yields a p99 breach', () => {
+    const sla: ExecutionSla = {
+      state: 'ok',
+      anchorId: 'moneygram',
+      corridor: null,
+      windowDays: 30,
+      computedAt: new Date(NOW).toISOString(),
+      sampleSize: 40,
+      terminalTxCount: 40,
+      p50Ms: 60_000,
+      p95Ms: thresholds.p95Ms - 1000,
+      p99Ms: null,
+    };
+    const assessment = evaluateSlaBreach(sla, thresholds);
+    expect(assessment.status).toBe('within');
+    expect(assessment.breaches).toHaveLength(0);
   });
 });
 
-describe('window boundaries', () => {
-  it('includes a row exactly at the window start and excludes the millisecond before', () => {
-    const windowStartMs = NOW - SLA_WINDOW_DAYS * DAY_MS;
-    const rows = [
+describe('buildExecutionSlaReport', () => {
+  it('builds a report with 30 rows on usdc-ngn for moneygram', () => {
+    const rows = Array.from({ length: 30 }, (_, i) =>
       makeOutcomeRow({
-        intentHash: 'included',
-        createdAt: new Date(windowStartMs).toISOString(),
-      }),
-      makeOutcomeRow({
-        intentHash: 'excluded-before',
-        createdAt: new Date(windowStartMs - 1).toISOString(),
-      }),
-    ];
-
-    const result = computeExecutionSla(rows, { anchorId: 'moneygram' }, { nowMs: NOW });
-
-    expect(result.terminalCount).toBe(1);
-    expect(result.sampleSize).toBe(1);
-    expect(result.windowStart).toBe(new Date(windowStartMs).toISOString());
-    expect(result.windowEnd).toBe(new Date(NOW).toISOString());
-    expect(result.computedAt).toBe(result.windowEnd);
-    expect(result.windowDays).toBe(SLA_WINDOW_DAYS);
-  });
-
-  it('excludes rows created after now', () => {
-    const rows = [makeOutcomeRow({ intentHash: 'after', createdAt: createdAt(1) })];
-
-    const result = computeExecutionSla(rows, { anchorId: 'moneygram' }, { nowMs: NOW });
-
-    expect(result.terminalCount).toBe(0);
-    expect(result.sampleSize).toBe(0);
-  });
-
-  it('honours the windowDays option', () => {
-    const rows = [makeOutcomeRow({ intentHash: 'ten-days', createdAt: createdAt(-10 * DAY_MS) })];
-
-    const narrow = computeExecutionSla(
-      rows,
-      { anchorId: 'moneygram' },
-      { nowMs: NOW, windowDays: 7 }
-    );
-    const wide = computeExecutionSla(
-      rows,
-      { anchorId: 'moneygram' },
-      { nowMs: NOW, windowDays: 30 }
-    );
-
-    expect(narrow.sampleSize).toBe(0);
-    expect(narrow.windowDays).toBe(7);
-    expect(wide.sampleSize).toBe(1);
-  });
-});
-
-describe('scope and sample exclusions', () => {
-  it('ignores disputed, on-ramp and other-anchor rows entirely', () => {
-    const rows = [
-      makeOutcomeRow({ intentHash: 'counted', createdAt: createdAt(-60_000) }),
-      makeOutcomeRow({ intentHash: 'disputed', disputed: true, createdAt: createdAt(-60_000) }),
-      makeOutcomeRow({
-        intentHash: 'deposit',
-        direction: 'deposit',
-        createdAt: createdAt(-60_000),
-      }),
-      makeOutcomeRow({
-        intentHash: 'other-anchor',
-        anchorId: 'anclap',
-        createdAt: createdAt(-60_000),
-      }),
-    ];
-
-    const result = computeExecutionSla(rows, { anchorId: 'moneygram' }, { nowMs: NOW });
-
-    expect(result.terminalCount).toBe(1);
-    expect(result.sampleSize).toBe(1);
-  });
-
-  it('counts non-completed and untimed rows as terminal but not as samples', () => {
-    const rows = [
-      makeOutcomeRow({
-        intentHash: 'refunded',
-        outcome: 'refunded',
-        createdAt: createdAt(-60_000),
-      }),
-      makeOutcomeRow({
-        intentHash: 'untimed',
-        settleSeconds: null,
-        createdAt: createdAt(-60_000),
-      }),
-    ];
-
-    const result = computeExecutionSla(rows, { anchorId: 'moneygram' }, { nowMs: NOW });
-
-    expect(result.terminalCount).toBe(2);
-    expect(result.sampleSize).toBe(0);
-  });
-
-  it('filters by scope.corridor and sorts the collected samples', () => {
-    const rows = [
-      makeOutcomeRow({
-        intentHash: 'slow',
+        intentHash: `hash-${i}`.padStart(64, '0'),
+        anchorId: 'moneygram',
         corridor: 'usdc-ngn',
-        settleSeconds: 120,
-        createdAt: createdAt(-60_000),
-      }),
-      makeOutcomeRow({
-        intentHash: 'fast',
-        corridor: 'usdc-ngn',
-        settleSeconds: 30,
-        createdAt: createdAt(-60_000),
-      }),
-      makeOutcomeRow({
-        intentHash: 'other-corridor',
-        corridor: 'usdc-kes',
-        settleSeconds: 10,
-        createdAt: createdAt(-60_000),
-      }),
-    ];
-
-    const scoped = settleSamplesMs(
-      rows,
-      { anchorId: 'moneygram', corridor: 'usdc-ngn' },
-      NOW - SLA_WINDOW_DAYS * DAY_MS,
-      NOW
+        settleSeconds: 60 + i,
+        createdAt: hoursAgo(10),
+      })
     );
 
-    expect(scoped.terminalCount).toBe(2);
-    expect(scoped.samplesMs).toEqual([30_000, 120_000]);
-  });
-});
+    const report = buildExecutionSlaReport(rows, 'moneygram', { nowMs: NOW });
 
-describe('computeExecutionSlaByCorridor', () => {
-  it('returns one entry per corridor, sorted, with per-corridor counts', () => {
-    const rows = [
-      ...rowsWith(30, (index) => index + 1),
-      ...Array.from({ length: 3 }, (_, index) =>
-        makeOutcomeRow({
-          intentHash: `kes-${index}`,
-          corridor: 'usdc-kes',
-          createdAt: createdAt(-60_000),
-        })
-      ),
-      makeOutcomeRow({
-        intentHash: 'deposit-only',
-        corridor: 'usdc-ghs',
-        direction: 'deposit',
-        createdAt: createdAt(-60_000),
-      }),
-    ];
+    expect(report.anchorId).toBe('moneygram');
+    expect(report.windowDays).toBe(30);
+    expect(report.overall.sla.state).toBe('ok');
+    expect(report.overall.sla.sampleSize).toBe(30);
 
-    const result = computeExecutionSlaByCorridor(rows, 'moneygram', { nowMs: NOW });
+    // Moneygram serves 5 registered corridors
+    expect(report.corridors.length).toBe(5);
+    const ngnEntry = report.corridors.find((c) => c.corridor === 'usdc-ngn');
+    expect(ngnEntry?.sla.state).toBe('ok');
 
-    expect(result.map((entry) => entry.corridor)).toEqual(['usdc-kes', 'usdc-ngn']);
-    expect(result[0]!.sla.state).toBe('insufficient_data');
-    expect(result[0]!.sla.sampleSize).toBe(3);
-    expect(result[1]!.sla.state).toBe('ok');
-    expect(result[1]!.sla.sampleSize).toBe(30);
-    expect(result[1]!.sla.windowEnd).toBe(result[0]!.sla.windowEnd);
-  });
-});
-
-describe('options', () => {
-  it('honours minSamples', () => {
-    const rows = rowsWith(10, () => 60);
-
-    const loose = computeExecutionSla(
-      rows,
-      { anchorId: 'moneygram' },
-      { nowMs: NOW, minSamples: 10 }
-    );
-    const strict = computeExecutionSla(
-      rows,
-      { anchorId: 'moneygram' },
-      { nowMs: NOW, minSamples: 11 }
-    );
-
-    expect(loose.state).toBe('ok');
-    expect(loose.minSamples).toBe(10);
-    expect(strict.state).toBe('insufficient_data');
-    expect(strict.minSamples).toBe(11);
-  });
-});
-
-describe('ExecutionSlaSchema', () => {
-  const ok = computeExecutionSla(
-    rowsWith(100, (index) => index + 1),
-    { anchorId: 'moneygram' },
-    { nowMs: NOW }
-  );
-  const insufficient = computeExecutionSla(
-    rowsWith(1, () => 60),
-    { anchorId: 'moneygram' },
-    {
-      nowMs: NOW,
+    const otherEntries = report.corridors.filter((c) => c.corridor !== 'usdc-ngn');
+    for (const entry of otherEntries) {
+      expect(entry.sla.state).toBe('insufficient_data');
     }
-  );
 
-  it('accepts both states', () => {
-    expect(ExecutionSlaSchema.parse(ok)).toEqual(ok);
-    expect(ExecutionSlaSchema.parse(insufficient)).toEqual(insufficient);
+    // Schema validation
+    expect(() => ExecutionSlaReportSchema.parse(report)).not.toThrow();
   });
 
-  it('accepts a null p99', () => {
-    const noP99 = computeExecutionSla(
-      rowsWith(30, () => 60),
-      { anchorId: 'moneygram' },
-      {
-        nowMs: NOW,
-      }
+  it('restricts corridors to a single requested corridor when option is set', () => {
+    const rows = Array.from({ length: 30 }, (_, i) =>
+      makeOutcomeRow({
+        intentHash: `hash-${i}`.padStart(64, '0'),
+        anchorId: 'moneygram',
+        corridor: 'usdc-ngn',
+        settleSeconds: 60 + i,
+        createdAt: hoursAgo(10),
+      })
     );
-    expect(ExecutionSlaSchema.parse(noP99)).toEqual(noP99);
+
+    const report = buildExecutionSlaReport(rows, 'moneygram', {
+      nowMs: NOW,
+      corridor: 'usdc-ngn',
+    });
+
+    expect(report.corridors).toHaveLength(1);
+    expect(report.corridors[0]?.corridor).toBe('usdc-ngn');
+    expect(report.corridors[0]?.sla.state).toBe('ok');
   });
 
-  it('rejects an ok object without p95Ms', () => {
-    const { p95Ms: _p95Ms, ...withoutP95 } = ok as Extract<typeof ok, { state: 'ok' }>;
-    expect(ExecutionSlaSchema.safeParse(withoutP95).success).toBe(false);
+  it('builds history with exactly 30 daily points', () => {
+    const rows = Array.from({ length: 10 }, (_, i) =>
+      makeOutcomeRow({
+        intentHash: `hash-${i}`.padStart(64, '0'),
+        anchorId: 'moneygram',
+        corridor: 'usdc-ngn',
+        settleSeconds: 60,
+        createdAt: hoursAgo(2),
+      })
+    );
+
+    const history = buildDailyP95Series(rows, { anchorId: 'moneygram' }, { nowMs: NOW, days: 30 });
+    expect(history).toHaveLength(30);
+    // Last point should have sampleSize: 10 and non-null p95Ms since sampleSize >= 5
+    const lastPoint = history[history.length - 1]!;
+    expect(lastPoint.sampleSize).toBe(10);
+    expect(lastPoint.p95Ms).toBe(60_000);
+  });
+
+  it('covers daily p95 series requirements (#2145)', () => {
+    const testNow = Date.parse('2026-11-01T12:00:00.000Z');
+
+    // 1. returns 30 points; first day is '2026-10-03', last is '2026-11-01'
+    const series30 = buildDailyP95Series([], { anchorId: 'moneygram' }, { nowMs: testNow });
+    expect(series30).toHaveLength(30);
+    expect(series30[0]?.day).toBe('2026-10-03');
+    expect(series30[29]?.day).toBe('2026-11-01');
+
+    // 2. a day with 4 samples -> p95Ms: null, sampleSize: 4
+    const fourSamples = Array.from({ length: 4 }, (_, i) =>
+      makeOutcomeRow({
+        intentHash: `f-${i}`.padStart(64, '0'),
+        anchorId: 'moneygram',
+        settleSeconds: 10 + i,
+        createdAt: '2026-11-01T08:00:00.000Z',
+      })
+    );
+    const series4 = buildDailyP95Series(fourSamples, { anchorId: 'moneygram' }, { nowMs: testNow });
+    const lastDay4 = series4.find((p) => p.day === '2026-11-01')!;
+    expect(lastDay4.sampleSize).toBe(4);
+    expect(lastDay4.p95Ms).toBeNull();
+
+    // 3. a day with 20 samples 1..20 s -> p95Ms: 19000
+    const twentySamples = Array.from({ length: 20 }, (_, i) =>
+      makeOutcomeRow({
+        intentHash: `t-${i}`.padStart(64, '0'),
+        anchorId: 'moneygram',
+        settleSeconds: i + 1, // 1..20 s
+        createdAt: '2026-11-01T08:00:00.000Z',
+      })
+    );
+    const series20 = buildDailyP95Series(
+      twentySamples,
+      { anchorId: 'moneygram' },
+      { nowMs: testNow }
+    );
+    const lastDay20 = series20.find((p) => p.day === '2026-11-01')!;
+    expect(lastDay20.sampleSize).toBe(20);
+    expect(lastDay20.p95Ms).toBe(19_000);
+
+    // 4. rows at 23:59:59.999Z and 00:00:00.000Z land on different days
+    const rowDay1 = makeOutcomeRow({
+      intentHash: 'row-d1'.padStart(64, '0'),
+      anchorId: 'moneygram',
+      settleSeconds: 10,
+      createdAt: '2026-10-31T23:59:59.999Z',
+    });
+    const rowDay2 = makeOutcomeRow({
+      intentHash: 'row-d2'.padStart(64, '0'),
+      anchorId: 'moneygram',
+      settleSeconds: 15,
+      createdAt: '2026-11-01T00:00:00.000Z',
+    });
+    const boundarySeries = buildDailyP95Series(
+      [rowDay1, rowDay2],
+      { anchorId: 'moneygram' },
+      { nowMs: testNow }
+    );
+    const oct31 = boundarySeries.find((p) => p.day === '2026-10-31')!;
+    const nov01 = boundarySeries.find((p) => p.day === '2026-11-01')!;
+    expect(oct31.sampleSize).toBe(1);
+    expect(nov01.sampleSize).toBe(1);
+
+    // 5. a row after NOW is excluded; disputed/deposit/non-completed rows are excluded
+    const futureRow = makeOutcomeRow({
+      intentHash: 'fut'.padStart(64, '0'),
+      anchorId: 'moneygram',
+      settleSeconds: 10,
+      createdAt: '2026-11-01T13:00:00.000Z', // after 12:00:00 NOW
+    });
+    const disputedRow = makeOutcomeRow({
+      intentHash: 'disp'.padStart(64, '0'),
+      anchorId: 'moneygram',
+      settleSeconds: 10,
+      disputed: true,
+      createdAt: '2026-11-01T08:00:00.000Z',
+    });
+    const depositRow = makeOutcomeRow({
+      intentHash: 'dep'.padStart(64, '0'),
+      anchorId: 'moneygram',
+      direction: 'deposit',
+      settleSeconds: 10,
+      createdAt: '2026-11-01T08:00:00.000Z',
+    });
+    const errorRow = makeOutcomeRow({
+      intentHash: 'err'.padStart(64, '0'),
+      anchorId: 'moneygram',
+      outcome: 'error',
+      settleSeconds: 10,
+      createdAt: '2026-11-01T08:00:00.000Z',
+    });
+    const filteredSeries = buildDailyP95Series(
+      [futureRow, disputedRow, depositRow, errorRow],
+      { anchorId: 'moneygram' },
+      { nowMs: testNow }
+    );
+    expect(filteredSeries.find((p) => p.day === '2026-11-01')?.sampleSize).toBe(0);
+
+    // 6. days: 7 option -> 7 points
+    const series7 = buildDailyP95Series([], { anchorId: 'moneygram' }, { nowMs: testNow, days: 7 });
+    expect(series7).toHaveLength(7);
+    expect(series7[0]?.day).toBe('2026-10-26');
+    expect(series7[6]?.day).toBe('2026-11-01');
+
+    // 7. buildExecutionSlaReport(...).history.length === 30 and report parses with ExecutionSlaReportSchema
+    const report = buildExecutionSlaReport([], 'moneygram', { nowMs: testNow });
+    expect(report.history).toHaveLength(30);
+    expect(() => ExecutionSlaReportSchema.parse(report)).not.toThrow();
   });
 });

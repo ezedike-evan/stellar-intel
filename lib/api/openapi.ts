@@ -5,6 +5,7 @@ import {
 } from '@asteasolutions/zod-to-openapi';
 import { z } from 'zod';
 import { STELLAR_PUBKEY_PATTERN, AMOUNT_PATTERN, AMOUNT_7DP_PATTERN } from '@/lib/patterns';
+import { ExecutionSlaReportSchema } from '@/lib/reputation/execution-sla';
 
 extendZodWithOpenApi(z);
 
@@ -920,6 +921,37 @@ registry.registerPath({
     200: {
       description: 'Bucketed history data',
       content: { 'application/json': { schema: z.any() } },
+    },
+    400: {
+      description: 'Validation error',
+      content: { 'application/json': { schema: ApiErrorSchema } },
+    },
+    404: {
+      description: 'Unknown anchor',
+      content: { 'application/json': { schema: ApiErrorSchema } },
+    },
+  },
+});
+
+registry.registerPath({
+  method: 'get',
+  path: '/api/reputation/{anchor}/sla',
+  summary: 'Get anchor execution SLA',
+  description:
+    'Returns trailing 30-day settlement SLA percentiles (nearest-rank, no trimming) for an anchor, requiring at least 30 completed samples (and 100 for p99), evaluated against breach thresholds.',
+  tags: ['Reputation'],
+  request: {
+    params: z.object({ anchor: AnchorPathParam }),
+    query: z.object({ corridor: CorridorQueryParam }),
+  },
+  responses: {
+    200: {
+      description: 'Execution SLA report',
+      content: {
+        'application/json': {
+          schema: registry.register('ExecutionSlaReport', ExecutionSlaReportSchema),
+        },
+      },
     },
     400: {
       description: 'Validation error',
