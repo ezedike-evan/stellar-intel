@@ -3693,6 +3693,7 @@ Stellar Intel can push real-time event notifications to your HTTPS endpoint inst
 | `intent.failed`                | An intent reaches a terminal `failed` state                          |
 | `reputation.event_written`     | A new outcome row is appended to the reputation log                  |
 | `anchor.health_status_changed` | An anchor's health status transitions (e.g. `healthy` to `degraded`) |
+| `intent.slippage_breach`       | A recorded outcome delivered less than the intent's `minReceive`     |
 
 ### `anchor.health_status_changed`
 
@@ -3714,6 +3715,33 @@ it. One event per anchor, in anchor-id order:
 `from` and `to` are `healthy` or `degraded`. The first run only records a baseline and
 emits nothing, and without a database there is no baseline to keep, so nothing is
 emitted. `lastCheckedAt` and `lastError` are `null` when the ledger has none.
+
+### `intent.slippage_breach`
+
+Emitted when an outcome is appended to the reputation log and the amount it reports as
+delivered is below the `minReceive` the intent was signed with. It is sent after the
+other events of the same outcome (`reputation.event_written`, then `intent.settled`):
+
+```json
+{
+  "intentHash": "3f6a0c1d9b2e47f58a6c0d1e2f3a4b5c6d7e8f90a1b2c3d4e5f60718293a4b5c",
+  "anchorId": "cowrie",
+  "corridor": "ngnt-ngn",
+  "minReceive": "1400",
+  "amountOut": "1350",
+  "shortfall": "50",
+  "shortfallBps": 357,
+  "evidenceHash": "9c1e7a44d0b25f6831c7e9a2b4d6f8013a5c7e9b1d3f507294b6d8fa1c3e5072",
+  "status": "detected",
+  "detectedAt": "2026-11-20T12:00:00.000Z"
+}
+```
+
+`minReceive`, `amountOut` and `shortfall` are decimal strings, and `shortfallBps` is the
+shortfall in basis points of `minReceive`, rounded down. `status` is always `detected`:
+the breach has been recorded and has not yet been checked against the Stellar payment.
+`evidenceHash` identifies the evidence kept with the breach. The evidence itself, the
+signer's account and the anchor's transaction id are not sent.
 
 ## Payload envelope
 

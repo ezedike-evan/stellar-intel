@@ -25,10 +25,11 @@ describe('Webhooks docs page (#1343)', () => {
 
   it('counts the live kinds in the banner instead of stating them (WHK003)', () => {
     const content = text();
-    // Five kinds have a producer today; the six added by WHK003 can only be subscribed to.
-    expect(WEBHOOK_EVENT_KINDS).toHaveLength(11);
+    // Six kinds have a producer today (SLP014 added intent.slippage_breach); the six added
+    // by WHK003 can only be subscribed to.
+    expect(WEBHOOK_EVENT_KINDS).toHaveLength(12);
     expect(content).toContain(
-      'Live for 5 of 11 kinds; the rest can be subscribed to and will start arriving as producers ship.'
+      'Live for 6 of 12 kinds; the rest can be subscribed to and will start arriving as producers ship.'
     );
     expect(content).not.toContain('four of the five');
   });

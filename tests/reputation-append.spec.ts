@@ -334,6 +334,127 @@ describe('POST /api/reputation/append — webhooks (#1341)', () => {
   });
 });
 
+describe('POST /api/reputation/append — intent.slippage_breach (SLP014)', () => {
+  /** A signed completed outcome for an intent that asked for at least 1400, delivering `deliveredAmount`. */
+  async function withMinReceive(transactionId: string, deliveredAmount: string) {
+    const outcomeIntent = {
+      type: 'offramp-outcome' as const,
+      sourceAsset: 'USDC',
+      destinationAsset: 'NGN',
+      amount: '100',
+      sender: sender.publicKey(),
+      recipient: 'user@example.com',
+      anchorId: 'cowrie',
+      corridor: 'ngnt-ngn',
+      transactionId,
+      minReceive: '1400',
+    };
+    const intentHash = await hashIntent(outcomeIntent);
+    const body = {
+      intentHash,
+      anchorId: 'cowrie',
+      corridor: 'ngnt-ngn',
+      direction: 'withdraw',
+      quotedRate: '1500.0',
+      quotedAmount: '100',
+      deliveredAmount,
+      outcome: 'completed',
+      minReceive: '1400',
+      outcomeIntent,
+      publicKey: sender.publicKey(),
+      signature: signRaw(intentHash, sender),
+    };
+    return { intentHash, body };
+  }
+
+  it("emits it after the outcome's own events, with exactly the listed keys", async () => {
+    const { intentHash, body } = await withMinReceive('anchor-tx-200', '1350');
+    expect((await appendPOST(req(body))).status).toBe(201);
+    const breach = await getSlippageBreachStore().get(intentHash);
+
+    expect(emitted.map((e) => e.kind)).toEqual([
+      'reputation.event_written',
+      'intent.settled',
+      'intent.slippage_breach',
+    ]);
+    expect(emitted[2]?.payload).toEqual({
+      intentHash,
+      anchorId: 'cowrie',
+      corridor: 'ngnt-ngn',
+      minReceive: '1400',
+      amountOut: '1350',
+      shortfall: '50',
+      shortfallBps: 357,
+      evidenceHash: breach?.evidenceHash,
+      status: 'detected',
+      detectedAt: breach?.detectedAt,
+    });
+    expect(breach?.evidenceHash).toEqual(expect.any(String));
+    expect(breach?.detectedAt).toEqual(expect.any(String));
+  });
+
+  it('leaves the signer, the evidence and the anchor transaction id out of the payload', async () => {
+    const { intentHash, body } = await withMinReceive('anchor-tx-201', '1350');
+    expect((await appendPOST(req(body))).status).toBe(201);
+    const breach = await getSlippageBreachStore().get(intentHash);
+    const payload = emitted.find((e) => e.kind === 'intent.slippage_breach')?.payload ?? {};
+
+    // The record holds all three; the event carries none of them.
+    expect(breach?.signerAccount).toBe(sender.publicKey());
+    expect(breach?.anchorTransactionId).toBe('anchor-tx-201');
+    expect(payload).not.toHaveProperty('signerAccount');
+    expect(payload).not.toHaveProperty('evidence');
+    expect(payload).not.toHaveProperty('anchorTransactionId');
+    const sent = JSON.stringify(payload);
+    expect(sent).not.toContain(sender.publicKey());
+    expect(sent).not.toContain('anchor-tx-201');
+    expect(sent).not.toContain('user@example.com');
+  });
+
+  it('emits nothing more when the outcome met its minimum', async () => {
+    const { body } = await withMinReceive('anchor-tx-202', '1450');
+    const res = await appendPOST(req(body));
+    expect(res.status).toBe(201);
+    expect((await res.json()).slippage).toBe('met');
+
+    expect(emitted.map((e) => e.kind)).toEqual(['reputation.event_written', 'intent.settled']);
+  });
+
+  it('emits nothing more for an outcome with no minimum to compare', async () => {
+    const res = await appendPOST(req(signed()));
+    expect(res.status).toBe(201);
+    expect((await res.json()).slippage).toBe('not_applicable');
+
+    expect(emitted.map((e) => e.kind)).toEqual(['reputation.event_written', 'intent.settled']);
+  });
+
+  it('emits nothing more when the breach could not be recorded', async () => {
+    _setSlippageBreachStore({
+      create: async () => {
+        throw new Error('db down');
+      },
+      get: async () => null,
+      list: async () => [],
+      resolveVerification: async () => null,
+      close: async () => {},
+    } as unknown as Parameters<typeof _setSlippageBreachStore>[0]);
+    const { body } = await withMinReceive('anchor-tx-203', '1350');
+    const res = await appendPOST(req(body));
+    expect(res.status).toBe(201);
+    expect((await res.json()).slippage).toBe('unrecorded');
+
+    expect(emitted.map((e) => e.kind)).toEqual(['reputation.event_written', 'intent.settled']);
+  });
+
+  it('a repeated POST of the same outcome does not announce the breach twice', async () => {
+    const { body } = await withMinReceive('anchor-tx-204', '1350');
+    expect((await appendPOST(req(body))).status).toBe(201);
+    expect((await appendPOST(req(body))).status).toBe(409);
+
+    expect(emitted.filter((e) => e.kind === 'intent.slippage_breach')).toHaveLength(1);
+  });
+});
+
 describe('append -> reconcile end-to-end (#220 + #221 + #219)', () => {
   it('backfills the delivered amount from Horizon within the store', async () => {
     await appendPOST(req(signed()));
