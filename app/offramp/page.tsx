@@ -19,11 +19,13 @@ import { RateTable } from '@/components/offramp/RateTable';
 import { RateTableHeader } from '@/components/offramp/RateTableHeader';
 import { StatusTracker } from '@/components/offramp/StatusTracker';
 import { DisclaimerBanner } from '@/components/offramp/DisclaimerBanner';
+import { SaveTemplateForm } from '@/components/templates/SaveTemplateForm';
 import { TrustBar } from '@/components/offramp/TrustBar';
 import { ErrorBoundary } from '@/components/ui/ErrorBoundary';
 import { useAnchorRates, RATES_REFRESH_INTERVAL_MS } from '@/hooks/useAnchorRates';
 import { useCountdown } from '@/hooks/useCountdown';
 import { useWallet } from '@/contexts/WalletContext';
+import { useIntentTemplates } from '@/hooks/useIntentTemplates';
 import { useWithdrawStatus, type OutcomeAppendContext } from '@/hooks/useWithdrawStatus';
 import { useWalletBalance } from '@/hooks/useWalletBalance';
 import { amountBucket, FUNNEL_EVENTS, trackFunnelEvent } from '@/lib/analytics';
@@ -32,6 +34,7 @@ import { getCorridorAsset, getCorridorById } from '@/lib/stellar/anchors';
 import { signIntent } from '@/lib/intent/sign';
 import { quotedAllInRate } from '@/lib/stellar/realized-rate';
 import type { Intent } from '@/lib/intent/hash';
+import type { IntentTemplateDraft } from '@/lib/templates/schema';
 import type { AnchorRate } from '@/types';
 import { MIN_RECEIVE_TOLERANCE } from '@/lib/rate-ranking';
 import type { OutcomeIntent } from '@/lib/reputation/schema';
@@ -89,6 +92,11 @@ function OfframpContent() {
   const [outcomeContext, setOutcomeContext] = useState<OutcomeAppendContext | null>(null);
 
   const { isConnected, publicKey, network } = useWallet();
+  const templatesApi = useIntentTemplates(
+    flags.intentTemplates && isConnected ? publicKey : null,
+    'offramp'
+  );
+  const [templateDraft, setTemplateDraft] = useState<IntentTemplateDraft | null>(null);
   const { rates, anchorErrors, isLoading, error, mutate, refreshInflight, lastFetchedAt } =
     useAnchorRates(corridorId, amount);
   const { secondsRemaining, elapsedSeconds, prefersReducedMotion, progress, totalSeconds } =
@@ -189,6 +197,15 @@ function OfframpContent() {
       setTrackingNonce(nonce);
       setTrackingAnchorHomeDomain(anchorHomeDomain);
 
+      if (selectedRate) {
+        setTemplateDraft({
+          direction: 'offramp',
+          corridorId: selectedRate.corridorId,
+          amount,
+          anchorId: selectedRate.anchorId,
+        });
+      }
+
       // Capture the quote so the terminal outcome of this real transaction is
       // logged to the reputation store (#799). A null exchangeRate can't be
       // quoted so it's skipped (the user can't execute against an unreachable
@@ -274,6 +291,7 @@ function OfframpContent() {
     setTrackingNonce(null);
     setTrackingAnchorHomeDomain(null);
     setOutcomeContext(null);
+    setTemplateDraft(null);
     rateTableRef.current?.scrollIntoView({ behavior: 'smooth', block: 'start' });
   }, []);
 
@@ -423,6 +441,17 @@ function OfframpContent() {
           )}
         </>
       )}
+
+      {flags.intentTemplates &&
+        publicKey &&
+        templateDraft &&
+        withdrawStatus.status === 'completed' && (
+          <SaveTemplateForm
+            draft={templateDraft}
+            onSave={templatesApi.save}
+            onDismiss={() => setTemplateDraft(null)}
+          />
+        )}
 
       {disputeOpen &&
         flags.disputeLadder &&
