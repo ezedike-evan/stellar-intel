@@ -1,4 +1,68 @@
 import { z } from 'zod';
+import { AMOUNT_PATTERN, STELLAR_PUBKEY_PATTERN } from '@/lib/patterns';
+
+// ─── Standing Authorization (v3 recurring intent) ────────────────────────────
+
+export const STANDING_AUTHORIZATION_PERIODS = ['daily', 'weekly', 'biweekly', 'monthly'] as const;
+export type StandingAuthorizationPeriod = (typeof STANDING_AUTHORIZATION_PERIODS)[number];
+export type StandingAuthorizationStatus = 'active' | 'paused' | 'cancelled';
+
+export const StandingAuthorizationTermsSchema = z
+  .object({
+    type: z.literal('recurring-authorization'),
+    version: z.literal(1),
+    sender: z.string().regex(STELLAR_PUBKEY_PATTERN),
+    corridorId: z.string().min(1),
+    sourceAsset: z.string().min(1),
+    destinationAsset: z.string().min(1),
+    amount: z.string().regex(AMOUNT_PATTERN),
+    perPeriodCap: z.string().regex(AMOUNT_PATTERN),
+    period: z.enum(STANDING_AUTHORIZATION_PERIODS),
+    startAt: z.string().datetime(),
+    stopAt: z.string().datetime(),
+    anchorAllowlist: z.array(z.string().min(1).max(64)).min(1).max(10),
+    nonce: z.string().regex(/^[0-9a-f]{32}$/),
+  })
+  .strict()
+  .superRefine((val, ctx) => {
+    if (Date.parse(val.stopAt) <= Date.parse(val.startAt)) {
+      ctx.addIssue({
+        code: 'custom',
+        path: ['stopAt'],
+        message: 'stopAt must be after startAt',
+      });
+    }
+    if (new Set(val.anchorAllowlist).size !== val.anchorAllowlist.length) {
+      ctx.addIssue({
+        code: 'custom',
+        path: ['anchorAllowlist'],
+        message: 'anchorAllowlist must not contain duplicates',
+      });
+    }
+    if (val.corridorId !== `${val.sourceAsset}-${val.destinationAsset}`.toLowerCase()) {
+      ctx.addIssue({
+        code: 'custom',
+        path: ['corridorId'],
+        message: 'corridorId must match sourceAsset-destinationAsset',
+      });
+    }
+  });
+
+export type StandingAuthorizationTerms = z.infer<typeof StandingAuthorizationTermsSchema>;
+
+export const SignedStandingAuthorizationSchema = z
+  .object({
+    terms: StandingAuthorizationTermsSchema,
+    termsHash: z.string().regex(/^[0-9a-f]{64}$/),
+    signature: z.string().min(1).max(200),
+    publicKey: z.string().regex(STELLAR_PUBKEY_PATTERN),
+  })
+  .refine((d) => d.publicKey === d.terms.sender, {
+    path: ['publicKey'],
+    message: 'publicKey must match terms.sender',
+  });
+
+export type SignedStandingAuthorization = z.infer<typeof SignedStandingAuthorizationSchema>;
 
 // ─── Cadence ──────────────────────────────────────────────────────────────────
 

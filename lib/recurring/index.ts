@@ -59,3 +59,6 @@ export {
   computeSlippageBps,
   MAX_CONSECUTIVE_SKIPS,
 } from './scheduler';
+
+// Standing authorizations store
+export * from './authorization-store';
