@@ -16,7 +16,7 @@ describe('DisputesPage (#2134)', () => {
   it('renders verified badge and summary counts when seeded with entries', async () => {
     const memoryLog = new InMemoryAdjudicationLog();
     await memoryLog.append({
-      disputeRef: 'ref-1',
+      disputeRef: 'a1b2c3d4e5f60001',
       anchorId: 'cowrie',
       category: 'delayed',
       level: 'anchor',
@@ -25,7 +25,7 @@ describe('DisputesPage (#2134)', () => {
       decidedAt: '2026-01-01T10:00:00Z',
     });
     await memoryLog.append({
-      disputeRef: 'ref-1',
+      disputeRef: 'a1b2c3d4e5f60001',
       anchorId: 'cowrie',
       category: 'delayed',
       level: 'review',

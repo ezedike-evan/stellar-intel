@@ -37,7 +37,7 @@ describe('GET /api/v1/disputes/log (#2133)', () => {
 
   it('serves pagination with afterSeq and limit, while summary is over all entries', async () => {
     await memoryLog.append({
-      disputeRef: 'ref-1',
+      disputeRef: 'a1b2c3d4e5f60001',
       anchorId: 'cowrie',
       category: 'delayed',
       level: 'anchor',
@@ -46,7 +46,7 @@ describe('GET /api/v1/disputes/log (#2133)', () => {
       decidedAt: '2026-01-01T00:00:00.000Z',
     });
     await memoryLog.append({
-      disputeRef: 'ref-2',
+      disputeRef: 'a1b2c3d4e5f60002',
       anchorId: 'mykobo',
       category: 'wrong_amount',
       level: 'anchor',
@@ -55,7 +55,7 @@ describe('GET /api/v1/disputes/log (#2133)', () => {
       decidedAt: '2026-01-02T00:00:00.000Z',
     });
     await memoryLog.append({
-      disputeRef: 'ref-2',
+      disputeRef: 'a1b2c3d4e5f60002',
       anchorId: 'mykobo',
       category: 'wrong_amount',
       level: 'review',
@@ -72,7 +72,7 @@ describe('GET /api/v1/disputes/log (#2133)', () => {
 
     expect(data.entries).toHaveLength(1);
     expect(data.entries[0].seq).toBe(2);
-    expect(data.entries[0].disputeRef).toBe('ref-2');
+    expect(data.entries[0].disputeRef).toBe('a1b2c3d4e5f60002');
     expect(data.head).toEqual({ seq: 3, entryHash: expect.any(String) });
     expect(data.verification.ok).toBe(true);
     expect(data.verification.length).toBe(3);
@@ -108,7 +108,7 @@ describe('GET /api/v1/disputes/log (#2133)', () => {
 
   it('response contains no G... Stellar account and no publicKey field', async () => {
     await memoryLog.append({
-      disputeRef: 'ref-1',
+      disputeRef: 'a1b2c3d4e5f60001',
       anchorId: 'cowrie',
       category: 'delayed',
       level: 'anchor',
