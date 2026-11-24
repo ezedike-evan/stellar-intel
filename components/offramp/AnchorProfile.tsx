@@ -2,6 +2,7 @@ import Link from 'next/link';
 import { STELLAR_EXPERT_URL } from '@/constants';
 import type { Bucket } from '@/lib/reputation/buckets';
 import type { PublicDisputeItem } from '@/lib/reputation/disputes';
+import type { AnchorRefundStats } from '@/lib/refunds/anchor-stats';
 
 type CorridorItem = {
   id: string;
@@ -20,6 +21,7 @@ export interface AnchorProfileData {
   history: Bucket[];
   disputes: PublicDisputeItem[];
   oracleTxId: string | null;
+  refunds?: AnchorRefundStats | null;
 }
 
 function scoreToPercent(score: number | null): number | null {
@@ -147,6 +149,25 @@ export function AnchorProfile({ data }: { data: AnchorProfileData }) {
             </li>
           ))}
         </ul>
+      </article>
+
+      <article className="rounded-2xl border border-border bg-bg-subtle p-6">
+        <h2 className="text-lg font-semibold text-primary-text">Refunds (90 days)</h2>
+        {data.refunds ? (
+          <div className="mt-3 space-y-1 text-sm">
+            <p className="text-primary-text">
+              {data.refunds.refunded} refunded · {data.refunds.acknowledged} confirmed by users ·{' '}
+              {data.refunds.overdueOwed} overdue
+            </p>
+            {data.refunds.medianHoursToRefund !== null && (
+              <p className="text-xs text-fg-muted">
+                Median time to refund: {data.refunds.medianHoursToRefund} h
+              </p>
+            )}
+          </div>
+        ) : (
+          <p className="mt-3 text-sm text-fg-muted">No refund data.</p>
+        )}
       </article>
 
       <article className="rounded-2xl border border-border bg-bg-subtle p-6">
