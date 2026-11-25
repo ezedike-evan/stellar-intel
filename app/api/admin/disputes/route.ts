@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { z } from 'zod';
-import { isAdminRequest } from '@/lib/auth/admin';
+import { isAdminRequest, throttleFailedAdminAuth } from '@/lib/auth/admin';
 import { withRequestLogger } from '@/lib/logger';
 import type { ApiError } from '@/types';
 import { enforceRateLimit } from '@/lib/api/response';
@@ -13,6 +13,7 @@ import {
   PublicTextError,
 } from '@/lib/reputation/adjudication-log';
 import { nextLevel, levelDeadline } from '@/lib/reputation/dispute-ladder';
+import { emitWebhookEvent } from '@/lib/webhooks/emit';
 
 const ResolveBodySchema = z.object({
   id: z.string().min(1).max(200),
@@ -29,6 +30,8 @@ export async function GET(request: NextRequest): Promise<NextResponse> {
     if (limited) return limited;
 
     if (!isAdminRequest(request)) {
+      const throttled = await throttleFailedAdminAuth(request);
+      if (throttled) return throttled;
       logger.warn({ event: 'unauthorized_access', path: request.nextUrl.pathname });
       return NextResponse.json<ApiError>(
         { code: 'UNAUTHORIZED', message: 'Admin access required' },
@@ -47,6 +50,8 @@ export async function GET(request: NextRequest): Promise<NextResponse> {
 export async function POST(request: NextRequest): Promise<NextResponse> {
   return withRequestLogger(request, 'api.admin.disputes', async (logger) => {
     if (!isAdminRequest(request)) {
+      const throttled = await throttleFailedAdminAuth(request);
+      if (throttled) return throttled;
       logger.warn({ event: 'unauthorized_access', path: request.nextUrl.pathname });
       return NextResponse.json<ApiError>(
         { code: 'UNAUTHORIZED', message: 'Admin access required' },
@@ -198,6 +203,18 @@ export async function POST(request: NextRequest): Promise<NextResponse> {
       }
     }
 
+    // Field by field: never publicKey or reason (WHK012).
+    emitWebhookEvent(
+      'dispute.resolved',
+      {
+        disputeId: updated.id,
+        intentHash: updated.intentHash,
+        anchorId: updated.anchorId,
+        status: nextStatus,
+        resolvedAt: updated.resolvedAt ?? nowIso,
+      },
+      { idempotencyKey: `dispute.resolved:${updated.id}` }
+    );
     logger.info({ event: 'dispute_resolved', disputeId: id, action });
     return NextResponse.json(updated);
   });

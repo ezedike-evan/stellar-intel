@@ -7,7 +7,9 @@ export type FlagName =
   | 'requireKeyForWrites'
   | 'intentTemplates'
   | 'firmQuoteBonus'
-  | 'disputeLadder';
+  | 'disputeLadder'
+  | 'refundGuarantees'
+  | 'executionSla';
 
 export const flags: Record<FlagName, boolean> = {
   // Default to enabled unless explicitly set to 'off'
@@ -33,6 +35,11 @@ export const flags: Record<FlagName, boolean> = {
   // Dispute escalation ladder: multi-level dispute management and status reporting.
   // Default OFF until ladder is staffed. Opt in with NEXT_PUBLIC_DISPUTE_LADDER=on.
   disputeLadder: (process.env.NEXT_PUBLIC_DISPUTE_LADDER || 'off') === 'on',
+  // Refund guarantees: sign refund acknowledgements on status screens.
+  // Default OFF; opt in with NEXT_PUBLIC_REFUND_GUARANTEES=on.
+  refundGuarantees: (process.env.NEXT_PUBLIC_REFUND_GUARANTEES || 'off') === 'on',
+  // Execution SLA card on the anchor page. Default OFF until anchors have settlement volume.
+  executionSla: (process.env.NEXT_PUBLIC_EXECUTION_SLA || 'off') === 'on',
 };
 
 export function isFlag(name: FlagName) {
