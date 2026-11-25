@@ -3,7 +3,7 @@ import { render, screen, waitFor } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { SWRConfig } from 'swr';
 import { flags } from '@/lib/flags';
-import { saveTemplate } from '@/lib/templates/store';
+import { listTemplates, saveTemplate } from '@/lib/templates/store';
 import OnrampPage from '@/app/onramp/page';
 import { useWallet } from '@/contexts/WalletContext';
 import { useDepositRates } from '@/hooks/useDepositRates';
@@ -34,8 +34,29 @@ vi.mock('next/dynamic', async () => {
   };
 });
 
+// A button stands in for the drawer and reports a started deposit.
 vi.mock('@/components/onramp/DepositDrawer', () => ({
-  DepositDrawer: () => null,
+  DepositDrawer: ({
+    rate,
+    onDepositStarted,
+  }: {
+    rate: { anchorId: string } | null;
+    onDepositStarted: (id: string, server: string, jwt: string, domain: string) => void;
+  }) =>
+    rate ? (
+      <button
+        onClick={() =>
+          onDepositStarted(
+            'deposit-tx-1',
+            'https://stellar.moneygram.com/sep24',
+            'test-jwt',
+            'stellar.moneygram.com'
+          )
+        }
+      >
+        Stub start
+      </button>
+    ) : null,
 }));
 
 vi.mock('@/contexts/WalletContext', () => ({
@@ -220,5 +241,70 @@ describe('/onramp templates (TPL007)', () => {
     renderPage();
 
     expect(screen.queryByLabelText('Saved templates')).toBeNull();
+  });
+});
+
+describe('/onramp save as template (#2162)', () => {
+  let prevFlag: boolean;
+
+  beforeEach(() => {
+    prevFlag = flags.intentTemplates;
+    flags.intentTemplates = true;
+    mockSearch = '';
+    mockReplace.mockReset();
+    localStorage.clear();
+    mockUseWallet.mockReturnValue(connectedWallet());
+    mockUseDepositRates.mockReturnValue({
+      rates: COMPARISON,
+      anchorErrors: [],
+      isLoading: false,
+      error: undefined,
+      mutate: vi.fn(),
+      lastFetchedAt: null,
+    });
+    vi.mocked(sign.signIntent).mockResolvedValue({
+      intentHash: 'a'.repeat(64),
+      signature: 'c2lnbmF0dXJl',
+      publicKey: PUBLIC_KEY,
+    });
+  });
+
+  afterEach(() => {
+    flags.intentTemplates = prevFlag;
+  });
+
+  async function startDeposit(status: string) {
+    vi.mocked(sep24.getSep24Transaction).mockResolvedValue({
+      id: 'deposit-tx-1',
+      status,
+      updatedAt: new Date(),
+    } as Awaited<ReturnType<typeof sep24.getSep24Transaction>>);
+    const user = userEvent.setup();
+    render(
+      <SWRConfig value={{ provider: () => new Map() }}>
+        <OnrampPage />
+      </SWRConfig>
+    );
+    await user.click(screen.getByRole('button', { name: 'Deposit with MoneyGram' }));
+    await user.click(await screen.findByRole('button', { name: 'Stub start' }));
+    return user;
+  }
+
+  it('offers to save a completed deposit, keeping the asset', async () => {
+    const user = await startDeposit('completed');
+    const name = await screen.findByLabelText('Template name');
+    await user.clear(name);
+    await user.type(name, 'Monthly top-up');
+    await user.click(screen.getByRole('button', { name: 'Save template' }));
+
+    expect(await screen.findByText('Saved as "Monthly top-up".')).toHaveAttribute('role', 'status');
+    const saved = listTemplates(PUBLIC_KEY, 'onramp').find((t) => t.label === 'Monthly top-up');
+    expect(saved).toMatchObject({ anchorId: 'moneygram', assetId: USDC_ID });
+  });
+
+  it('does not offer it while the deposit is pending', async () => {
+    await startDeposit('pending_user_transfer_start');
+    await waitFor(() => expect(vi.mocked(sep24.getSep24Transaction)).toHaveBeenCalled());
+    expect(screen.queryByLabelText('Template name')).not.toBeInTheDocument();
   });
 });
