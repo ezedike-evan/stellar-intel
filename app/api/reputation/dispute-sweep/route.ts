@@ -1,36 +1,48 @@
-import { NextRequest, NextResponse } from 'next/server';
-import { withRequestLogger } from '@/lib/logger';
-import { checkCronAuth } from '@/lib/api/cron-auth';
-import { getAdjudicationLog } from '@/lib/reputation/adjudication-log';
-import { getDisputeStore } from '@/lib/reputation/disputes';
-import { escalateOverdueDisputes } from '@/lib/reputation/dispute-sweep';
-
 export const runtime = 'nodejs';
 
-// ─── GET|POST /api/reputation/dispute-sweep ────────────────────────────────────
-//
-// Triggered by GitHub Actions (.github/workflows/reputation-cron.yml). Moves
-// disputes that sat at the anchor rung past its 72-hour deadline to maintainer
-// review and records each move in the public adjudication log. No request body
-// is needed because the work list comes from the dispute store.
+import { NextRequest, NextResponse } from 'next/server';
+import { checkCronAuth } from '@/lib/api/cron-auth';
+import { withRequestLogger } from '@/lib/logger';
+import { getDisputeStore } from '@/lib/reputation/disputes';
+import { getAdjudicationLog } from '@/lib/reputation/adjudication-log';
+import { getRefundStore } from '@/lib/refunds/store';
+import { escalateOverdueDisputes } from '@/lib/reputation/dispute-sweep';
+import { openDisputesForOverdueRefunds } from '@/lib/refunds/escalate';
 
-export async function GET(request: NextRequest): Promise<NextResponse> {
+async function handleSweep(request: NextRequest): Promise<NextResponse> {
   const unauthorized = checkCronAuth(request);
   if (unauthorized) return unauthorized;
 
   return withRequestLogger(request, 'api.reputation.dispute_sweep', async (logger) => {
-    const result = await escalateOverdueDisputes({
-      disputes: getDisputeStore(),
-      log: getAdjudicationLog(),
-    });
+    const disputes = getDisputeStore();
+    const log = getAdjudicationLog();
+    const refunds = getRefundStore();
+
+    const now = new Date();
+    const disputeRes = await escalateOverdueDisputes({ disputes, log, now });
+    const refundRes = await openDisputesForOverdueRefunds({ refunds, disputes, log, now });
+
     logger.info({
-      event: 'dispute_sweep_run',
-      scanned: result.scanned,
-      escalated: result.escalated,
+      event: 'dispute_sweep_completed',
+      scanned: disputeRes.scanned,
+      escalated: disputeRes.escalated,
+      refundDisputesOpened: refundRes.opened,
     });
-    return NextResponse.json(result);
+
+    return NextResponse.json({
+      ok: true,
+      scanned: disputeRes.scanned,
+      escalated: disputeRes.escalated,
+      refundDisputesOpened: refundRes.opened,
+      sweptAt: now.toISOString(),
+    });
   });
 }
 
-// Manual trigger parity for non-cron callers.
-export const POST = GET;
+export async function GET(request: NextRequest): Promise<NextResponse> {
+  return handleSweep(request);
+}
+
+export async function POST(request: NextRequest): Promise<NextResponse> {
+  return handleSweep(request);
+}

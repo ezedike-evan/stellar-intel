@@ -63,6 +63,11 @@ const EVENTS: { kind: string; description: string; emitted: boolean }[] = [
     description: 'The oracle writes a batch of outcomes and rates on chain',
     emitted: false,
   },
+  {
+    kind: 'intent.slippage_breach',
+    description: "A recorded outcome delivered less than the intent's minimum receive",
+    emitted: true,
+  },
 ];
 
 /** How many of the kinds above a producer emits today. The banner is computed, never typed. */

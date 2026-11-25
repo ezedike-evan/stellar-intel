@@ -23,6 +23,8 @@ export type RefundReason = (typeof REFUND_REASONS)[number];
 export const REFUND_CASE_STATUSES = ['owed', 'refunded', 'acknowledged'] as const;
 export type RefundCaseStatus = (typeof REFUND_CASE_STATUSES)[number];
 
+export const REFUND_OWED_OVERDUE_MS = 7 * 24 * 60 * 60 * 1000;
+
 export type RefundOnChainCheck = 'verified' | 'mismatch' | 'unverifiable';
 
 export interface RefundPaymentRecord {

@@ -12,7 +12,8 @@ import type { ApiError } from '@/types';
 import { enforceRateLimit } from '@/lib/api/response';
 import { requireCallerScope } from '@/lib/auth/caller';
 import { emitWebhookEvent } from '@/lib/webhooks/emit';
-import type { OutcomeLogRow } from '@/types/reputation';
+import { openRefundCaseForOutcome } from '@/lib/refunds/detect';
+import type { OutcomeLogRow, SlippageBreach } from '@/types/reputation';
 
 export const runtime = 'nodejs';
 
@@ -36,6 +37,34 @@ export const runtime = 'nodejs';
 //
 // Webhooks fire only on the 201 path. Payloads are built field by field from
 // the stored row, never spread, so `signerAccount` and `signature` cannot leak.
+
+/**
+ * Tells subscribers a breach was detected, so they need not poll for it. The payload
+ * is built field by field: the record's `signerAccount`, `evidence` and
+ * `anchorTransactionId` never leave the platform. `status` is the literal the record
+ * was just written with, not a later verification result.
+ *
+ * The idempotency key is made from the intent hash: there is one breach per intent,
+ * so however often this is emitted for it, a subscriber sees one event.
+ */
+function emitSlippageBreachEvent(breach: SlippageBreach): void {
+  emitWebhookEvent(
+    'intent.slippage_breach',
+    {
+      intentHash: breach.intentHash,
+      anchorId: breach.anchorId,
+      corridor: breach.corridor,
+      minReceive: breach.minReceive,
+      amountOut: breach.amountOut,
+      shortfall: breach.shortfall,
+      shortfallBps: breach.shortfallBps,
+      evidenceHash: breach.evidenceHash,
+      status: 'detected',
+      detectedAt: breach.detectedAt,
+    },
+    { idempotencyKey: `intent.slippage_breach:${breach.intentHash}` }
+  );
+}
 
 function emitOutcomeEvents(row: OutcomeLogRow): void {
   const { intentHash, anchorId, corridor, outcome } = row;
@@ -185,6 +214,26 @@ export async function POST(request: NextRequest): Promise<NextResponse> {
       attested: true,
     });
     emitOutcomeEvents(row);
+    // After the events of the outcome itself, so a subscriber learns of the outcome
+    // before it learns that the outcome fell short.
+    if (slippageResult.kind === 'breach') emitSlippageBreachEvent(slippageResult.breach);
+
+    // A refunded outcome, or a withdrawal that failed after the user paid,
+    // opens a refund case with no user action (RFD004). A failure here never
+    // changes the 201: the outcome itself is already recorded.
+    try {
+      const opened = await openRefundCaseForOutcome(row);
+      if (opened) {
+        logger.info({
+          event: 'refund_case_opened',
+          reason: opened.reason,
+          intentHash: row.intentHash,
+        });
+      }
+    } catch {
+      logger.error({ event: 'refund_case_open_failed', intentHash: row.intentHash });
+    }
+
     return NextResponse.json(
       { ok: true, intentHash: row.intentHash, attested: true, slippage },
       { status: 201 }
