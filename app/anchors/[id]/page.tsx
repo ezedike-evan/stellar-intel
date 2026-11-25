@@ -11,6 +11,9 @@ import { getReputationStore, ReputationStoreUnavailableError } from '@/lib/reput
 import { AnchorProfile, type AnchorProfileData } from '@/components/offramp/AnchorProfile';
 import { ScorecardCard } from '@/components/offramp/ScorecardCard';
 import { QuoteGapCard } from '@/components/anchors/QuoteGapCard';
+import { ExecutionSlaCard } from '@/components/anchors/ExecutionSlaCard';
+import { buildExecutionSlaReport } from '@/lib/reputation/execution-sla';
+import { flags } from '@/lib/flags';
 
 const SITE_URL = process.env.NEXT_PUBLIC_SITE_URL ?? 'https://stellar-intel.vercel.app';
 const DEFAULT_TITLE = 'Anchor profile — Stellar Intel';
@@ -154,6 +157,10 @@ export default async function AnchorDetailPage({
     refunds,
   };
 
+  // Behind a flag until anchors have settlement volume (SLA006). Built from the
+  // rows already loaded above, so it adds no store query.
+  const slaReport = flags.executionSla ? buildExecutionSlaReport(rows, anchor.id) : null;
+
   return (
     <div className="mx-auto max-w-5xl space-y-8 px-4 py-8">
       <AnchorProfile data={profileData} />
@@ -162,6 +169,7 @@ export default async function AnchorDetailPage({
         window="30d"
         latestOracleTxHash={lastPublished?.oracleTxHash ?? undefined}
       />
+      {slaReport && <ExecutionSlaCard report={slaReport} />}
       <QuoteGapCard {...quoteGap} />
     </div>
   );
