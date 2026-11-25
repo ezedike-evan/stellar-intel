@@ -39,6 +39,7 @@ import { flags } from '@/lib/flags';
 import { submitDispute } from '@/lib/reputation/dispute-client';
 import { DisputeModal } from '@/components/offramp/DisputeModal';
 import { DisputeStatusBadge } from '@/components/offramp/DisputeStatusBadge';
+import { RefundAckCard } from '@/components/refunds/RefundAckCard';
 
 // Not needed until the user picks a rate to execute — split into its own
 // chunk so it doesn't pad the initial /offramp bundle.
@@ -423,6 +424,21 @@ function OfframpContent() {
           )}
         </>
       )}
+
+      {flags.refundGuarantees &&
+        outcomeContext &&
+        trackingTransactionId &&
+        (withdrawStatus.status === 'refunded' ||
+          withdrawStatus.status === 'error' ||
+          withdrawStatus.status === 'expired') && (
+          <RefundAckCard
+            intentHash={outcomeContext.intentHash}
+            anchorId={outcomeContext.anchorId}
+            account={outcomeContext.publicKey}
+            refunds={withdrawStatus.refunds}
+            assetLabel="USDC"
+          />
+        )}
 
       {disputeOpen &&
         flags.disputeLadder &&

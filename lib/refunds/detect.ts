@@ -1,4 +1,5 @@
 import type { OutcomeLogRow } from '@/types/reputation';
+import { getReputationStore, type ReputationStore } from '@/lib/reputation/store';
 import { getRefundStore, type RefundCase, type RefundReason, type RefundStore } from './store';
 
 // ─── Automatic refund detection (Issue #2115 / RFD004) ────────────────────────
@@ -62,5 +63,31 @@ export async function openRefundCaseForOutcome(
   const record = refundCaseFromOutcome(row, reason);
   if (record === null) return null;
   const inserted = await store.open(record);
+  return inserted ? record : null;
+}
+
+/**
+ * Opens a refund case for a slippage breach (RFD014).
+ * Loads the attested outcome by intentHash and creates an 'owed' case with
+ * reason 'slippage_breach'.
+ */
+export async function openRefundCaseForBreach(
+  breach: { intentHash: string },
+  deps?: { refunds?: RefundStore; outcomes?: Pick<ReputationStore, 'query'> }
+): Promise<RefundCase | null> {
+  const outcomes = deps?.outcomes ?? getReputationStore();
+  const refunds = deps?.refunds ?? getRefundStore();
+
+  const rows = await outcomes.query({ intentHash: breach.intentHash, includeUnattested: false });
+  const row = rows[0];
+  if (!row) return null;
+
+  const record = refundCaseFromOutcome(row, 'slippage_breach');
+  if (!record) return null;
+
+  record.status = 'owed';
+  record.refundedAt = null;
+
+  const inserted = await refunds.open(record);
   return inserted ? record : null;
 }

@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { z } from 'zod';
-import { isAdminRequest } from '@/lib/auth/admin';
+import { isAdminRequest, throttleFailedAdminAuth } from '@/lib/auth/admin';
 import { withRequestLogger } from '@/lib/logger';
 import type { ApiError } from '@/types';
 import { enforceRateLimit } from '@/lib/api/response';
@@ -30,6 +30,8 @@ export async function GET(request: NextRequest): Promise<NextResponse> {
     if (limited) return limited;
 
     if (!isAdminRequest(request)) {
+      const throttled = await throttleFailedAdminAuth(request);
+      if (throttled) return throttled;
       logger.warn({ event: 'unauthorized_access', path: request.nextUrl.pathname });
       return NextResponse.json<ApiError>(
         { code: 'UNAUTHORIZED', message: 'Admin access required' },
@@ -48,6 +50,8 @@ export async function GET(request: NextRequest): Promise<NextResponse> {
 export async function POST(request: NextRequest): Promise<NextResponse> {
   return withRequestLogger(request, 'api.admin.disputes', async (logger) => {
     if (!isAdminRequest(request)) {
+      const throttled = await throttleFailedAdminAuth(request);
+      if (throttled) return throttled;
       logger.warn({ event: 'unauthorized_access', path: request.nextUrl.pathname });
       return NextResponse.json<ApiError>(
         { code: 'UNAUTHORIZED', message: 'Admin access required' },

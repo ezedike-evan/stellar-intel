@@ -2,9 +2,11 @@ import { describe, expect, it } from 'vitest';
 import {
   detectRefundReason,
   openRefundCaseForOutcome,
+  openRefundCaseForBreach,
   refundCaseFromOutcome,
 } from '@/lib/refunds/detect';
 import { InMemoryRefundStore } from '@/lib/refunds/store';
+import { InMemoryReputationStore } from '@/lib/reputation/store';
 import type { OutcomeLogRow } from '@/types/reputation';
 
 const SIGNER = 'GA5ZSEJYB37JRC5AVCIA5MOP4RHTM335X2KGX3IHOJAPP5RE34K4KZVN';
@@ -146,5 +148,96 @@ describe('openRefundCaseForOutcome', () => {
       await openRefundCaseForOutcome(row({ outcome: 'refunded', attested: false }), store)
     ).toBeNull();
     expect(await store.list()).toHaveLength(0);
+  });
+});
+
+describe('openRefundCaseForBreach (RFD014)', () => {
+  it('breach for an attested completed outcome opens one owed case with reason slippage_breach', async () => {
+    const refunds = new InMemoryRefundStore();
+    const outcomes = new InMemoryReputationStore();
+    const completedRow = row({ outcome: 'completed', attested: true });
+    await outcomes.append(completedRow);
+
+    const opened = await openRefundCaseForBreach(
+      { intentHash: completedRow.intentHash },
+      { refunds, outcomes }
+    );
+    expect(opened).not.toBeNull();
+    expect(opened?.reason).toBe('slippage_breach');
+    expect(opened?.status).toBe('owed');
+    expect(opened?.refundedAt).toBeNull();
+    expect(opened?.amountPaid).toBe(completedRow.quotedAmount);
+    expect(await refunds.list()).toHaveLength(1);
+  });
+
+  it('second call returns null (insert-only dedup)', async () => {
+    const refunds = new InMemoryRefundStore();
+    const outcomes = new InMemoryReputationStore();
+    const completedRow = row({ outcome: 'completed', attested: true });
+    await outcomes.append(completedRow);
+
+    const first = await openRefundCaseForBreach(
+      { intentHash: completedRow.intentHash },
+      { refunds, outcomes }
+    );
+    expect(first).not.toBeNull();
+
+    const second = await openRefundCaseForBreach(
+      { intentHash: completedRow.intentHash },
+      { refunds, outcomes }
+    );
+    expect(second).toBeNull();
+    expect(await refunds.list()).toHaveLength(1);
+  });
+
+  it('unknown intent returns null', async () => {
+    const refunds = new InMemoryRefundStore();
+    const outcomes = new InMemoryReputationStore();
+
+    const opened = await openRefundCaseForBreach(
+      { intentHash: 'nonexistent'.padEnd(64, '0') },
+      { refunds, outcomes }
+    );
+    expect(opened).toBeNull();
+    expect(await refunds.list()).toHaveLength(0);
+  });
+
+  it('unattested outcome returns null', async () => {
+    const refunds = new InMemoryRefundStore();
+    const outcomes = new InMemoryReputationStore();
+    const unattestedRow = row({ outcome: 'completed', attested: false });
+    await outcomes.append(unattestedRow);
+
+    const opened = await openRefundCaseForBreach(
+      { intentHash: unattestedRow.intentHash },
+      { refunds, outcomes }
+    );
+    expect(opened).toBeNull();
+    expect(await refunds.list()).toHaveLength(0);
+  });
+
+  it('a refunded outcome with an existing anchor_refunded case still gets a separate slippage_breach case', async () => {
+    const refunds = new InMemoryRefundStore();
+    const outcomes = new InMemoryReputationStore();
+    const refundedRow = row({ outcome: 'refunded', attested: true });
+    await outcomes.append(refundedRow);
+
+    // Open anchor_refunded case first
+    const existing = await openRefundCaseForOutcome(refundedRow, refunds);
+    expect(existing?.reason).toBe('anchor_refunded');
+    expect(await refunds.list()).toHaveLength(1);
+
+    // Now open slippage_breach case for the same intentHash
+    const breachCase = await openRefundCaseForBreach(
+      { intentHash: refundedRow.intentHash },
+      { refunds, outcomes }
+    );
+    expect(breachCase).not.toBeNull();
+    expect(breachCase?.reason).toBe('slippage_breach');
+    expect(breachCase?.status).toBe('owed');
+
+    const allCases = await refunds.getByIntentHash(refundedRow.intentHash);
+    expect(allCases).toHaveLength(2);
+    expect(allCases.map((c) => c.reason).sort()).toEqual(['anchor_refunded', 'slippage_breach']);
   });
 });

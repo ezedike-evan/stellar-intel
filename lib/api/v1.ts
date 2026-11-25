@@ -12,6 +12,7 @@ import { API_VERSION } from './response';
 import { getLogger } from '@/lib/logger';
 import { hasScope, type ApiScope } from '@/lib/auth/api-keys';
 import { resolveCaller, type Caller } from '@/lib/auth/caller';
+import { limitForTier } from './rate-limit-tiers';
 import { recordAuditEvent } from '@/lib/audit/record';
 import type { AuditOutcome } from '@/lib/audit/types';
 
@@ -131,8 +132,8 @@ export interface V1Options {
 }
 
 /**
- * Wraps a v1 handler with the hardening contract: a request id, per-IP rate
- * limiting with `X-RateLimit-*` headers on every response, the standard error
+ * Wraps a v1 handler with the hardening contract: a request id, per-caller
+ * tiered rate limiting with `X-RateLimit-*` headers on every response, the standard error
  * envelope (including on throw), and — when `idempotent` — replaying the stored
  * response for a repeated `Idempotency-Key` so a retried request never
  * double-submits.
@@ -144,9 +145,6 @@ export async function withV1(
 ): Promise<NextResponse> {
   const requestId = request.headers.get('x-request-id') ?? globalThis.crypto.randomUUID();
   const ip = getClientIp(request.headers);
-
-  const rl = await checkRateLimit(ip, { bucket: options.bucket, maxRequests: options.maxRequests });
-  const baseHeaders = { 'X-Request-Id': requestId, ...rateLimitHeaders(options.maxRequests, rl) };
 
   const recordAudit = (
     callerId: string,
@@ -179,24 +177,46 @@ export async function withV1(
     }
   };
 
-  if (!rl.allowed) {
-    const callerRes = await resolveCaller(request.headers);
-    const caller = callerRes.ok
-      ? callerRes.caller
-      : { id: 'anonymous', kind: 'anonymous' as const, scopes: [] };
-    recordAudit(caller.id, caller.kind, 'rate_limited', 429);
-    return v1Error('rate_limited', 'Too many requests', requestId, 429, baseHeaders);
-  }
-
+  // The caller is resolved first, so each one gets its own rate-limit budget
+  // sized by its tier (AGS007). Anonymous callers keep the per-IP key
+  // `${bucket}:${ip}` they had before. A bad credential never reaches the
+  // handler, and its attempts are counted per IP so keys cannot be guessed
+  // without limit.
   const callerRes = await resolveCaller(request.headers);
   if (!callerRes.ok) {
-    recordAudit('anonymous', 'anonymous', 'denied', callerRes.status);
-    return v1Error(callerRes.code, callerRes.message, requestId, callerRes.status, {
-      ...baseHeaders,
-      'WWW-Authenticate': 'Bearer error="invalid_token"',
+    const invalidRl = await checkRateLimit(ip, { bucket: 'auth.invalid', maxRequests: 30 });
+    const invalidHeaders = {
+      'X-Request-Id': requestId,
+      'X-Caller-Tier': 'anonymous',
+      ...rateLimitHeaders(30, invalidRl),
+    };
+    if (!invalidRl.allowed) {
+      recordAudit('anonymous', 'anonymous', 'rate_limited', 429);
+      return v1Error('rate_limited', 'Too many requests', requestId, 429, invalidHeaders);
+    }
+    recordAudit('anonymous', 'anonymous', 'denied', 401);
+    return v1Error(callerRes.code, callerRes.message, requestId, 401, {
+      ...invalidHeaders,
+      'WWW-Authenticate': 'Bearer realm="stellar-intel", error="invalid_token"',
     });
   }
   const caller = callerRes.caller;
+
+  const limit = limitForTier(options.maxRequests, caller.tier);
+  const rl = await checkRateLimit(caller.rateLimitKey, {
+    bucket: options.bucket,
+    maxRequests: limit,
+  });
+  const baseHeaders = {
+    'X-Request-Id': requestId,
+    'X-Caller-Tier': caller.tier,
+    ...rateLimitHeaders(limit, rl),
+  };
+
+  if (!rl.allowed) {
+    recordAudit(caller.id, caller.kind, 'rate_limited', 429);
+    return v1Error('rate_limited', 'Too many requests', requestId, 429, baseHeaders);
+  }
 
   // Daily quota for keyed callers (AGS024), counted once across every surface.
   // Anonymous callers have none.
