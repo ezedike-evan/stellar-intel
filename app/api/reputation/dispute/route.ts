@@ -7,9 +7,22 @@ import { checkRateLimit, clearRateLimitStore } from '@/lib/api/rate-limit';
 import { _setDisputeStore, getDisputeStore } from '@/lib/reputation/disputes';
 import { verifyIntentSignature } from '@/lib/intent/verify';
 import { enforceRateLimit } from '@/lib/api/response';
+import { requireCallerScope } from '@/lib/auth/caller';
 import { checkDurableStore } from '@/lib/api/store-guard';
 import { getReputationStore } from '@/lib/reputation/store';
 import { ANCHORS } from '@/constants/anchors';
+import {
+  DISPUTE_CATEGORIES,
+  levelDeadline,
+  type DisputeCategory,
+  type DisputeLevel,
+} from '@/lib/reputation/dispute-ladder';
+import {
+  getAdjudicationLog,
+  publicDisputeRef,
+  _setAdjudicationLog,
+} from '@/lib/reputation/adjudication-log';
+import { emitWebhookEvent } from '@/lib/webhooks/emit';
 
 const DisputeBodySchema = z.object({
   intentHash: z.string().regex(/^[0-9a-f]{64}$/, {
@@ -28,16 +41,21 @@ const DisputeBodySchema = z.object({
     .string()
     .min(1, { message: 'reason is required' })
     .max(1000, { message: 'reason must be at most 1000 characters' }),
+  category: z.enum(DISPUTE_CATEGORIES).default('other'),
 });
 
 export type DisputeBody = z.infer<typeof DisputeBodySchema>;
 
 export interface DisputeRecord {
   id: string;
+  ref: string;
   intentHash: string;
   publicKey: string;
   anchorId: string;
   reason: string;
+  category: DisputeCategory;
+  level: DisputeLevel;
+  levelDeadline: string;
   disputed: true;
   createdAt: string;
 }
@@ -47,11 +65,7 @@ const DISPUTE_MAX = 10;
 
 /**
  * Per-signer dispute quota, now counted through the shared limiter instead of a
- * private Map — the private one was per-instance, so the "10 per 24 h" cap was
- * really 10 per instance per 24 h (#733 / #911).
- *
- * Keyed by publicKey rather than IP on purpose: the quota belongs to the signer,
- * and rotating IPs should not buy more disputes.
+ * private Map.
  */
 async function checkDisputeRateLimit(publicKey: string): Promise<boolean> {
   const result = await checkRateLimit(publicKey, {
@@ -64,6 +78,7 @@ async function checkDisputeRateLimit(publicKey: string): Promise<boolean> {
 
 export function clearDisputeStores(): void {
   _setDisputeStore(null);
+  _setAdjudicationLog(null);
   clearRateLimitStore();
 }
 
@@ -71,13 +86,14 @@ export function clearDisputeStores(): void {
 
 export async function POST(request: NextRequest): Promise<NextResponse> {
   return withRequestLogger(request, 'api.reputation.dispute', async (logger) => {
-    // The per-signer quota below is free to dodge with freshly generated keys, so
-    // there is also a per-IP limit, checked before anything is parsed.
     const limited = await enforceRateLimit(request, {
       bucket: 'api.reputation.dispute.ip',
       maxRequests: 10,
     });
     if (limited) return limited;
+
+    const auth = await requireCallerScope(request, 'reputation:write');
+    if (!auth.ok) return auth.response;
 
     let body: unknown;
     try {
@@ -102,9 +118,9 @@ export async function POST(request: NextRequest): Promise<NextResponse> {
       );
     }
 
-    const { intentHash, publicKey, signature, anchorId, reason } = parsed.data;
+    const { intentHash, publicKey, signature, anchorId, reason, category } = parsed.data;
 
-    logger.info({ event: 'dispute_submission', anchorId, publicKey, intentHash });
+    logger.info({ event: 'dispute_submission', anchorId, publicKey, intentHash, category });
 
     // Verify Ed25519 proof: signature over the raw intentHash bytes.
     const valid = verifyIntentSignature({ intentHash, publicKey, signature });
@@ -117,8 +133,7 @@ export async function POST(request: NextRequest): Promise<NextResponse> {
       );
     }
 
-    // Only the account that attested the outcome may dispute it. Without this,
-    // anyone could dispute any intent hash by signing it with a key of their own.
+    // Only the account that attested the outcome may dispute it.
     const unavailable = checkDurableStore();
     if (unavailable) return unavailable;
 
@@ -141,6 +156,19 @@ export async function POST(request: NextRequest): Promise<NextResponse> {
       );
     }
 
+    // Check if an open dispute already exists on this intent
+    const existingDisputes = await getDisputeStore().findByIntentHash(intentHash);
+    if (existingDisputes.some((d) => d.status === 'open')) {
+      logger.warn({ event: 'dispute_already_open', intentHash });
+      return NextResponse.json<ApiError>(
+        {
+          code: 'CONFLICT',
+          message: 'An open dispute already exists for this intent',
+        },
+        { status: 409 }
+      );
+    }
+
     if (!(await checkDisputeRateLimit(publicKey))) {
       logger.warn({ event: 'rate_limited', publicKey });
       return NextResponse.json<ApiError>(
@@ -149,27 +177,109 @@ export async function POST(request: NextRequest): Promise<NextResponse> {
       );
     }
 
+    const createdAt = new Date().toISOString();
+    const id = crypto.randomUUID();
+    const level: DisputeLevel = 'anchor';
+    const deadline = levelDeadline(level, createdAt);
+    const ref = publicDisputeRef(id);
+
     const record: DisputeRecord = {
-      id: `${publicKey.slice(0, 8)}-${intentHash.slice(0, 8)}-${Date.now()}`,
+      id,
+      ref,
       intentHash,
       publicKey,
       anchorId,
       reason,
+      category,
+      level,
+      levelDeadline: deadline,
       disputed: true,
-      createdAt: new Date().toISOString(),
+      createdAt,
     };
+
     await getDisputeStore().create({
-      id: record.id,
+      id,
       intentHash,
       publicKey,
       anchorId,
       reason,
       status: 'open',
-      createdAt: record.createdAt,
+      createdAt,
       resolvedAt: null,
+      category,
+      level,
+      levelDeadline: deadline,
+      subjectKind: 'outcome',
+      subjectRef: intentHash,
+      appealedAt: null,
     });
 
-    logger.info({ event: 'dispute_created', disputeId: record.id });
+    // Field by field: never publicKey or reason, which is free text that may
+    // carry personal data (WHK012).
+    emitWebhookEvent(
+      'dispute.opened',
+      { disputeId: id, intentHash, anchorId, createdAt },
+      { idempotencyKey: `dispute.opened:${id}` }
+    );
+
+    try {
+      await getAdjudicationLog().append({
+        action: 'filed',
+        level: 'anchor',
+        rationale: '',
+        disputeRef: ref,
+        anchorId,
+        category,
+        decidedAt: createdAt,
+      });
+    } catch (err: unknown) {
+      logger.error({ event: 'adjudication_log_append_failed', error: err });
+      return NextResponse.json<ApiError>(
+        { code: 'INTERNAL_ERROR', message: 'Failed to record adjudication log' },
+        { status: 500 }
+      );
+    }
+
+    logger.info({ event: 'dispute_created', disputeId: record.id, ref });
     return NextResponse.json(record, { status: 201 });
+  });
+}
+
+export async function GET(request: NextRequest): Promise<NextResponse> {
+  return withRequestLogger(request, 'api.reputation.dispute.lookup', async () => {
+    const limited = await enforceRateLimit(request, {
+      bucket: 'api.reputation.dispute.lookup',
+      maxRequests: 60,
+    });
+    if (limited) return limited;
+
+    const { searchParams } = new URL(request.url);
+    const intentHash = searchParams.get('intentHash');
+    if (!intentHash || !/^[0-9a-f]{64}$/.test(intentHash)) {
+      return NextResponse.json<ApiError>(
+        {
+          code: 'VALIDATION_ERROR',
+          message: 'intentHash must be a lowercase hex-encoded SHA-256 (64 chars)',
+        },
+        { status: 422 }
+      );
+    }
+
+    const list = await getDisputeStore().findByIntentHash(intentHash);
+    const sorted = [...list].sort(
+      (a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime()
+    );
+
+    const disputes = sorted.map((d) => ({
+      ref: publicDisputeRef(d.id),
+      category: d.category,
+      level: d.level,
+      levelDeadline: d.levelDeadline,
+      status: d.status,
+      createdAt: d.createdAt,
+      resolvedAt: d.resolvedAt,
+    }));
+
+    return NextResponse.json({ disputes }, { status: 200 });
   });
 }

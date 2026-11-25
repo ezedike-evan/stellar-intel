@@ -8,8 +8,12 @@ export const runtime = 'nodejs';
  * the same `X-RateLimit-*` headers and request id as every other v1 route.
  */
 export async function GET(request: NextRequest): Promise<NextResponse> {
-  return withV1(request, { bucket: 'v1.health', maxRequests: 60 }, async () => ({
-    status: 200,
-    body: { status: 'ok', version: API_V1, ts: new Date().toISOString() },
-  }));
+  return withV1(
+    request,
+    { bucket: 'v1.health', maxRequests: 60, scope: 'quotes:read' },
+    async () => ({
+      status: 200,
+      body: { status: 'ok', version: API_V1, ts: new Date().toISOString() },
+    })
+  );
 }

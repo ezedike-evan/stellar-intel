@@ -59,6 +59,8 @@ export async function deliverToSubscription(
           'content-type': 'application/json',
           'x-webhook-signature': sigHeader,
           'x-webhook-timestamp': String(timestampSec),
+          'x-webhook-id': event.id,
+          'x-webhook-idempotency-key': event.idempotencyKey,
         },
         body: rawBody,
         redirect: 'manual',
@@ -119,6 +121,9 @@ export async function dispatchEvent(
   store: WebhookStore,
   sleepFn?: SleepFn
 ): Promise<void> {
+  // Store the envelope first. A key this store has already seen is a duplicate emission (a
+  // retried producer): it was delivered the first time, so it is not delivered again.
+  if (!(await store.recordEvent(event))) return;
   const subs = await store.listSubscriptions();
   const matching = subs.filter((s) => s.events.includes(event.kind));
   await Promise.allSettled(

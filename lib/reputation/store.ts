@@ -10,6 +10,7 @@ import { QuoteHistoryRowSchema } from './schema';
 import { SqliteReputationStore } from './sqlite';
 import { PostgresReputationStore, type SqlExecutor } from './postgres';
 import { getSqlExecutor, ReputationStoreUnavailableError } from './pool';
+import { nearestRankPercentile } from './percentile';
 
 export { ReputationStoreUnavailableError } from './pool';
 
@@ -111,10 +112,7 @@ function matchesProbeFilter(row: ProbeLedgerRow, filter: ProbeSampleQuery): bool
  * Returns `null` for an empty input.
  */
 export function percentile(sortedValues: number[], p: number): number | null {
-  if (sortedValues.length === 0) return null;
-  const rank = Math.ceil((p / 100) * sortedValues.length) - 1;
-  const index = Math.min(Math.max(rank, 0), sortedValues.length - 1);
-  return sortedValues[index]!;
+  return nearestRankPercentile(sortedValues, p);
 }
 
 /**
