@@ -2402,6 +2402,81 @@ registry.registerPath({
 
 // ─── Spec builder ────────────────────────────────────────────────────────────
 
+const PublicRefundCaseSchema = registry.register(
+  'PublicRefundCase',
+  z.object({
+    id: z.string(),
+    intentHash: z.string(),
+    reason: z.enum([
+      'anchor_refunded',
+      'anchor_error_after_payment',
+      'expired_after_payment',
+      'slippage_breach',
+    ]),
+    anchorId: z.string(),
+    corridor: z.string(),
+    direction: z.enum(['withdraw', 'deposit']),
+    amountPaid: z.string(),
+    status: z.enum(['owed', 'refunded', 'acknowledged']),
+    amountRefunded: z.string().nullable(),
+    refundFee: z.string().nullable(),
+    payments: z.array(
+      z.object({
+        id: z.string(),
+        idType: z.enum(['stellar', 'external']),
+        amount: z.string(),
+        fee: z.string(),
+      })
+    ),
+    openedAt: z.string(),
+    refundedAt: z.string().nullable(),
+    acknowledgedAt: z.string().nullable(),
+    onChainCheck: z
+      .string()
+      .nullable()
+      .describe('verified, mismatch or unverifiable; null when no on-chain check was made'),
+  })
+);
+
+const IntentHashPathParam = z.string().openapi({
+  param: { name: 'intentHash', in: 'path' },
+  example: 'a3f1c2d4e5b60718293a4b5c6d7e8f90a1b2c3d4e5f60718293a4b5c6d7e8f90',
+  description: 'Lowercase hex SHA-256 intent hash (64 characters)',
+});
+
+registry.registerPath({
+  method: 'get',
+  path: '/api/refunds/{intentHash}',
+  summary: 'Look up refund cases for an intent',
+  description:
+    'Read-only lookup of the refund cases tracked for one intent, oldest first. An intent with ' +
+    'no cases returns an empty list, not 404. Only non-sensitive fields are returned; the signer ' +
+    'account and the acknowledgement proof are never exposed, and there is no lookup by account. ' +
+    'Responses are sent with Cache-Control: no-store.',
+  tags: ['Refunds'],
+  request: {
+    params: z.object({ intentHash: IntentHashPathParam }),
+  },
+  responses: {
+    200: {
+      description: 'Refund cases for the intent',
+      content: {
+        'application/json': {
+          schema: z.object({
+            intentHash: z.string(),
+            cases: z.array(PublicRefundCaseSchema),
+          }),
+        },
+      },
+    },
+    400: {
+      description: 'intentHash is not a lowercase 64-character hex string',
+      content: { 'application/json': { schema: ApiErrorSchema } },
+    },
+    429: RATE_LIMITED_429,
+  },
+});
+
 export function buildOpenApiSpec() {
   const generator = new OpenApiGeneratorV31(registry.definitions);
   return generator.generateDocument({
