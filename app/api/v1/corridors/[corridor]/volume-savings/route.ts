@@ -16,7 +16,7 @@ export async function GET(
 ): Promise<NextResponse> {
   return withV1(
     request,
-    { bucket: 'v1.corridors.volume-savings', maxRequests: 90 },
+    { bucket: 'v1.corridors.volume-savings', maxRequests: 90, scope: 'quotes:read' },
     async (ctx) => {
       const resolvedParams = await params;
       const parsed = ParamsSchema.safeParse(resolvedParams);

@@ -2,7 +2,11 @@ import { beforeEach, afterEach, describe, expect, it } from 'vitest';
 import { NextRequest } from 'next/server';
 import { GET } from '@/app/api/reputation/[anchor]/sla/route';
 import { clearRateLimitStore } from '@/lib/api/rate-limit';
-import { createReputationStore, _setReputationStore, type ReputationStore } from '@/lib/reputation/store';
+import {
+  createReputationStore,
+  _setReputationStore,
+  type ReputationStore,
+} from '@/lib/reputation/store';
 import { ExecutionSlaReportSchema } from '@/lib/reputation/execution-sla';
 import { makeOutcomeRow } from './fixtures/outcome-rows';
 

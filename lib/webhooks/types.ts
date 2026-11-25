@@ -1,16 +1,12 @@
-export type WebhookEventKind =
-  | 'intent.created'
-  | 'intent.settled'
-  | 'intent.failed'
-  | 'reputation.event_written'
-  | 'anchor.health_status_changed'
-  | 'dispute.opened'
-  | 'dispute.resolved';
+export type { WebhookEventKind, WebhookEventPayloadMap } from '@/types/webhooks';
+import type { WebhookEventKind } from '@/types/webhooks';
 
 export interface WebhookEvent {
   id: string;
   kind: WebhookEventKind;
   createdAt: string;
+  /** Same key, same event: a store records and delivers it once (WHK004). */
+  idempotencyKey: string;
   payload: Record<string, unknown>;
 }
 

@@ -4,13 +4,11 @@ import { ANCHORS, CORRIDORS } from '@/constants';
 import { buildScorecards, mapOutcomeRows } from '@/lib/reputation/aggregate';
 import { getHistoryBuckets } from '@/lib/reputation/buckets';
 import { computeQuoteGapStats } from '@/lib/reputation/quote-gap';
+import { getDisputeStore, toPublicDisputeItems } from '@/lib/reputation/disputes';
 import { getReputationStore, ReputationStoreUnavailableError } from '@/lib/reputation/store';
 import { AnchorProfile, type AnchorProfileData } from '@/components/offramp/AnchorProfile';
 import { ScorecardCard } from '@/components/offramp/ScorecardCard';
 import { QuoteGapCard } from '@/components/anchors/QuoteGapCard';
-import { ExecutionSlaCard } from '@/components/anchors/ExecutionSlaCard';
-import { buildExecutionSlaReport } from '@/lib/reputation/execution-sla';
-import { flags } from '@/lib/flags';
 
 const SITE_URL = process.env.NEXT_PUBLIC_SITE_URL ?? 'https://stellar-intel.vercel.app';
 const DEFAULT_TITLE = 'Anchor profile — Stellar Intel';
@@ -104,27 +102,18 @@ export default async function AnchorDetailPage({
     .find((row) => row.oracleTxHash !== null && row.publishedAt !== null);
 
   const quoteGap = computeQuoteGapStats(rows, { windowDays: 30 });
-  const slaReport = flags.executionSla ? buildExecutionSlaReport(rows, anchor.id) : null;
 
   const scorecards = buildScorecards(outcomeRows, Date.now(), lastPublished?.publishedAt ?? null);
 
-  const disputes: AnchorProfileData['disputes'] = rows
-    .filter(
-      (row) => row.outcome === 'refunded' || row.outcome === 'error' || row.outcome === 'partial'
-    )
-    .slice(-10)
-    .reverse()
-    .map((row) => ({
-      id: row.intentHash,
-      createdAt: row.createdAt,
-      reason:
-        row.outcome === 'refunded'
-          ? 'Refunded transaction'
-          : row.outcome === 'partial'
-            ? 'Partial completion'
-            : 'Failed transaction',
-      status: row.outcome === 'error' ? 'open' : 'resolved',
-    }));
+  // Real disputes from the dispute store (DSP010). A refunded or failed outcome is not a dispute,
+  // so outcome rows are never shown here. A store that cannot be read shows none rather than
+  // failing the page.
+  let disputes: AnchorProfileData['disputes'] = [];
+  try {
+    disputes = toPublicDisputeItems(await getDisputeStore().list(), anchor.id);
+  } catch {
+    disputes = [];
+  }
 
   const score = scorecards[30].state === 'ok' ? scorecards[30].fillRate : null;
 
@@ -160,7 +149,6 @@ export default async function AnchorDetailPage({
         latestOracleTxHash={lastPublished?.oracleTxHash ?? undefined}
       />
       <QuoteGapCard {...quoteGap} />
-      {flags.executionSla && slaReport ? <ExecutionSlaCard report={slaReport} /> : null}
     </div>
   );
 }
