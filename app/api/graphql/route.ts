@@ -11,11 +11,15 @@ import {
 } from 'graphql';
 import { schema } from '@/lib/graphql/schema';
 import { countRootFields, graphqlValidationRules } from '@/lib/graphql/security';
+import { checkRateLimit, getClientIp } from '@/lib/api/rate-limit';
+import { checkDailyQuota, quotaHeaders } from '@/lib/api/quota';
+import { limitForTier } from '@/lib/api/rate-limit-tiers';
+import { hasScope } from '@/lib/auth/api-keys';
+import { resolveCaller, type Caller } from '@/lib/auth/caller';
+import { recordAuditEvent } from '@/lib/audit/record';
+import type { AuditOutcome } from '@/lib/audit/types';
 import type { GraphQLContext } from '@/lib/graphql/context';
-import { checkRateLimit } from '@/lib/api/rate-limit';
 import { rateLimitedResponse } from '@/lib/api/response';
-import { hasScope, limitForTier, resolveCaller } from '@/lib/auth/caller';
-import { recordAuditEvent, type AuditOutcome } from '@/lib/audit';
 import { getLogger } from '@/lib/logger';
 
 /**
@@ -135,17 +139,26 @@ async function handler(request: NextRequest): Promise<Response> {
   const logger = getLogger('api.graphql');
   const requestId = request.headers.get('x-request-id') ?? globalThis.crypto.randomUUID();
 
-  const resolved = await resolveCaller(request.headers);
-  if (!resolved.ok) {
+  // The caller is resolved first (AGS022), so limits are per caller and sized
+  // by tier. A bad credential is rejected, never silently downgraded to
+  // anonymous, and those attempts are counted per IP so keys cannot be guessed
+  // without limit.
+  const resolution = await resolveCaller(request.headers);
+  if (!resolution.ok) {
+    const invalid = await checkRateLimit(getClientIp(request.headers), {
+      bucket: 'auth.invalid',
+      maxRequests: 30,
+    });
+    if (!invalid.allowed) return rateLimitedResponse(invalid, 'auth.invalid');
     return NextResponse.json(
       {
         data: null,
-        errors: [{ message: resolved.message, extensions: { code: 'UNAUTHENTICATED' } }],
+        errors: [{ message: resolution.message, extensions: { code: 'UNAUTHENTICATED' } }],
       },
       { status: 401 }
     );
   }
-  const { caller } = resolved;
+  const caller = resolution.caller;
 
   const rl = await checkRateLimit(caller.rateLimitKey, {
     bucket: 'api.graphql',
@@ -153,8 +166,63 @@ async function handler(request: NextRequest): Promise<Response> {
   });
   if (!rl.allowed) {
     logger.warn({ event: 'rate_limit_exceeded', callerId: caller.id, retryAfter: rl.retryAfter });
+    // The same helper as the mutation limit below, so both 429s look alike (AGS009).
     return rateLimitedResponse(rl, 'api.graphql');
   }
+
+  // Daily quota (AGS024), shared with REST and MCP: one unit per request.
+  // Anonymous callers have none.
+  let quotaHeadersOut: Record<string, string> = {};
+  if (caller.kind !== 'anonymous') {
+    const quota = await checkDailyQuota(caller);
+    if (quota) {
+      quotaHeadersOut = quotaHeaders(quota);
+      if (!quota.allowed) {
+        return NextResponse.json(
+          {
+            data: null,
+            errors: [{ message: 'Daily quota exceeded', extensions: { code: 'QUOTA_EXCEEDED' } }],
+          },
+          {
+            status: 429,
+            headers: { ...quotaHeadersOut, 'Retry-After': String(quota.retryAfter) },
+          }
+        );
+      }
+    }
+  }
+
+  const response = await handleOperation(request, logger, caller, requestId);
+  if (Object.keys(quotaHeadersOut).length === 0) return response;
+  const headers = new Headers(response.headers);
+  for (const [name, value] of Object.entries(quotaHeadersOut)) headers.set(name, value);
+  return new NextResponse(response.body, { status: response.status, headers });
+}
+
+async function handleOperation(
+  request: NextRequest,
+  logger: ReturnType<typeof getLogger>,
+  caller: Caller,
+  requestId: string
+): Promise<Response> {
+  const audit = (
+    action: string,
+    scope: 'quotes:read' | 'intents:write',
+    outcome: AuditOutcome,
+    status: number,
+    intentHash: string | null = null
+  ) =>
+    recordAuditEvent({
+      surface: 'graphql',
+      action,
+      scope,
+      intentHash,
+      outcome,
+      status,
+      requestId,
+      callerId: caller.id,
+      callerKind: caller.kind,
+    });
 
   const parsed = await readOperation(request);
   if (!parsed.ok) return parsed.response;
@@ -182,30 +250,16 @@ async function handler(request: NextRequest): Promise<Response> {
   // to the same bucket. Without this it is the cheapest way to call the builder.
   const selected = getOperationAST(document, operation.operationName ?? null);
   const isMutation = selected?.operation === 'mutation';
-  const isQuery = selected?.operation === 'query';
+  // Queries are audited for key and token callers only; mutations always (AGS014).
+  const auditQuery = selected?.operation === 'query' && caller.kind !== 'anonymous';
 
-  if (isQuery && !hasScope(caller.scopes, 'quotes:read')) {
-    if (caller.kind !== 'anonymous') {
-      recordAuditEvent({
-        surface: 'graphql',
-        action: 'Query',
-        scope: 'quotes:read',
-        intentHash: null,
-        outcome: 'denied',
-        status: 403,
-        requestId,
-        callerId: caller.id,
-        callerKind: caller.kind,
-      });
-    }
+  if (selected?.operation === 'query' && !hasScope(caller.scopes, 'quotes:read')) {
+    if (auditQuery) audit('Query', 'quotes:read', 'denied', 403);
     return NextResponse.json(
       {
         data: null,
         errors: [
-          {
-            message: 'This call needs the "quotes:read" scope',
-            extensions: { code: 'FORBIDDEN' },
-          },
+          { message: 'This call needs the "quotes:read" scope', extensions: { code: 'FORBIDDEN' } },
         ],
       },
       { status: 403 }
@@ -233,24 +287,13 @@ async function handler(request: NextRequest): Promise<Response> {
         callerId: caller.id,
         retryAfter: intentLimit.retryAfter,
       });
-      recordAuditEvent({
-        surface: 'graphql',
-        action: 'Mutation.submitOfframpIntent',
-        scope: 'intents:write',
-        intentHash: null,
-        outcome: 'rate_limited',
-        status: 429,
-        requestId,
-        callerId: caller.id,
-        callerKind: caller.kind,
-      });
+      audit('Mutation.submitOfframpIntent', 'intents:write', 'rate_limited', 429);
       return rateLimitedResponse(intentLimit, 'api.intent.offramp');
     }
   }
 
-  const contextValue = { caller, requestId } satisfies GraphQLContext;
-
   try {
+    const contextValue = { caller, requestId } satisfies GraphQLContext;
     const result: ExecutionResult = await execute({
       schema,
       document,
@@ -265,33 +308,17 @@ async function handler(request: NextRequest): Promise<Response> {
         : result.errors.some((e) => e.extensions?.code === 'FORBIDDEN')
           ? 'denied'
           : 'client_error';
-
     if (isMutation) {
-      const submitData = result.data?.submitOfframpIntent as
-        { quoteId?: string } | null | undefined;
-      recordAuditEvent({
-        surface: 'graphql',
-        action: 'Mutation.submitOfframpIntent',
-        scope: 'intents:write',
-        intentHash: submitData?.quoteId ?? null,
+      const submitted = (result.data?.submitOfframpIntent ?? null) as { quoteId?: string } | null;
+      audit(
+        'Mutation.submitOfframpIntent',
+        'intents:write',
         outcome,
-        status: 200,
-        requestId,
-        callerId: caller.id,
-        callerKind: caller.kind,
-      });
-    } else if (isQuery && caller.kind !== 'anonymous') {
-      recordAuditEvent({
-        surface: 'graphql',
-        action: 'Query',
-        scope: 'quotes:read',
-        intentHash: null,
-        outcome,
-        status: 200,
-        requestId,
-        callerId: caller.id,
-        callerKind: caller.kind,
-      });
+        200,
+        submitted?.quoteId ?? null
+      );
+    } else if (auditQuery) {
+      audit('Query', 'quotes:read', outcome, 200);
     }
 
     return NextResponse.json(
@@ -309,36 +336,13 @@ async function handler(request: NextRequest): Promise<Response> {
     // the original outage undiagnosable from outside, and never with the raw
     // exception text, which can carry driver errors, file paths or upstream URLs.
     const message = error instanceof Error ? error.message : String(error);
+    if (isMutation) audit('Mutation.submitOfframpIntent', 'intents:write', 'error', 500);
+    else if (auditQuery) audit('Query', 'quotes:read', 'error', 500);
     logger.error({
       event: 'graphql_execution_error',
       error: message,
       stack: error instanceof Error ? error.stack : undefined,
     });
-    if (isMutation) {
-      recordAuditEvent({
-        surface: 'graphql',
-        action: 'Mutation.submitOfframpIntent',
-        scope: 'intents:write',
-        intentHash: null,
-        outcome: 'error',
-        status: 500,
-        requestId,
-        callerId: caller.id,
-        callerKind: caller.kind,
-      });
-    } else if (isQuery && caller.kind !== 'anonymous') {
-      recordAuditEvent({
-        surface: 'graphql',
-        action: 'Query',
-        scope: 'quotes:read',
-        intentHash: null,
-        outcome: 'error',
-        status: 500,
-        requestId,
-        callerId: caller.id,
-        callerKind: caller.kind,
-      });
-    }
     return errorResponse('Internal server error', 500);
   }
 }

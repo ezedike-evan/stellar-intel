@@ -2,8 +2,10 @@ import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest';
 import { NextRequest } from 'next/server';
 import { POST } from '@/app/api/graphql/route';
 import { checkRateLimit, clearRateLimitStore } from '@/lib/api/rate-limit';
-import { clearApiKeys, registerApiKey } from '@/lib/auth/caller';
-import { clearAuditEvents, getAuditEvents } from '@/lib/audit';
+import { generateApiKey, type ApiScope } from '@/lib/auth/api-keys';
+import { InMemoryApiKeyStore, _setApiKeyStore } from '@/lib/auth/key-store';
+import { InMemoryAuditStore, _setAuditStore, type AuditEvent } from '@/lib/audit/store';
+import { flushAuditEvents } from '@/lib/audit/record';
 import { flags } from '@/lib/flags';
 import * as offrampModule from '@/lib/intent/offramp';
 
@@ -44,13 +46,46 @@ function makeRequest(
   });
 }
 
+let keyStore: InMemoryApiKeyStore;
+let auditStore: InMemoryAuditStore;
+
+/** Stores a key with these scopes and returns the raw key and its caller id. */
+async function seedKey(scopes: ApiScope[]): Promise<{ key: string; callerId: string }> {
+  const generated = await generateApiKey();
+  await keyStore.create({
+    keyId: generated.keyId,
+    displayPrefix: generated.displayPrefix,
+    hash: generated.hash,
+    name: 'graphql-test',
+    scopes,
+    tier: 'standard',
+    maxIntentAmount: null,
+    createdAt: new Date().toISOString(),
+    expiresAt: null,
+    revokedAt: null,
+    lastUsedAt: null,
+  });
+  return { key: generated.key, callerId: `key:${generated.keyId}` };
+}
+
+async function getAuditEvents(): Promise<AuditEvent[]> {
+  await flushAuditEvents();
+  return auditStore.listRange({
+    from: '2000-01-01T00:00:00.000Z',
+    to: '2100-01-01T00:00:00.000Z',
+    limit: 1000,
+  });
+}
+
 describe('POST /api/graphql — caller identity, limits, scopes and audit (#2215)', () => {
   const originalRequireKeyForWrites = flags.requireKeyForWrites;
 
   beforeEach(() => {
     clearRateLimitStore();
-    clearApiKeys();
-    clearAuditEvents();
+    keyStore = new InMemoryApiKeyStore();
+    _setApiKeyStore(keyStore);
+    auditStore = new InMemoryAuditStore();
+    _setAuditStore(auditStore);
     flags.requireKeyForWrites = false;
     vi.stubEnv('ANCHOR_PAYMENT_ACCOUNTS', JSON.stringify({ moneygram: VALID_SENDER }));
   });
@@ -59,6 +94,8 @@ describe('POST /api/graphql — caller identity, limits, scopes and audit (#2215
     flags.requireKeyForWrites = originalRequireKeyForWrites;
     vi.unstubAllEnvs();
     vi.restoreAllMocks();
+    _setApiKeyStore(null);
+    _setAuditStore(null);
   });
 
   it('allows an anonymous query with 200 and rejects an invalid key with 401 UNAUTHENTICATED', async () => {
@@ -69,7 +106,7 @@ describe('POST /api/graphql — caller identity, limits, scopes and audit (#2215
     expect(anonBody.data?.anchors.length).toBeGreaterThan(0);
 
     const badKeyRes = await POST(
-      makeRequest('{ anchors { id } }', undefined, { 'x-api-key': 'sk_invalid_key' })
+      makeRequest('{ anchors { id } }', undefined, { 'x-api-key': 'sik_invalid_key' })
     );
     expect(badKeyRes.status).toBe(401);
     const badKeyBody = (await badKeyRes.json()) as GraphQLResponse;
@@ -78,26 +115,21 @@ describe('POST /api/graphql — caller identity, limits, scopes and audit (#2215
   });
 
   it('denies mutation for a quotes:read-only key with FORBIDDEN without calling createOfframpIntent', async () => {
-    registerApiKey({
-      id: 'key-read-only',
-      key: 'sk_read_only',
-      tier: 'free',
-      scopes: ['quotes:read'],
-    });
+    const keyReadOnly = await seedKey(['quotes:read']);
 
     const spy = vi.spyOn(offrampModule, 'createOfframpIntent');
 
     const res = await POST(
-      makeRequest(MUTATION, { input: VALID_INPUT }, { 'x-api-key': 'sk_read_only' })
+      makeRequest(MUTATION, { input: VALID_INPUT }, { 'x-api-key': keyReadOnly.key })
     );
     expect(res.status).toBe(200);
     const body = (await res.json()) as GraphQLResponse;
     expect(body.errors?.[0]?.extensions?.code).toBe('FORBIDDEN');
     expect(spy).not.toHaveBeenCalled();
 
-    const audit = getAuditEvents().find((e) => e.action === 'Mutation.submitOfframpIntent');
+    const audit = (await getAuditEvents()).find((e) => e.action === 'Mutation.submitOfframpIntent');
     expect(audit?.outcome).toBe('denied');
-    expect(audit?.callerId).toBe('key-read-only');
+    expect(audit?.callerId).toBe(keyReadOnly.callerId);
   });
 
   it('denies anonymous mutation with FORBIDDEN when flags.requireKeyForWrites is true', async () => {
@@ -113,15 +145,10 @@ describe('POST /api/graphql — caller identity, limits, scopes and audit (#2215
   });
 
   it('returns 403 FORBIDDEN when an intents:write-only key runs a query', async () => {
-    registerApiKey({
-      id: 'key-write-only',
-      key: 'sk_write_only',
-      tier: 'free',
-      scopes: ['intents:write'],
-    });
+    const keyWriteOnly = await seedKey(['intents:write']);
 
     const res = await POST(
-      makeRequest('{ anchors { id } }', undefined, { 'x-api-key': 'sk_write_only' })
+      makeRequest('{ anchors { id } }', undefined, { 'x-api-key': keyWriteOnly.key })
     );
     expect(res.status).toBe(403);
     const body = (await res.json()) as GraphQLResponse;
@@ -131,12 +158,7 @@ describe('POST /api/graphql — caller identity, limits, scopes and audit (#2215
 
   it('keeps a keyed caller api.graphql bucket independent of an anonymous caller on the same IP', async () => {
     const ip = '198.51.100.77';
-    registerApiKey({
-      id: 'key-independent',
-      key: 'sk_independent',
-      tier: 'free',
-      scopes: ['quotes:read'],
-    });
+    const keyIndependent = await seedKey(['quotes:read']);
 
     // Exhaust the anonymous IP's bucket
     for (let i = 0; i < 60; i += 1) {
@@ -152,22 +174,17 @@ describe('POST /api/graphql — caller identity, limits, scopes and audit (#2215
     const keyedRes = await POST(
       makeRequest('{ anchors { id } }', undefined, {
         'x-forwarded-for': ip,
-        'x-api-key': 'sk_independent',
+        'x-api-key': keyIndependent.key,
       })
     );
     expect(keyedRes.status).toBe(200);
   });
 
   it('records a mutation audit event with intentHash === quoteId and no sender/recipient PII', async () => {
-    registerApiKey({
-      id: 'key-writer',
-      key: 'sk_writer',
-      tier: 'free',
-      scopes: ['quotes:read', 'intents:write'],
-    });
+    const keyWriter = await seedKey(['quotes:read', 'intents:write']);
 
     const res = await POST(
-      makeRequest(MUTATION, { input: VALID_INPUT }, { 'x-api-key': 'sk_writer' })
+      makeRequest(MUTATION, { input: VALID_INPUT }, { 'x-api-key': keyWriter.key })
     );
     expect(res.status).toBe(200);
     const body = (await res.json()) as GraphQLResponse<{
@@ -177,7 +194,7 @@ describe('POST /api/graphql — caller identity, limits, scopes and audit (#2215
     const quoteId = body.data?.submitOfframpIntent.quoteId;
     expect(quoteId).toMatch(/^[0-9a-f]{64}$/);
 
-    const events = getAuditEvents();
+    const events = await getAuditEvents();
     expect(events).toHaveLength(1);
     const event = events[0];
     expect(event).toBeDefined();
@@ -186,8 +203,8 @@ describe('POST /api/graphql — caller identity, limits, scopes and audit (#2215
     expect(event?.scope).toBe('intents:write');
     expect(event?.intentHash).toBe(quoteId);
     expect(event?.outcome).toBe('ok');
-    expect(event?.callerId).toBe('key-writer');
-    expect(event?.callerKind).toBe('api_key');
+    expect(event?.callerId).toBe(keyWriter.callerId);
+    expect(event?.callerKind).toBe('key');
 
     const serialized = JSON.stringify(event);
     expect(serialized).not.toContain(VALID_SENDER);

@@ -12,7 +12,7 @@ import { resolveCorridorRates } from '@/lib/api/rates-resolver';
 import { getPublisherHealth, getMetricsSnapshot } from '@/lib/metrics';
 import { IntentSchema, createOfframpIntent } from '@/lib/intent/offramp';
 import { AMOUNT_PATTERN } from '@/lib/patterns';
-import { hasScope } from '@/lib/auth/caller';
+import { hasScope } from '@/lib/auth/api-keys';
 import type { GraphQLContext } from '@/lib/graphql/context';
 import type { Anchor, AnchorRate } from '@/types';
 import type { Intent } from '@/lib/intent/hash';

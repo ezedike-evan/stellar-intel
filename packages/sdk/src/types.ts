@@ -260,6 +260,40 @@ export interface AnchorCensusResponse {
   rows: AnchorCensusRow[];
 }
 
+/** One entry in the public dispute adjudication log. */
+export interface AdjudicationEntry {
+  seq: number;
+  disputeRef: string;
+  anchorId: string;
+  category: string;
+  level: string;
+  action: string;
+  rationale: string;
+  decidedAt: string;
+  prevHash: string;
+  entryHash: string;
+}
+
+/** Summary statistics across all public disputes. */
+export interface AdjudicationSummary {
+  filed: number;
+  resolved: number;
+  accepted: number;
+  rejected: number;
+  open: number;
+  appealed: number;
+}
+
+/** Response shape for `GET /api/v1/disputes/log`. */
+export interface AdjudicationLogResponse {
+  entries: AdjudicationEntry[];
+  head: { seq: number; entryHash: string } | null;
+  verification:
+    { ok: true; length: number; head: string } | { ok: false; brokenAtSeq: number; reason: string };
+  summary: AdjudicationSummary;
+  hashFormat: string;
+}
+
 /**
  * Every endpoint this SDK calls, as `METHOD path`.
  *
@@ -280,6 +314,9 @@ export const OPERATIONS = {
   getCorridorVolumeSavings: 'GET /api/v1/corridors/{corridor}/volume-savings',
   getHealth: 'GET /api/v1/health',
   getVolumeSavings: 'GET /api/v1/corridors/{corridor}/volume-savings',
+  getSlippageBreaches: 'GET /api/v1/slippage-breaches',
+  getSlippageBreach: 'GET /api/v1/slippage-breaches/{intentHash}',
+  getDisputeLog: 'GET /api/v1/disputes/log',
 } as const;
 
 export type OperationName = keyof typeof OPERATIONS;

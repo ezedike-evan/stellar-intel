@@ -1,16 +1,12 @@
 import { z } from 'zod';
-import type { WebhookEventKind } from './types';
+import { WEBHOOK_PAYLOAD_SCHEMAS, type WebhookEventKind } from '@/types/webhooks';
 import { isPublicHttpsUrl } from './url';
 
-export const WEBHOOK_EVENT_KINDS = [
-  'intent.created',
-  'intent.settled',
-  'intent.failed',
-  'reputation.event_written',
-  'anchor.health_status_changed',
-] as const satisfies WebhookEventKind[];
+export const WEBHOOK_EVENT_KINDS = Object.keys(WEBHOOK_PAYLOAD_SCHEMAS) as WebhookEventKind[];
 
-export const WebhookEventKindSchema = z.enum(WEBHOOK_EVENT_KINDS);
+export const WebhookEventKindSchema = z.enum(
+  WEBHOOK_EVENT_KINDS as [WebhookEventKind, ...WebhookEventKind[]]
+);
 
 export const CreateSubscriptionSchema = z.object({
   url: z.string().url({ message: 'url must be a valid URL' }).refine(isPublicHttpsUrl, {
