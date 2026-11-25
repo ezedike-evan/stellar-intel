@@ -36,6 +36,7 @@ import { TERMINAL_STATES } from '@/lib/stellar/sep24';
 import type { OnrampIntent } from '@/types/intent';
 import type { DepositRate } from '@/types';
 import { flags } from '@/lib/flags';
+import { rememberTrackedIntent } from '@/lib/refunds/local-history';
 import { RefundAckCard } from '@/components/refunds/RefundAckCard';
 
 // Only needed once the user picks a row, so it stays out of the initial bundle.
@@ -280,6 +281,16 @@ function OnrampContent() {
       try {
         const { intentHash, signature, publicKey: signer } = await signIntent(hashedIntent);
         setOutcomeContext({ ...quote, intentHash, signature, publicKey: signer });
+        if (flags.refundGuarantees) {
+          rememberTrackedIntent({
+            intentHash,
+            anchorId: quote.anchorId,
+            corridor: quote.corridor,
+            direction: 'deposit',
+            transactionId,
+            startedAt: new Date().toISOString(),
+          });
+        }
       } catch {
         // A declined or failed signature is best-effort, like the off-ramp page:
         // the deposit itself proceeds, its outcome simply isn't recorded.

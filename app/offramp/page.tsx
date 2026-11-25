@@ -41,6 +41,7 @@ import type { AnchorRate } from '@/types';
 import { MIN_RECEIVE_TOLERANCE } from '@/lib/rate-ranking';
 import type { OutcomeIntent } from '@/lib/reputation/schema';
 import { flags } from '@/lib/flags';
+import { rememberTrackedIntent } from '@/lib/refunds/local-history';
 import { submitDispute } from '@/lib/reputation/dispute-client';
 import { DisputeModal } from '@/components/offramp/DisputeModal';
 import { DisputeStatusBadge } from '@/components/offramp/DisputeStatusBadge';
@@ -274,6 +275,16 @@ function OfframpContent() {
               publicKey: signer,
               ...(outcomeIntent ? { minReceive: outcomeIntent.minReceive, outcomeIntent } : {}),
             });
+            if (flags.refundGuarantees) {
+              rememberTrackedIntent({
+                intentHash,
+                anchorId: quote.anchorId,
+                corridor: quote.corridor,
+                direction: 'withdraw',
+                transactionId,
+                startedAt: new Date().toISOString(),
+              });
+            }
           })
           .catch(() => {
             // Best-effort, like the append itself: an unsigned outcome would be
