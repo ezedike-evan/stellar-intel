@@ -62,6 +62,7 @@ the hardening contract (see `lib/api/v1.ts`):
   - [`GET /api/reputation/sdf-export`](#get-apireputationsdf-export)
   - [`GET /api/reputation/{anchor}`](#get-apireputationanchor)
   - [`GET /api/reputation/{anchor}/history`](#get-apireputationanchorhistory)
+  - [`GET /api/reputation/{anchor}/sla`](#get-apireputationanchorsla)
   - [`GET /api/v1/disputes/log`](#get-apiv1disputeslog)
   - [`GET /api/v1/slippage-breaches`](#get-apiv1slippage-breaches)
   - [`GET /api/v1/slippage-breaches/{intentHash}`](#get-apiv1slippage-breachesintenthash)
@@ -804,6 +805,30 @@ Returns bucketed outcome history for a specific anchor over a configurable time 
 | `200` | Bucketed history data | `application/json` | `object` |
 | `400` | Validation error | `application/json` | `ApiError` |
 | `404` | Unknown anchor | `application/json` | `ApiError` |
+
+---
+
+### `GET /api/reputation/{anchor}/sla`
+
+**Summary:** Get anchor execution SLA  
+
+Returns trailing 30-day settlement SLA percentiles (nearest-rank, no trimming) for an anchor, requiring at least 30 completed samples (and 100 for p99), evaluated against breach thresholds.
+
+#### Parameters
+
+| Name | In | Type | Required | Description |
+| :--- | :--- | :--- | :--- | :--- |
+| `anchor` | `path` | `string` | **Yes** | Anchor ID from the registry |
+| `corridor` | `query` | `string` | No | Filter by corridor ID |
+
+#### Responses
+
+| Status | Description | Content-Type | Schema |
+| :--- | :--- | :--- | :--- |
+| `200` | Execution SLA report | `application/json` | `ExecutionSlaReport` |
+| `400` | Validation error | `application/json` | `ApiError` |
+| `404` | Unknown anchor | `application/json` | `ApiError` |
+| `429` | Rate limited | `application/json` | `ApiError` |
 
 ---
 

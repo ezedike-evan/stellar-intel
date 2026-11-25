@@ -1273,6 +1273,373 @@
           "onChainCheck"
         ]
       },
+      "ExecutionSlaReport": {
+        "type": "object",
+        "properties": {
+          "anchorId": {
+            "type": "string"
+          },
+          "windowDays": {
+            "type": "integer",
+            "exclusiveMinimum": 0
+          },
+          "computedAt": {
+            "type": "string"
+          },
+          "thresholds": {
+            "type": "object",
+            "properties": {
+              "p95Ms": {
+                "type": "number"
+              },
+              "p99Ms": {
+                "type": "number"
+              }
+            },
+            "required": [
+              "p95Ms",
+              "p99Ms"
+            ]
+          },
+          "overall": {
+            "type": "object",
+            "properties": {
+              "sla": {
+                "oneOf": [
+                  {
+                    "type": "object",
+                    "properties": {
+                      "windowDays": {
+                        "type": "number"
+                      },
+                      "windowStart": {
+                        "type": "string"
+                      },
+                      "windowEnd": {
+                        "type": "string"
+                      },
+                      "sampleSize": {
+                        "type": "integer",
+                        "minimum": 0
+                      },
+                      "terminalCount": {
+                        "type": "integer",
+                        "minimum": 0
+                      },
+                      "minSamples": {
+                        "type": "integer",
+                        "minimum": 0
+                      },
+                      "computedAt": {
+                        "type": "string"
+                      },
+                      "state": {
+                        "type": "string",
+                        "enum": [
+                          "ok"
+                        ]
+                      },
+                      "p50Ms": {
+                        "type": "number"
+                      },
+                      "p95Ms": {
+                        "type": "number"
+                      },
+                      "p99Ms": {
+                        "type": [
+                          "number",
+                          "null"
+                        ]
+                      }
+                    },
+                    "required": [
+                      "windowDays",
+                      "windowStart",
+                      "windowEnd",
+                      "sampleSize",
+                      "terminalCount",
+                      "minSamples",
+                      "computedAt",
+                      "state",
+                      "p50Ms",
+                      "p95Ms",
+                      "p99Ms"
+                    ]
+                  },
+                  {
+                    "type": "object",
+                    "properties": {
+                      "windowDays": {
+                        "type": "number"
+                      },
+                      "windowStart": {
+                        "type": "string"
+                      },
+                      "windowEnd": {
+                        "type": "string"
+                      },
+                      "sampleSize": {
+                        "type": "integer",
+                        "minimum": 0
+                      },
+                      "terminalCount": {
+                        "type": "integer",
+                        "minimum": 0
+                      },
+                      "minSamples": {
+                        "type": "integer",
+                        "minimum": 0
+                      },
+                      "computedAt": {
+                        "type": "string"
+                      },
+                      "state": {
+                        "type": "string",
+                        "enum": [
+                          "insufficient_data"
+                        ]
+                      }
+                    },
+                    "required": [
+                      "windowDays",
+                      "windowStart",
+                      "windowEnd",
+                      "sampleSize",
+                      "terminalCount",
+                      "minSamples",
+                      "computedAt",
+                      "state"
+                    ]
+                  }
+                ]
+              },
+              "breach": {
+                "type": "object",
+                "properties": {
+                  "status": {
+                    "type": "string",
+                    "enum": [
+                      "within",
+                      "breach",
+                      "unknown"
+                    ]
+                  },
+                  "breaches": {
+                    "type": "array",
+                    "items": {
+                      "type": "object",
+                      "properties": {
+                        "metric": {
+                          "type": "string",
+                          "enum": [
+                            "p95",
+                            "p99"
+                          ]
+                        },
+                        "observedMs": {
+                          "type": "number"
+                        },
+                        "thresholdMs": {
+                          "type": "number"
+                        }
+                      },
+                      "required": [
+                        "metric",
+                        "observedMs",
+                        "thresholdMs"
+                      ]
+                    }
+                  }
+                },
+                "required": [
+                  "status",
+                  "breaches"
+                ]
+              }
+            },
+            "required": [
+              "sla",
+              "breach"
+            ]
+          },
+          "corridors": {
+            "type": "array",
+            "items": {
+              "type": "object",
+              "properties": {
+                "sla": {
+                  "oneOf": [
+                    {
+                      "type": "object",
+                      "properties": {
+                        "windowDays": {
+                          "type": "number"
+                        },
+                        "windowStart": {
+                          "type": "string"
+                        },
+                        "windowEnd": {
+                          "type": "string"
+                        },
+                        "sampleSize": {
+                          "type": "integer",
+                          "minimum": 0
+                        },
+                        "terminalCount": {
+                          "type": "integer",
+                          "minimum": 0
+                        },
+                        "minSamples": {
+                          "type": "integer",
+                          "minimum": 0
+                        },
+                        "computedAt": {
+                          "type": "string"
+                        },
+                        "state": {
+                          "type": "string",
+                          "enum": [
+                            "ok"
+                          ]
+                        },
+                        "p50Ms": {
+                          "type": "number"
+                        },
+                        "p95Ms": {
+                          "type": "number"
+                        },
+                        "p99Ms": {
+                          "type": [
+                            "number",
+                            "null"
+                          ]
+                        }
+                      },
+                      "required": [
+                        "windowDays",
+                        "windowStart",
+                        "windowEnd",
+                        "sampleSize",
+                        "terminalCount",
+                        "minSamples",
+                        "computedAt",
+                        "state",
+                        "p50Ms",
+                        "p95Ms",
+                        "p99Ms"
+                      ]
+                    },
+                    {
+                      "type": "object",
+                      "properties": {
+                        "windowDays": {
+                          "type": "number"
+                        },
+                        "windowStart": {
+                          "type": "string"
+                        },
+                        "windowEnd": {
+                          "type": "string"
+                        },
+                        "sampleSize": {
+                          "type": "integer",
+                          "minimum": 0
+                        },
+                        "terminalCount": {
+                          "type": "integer",
+                          "minimum": 0
+                        },
+                        "minSamples": {
+                          "type": "integer",
+                          "minimum": 0
+                        },
+                        "computedAt": {
+                          "type": "string"
+                        },
+                        "state": {
+                          "type": "string",
+                          "enum": [
+                            "insufficient_data"
+                          ]
+                        }
+                      },
+                      "required": [
+                        "windowDays",
+                        "windowStart",
+                        "windowEnd",
+                        "sampleSize",
+                        "terminalCount",
+                        "minSamples",
+                        "computedAt",
+                        "state"
+                      ]
+                    }
+                  ]
+                },
+                "breach": {
+                  "type": "object",
+                  "properties": {
+                    "status": {
+                      "type": "string",
+                      "enum": [
+                        "within",
+                        "breach",
+                        "unknown"
+                      ]
+                    },
+                    "breaches": {
+                      "type": "array",
+                      "items": {
+                        "type": "object",
+                        "properties": {
+                          "metric": {
+                            "type": "string",
+                            "enum": [
+                              "p95",
+                              "p99"
+                            ]
+                          },
+                          "observedMs": {
+                            "type": "number"
+                          },
+                          "thresholdMs": {
+                            "type": "number"
+                          }
+                        },
+                        "required": [
+                          "metric",
+                          "observedMs",
+                          "thresholdMs"
+                        ]
+                      }
+                    }
+                  },
+                  "required": [
+                    "status",
+                    "breaches"
+                  ]
+                },
+                "corridor": {
+                  "type": "string"
+                }
+              },
+              "required": [
+                "sla",
+                "breach",
+                "corridor"
+              ]
+            }
+          }
+        },
+        "required": [
+          "anchorId",
+          "windowDays",
+          "computedAt",
+          "thresholds",
+          "overall",
+          "corridors"
+        ]
+      },
       "OnrampIntentRequest": {
         "type": "object",
         "properties": {
@@ -4475,6 +4842,81 @@
           },
           "304": {
             "description": "Not modified"
+          },
+          "429": {
+            "description": "Rate limited",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/reputation/{anchor}/sla": {
+      "get": {
+        "summary": "Get anchor execution SLA",
+        "description": "Returns trailing 30-day settlement SLA percentiles (nearest-rank, no trimming) for an anchor, requiring at least 30 completed samples (and 100 for p99), evaluated against breach thresholds.",
+        "tags": [
+          "Reputation"
+        ],
+        "parameters": [
+          {
+            "schema": {
+              "type": "string",
+              "example": "cowrie",
+              "description": "Anchor ID from the registry"
+            },
+            "required": true,
+            "description": "Anchor ID from the registry",
+            "name": "anchor",
+            "in": "path"
+          },
+          {
+            "schema": {
+              "type": "string",
+              "example": "usdc-ngn",
+              "description": "Filter by corridor ID"
+            },
+            "required": false,
+            "description": "Filter by corridor ID",
+            "name": "corridor",
+            "in": "query"
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Execution SLA report",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ExecutionSlaReport"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Validation error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiError"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Unknown anchor",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiError"
+                }
+              }
+            }
           },
           "429": {
             "description": "Rate limited",
