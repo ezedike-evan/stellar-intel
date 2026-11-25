@@ -27,6 +27,7 @@ the hardening contract (see `lib/api/v1.ts`):
 ## Table of Contents
 
 - **Admin**
+  - [`GET /api/admin/audit/export`](#get-apiadminauditexport)
   - [`GET /api/admin/disputes`](#get-apiadmindisputes)
   - [`POST /api/admin/disputes`](#post-apiadmindisputes)
   - [`GET /api/admin/keys`](#get-apiadminkeys)
@@ -98,6 +99,34 @@ the hardening contract (see `lib/api/v1.ts`):
   - [`DELETE /api/webhooks/subscriptions/{id}`](#delete-apiwebhookssubscriptionsid)
 
 ## Admin
+
+### `GET /api/admin/audit/export`
+
+**Summary:** Export audit log (admin)  
+
+Export audit log events over a date range as NDJSON or CSV. Requires adminKey or callerKey with admin scope.
+
+#### Parameters
+
+| Name | In | Type | Required | Description |
+| :--- | :--- | :--- | :--- | :--- |
+| `from` | `query` | `string` | **Yes** | Start of ISO 8601 date range (inclusive) |
+| `to` | `query` | `string` | **Yes** | End of ISO 8601 date range (exclusive) |
+| `format` | `query` | `"ndjson" | "csv"` | No | Export format ("ndjson" or "csv", default "ndjson") |
+| `callerId` | `query` | `string` | No | Filter by caller id (e.g. "anonymous" or "key:<16-hex>") |
+
+#### Responses
+
+| Status | Description | Content-Type | Schema |
+| :--- | :--- | :--- | :--- |
+| `200` | Audit log export stream | `application/x-ndjson` | `string` |
+| `200` | Audit log export stream | `text/csv` | `string` |
+| `400` | Validation error | `application/json` | `ApiError` |
+| `401` | Authentication required | `application/json` | `ApiError` |
+| `403` | Forbidden | `application/json` | `ApiError` |
+| `429` | Rate limited | `application/json` | `ApiError` |
+
+---
 
 ### `GET /api/admin/disputes`
 

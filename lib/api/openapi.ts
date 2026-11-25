@@ -31,6 +31,26 @@ registry.registerComponent('securitySchemes', 'callerKey', {
     'Caller API key (sik_…) or a short-lived caller token. Optional on public routes: anonymous calls are served at the anonymous tier.',
 });
 
+registry.registerComponent('securitySchemes', 'adminKey', {
+  type: 'apiKey',
+  in: 'header',
+  name: 'x-admin-key',
+  description: 'Server-side ADMIN_SECRET_KEY. Operator only.',
+});
+
+registry.registerComponent('securitySchemes', 'bearerAuth', {
+  type: 'http',
+  scheme: 'bearer',
+  description: 'CRON_SECRET. Vercel Cron and the operator only.',
+});
+
+registry.registerComponent('securitySchemes', 'callerKey', {
+  type: 'http',
+  scheme: 'bearer',
+  description:
+    'Caller API key (sik_…) or a short-lived caller token. Optional on public routes: anonymous calls are served at the anonymous tier.',
+});
+
 // ─── Reusable param helpers ─────────────────────────────────────────────────
 
 const CorridorPathParam = z.string().openapi({
@@ -1685,6 +1705,56 @@ const UNAUTHORIZED_401 = {
   description: 'Missing or invalid credentials',
   content: { 'application/json': { schema: ApiErrorSchema } },
 } as const;
+
+registry.registerPath({
+  method: 'get',
+  path: '/api/admin/audit/export',
+  summary: 'Export audit log (admin)',
+  description:
+    'Export audit log events over a date range as NDJSON or CSV. Requires adminKey or callerKey with admin scope.',
+  tags: ['Admin'],
+  security: [{ adminKey: [] }, { callerKey: [] }],
+  request: {
+    query: z.object({
+      from: z.string().openapi({ description: 'Start of ISO 8601 date range (inclusive)' }),
+      to: z.string().openapi({ description: 'End of ISO 8601 date range (exclusive)' }),
+      format: z
+        .enum(['ndjson', 'csv'])
+        .optional()
+        .openapi({ description: 'Export format ("ndjson" or "csv", default "ndjson")' }),
+      callerId: z
+        .string()
+        .optional()
+        .openapi({ description: 'Filter by caller id (e.g. "anonymous" or "key:<16-hex>")' }),
+    }),
+  },
+  responses: {
+    200: {
+      description: 'Audit log export stream',
+      content: {
+        'application/x-ndjson': {
+          schema: z.string(),
+        },
+        'text/csv': {
+          schema: z.string(),
+        },
+      },
+    },
+    400: {
+      description: 'Validation error',
+      content: { 'application/json': { schema: ApiErrorSchema } },
+    },
+    401: {
+      description: 'Authentication required',
+      content: { 'application/json': { schema: ApiErrorSchema } },
+    },
+    403: {
+      description: 'Forbidden',
+      content: { 'application/json': { schema: ApiErrorSchema } },
+    },
+    429: RATE_LIMITED_429,
+  },
+});
 
 registry.registerPath({
   method: 'get',

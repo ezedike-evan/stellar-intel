@@ -5068,6 +5068,126 @@
         }
       }
     },
+    "/api/admin/audit/export": {
+      "get": {
+        "summary": "Export audit log (admin)",
+        "description": "Export audit log events over a date range as NDJSON or CSV. Requires adminKey or callerKey with admin scope.",
+        "tags": [
+          "Admin"
+        ],
+        "security": [
+          {
+            "adminKey": []
+          },
+          {
+            "callerKey": []
+          }
+        ],
+        "parameters": [
+          {
+            "schema": {
+              "type": "string",
+              "description": "Start of ISO 8601 date range (inclusive)"
+            },
+            "required": true,
+            "description": "Start of ISO 8601 date range (inclusive)",
+            "name": "from",
+            "in": "query"
+          },
+          {
+            "schema": {
+              "type": "string",
+              "description": "End of ISO 8601 date range (exclusive)"
+            },
+            "required": true,
+            "description": "End of ISO 8601 date range (exclusive)",
+            "name": "to",
+            "in": "query"
+          },
+          {
+            "schema": {
+              "type": "string",
+              "enum": [
+                "ndjson",
+                "csv"
+              ],
+              "description": "Export format (\"ndjson\" or \"csv\", default \"ndjson\")"
+            },
+            "required": false,
+            "description": "Export format (\"ndjson\" or \"csv\", default \"ndjson\")",
+            "name": "format",
+            "in": "query"
+          },
+          {
+            "schema": {
+              "type": "string",
+              "description": "Filter by caller id (e.g. \"anonymous\" or \"key:<16-hex>\")"
+            },
+            "required": false,
+            "description": "Filter by caller id (e.g. \"anonymous\" or \"key:<16-hex>\")",
+            "name": "callerId",
+            "in": "query"
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Audit log export stream",
+            "content": {
+              "application/x-ndjson": {
+                "schema": {
+                  "type": "string"
+                }
+              },
+              "text/csv": {
+                "schema": {
+                  "type": "string"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Validation error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiError"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Authentication required",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiError"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Forbidden",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiError"
+                }
+              }
+            }
+          },
+          "429": {
+            "description": "Rate limited",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
     "/api/reputation/{anchor}/sla": {
       "get": {
         "summary": "Get anchor execution SLA",
