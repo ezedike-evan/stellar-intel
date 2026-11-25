@@ -10,6 +10,8 @@ import { emitWebhookEvent } from '@/lib/webhooks/emit';
 
 const VALID_PAYLOADS: { [K in keyof WebhookEventPayloadMap]: WebhookEventPayloadMap[K] } = {
   'intent.created': {
+    intentHash: 'aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa',
+    direction: 'offramp',
     corridorId: 'usdc-ngn',
     anchorId: 'cowrie',
     quoteId: 'q-123',
@@ -94,6 +96,18 @@ const VALID_PAYLOADS: { [K in keyof WebhookEventPayloadMap]: WebhookEventPayload
     probeSignalsPublished: 0,
     publishedAt: '2026-11-20T12:00:00.000Z',
   },
+  'intent.slippage_breach': {
+    intentHash: 'a'.repeat(64),
+    anchorId: 'cowrie',
+    corridor: 'usdc-ngn',
+    minReceive: '1400',
+    amountOut: '1350',
+    shortfall: '50',
+    shortfallBps: 357,
+    evidenceHash: 'd'.repeat(64),
+    status: 'detected',
+    detectedAt: '2026-11-20T12:00:00.000Z',
+  },
 };
 
 /** The kinds WHK003 added, in the order they are registered. */
@@ -156,6 +170,8 @@ describe('the intent, settlement, dispute and oracle kinds (WHK003)', () => {
       'reputation.event_written',
       'anchor.health_status_changed',
       ...ADDED_KINDS,
+      // SLP014 registered one more, after them.
+      'intent.slippage_breach',
     ]);
   });
 
@@ -190,6 +206,29 @@ describe('the intent, settlement, dispute and oracle kinds (WHK003)', () => {
     expect(
       accepts('intent.rejected', { ...VALID_PAYLOADS['intent.rejected'], reason: 'looked odd' })
     ).toBe(false);
+  });
+
+  it("keeps the breach record's private fields out of intent.slippage_breach (SLP014)", () => {
+    const breach = VALID_PAYLOADS['intent.slippage_breach'];
+    expect(accepts('intent.slippage_breach', breach)).toBe(true);
+    for (const key of [
+      'signerAccount',
+      'evidence',
+      'anchorTransactionId',
+      'stellarTransactionId',
+    ]) {
+      expect(accepts('intent.slippage_breach', { ...breach, [key]: 'GABC' }), key).toBe(false);
+    }
+    // The event reports a detection. A verification result is not this event.
+    for (const status of ['verified', 'rejected', 'pending']) {
+      expect(accepts('intent.slippage_breach', { ...breach, status }), status).toBe(false);
+    }
+    expect(accepts('intent.slippage_breach', { ...breach, intentHash: 'A'.repeat(64) })).toBe(
+      false
+    );
+    expect(accepts('intent.slippage_breach', { ...breach, shortfallBps: 3.5 })).toBe(false);
+    expect(accepts('intent.slippage_breach', { ...breach, shortfallBps: -1 })).toBe(false);
+    expect(accepts('intent.slippage_breach', { ...breach, detectedAt: 'yesterday' })).toBe(false);
   });
 
   it('takes an intent hash only as 64 lower-case hex characters', () => {

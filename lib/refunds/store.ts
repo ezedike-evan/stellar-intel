@@ -23,6 +23,8 @@ export type RefundReason = (typeof REFUND_REASONS)[number];
 export const REFUND_CASE_STATUSES = ['owed', 'refunded', 'acknowledged'] as const;
 export type RefundCaseStatus = (typeof REFUND_CASE_STATUSES)[number];
 
+export const REFUND_OWED_OVERDUE_MS = 7 * 24 * 60 * 60 * 1000;
+
 export type RefundOnChainCheck = 'verified' | 'mismatch' | 'unverifiable';
 
 export interface RefundPaymentRecord {
@@ -80,6 +82,38 @@ export interface RefundStore {
   /** Moves an `owed` or `refunded` case to `acknowledged`; sets refundedAt to acknowledgedAt when it was null.
    *  Returns null when the id is unknown or the case is already acknowledged. */
   acknowledge(id: string, update: RefundAckUpdate): Promise<RefundCase | null>;
+}
+
+/** What the public lookup may expose: never the signer account or the acknowledgement proof. */
+export type PublicRefundCase = Omit<RefundCase, 'signerAccount' | 'ackSignature' | 'ackHash'>;
+
+/**
+ * Builds the public view field by field, never by spreading, so a field added to
+ * `RefundCase` later stays private until it is listed here on purpose.
+ */
+export function toPublicRefundCase(c: RefundCase): PublicRefundCase {
+  return {
+    id: c.id,
+    intentHash: c.intentHash,
+    reason: c.reason,
+    anchorId: c.anchorId,
+    corridor: c.corridor,
+    direction: c.direction,
+    amountPaid: c.amountPaid,
+    status: c.status,
+    amountRefunded: c.amountRefunded,
+    refundFee: c.refundFee,
+    payments: c.payments.map((p) => ({
+      id: p.id,
+      idType: p.idType,
+      amount: p.amount,
+      fee: p.fee,
+    })),
+    openedAt: c.openedAt,
+    refundedAt: c.refundedAt,
+    acknowledgedAt: c.acknowledgedAt,
+    onChainCheck: c.onChainCheck,
+  };
 }
 
 /** A deep copy, so callers never hold a reference into a store. */
