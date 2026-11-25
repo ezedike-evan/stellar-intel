@@ -934,6 +934,7 @@ the hardening contract (see `lib/api/v1.ts`):
 ## Table of Contents
 
 - **Admin**
+  - [`GET /api/admin/audit/export`](#get-apiadminauditexport)
   - [`GET /api/admin/disputes`](#get-apiadmindisputes)
   - [`POST /api/admin/disputes`](#post-apiadmindisputes)
   - [`GET /api/admin/keys`](#get-apiadminkeys)
@@ -1004,6 +1005,34 @@ the hardening contract (see `lib/api/v1.ts`):
   - [`DELETE /api/webhooks/subscriptions/{id}`](#delete-apiwebhookssubscriptionsid)
 
 ## Admin
+
+### `GET /api/admin/audit/export`
+
+**Summary:** Export audit log (admin)  
+
+Export audit log events over a date range as NDJSON or CSV. Requires adminKey or callerKey with admin scope.
+
+#### Parameters
+
+| Name | In | Type | Required | Description |
+| :--- | :--- | :--- | :--- | :--- |
+| `from` | `query` | `string` | **Yes** | Start of ISO 8601 date range (inclusive) |
+| `to` | `query` | `string` | **Yes** | End of ISO 8601 date range (exclusive) |
+| `format` | `query` | `"ndjson" | "csv"` | No | Export format ("ndjson" or "csv", default "ndjson") |
+| `callerId` | `query` | `string` | No | Filter by caller id (e.g. "anonymous" or "key:<16-hex>") |
+
+#### Responses
+
+| Status | Description | Content-Type | Schema |
+| :--- | :--- | :--- | :--- |
+| `200` | Audit log export stream | `application/x-ndjson` | `string` |
+| `200` | Audit log export stream | `text/csv` | `string` |
+| `400` | Validation error | `application/json` | `ApiError` |
+| `401` | Authentication required | `application/json` | `ApiError` |
+| `403` | Forbidden | `application/json` | `ApiError` |
+| `429` | Rate limited | `application/json` | `ApiError` |
+
+---
 
 ### `GET /api/admin/disputes`
 
@@ -3766,29 +3795,39 @@ Its fee must be at most 100,000 stroops, and it must carry an expiry
 Any mismatch is rejected (`TX_MISMATCH`) before anything reaches Horizon.
 
 - **Input:**
-  `{ unsignedEnvelope: { intent, intentHash }, signature, signedTx }` — the
+  `{ unsignedEnvelope: { intent, intentHash }, signature, signedTx, dryRun? }` — the
   exact `unsignedEnvelope` from `intel.offramp.prepare`, a base64 ed25519
   signature over `intentHash` from the sender's key, and the base64 XDR of
-  `unsignedTx` after the sender has signed it. The signature is accepted in
+  `unsignedTx` after the sender has signed it. Optional `dryRun: true` performs
+  every verification check without broadcasting the transaction to Horizon. The signature is accepted in
   the same two forms as the web app: over the 32 raw bytes the hex
   `intentHash` decodes to (`Keypair.sign`), or SEP-53 (`Keypair.signMessage`,
   which is what a wallet's `signMessage` produces). A signature over the
   hash's UTF-8 bytes is deprecated; it is still accepted, and each use is
   logged as `mcp_legacy_signature_format`.
-- **Output:** `{ status: "submitted", hash, ledger, corridorId, anchorId }`
+- **Output:** `{ status: "submitted" | "verified", hash, ledger: number | null, corridorId, anchorId }`. When `dryRun: true` is passed, `status` is `"verified"` and `ledger` is `null`.
 
 ```jsonc
 // input
 {
   "unsignedEnvelope": { "intent": { "type": "offramp", "..." }, "intentHash": "<64-hex>" },
   "signature": "<base64 ed25519 sig over intentHash (raw bytes or SEP-53)>",
-  "signedTx": "<base64 signed transaction XDR>"
+  "signedTx": "<base64 signed transaction XDR>",
+  "dryRun": false // optional, true to verify without broadcasting
 }
-// output
+// output (submitted)
 {
   "status": "submitted",
   "hash": "<64-hex tx hash>",
   "ledger": 12345,
+  "corridorId": "usdc-ngn",
+  "anchorId": "cowrie"
+}
+// output (dryRun: true)
+{
+  "status": "verified",
+  "hash": "<64-hex tx hash>",
+  "ledger": null,
   "corridorId": "usdc-ngn",
   "anchorId": "cowrie"
 }

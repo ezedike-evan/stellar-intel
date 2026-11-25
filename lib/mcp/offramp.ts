@@ -374,14 +374,16 @@ export const ExecuteInputSchema = z.object({
    * sender's own wallet. This is the transaction submitted to Horizon.
    */
   signedTx: z.string().min(1),
+  /** When true, run every check and return the transaction hash without submitting it. */
+  dryRun: z.boolean().optional(),
 });
 export type ExecuteInput = z.infer<typeof ExecuteInputSchema>;
 
 /** Output schema for intel.execute: the Horizon submission result. */
 export const ExecuteOutputSchema = z.object({
-  status: z.literal('submitted'),
+  status: z.enum(['submitted', 'verified']),
   hash: z.string(),
-  ledger: z.number(),
+  ledger: z.number().nullable(),
   corridorId: z.string(),
   anchorId: z.string(),
 });
@@ -567,6 +569,16 @@ export async function executeIntent(
   const memoValue = memo?.value instanceof Uint8Array ? Buffer.from(memo.value) : undefined;
   if (memo?.type !== 'hash' || !memoValue || !memoValue.equals(expectedMemo)) {
     throw new OfframpToolError('Transaction memo does not match the intent hash', 'TX_MISMATCH');
+  }
+
+  if (parsed.dryRun === true) {
+    return ExecuteOutputSchema.parse({
+      status: 'verified',
+      hash: Buffer.from(tx.hash()).toString('hex'),
+      ledger: null,
+      corridorId: id,
+      anchorId: route.anchorId,
+    });
   }
 
   const server = new Horizon.Server(HORIZON_URL);
