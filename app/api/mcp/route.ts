@@ -2,8 +2,8 @@ import { NextRequest, NextResponse } from 'next/server';
 import type { McpServer } from '@modelcontextprotocol/sdk/server/mcp.js';
 import { WebStandardStreamableHTTPServerTransport } from '@modelcontextprotocol/sdk/server/webStandardStreamableHttp.js';
 import { createServer } from '@/lib/mcp/server';
-import { checkRateLimit } from '@/lib/api/rate-limit';
-import { limitForTier } from '@/lib/api/rate-limit-tiers';
+import { checkRateLimit, getClientIp } from '@/lib/api/rate-limit';
+import { checkDailyQuota, quotaHeaders } from '@/lib/api/quota';
 import { resolveCaller } from '@/lib/auth/caller';
 import { getLogger } from '@/lib/logger';
 
@@ -81,6 +81,42 @@ export async function POST(request: NextRequest): Promise<Response> {
     );
   }
 
+  // Daily quota (AGS024), shared with REST and GraphQL: one unit per request.
+  // Anonymous callers have none; a bad credential is rejected, never silently
+  // downgraded to anonymous.
+  const resolution = await resolveCaller(request.headers);
+  if (!resolution.ok) {
+    return NextResponse.json(
+      {
+        jsonrpc: '2.0',
+        error: { code: -32000, message: resolution.message },
+        id: null,
+      },
+      { status: 401 }
+    );
+  }
+  const caller = resolution.caller;
+  let quotaHeadersOut: Record<string, string> = {};
+  if (caller.kind !== 'anonymous') {
+    const quota = await checkDailyQuota(caller);
+    if (quota) {
+      quotaHeadersOut = quotaHeaders(quota);
+      if (!quota.allowed) {
+        return NextResponse.json(
+          {
+            jsonrpc: '2.0',
+            error: { code: -32000, message: 'Daily quota exceeded' },
+            id: null,
+          },
+          {
+            status: 429,
+            headers: { ...quotaHeadersOut, 'Retry-After': String(quota.retryAfter) },
+          }
+        );
+      }
+    }
+  }
+
   // A stateless transport refuses to serve a second request — it throws
   // "Stateless transport cannot be reused across requests" once
   // `_hasHandledRequest` is set. Both the transport and the server are
@@ -123,7 +159,10 @@ export async function POST(request: NextRequest): Promise<Response> {
     });
     await server.close();
     server = undefined;
-    return response;
+    if (Object.keys(quotaHeadersOut).length === 0) return response;
+    const headers = new Headers(response.headers);
+    for (const [name, value] of Object.entries(quotaHeadersOut)) headers.set(name, value);
+    return new NextResponse(await response.text(), { status: response.status, headers });
   } catch (error) {
     const message = error instanceof Error ? error.message : String(error);
     logger.error({

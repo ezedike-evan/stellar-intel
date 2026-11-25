@@ -1,5 +1,5 @@
 'use client';
-import { Suspense, useState, useCallback, useEffect, useRef } from 'react';
+import { Suspense, useState, useCallback, useEffect, useMemo, useRef } from 'react';
 import dynamic from 'next/dynamic';
 import { useRouter, useSearchParams } from 'next/navigation';
 import { TERMINAL_STATES } from '@/lib/stellar/sep24';
@@ -34,6 +34,7 @@ import { quotedAllInRate } from '@/lib/stellar/realized-rate';
 import type { Intent } from '@/lib/intent/hash';
 import type { AnchorRate } from '@/types';
 import { MIN_RECEIVE_TOLERANCE } from '@/lib/rate-ranking';
+import type { OutcomeIntent } from '@/lib/reputation/schema';
 import { flags } from '@/lib/flags';
 import { submitDispute } from '@/lib/reputation/dispute-client';
 import { DisputeModal } from '@/components/offramp/DisputeModal';
@@ -167,6 +168,16 @@ function OfframpContent() {
     setSelectedRate(null);
   }, []);
 
+  // The floor the drawer enforces before payment. It is signed into the outcome intent so a
+  // breach is judged against what the user agreed to, and survives the drawer closing.
+  const minReceive = useMemo(
+    () =>
+      selectedRate?.totalReceived != null
+        ? (selectedRate.totalReceived * (1 - MIN_RECEIVE_TOLERANCE)).toFixed(2)
+        : undefined,
+    [selectedRate]
+  );
+
   const handleExecuteStarted = useCallback(
     (transactionId: string, transferServer: string, jwt: string, anchorHomeDomain: string) => {
       const nonce = generateNonce();
@@ -190,8 +201,8 @@ function OfframpContent() {
       // simply isn't recorded.
       if (selectedRate && selectedRate.exchangeRate !== null && publicKey) {
         const [sourceAsset = '', destinationAsset = ''] = selectedRate.corridorId.split('-');
-        const intent: Intent = {
-          type: 'offramp-outcome',
+        const baseIntent = {
+          type: 'offramp-outcome' as const,
           sourceAsset: sourceAsset.toUpperCase(),
           destinationAsset: destinationAsset.toUpperCase(),
           amount,
@@ -201,6 +212,11 @@ function OfframpContent() {
           corridor: selectedRate.corridorId,
           transactionId,
         };
+        // With a floor, it is part of what the user signs; without one the intent, and so the
+        // append body, is exactly what it was before.
+        const outcomeIntent: OutcomeIntent | undefined =
+          minReceive !== undefined ? { ...baseIntent, minReceive } : undefined;
+        const intent: Intent = outcomeIntent ?? baseIntent;
         const quote = {
           anchorId: selectedRate.anchorId,
           corridor: selectedRate.corridorId,
@@ -211,7 +227,13 @@ function OfframpContent() {
         };
         signIntent(intent)
           .then(({ intentHash, signature, publicKey: signer }) => {
-            setOutcomeContext({ ...quote, intentHash, signature, publicKey: signer });
+            setOutcomeContext({
+              ...quote,
+              intentHash,
+              signature,
+              publicKey: signer,
+              ...(outcomeIntent ? { minReceive: outcomeIntent.minReceive, outcomeIntent } : {}),
+            });
           })
           .catch(() => {
             // Best-effort, like the append itself: an unsigned outcome would be
@@ -219,7 +241,7 @@ function OfframpContent() {
           });
       }
     },
-    [router, selectedRate, amount, publicKey]
+    [router, selectedRate, amount, publicKey, minReceive]
   );
 
   useEffect(() => {
@@ -427,11 +449,7 @@ function OfframpContent() {
       <ExecuteDrawer
         rate={selectedRate}
         amount={amount}
-        minReceive={
-          selectedRate?.totalReceived != null
-            ? (selectedRate.totalReceived * (1 - MIN_RECEIVE_TOLERANCE)).toFixed(2)
-            : undefined
-        }
+        minReceive={minReceive}
         publicKey={publicKey ?? ''}
         onClose={handleDrawerClose}
         onExecuteStarted={handleExecuteStarted}

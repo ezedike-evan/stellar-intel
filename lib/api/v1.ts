@@ -1,5 +1,6 @@
 import { NextResponse } from 'next/server';
 import { checkRateLimit, getClientIp, type RateLimitResult } from './rate-limit';
+import { checkDailyQuota, quotaHeaders } from './quota';
 import {
   clearIdempotencyStore,
   getIdempotentResponse as getStoredIdempotent,
@@ -197,6 +198,25 @@ export async function withV1(
   }
   const caller = callerRes.caller;
 
+  // Daily quota for keyed callers (AGS024), counted once across every surface.
+  // Anonymous callers have none.
+  let quotaHeadersOut: Record<string, string> = {};
+  if (caller.kind !== 'anonymous') {
+    const quota = await checkDailyQuota(caller);
+    if (quota) {
+      quotaHeadersOut = quotaHeaders(quota);
+      if (!quota.allowed) {
+        recordAudit(caller.id, caller.kind, 'rate_limited', 429);
+        return v1Error('quota_exceeded', 'Daily quota exceeded', requestId, 429, {
+          ...baseHeaders,
+          ...quotaHeadersOut,
+          'Retry-After': String(quota.retryAfter),
+        });
+      }
+    }
+  }
+  const headersWithQuota = { ...baseHeaders, ...quotaHeadersOut };
+
   if (options.scope && !hasScope(caller.scopes, options.scope)) {
     recordAudit(caller.id, caller.kind, 'denied', 403);
     return v1Error(
@@ -205,7 +225,7 @@ export async function withV1(
       requestId,
       403,
       {
-        ...baseHeaders,
+        ...headersWithQuota,
         'WWW-Authenticate': `Bearer error="insufficient_scope", scope="${options.scope}"`,
       }
     );
@@ -230,7 +250,7 @@ export async function withV1(
       recordAudit(caller.id, caller.kind, 'ok', entry.status, intentHash);
       return NextResponse.json(entry.body, {
         status: entry.status,
-        headers: { ...baseHeaders, 'Idempotency-Replayed': 'true' },
+        headers: { ...headersWithQuota, 'Idempotency-Replayed': 'true' },
       });
     }
   }
@@ -258,7 +278,7 @@ export async function withV1(
       stack: err instanceof Error ? err.stack : undefined,
     });
     recordAudit(caller.id, caller.kind, 'error', 500);
-    return v1Error('internal_error', 'Internal error', requestId, 500, baseHeaders);
+    return v1Error('internal_error', 'Internal error', requestId, 500, headersWithQuota);
   }
 
   // Only successful mutations are cached, so a client can safely retry a failure.
@@ -272,6 +292,6 @@ export async function withV1(
 
   return NextResponse.json(result.body, {
     status: result.status,
-    headers: { ...result.headers, ...baseHeaders },
+    headers: { ...result.headers, ...headersWithQuota },
   });
 }
