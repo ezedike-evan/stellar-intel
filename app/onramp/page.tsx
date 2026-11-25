@@ -21,7 +21,8 @@ import {
   trackFunnelEvent,
 } from '@/lib/analytics';
 import { signIntent } from '@/lib/intent/sign';
-import type { IntentTemplate } from '@/lib/templates/schema';
+import type { IntentTemplate, IntentTemplateDraft } from '@/lib/templates/schema';
+import { SaveTemplateForm } from '@/components/templates/SaveTemplateForm';
 import {
   buildTrackingSearch,
   clearJwtFromSession,
@@ -93,6 +94,8 @@ function OnrampContent() {
   );
   const [selectedAssetId, setSelectedAssetId] = useState<string | null>(initialAssetParam);
   const [selectedRate, setSelectedRate] = useState<DepositRate | null>(null);
+  // Offered after a completed deposit started in this page session (TPL009).
+  const [templateDraft, setTemplateDraft] = useState<IntentTemplateDraft | null>(null);
 
   const [trackingTransactionId, setTrackingTransactionId] = useState<string | null>(null);
   const [trackingTransferServer, setTrackingTransferServer] = useState<string | null>(null);
@@ -293,9 +296,19 @@ function OnrampContent() {
       setTrackingNonce(nonce);
       setTrackingAnchorHomeDomain(anchorHomeDomain);
 
-      if (selectedRate) void recordOutcomeIntent(selectedRate, transactionId);
+      if (selectedRate) {
+        void recordOutcomeIntent(selectedRate, transactionId);
+        // No depositMethod: the page always uses bank_transfer.
+        setTemplateDraft({
+          direction: 'onramp',
+          corridorId,
+          amount,
+          anchorId: selectedRate.anchorId,
+          assetId: selectedRate.asset,
+        });
+      }
     },
-    [router, selectedRate, recordOutcomeIntent]
+    [router, selectedRate, recordOutcomeIntent, corridorId, amount]
   );
 
   const handleStartAnother = useCallback(() => {
@@ -306,6 +319,7 @@ function OnrampContent() {
     setTrackingNonce(null);
     setTrackingAnchorHomeDomain(null);
     setOutcomeContext(null);
+    setTemplateDraft(null);
   }, [trackingNonce]);
 
   return (
@@ -407,6 +421,17 @@ function OnrampContent() {
           onStartAnother={handleStartAnother}
         />
       )}
+
+      {flags.intentTemplates &&
+        publicKey &&
+        templateDraft &&
+        depositStatus.status === 'completed' && (
+          <SaveTemplateForm
+            draft={templateDraft}
+            onSave={templatesApi.save}
+            onDismiss={() => setTemplateDraft(null)}
+          />
+        )}
 
       {flags.refundGuarantees &&
         outcomeContext &&
