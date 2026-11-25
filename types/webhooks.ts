@@ -17,9 +17,12 @@ const IntentDirectionSchema = z.enum(['offramp', 'onramp']);
 
 export const IntentCreatedPayloadSchema = z
   .object({
+    intentHash: IntentHashSchema,
+    direction: IntentDirectionSchema,
     corridorId: z.string(),
     anchorId: z.string(),
-    quoteId: z.string(),
+    // Null for an on-ramp, which has no quote id (WHK008).
+    quoteId: z.string().nullable(),
     amount: z.string(),
     sourceAsset: z.string(),
     destinationAsset: z.string(),
@@ -142,6 +145,27 @@ export const OraclePublishedPayloadSchema = z
   })
   .strict();
 
+/**
+ * A recorded outcome delivered less than the intent's `minReceive`. The payload is
+ * built from the breach record field by field: its `signerAccount`, `evidence` and
+ * `anchorTransactionId` stay on the platform. `evidenceHash` identifies that evidence
+ * without carrying it.
+ */
+export const IntentSlippageBreachPayloadSchema = z
+  .object({
+    intentHash: IntentHashSchema,
+    anchorId: z.string(),
+    corridor: z.string(),
+    minReceive: z.string(),
+    amountOut: z.string(),
+    shortfall: z.string(),
+    shortfallBps: z.number().int().min(0),
+    evidenceHash: z.string(),
+    status: z.literal('detected'),
+    detectedAt: z.iso.datetime(),
+  })
+  .strict();
+
 export const WEBHOOK_PAYLOAD_SCHEMAS = {
   'intent.created': IntentCreatedPayloadSchema,
   'intent.settled': IntentSettledPayloadSchema,
@@ -154,6 +178,7 @@ export const WEBHOOK_PAYLOAD_SCHEMAS = {
   'dispute.opened': DisputeOpenedPayloadSchema,
   'dispute.resolved': DisputeResolvedPayloadSchema,
   'oracle.published': OraclePublishedPayloadSchema,
+  'intent.slippage_breach': IntentSlippageBreachPayloadSchema,
 } as const;
 
 export type WebhookEventKind = keyof typeof WEBHOOK_PAYLOAD_SCHEMAS;
@@ -239,5 +264,12 @@ export const WebhookEventEnvelopeSchema = z.discriminatedUnion('kind', [
     createdAt: z.iso.datetime(),
     idempotencyKey: z.string().min(1).max(200),
     payload: OraclePublishedPayloadSchema,
+  }),
+  z.object({
+    id: z.string().uuid(),
+    kind: z.literal('intent.slippage_breach'),
+    createdAt: z.iso.datetime(),
+    idempotencyKey: z.string().min(1).max(200),
+    payload: IntentSlippageBreachPayloadSchema,
   }),
 ]);

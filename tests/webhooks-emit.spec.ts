@@ -35,6 +35,8 @@ afterEach(() => {
 });
 
 const CREATED_PAYLOAD = {
+  intentHash: 'aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa',
+  direction: 'offramp' as const,
   corridorId: 'usdc-ngn',
   anchorId: 'cowrie',
   quoteId: 'q-1',

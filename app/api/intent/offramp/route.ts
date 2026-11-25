@@ -17,7 +17,7 @@ import { recordIntentError, recordIntentSuccess } from '@/lib/metrics';
 import { IntentSchema, createOfframpIntent } from '@/lib/intent/offramp';
 import { verifyOptionalIntentAttestation } from '@/lib/intent/verify';
 import { registerIntentReplay } from '@/lib/intent/replay';
-import type { Intent } from '@/lib/intent/hash';
+import { hashIntent, type Intent } from '@/lib/intent/hash';
 import { emitWebhookEvent } from '@/lib/webhooks/emit';
 import type { ApiError } from '@/types';
 
@@ -115,6 +115,7 @@ export async function POST(request: NextRequest): Promise<NextResponse> {
     }
 
     const intent = parsed.data as Intent;
+    const intentHash = await hashIntent(intent);
 
     // Optional signature attestation: when the caller supplies a signed envelope
     // it is verified over the canonical intent hash and a bad one is rejected;
@@ -123,6 +124,20 @@ export async function POST(request: NextRequest): Promise<NextResponse> {
     if (!attestation.ok) {
       logger.warn({ event: 'intent_attestation_rejected', status: attestation.status });
       recordIntentError(attestation.status === 401 ? 'UNAUTHORIZED' : 'VALIDATION_ERROR');
+      if (attestation.status === 401) {
+        emitWebhookEvent(
+          'intent.rejected',
+          {
+            intentHash,
+            direction: 'offramp',
+            reason: 'invalid_signature',
+            sourceAsset: intent.sourceAsset,
+            destinationAsset: intent.destinationAsset,
+            amount: intent.amount,
+          },
+          { idempotencyKey: `intent.rejected:invalid_signature:${intentHash}` }
+        );
+      }
       return await respond<ApiError>(
         {
           code: attestation.status === 401 ? 'UNAUTHORIZED' : 'VALIDATION_ERROR',
@@ -146,6 +161,18 @@ export async function POST(request: NextRequest): Promise<NextResponse> {
       if (!nonce || !deadline) {
         logger.warn({ event: 'intent_replay_fields_missing' });
         recordIntentError('VALIDATION_ERROR');
+        emitWebhookEvent(
+          'intent.rejected',
+          {
+            intentHash,
+            direction: 'offramp',
+            reason: 'missing_replay_fields',
+            sourceAsset: intent.sourceAsset,
+            destinationAsset: intent.destinationAsset,
+            amount: intent.amount,
+          },
+          { idempotencyKey: `intent.rejected:missing_replay_fields:${intentHash}` }
+        );
         return await respond<ApiError>(
           {
             code: 'VALIDATION_ERROR',
@@ -165,6 +192,33 @@ export async function POST(request: NextRequest): Promise<NextResponse> {
         recordIntentError(
           replay.code === 'replay_detected' ? 'REPLAY_DETECTED' : 'DEADLINE_EXPIRED'
         );
+        if (replay.code === 'replay_detected') {
+          emitWebhookEvent(
+            'intent.rejected',
+            {
+              intentHash,
+              direction: 'offramp',
+              reason: 'replay_detected',
+              sourceAsset: intent.sourceAsset,
+              destinationAsset: intent.destinationAsset,
+              amount: intent.amount,
+            },
+            { idempotencyKey: `intent.rejected:replay_detected:${intentHash}` }
+          );
+        } else if (replay.code === 'deadline_expired') {
+          emitWebhookEvent(
+            'intent.expired',
+            {
+              intentHash,
+              direction: 'offramp',
+              deadline: String(intent.deadline),
+              sourceAsset: intent.sourceAsset,
+              destinationAsset: intent.destinationAsset,
+              amount: intent.amount,
+            },
+            { idempotencyKey: `intent.expired:${intentHash}` }
+          );
+        }
         return await respond<ApiError>(
           { code: replay.code.toUpperCase(), message: replay.message },
           replay.status
@@ -183,6 +237,20 @@ export async function POST(request: NextRequest): Promise<NextResponse> {
         code: result.code,
       });
       recordIntentError(result.code);
+      if (result.code === 'NO_ROUTE') {
+        emitWebhookEvent(
+          'intent.rejected',
+          {
+            intentHash,
+            direction: 'offramp',
+            reason: 'no_route',
+            sourceAsset: intent.sourceAsset,
+            destinationAsset: intent.destinationAsset,
+            amount: intent.amount,
+          },
+          { idempotencyKey: `intent.rejected:no_route:${intentHash}` }
+        );
+      }
       // A 500 (TX_BUILD_FAILED) is deliberately not cached under the
       // idempotency key -- isIdempotentCacheable excludes it, so a retry with
       // the same key tries building again.
@@ -197,14 +265,22 @@ export async function POST(request: NextRequest): Promise<NextResponse> {
     recordIntentSuccess();
     // Field by field, never a spread: the intent carries sender and recipient.
     // A replay returns from the cache above and never reaches this line.
-    emitWebhookEvent('intent.created', {
-      corridorId: result.response.route.corridorId,
-      anchorId: result.response.route.anchorId,
-      quoteId: result.response.quoteId,
-      amount: intent.amount,
-      sourceAsset: intent.sourceAsset,
-      destinationAsset: intent.destinationAsset,
-    });
+    // The key is the quote id: one accepted intent has one quote, so the event for it
+    // is the same event if this line is ever reached twice.
+    emitWebhookEvent(
+      'intent.created',
+      {
+        intentHash,
+        direction: 'offramp',
+        corridorId: result.response.route.corridorId,
+        anchorId: result.response.route.anchorId,
+        quoteId: result.response.quoteId,
+        amount: intent.amount,
+        sourceAsset: intent.sourceAsset,
+        destinationAsset: intent.destinationAsset,
+      },
+      { idempotencyKey: `intent.created:${result.response.quoteId}` }
+    );
     return await respond<OfframpIntentResponse>(result.response, 200);
   });
 }
