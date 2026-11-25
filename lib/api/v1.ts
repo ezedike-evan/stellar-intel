@@ -1,5 +1,6 @@
 import { NextResponse } from 'next/server';
 import { checkRateLimit, getClientIp, type RateLimitResult } from './rate-limit';
+import { checkDailyQuota, quotaHeaders } from './quota';
 import {
   clearIdempotencyStore,
   getIdempotentResponse as getStoredIdempotent,
@@ -9,6 +10,10 @@ import {
 } from './idempotency';
 import { API_VERSION } from './response';
 import { getLogger } from '@/lib/logger';
+import { hasScope, type ApiScope } from '@/lib/auth/api-keys';
+import { resolveCaller, type Caller } from '@/lib/auth/caller';
+import { recordAuditEvent } from '@/lib/audit/record';
+import type { AuditOutcome } from '@/lib/audit/types';
 
 /**
  * lib/api/v1.ts
@@ -97,6 +102,7 @@ export async function storeIdempotentResponse(
 export interface V1Context {
   requestId: string;
   ip: string;
+  caller: Caller;
   /** Build a standard-envelope error result from inside a handler. */
   error(code: string, message: string, status: number): V1HandlerResult;
 }
@@ -111,11 +117,15 @@ export interface V1HandlerResult {
    * id or the rate-limit counters.
    */
   headers?: Record<string, string>;
+  /** Intent hash produced by the handler (e.g. quoteId or intentHash) for audit logging. */
+  auditIntentHash?: string;
 }
 
 export interface V1Options {
   bucket: string;
   maxRequests: number;
+  /** Required scope for this endpoint. `null` means "any caller, the handler authorizes itself" and must carry a comment at each use. */
+  scope: ApiScope | null;
   /** Honour the `Idempotency-Key` header (for mutating endpoints). */
   idempotent?: boolean;
 }
@@ -138,8 +148,87 @@ export async function withV1(
   const rl = await checkRateLimit(ip, { bucket: options.bucket, maxRequests: options.maxRequests });
   const baseHeaders = { 'X-Request-Id': requestId, ...rateLimitHeaders(options.maxRequests, rl) };
 
+  const recordAudit = (
+    callerId: string,
+    callerKind: 'anonymous' | 'key' | 'token',
+    outcome: AuditOutcome,
+    status: number,
+    intentHash: string | null = null
+  ) => {
+    // Which requests are recorded: every request from a key or token caller.
+    // For anonymous callers, only requests whose options.scope is not 'quotes:read'
+    // (writes and null-scoped routes), plus any denied / rate_limited outcome.
+    const shouldRecord =
+      callerKind !== 'anonymous' ||
+      outcome === 'denied' ||
+      outcome === 'rate_limited' ||
+      options.scope !== 'quotes:read';
+
+    if (shouldRecord) {
+      recordAuditEvent({
+        surface: 'rest',
+        action: options.bucket,
+        scope: options.scope,
+        requestId,
+        callerId,
+        callerKind,
+        outcome,
+        status,
+        intentHash,
+      });
+    }
+  };
+
   if (!rl.allowed) {
+    const callerRes = await resolveCaller(request.headers);
+    const caller = callerRes.ok
+      ? callerRes.caller
+      : { id: 'anonymous', kind: 'anonymous' as const, scopes: [] };
+    recordAudit(caller.id, caller.kind, 'rate_limited', 429);
     return v1Error('rate_limited', 'Too many requests', requestId, 429, baseHeaders);
+  }
+
+  const callerRes = await resolveCaller(request.headers);
+  if (!callerRes.ok) {
+    recordAudit('anonymous', 'anonymous', 'denied', callerRes.status);
+    return v1Error(callerRes.code, callerRes.message, requestId, callerRes.status, {
+      ...baseHeaders,
+      'WWW-Authenticate': 'Bearer error="invalid_token"',
+    });
+  }
+  const caller = callerRes.caller;
+
+  // Daily quota for keyed callers (AGS024), counted once across every surface.
+  // Anonymous callers have none.
+  let quotaHeadersOut: Record<string, string> = {};
+  if (caller.kind !== 'anonymous') {
+    const quota = await checkDailyQuota(caller);
+    if (quota) {
+      quotaHeadersOut = quotaHeaders(quota);
+      if (!quota.allowed) {
+        recordAudit(caller.id, caller.kind, 'rate_limited', 429);
+        return v1Error('quota_exceeded', 'Daily quota exceeded', requestId, 429, {
+          ...baseHeaders,
+          ...quotaHeadersOut,
+          'Retry-After': String(quota.retryAfter),
+        });
+      }
+    }
+  }
+  const headersWithQuota = { ...baseHeaders, ...quotaHeadersOut };
+
+  if (options.scope && !hasScope(caller.scopes, options.scope)) {
+    recordAudit(caller.id, caller.kind, 'denied', 403);
+    return v1Error(
+      'insufficient_scope',
+      `This call needs the "${options.scope}" scope`,
+      requestId,
+      403,
+      {
+        ...headersWithQuota,
+        'WWW-Authenticate': `Bearer error="insufficient_scope", scope="${options.scope}"`,
+      }
+    );
   }
 
   // Scoped to this bucket and the exact body, so a key cannot replay another
@@ -150,13 +239,26 @@ export async function withV1(
     ? await scopedIdempotencyKey(options.bucket, clientKey, await request.clone().text())
     : null;
   if (idempotencyKey) {
-    const replay = await getIdempotentResponse(idempotencyKey, baseHeaders);
-    if (replay) return replay;
+    const entry = await getStoredIdempotent(idempotencyKey);
+    if (entry) {
+      const intentHash =
+        typeof entry.body === 'object' && entry.body !== null
+          ? (((entry.body as Record<string, unknown>).quoteId as string | undefined) ??
+            ((entry.body as Record<string, unknown>).intentHash as string | undefined) ??
+            null)
+          : null;
+      recordAudit(caller.id, caller.kind, 'ok', entry.status, intentHash);
+      return NextResponse.json(entry.body, {
+        status: entry.status,
+        headers: { ...headersWithQuota, 'Idempotency-Replayed': 'true' },
+      });
+    }
   }
 
   const ctx: V1Context = {
     requestId,
     ip,
+    caller,
     error: (code, message, status) => ({
       status,
       body: { error: { code, message, requestId } },
@@ -175,7 +277,8 @@ export async function withV1(
       error: err instanceof Error ? err.message : String(err),
       stack: err instanceof Error ? err.stack : undefined,
     });
-    return v1Error('internal_error', 'Internal error', requestId, 500, baseHeaders);
+    recordAudit(caller.id, caller.kind, 'error', 500);
+    return v1Error('internal_error', 'Internal error', requestId, 500, headersWithQuota);
   }
 
   // Only successful mutations are cached, so a client can safely retry a failure.
@@ -183,8 +286,12 @@ export async function withV1(
     await storeIdempotentResponse(idempotencyKey, result.status, result.body);
   }
 
+  const outcome: AuditOutcome =
+    result.status < 400 ? 'ok' : result.status < 500 ? 'client_error' : 'error';
+  recordAudit(caller.id, caller.kind, outcome, result.status, result.auditIntentHash ?? null);
+
   return NextResponse.json(result.body, {
     status: result.status,
-    headers: { ...result.headers, ...baseHeaders },
+    headers: { ...result.headers, ...headersWithQuota },
   });
 }

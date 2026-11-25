@@ -1,62 +1,106 @@
-import type { SlippageEvidence, SlippageOnChainEvidence } from '@/types/reputation';
+import { NETWORK_PASSPHRASE } from '@/lib/config';
+import { canonicalize, sha256Hex } from '@/lib/intent/hash';
+import type { OutcomeLogRow, SlippageEvidence, SlippageOnChainEvidence } from '@/types/reputation';
+import type { SlippageEvaluation } from '@/lib/reputation/slippage';
+
+export type { SlippageEvidence, SlippageOnChainEvidence, SlippageEvaluation };
 
 /**
- * Sorts object keys recursively so JSON serialization is deterministic
- * across environments, property declaration orders, and nesting levels.
+ * Constructs a canonical slippage-evidence object from an outcome row and evaluation.
+ *
+ * Fields are explicitly populated field-by-field without spreading row or intent
+ * objects, guaranteeing sensitive user data (e.g. recipient identifiers) cannot leak in.
  */
-function sortKeys(value: unknown): unknown {
-  if (Array.isArray(value)) {
-    return value.map(sortKeys);
+export function buildSlippageEvidence(input: {
+  row: OutcomeLogRow;
+  anchorTransactionId: string | null;
+  evaluation: Extract<SlippageEvaluation, { kind: 'breach' }>;
+  detectedAt: string;
+  networkPassphrase?: string;
+}): SlippageEvidence {
+  const { row, anchorTransactionId, evaluation, detectedAt } = input;
+
+  if (row.signerAccount === null || row.signerAccount === undefined) {
+    throw new Error('row.signerAccount cannot be null');
   }
-  if (value !== null && typeof value === 'object') {
-    const obj = value as Record<string, unknown>;
-    return Object.keys(obj)
-      .sort()
-      .reduce<Record<string, unknown>>((acc, key) => {
-        acc[key] = sortKeys(obj[key]);
-        return acc;
-      }, {});
+  if (row.minReceive === null || row.minReceive === undefined) {
+    throw new Error('row.minReceive cannot be null');
   }
-  return value;
+  if (row.deliveredAmount === null || row.deliveredAmount === undefined) {
+    throw new Error('row.deliveredAmount cannot be null');
+  }
+
+  const networkPassphrase = input.networkPassphrase ?? NETWORK_PASSPHRASE;
+
+  return {
+    v: 1,
+    networkPassphrase,
+    intentHash: row.intentHash,
+    anchorId: row.anchorId,
+    corridor: row.corridor,
+    signerAccount: row.signerAccount,
+    minReceive: row.minReceive,
+    anchorReported: {
+      anchorTransactionId,
+      amountOut: row.deliveredAmount,
+      reportedBy: 'sender',
+    },
+    shortfall: evaluation.shortfall,
+    shortfallBps: evaluation.shortfallBps,
+    onChain: null,
+    detectedAt,
+  };
 }
 
 /**
- * Serializes any value to canonical JSON: sorted keys recursively,
- * no whitespace.
- */
-export function canonicalize(value: unknown): string {
-  return JSON.stringify(sortKeys(value));
-}
-
-/**
- * Serializes slippage evidence to canonical JSON for deterministic SHA-256 hashing.
- */
-export function canonicalEvidenceJson(evidence: SlippageEvidence): string {
-  return canonicalize(evidence);
-}
-
-/**
- * Computes the lowercase hex SHA-256 digest of the canonical evidence JSON.
- */
-export async function hashSlippageEvidence(evidence: SlippageEvidence): Promise<string> {
-  const canonical = canonicalEvidenceJson(evidence);
-  const encoded = new TextEncoder().encode(canonical);
-  const hashBuffer = await crypto.subtle.digest('SHA-256', encoded);
-  return Array.from(new Uint8Array(hashBuffer))
-    .map((b) => b.toString(16).padStart(2, '0'))
-    .join('');
-}
-
-/**
- * Attaches on-chain evidence to an existing SlippageEvidence object,
- * returning a new immutable copy.
+ * Returns a new SlippageEvidence object with verified on-chain payment details attached.
  */
 export function withOnChainEvidence(
-  evidence: SlippageEvidence,
+  e: SlippageEvidence,
   onChain: SlippageOnChainEvidence
 ): SlippageEvidence {
   return {
-    ...evidence,
-    onChain: { ...onChain },
+    v: e.v,
+    networkPassphrase: e.networkPassphrase,
+    intentHash: e.intentHash,
+    anchorId: e.anchorId,
+    corridor: e.corridor,
+    signerAccount: e.signerAccount,
+    minReceive: e.minReceive,
+    anchorReported: {
+      anchorTransactionId: e.anchorReported.anchorTransactionId,
+      amountOut: e.anchorReported.amountOut,
+      reportedBy: e.anchorReported.reportedBy,
+    },
+    shortfall: e.shortfall,
+    shortfallBps: e.shortfallBps,
+    onChain: {
+      txHash: onChain.txHash,
+      ledger: onChain.ledger,
+      closedAt: onChain.closedAt,
+      successful: onChain.successful,
+      from: onChain.from,
+      to: onChain.to,
+      assetCode: onChain.assetCode,
+      assetIssuer: onChain.assetIssuer,
+      amount: onChain.amount,
+      memoType: onChain.memoType,
+      memo: onChain.memo,
+    },
+    detectedAt: e.detectedAt,
   };
+}
+
+/**
+ * Serializes slippage evidence to canonical JSON with recursively sorted keys and no whitespace.
+ */
+export function canonicalEvidenceJson(e: SlippageEvidence): string {
+  return canonicalize(e);
+}
+
+/**
+ * Computes lowercase hex SHA-256 of canonical slippage evidence JSON.
+ */
+export async function hashSlippageEvidence(e: SlippageEvidence): Promise<string> {
+  return sha256Hex(canonicalEvidenceJson(e));
 }

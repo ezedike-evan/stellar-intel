@@ -1,18 +1,26 @@
 import { getSqlExecutor, hasDatabaseUrl } from '@/lib/reputation/pool';
 import { canonicalEvidenceJson } from '@/lib/reputation/slippage-evidence';
-import type {
-  SlippageBreach,
-  SlippageBreachStatus,
-  SlippageEvidence,
+
+import {
+  SLIPPAGE_BREACH_STATUSES,
+  type SlippageBreach,
+  type SlippageBreachStatus,
+  type SlippageEvidence,
+  type SlippageOnChainEvidence,
 } from '@/types/reputation';
+
+// The breach and evidence types live in types/reputation.ts (#2104); re-exported
+// here so existing imports from this module keep working.
+export { SLIPPAGE_BREACH_STATUSES };
+export type { SlippageBreach, SlippageBreachStatus, SlippageEvidence, SlippageOnChainEvidence };
 
 // ─── Slippage breach store (Issue #2103) ──────────────────────────────────────
 
 export interface SlippageBreachFilter {
-  anchorId?: string | undefined;
-  status?: SlippageBreachStatus | undefined;
-  since?: string | undefined;
-  limit?: number | undefined;
+  anchorId?: string;
+  status?: SlippageBreachStatus;
+  since?: string;
+  limit?: number;
 }
 
 export interface SlippageBreachStore {
@@ -87,8 +95,7 @@ export class InMemorySlippageBreachStore implements SlippageBreachStore {
       rows = rows.filter((b) => b.status === filter.status);
     }
     if (filter?.since) {
-      const sinceTime = new Date(filter.since).getTime();
-      rows = rows.filter((b) => new Date(b.detectedAt).getTime() >= sinceTime);
+      rows = rows.filter((b) => b.detectedAt >= filter.since!);
     }
     rows.sort(newestFirst);
     const limit = filter?.limit ?? 100;
@@ -125,27 +132,29 @@ export class InMemorySlippageBreachStore implements SlippageBreachStore {
   }
 }
 
+// ─── Postgres Slippage Breach Store ──────────────────────────────────────────
+
 const SCHEMA_SQL = `
-  CREATE TABLE IF NOT EXISTS slippage_breaches (
-    intent_hash            TEXT PRIMARY KEY,
-    anchor_id              TEXT NOT NULL,
-    corridor               TEXT NOT NULL,
-    signer_account         TEXT NOT NULL,
-    min_receive            TEXT NOT NULL,
-    amount_out             TEXT NOT NULL,
-    shortfall              TEXT NOT NULL,
-    shortfall_bps          INTEGER NOT NULL,
-    stellar_transaction_id TEXT,
-    anchor_transaction_id  TEXT,
-    status                 TEXT NOT NULL DEFAULT 'detected',
-    rejection_reason       TEXT,
-    evidence               TEXT NOT NULL,
-    evidence_hash          TEXT NOT NULL,
-    detected_at            TEXT NOT NULL,
-    verified_at            TEXT
-  );
-  CREATE INDEX IF NOT EXISTS idx_slippage_breaches_anchor ON slippage_breaches (anchor_id, detected_at);
-  CREATE INDEX IF NOT EXISTS idx_slippage_breaches_status ON slippage_breaches (status);
+CREATE TABLE IF NOT EXISTS slippage_breaches (
+  intent_hash TEXT PRIMARY KEY,
+  anchor_id TEXT NOT NULL,
+  corridor TEXT NOT NULL,
+  signer_account TEXT NOT NULL,
+  min_receive TEXT NOT NULL,
+  amount_out TEXT NOT NULL,
+  shortfall TEXT NOT NULL,
+  shortfall_bps INTEGER NOT NULL,
+  stellar_transaction_id TEXT,
+  anchor_transaction_id TEXT,
+  status TEXT NOT NULL DEFAULT 'detected',
+  rejection_reason TEXT,
+  evidence TEXT NOT NULL,
+  evidence_hash TEXT NOT NULL,
+  detected_at TEXT NOT NULL,
+  verified_at TEXT
+);
+CREATE INDEX IF NOT EXISTS idx_slippage_breaches_anchor ON slippage_breaches (anchor_id, detected_at);
+CREATE INDEX IF NOT EXISTS idx_slippage_breaches_status ON slippage_breaches (status);
 `;
 
 let schemaReady: Promise<void> | null = null;
@@ -163,34 +172,24 @@ function ensureSchema(): Promise<void> {
   return schemaReady;
 }
 
-export function _resetSlippageBreachSchema(): void {
-  schemaReady = null;
-}
-
 function toSlippageBreach(row: Record<string, unknown>): SlippageBreach {
   return {
-    intentHash: String(row['intent_hash']),
-    anchorId: String(row['anchor_id']),
-    corridor: String(row['corridor']),
-    signerAccount: String(row['signer_account']),
-    minReceive: String(row['min_receive']),
-    amountOut: String(row['amount_out']),
-    shortfall: String(row['shortfall']),
-    shortfallBps: Number(row['shortfall_bps']),
-    stellarTransactionId:
-      row['stellar_transaction_id'] == null ? null : String(row['stellar_transaction_id']),
-    anchorTransactionId:
-      row['anchor_transaction_id'] == null ? null : String(row['anchor_transaction_id']),
-    status: String(row['status']) as SlippageBreachStatus,
-    rejectionReason:
-      row['rejection_reason'] == null ? null : String(row['rejection_reason']),
-    evidence:
-      typeof row['evidence'] === 'string'
-        ? (JSON.parse(row['evidence']) as SlippageEvidence)
-        : (row['evidence'] as SlippageEvidence),
-    evidenceHash: String(row['evidence_hash']),
-    detectedAt: String(row['detected_at']),
-    verifiedAt: row['verified_at'] == null ? null : String(row['verified_at']),
+    intentHash: String(row.intent_hash),
+    anchorId: String(row.anchor_id),
+    corridor: String(row.corridor),
+    signerAccount: String(row.signer_account),
+    minReceive: String(row.min_receive),
+    amountOut: String(row.amount_out),
+    shortfall: String(row.shortfall),
+    shortfallBps: Number(row.shortfall_bps),
+    stellarTransactionId: row.stellar_transaction_id ? String(row.stellar_transaction_id) : null,
+    anchorTransactionId: row.anchor_transaction_id ? String(row.anchor_transaction_id) : null,
+    status: row.status as SlippageBreachStatus,
+    rejectionReason: row.rejection_reason ? String(row.rejection_reason) : null,
+    evidence: JSON.parse(String(row.evidence)),
+    evidenceHash: String(row.evidence_hash),
+    detectedAt: String(row.detected_at),
+    verifiedAt: row.verified_at ? String(row.verified_at) : null,
   };
 }
 
@@ -290,9 +289,11 @@ export class PostgresSlippageBreachStore implements SlippageBreachStore {
   }
 }
 
-let override: SlippageBreachStore | null = null;
+// ─── Singleton & Test Seams ───────────────────────────────────────────────────
+
 let memoryStore: InMemorySlippageBreachStore | null = null;
 let postgresStore: PostgresSlippageBreachStore | null = null;
+let override: SlippageBreachStore | null = null;
 
 /**
  * Returns the active SlippageBreachStore:
@@ -317,5 +318,10 @@ export function _resetSlippageBreachStore(): void {
   override = null;
   memoryStore = null;
   postgresStore = null;
+  schemaReady = null;
+}
+
+/** Test seam: reset schema initialization state. */
+export function _resetSlippageBreachSchema(): void {
   schemaReady = null;
 }
