@@ -22,6 +22,7 @@ import { deriveAllCorridorRates } from '@/lib/oracle/corridor-rate';
 import { deriveCorridorMetrics } from '@/lib/oracle/corridor-metrics';
 import { mapOutcomeRow } from '@/lib/oracle/outcome-rows';
 import { emitHealthChanges } from '@/lib/webhooks/health-diff';
+import { emitWebhookEvent } from '@/lib/webhooks/emit';
 import { ANCHORS } from '@/constants/anchors';
 import type { ProbeLedgerRow } from '@/types/reputation';
 
@@ -144,7 +145,7 @@ function buildDomainToAnchorId(): Record<string, string> {
   return map;
 }
 
-async function tick(): Promise<BatchResult> {
+async function tick(): Promise<{ result: BatchResult; network: string; oracleContractId: string }> {
   const publisherSecret = process.env.PUBLISHER_SECRET;
   if (!publisherSecret) {
     throw new Error('PUBLISHER_SECRET is required for the publisher tick');
@@ -196,7 +197,8 @@ async function tick(): Promise<BatchResult> {
     },
   };
 
-  return runBatch(config);
+  const result = await runBatch(config);
+  return { result, network: network.network, oracleContractId };
 }
 
 export async function GET(request: NextRequest): Promise<NextResponse> {
@@ -231,11 +233,46 @@ export async function GET(request: NextRequest): Promise<NextResponse> {
     }
 
     try {
-      const result = await tick();
+      const { result, network, oracleContractId } = await tick();
       // Actually record the run. These recorders existed but had zero call
       // sites, which is why /api/publisher/health always reported "never ran"
       // (#910).
       recordPublisherRun(result.submitted);
+
+      if (
+        (!result.gate || result.gate.allowed) &&
+        result.submitted +
+          (result.corridorRatesPublished ?? 0) +
+          (result.corridorMetricsPublished ?? 0) +
+          (result.probeSignalsPublished ?? 0) >
+          0
+      ) {
+        const publishedAt = new Date().toISOString();
+        const idempotencyKey = result.txHash
+          ? `oracle.published:${result.txHash}`
+          : `oracle.published:${publishedAt}`;
+        try {
+          emitWebhookEvent(
+            'oracle.published',
+            {
+              network,
+              contractId: oracleContractId,
+              txHash: result.txHash ?? null,
+              outcomesPublished: result.submitted,
+              corridorRatesPublished: result.corridorRatesPublished ?? 0,
+              corridorMetricsPublished: result.corridorMetricsPublished ?? 0,
+              probeSignalsPublished: result.probeSignalsPublished ?? 0,
+              publishedAt,
+            },
+            { idempotencyKey }
+          );
+        } catch (err) {
+          logger.warn({
+            event: 'oracle_published_emit_failed',
+            error: err instanceof Error ? err.message : String(err),
+          });
+        }
+      }
 
       // A closed gate returns 200, not 4xx (#786). The cron calls this every 5
       // minutes with `curl -f`, so a 4xx during a legitimate 90-day

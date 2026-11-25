@@ -2,6 +2,10 @@ import { NextRequest, NextResponse } from 'next/server';
 import { withRequestLogger } from '@/lib/logger';
 import { getReputationStore } from '@/lib/reputation/store';
 import { reconcileReputationOutcomes, type ReputationOutcomeRow } from '@/lib/reputation/reconcile';
+import {
+  verifyDetectedBreaches,
+  type VerifyBreachesSummary,
+} from '@/lib/reputation/slippage-verify';
 import { checkCronAuth } from '@/lib/api/cron-auth';
 import { checkDurableStore } from '@/lib/api/store-guard';
 
@@ -13,6 +17,10 @@ export const runtime = 'nodejs';
 // settled-but-unreconciled outcome row from the store, looks up the on-chain
 // payment via Horizon, and backfills the actual delivered amount + rate. No request
 // body needed — the work list comes from the store, so a bare ping does the right thing.
+//
+// The same run then verifies detected slippage breaches against their Stellar
+// payment (#2105). That pass has its own work list and its own failures: if it
+// throws, the reconciliation above has still happened and is still reported.
 
 async function runReconciler(): Promise<{
   updated: number;
@@ -79,13 +87,26 @@ export async function GET(request: NextRequest): Promise<NextResponse> {
     }
 
     const summary = await runReconciler();
+
+    let slippage: VerifyBreachesSummary | null;
+    try {
+      slippage = await verifyDetectedBreaches();
+    } catch (err) {
+      logger.warn({
+        event: 'slippage_verify_failed',
+        message: err instanceof Error ? err.message : String(err),
+      });
+      slippage = null;
+    }
+
     logger.info({
       event: 'reconcile_run',
       scanned: summary.scanned,
       updated: summary.updated,
       sourceMismatch: summary.sourceMismatch,
+      slippage,
     });
-    return NextResponse.json(summary);
+    return NextResponse.json({ ...summary, slippage });
   });
 }
 

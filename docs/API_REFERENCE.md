@@ -48,6 +48,9 @@ the hardening contract (see `lib/api/v1.ts`):
   - [`GET /api/rates/{corridor}`](#get-apiratescorridor)
   - [`GET /api/snapshot`](#get-apisnapshot)
   - [`GET /api/v1/corridors/{corridor}/volume-savings`](#get-apiv1corridorscorridorvolume-savings)
+- **Refunds**
+  - [`POST /api/refunds/ack`](#post-apirefundsack)
+  - [`GET /api/refunds/{intentHash}`](#get-apirefundsintenthash)
 - **Reputation**
   - [`GET /api/reputation/actuarial`](#get-apireputationactuarial)
   - [`POST /api/reputation/append`](#post-apireputationappend)
@@ -61,6 +64,8 @@ the hardening contract (see `lib/api/v1.ts`):
   - [`GET /api/reputation/{anchor}/history`](#get-apireputationanchorhistory)
   - [`GET /api/reputation/{anchor}/sla`](#get-apireputationanchorsla)
   - [`GET /api/v1/disputes/log`](#get-apiv1disputeslog)
+  - [`GET /api/v1/slippage-breaches`](#get-apiv1slippage-breaches)
+  - [`GET /api/v1/slippage-breaches/{intentHash}`](#get-apiv1slippage-breachesintenthash)
   - [`GET /v1/public/scores`](#get-v1publicscores)
 - **SEP-10**
   - [`POST /api/sep10/client-domain`](#post-apisep10client-domain)
@@ -81,6 +86,7 @@ the hardening contract (see `lib/api/v1.ts`):
   - [`GET /api/status`](#get-apistatus)
   - [`GET /api/v1/health`](#get-apiv1health)
   - [`GET /api/webhooks/deliveries`](#get-apiwebhooksdeliveries)
+  - [`POST /api/webhooks/deliveries/{id}/redeliver`](#post-apiwebhooksdeliveriesidredeliver)
   - [`GET /api/webhooks/failures`](#get-apiwebhooksfailures)
   - [`GET /api/webhooks/subscriptions`](#get-apiwebhookssubscriptions)
   - [`POST /api/webhooks/subscriptions`](#post-apiwebhookssubscriptions)
@@ -509,6 +515,60 @@ Reads the on-chain volume/savings oracle for one corridor: cumulative USDC route
 
 ---
 
+## Refunds
+
+### `POST /api/refunds/ack`
+
+**Summary:** Record user-signed refund acknowledgement  
+
+Secured write route to record a user-signed refund acknowledgement for an owed or refunded case. The server validates that only the original transfer signer can acknowledge, verifies the cryptographic signature over the canonical payload hash, and confirms the refunded amount does not exceed the paid amount.
+
+#### Request Body
+
+**Content-Type:** `application/json`
+
+| Field | Type | Required | Description |
+| :--- | :--- | :--- | :--- |
+| `ack` | `RefundAckPayload` | **Yes** | - |
+| `signature` | `string` | **Yes** | Cryptographic signature over the canonical refund-ack payload hash |
+
+#### Responses
+
+| Status | Description | Content-Type | Schema |
+| :--- | :--- | :--- | :--- |
+| `200` | Refund acknowledgement recorded | `application/json` | `RefundAckResponse` |
+| `400` | Invalid JSON | `application/json` | `ApiError` |
+| `401` | Missing or invalid credentials | `application/json` | `ApiError` |
+| `403` | Signer mismatch | `application/json` | `ApiError` |
+| `404` | No refund case found | `application/json` | `ApiError` |
+| `409` | Case already acknowledged | `application/json` | `ApiError` |
+| `422` | Validation error | `application/json` | `ApiError` |
+| `429` | Rate limited | `application/json` | `ApiError` |
+
+---
+
+### `GET /api/refunds/{intentHash}`
+
+**Summary:** Look up refund cases for an intent  
+
+Read-only lookup of the refund cases tracked for one intent, oldest first. An intent with no cases returns an empty list, not 404. Only non-sensitive fields are returned; the signer account and the acknowledgement proof are never exposed, and there is no lookup by account. Responses are sent with Cache-Control: no-store.
+
+#### Parameters
+
+| Name | In | Type | Required | Description |
+| :--- | :--- | :--- | :--- | :--- |
+| `intentHash` | `path` | `string` | **Yes** | Lowercase hex SHA-256 intent hash (64 characters) |
+
+#### Responses
+
+| Status | Description | Content-Type | Schema |
+| :--- | :--- | :--- | :--- |
+| `200` | Refund cases for the intent | `application/json` | `object` |
+| `400` | intentHash is not a lowercase 64-character hex string | `application/json` | `ApiError` |
+| `429` | Rate limited | `application/json` | `ApiError` |
+
+---
+
 ## Reputation
 
 ### `GET /api/reputation/actuarial`
@@ -767,6 +827,7 @@ Returns trailing 30-day settlement SLA percentiles (nearest-rank, no trimming) f
 | `200` | Execution SLA report | `application/json` | `ExecutionSlaReport` |
 | `400` | Validation error | `application/json` | `ApiError` |
 | `404` | Unknown anchor | `application/json` | `ApiError` |
+| `429` | Rate limited | `application/json` | `ApiError` |
 
 ---
 
@@ -790,6 +851,55 @@ Serves the public, append-only, hash-chained dispute adjudication log, along wit
 | `200` | The adjudication log entries and chain verification | `application/json` | `AdjudicationLogResponse` |
 | `400` | Invalid afterSeq or limit parameters | `application/json` | `ApiError` |
 | `429` | Rate limited | `application/json` | `ApiError` |
+
+---
+
+### `GET /api/v1/slippage-breaches`
+
+**Summary:** List slippage breaches  
+
+Returns a list of detected slippage breaches, newest first. Excludes sensitive signerAccount, recipient and raw evidence.
+
+#### Parameters
+
+| Name | In | Type | Required | Description |
+| :--- | :--- | :--- | :--- | :--- |
+| `anchorId` | `query` | `string` | No | Filter by anchor identifier |
+| `status` | `query` | `"detected" | "verified" | "rejected"` | No | Filter by breach status |
+| `limit` | `query` | `object` | No | Maximum number of breaches to return (1-500, default 100) |
+
+#### Responses
+
+| Status | Description | Content-Type | Schema |
+| :--- | :--- | :--- | :--- |
+| `200` | List of slippage breaches | `application/json` | `object` |
+| `400` | Validation error | `application/json` | `ApiError` |
+| `429` | Rate limited | `application/json` | `ApiError` |
+| `503` | Store unavailable | `application/json` | `ApiError` |
+
+---
+
+### `GET /api/v1/slippage-breaches/{intentHash}`
+
+**Summary:** Get slippage breach detail  
+
+Returns detailed information about a slippage breach, including full evidence and canonical evidence JSON string for independent SHA-256 verification.
+
+#### Parameters
+
+| Name | In | Type | Required | Description |
+| :--- | :--- | :--- | :--- | :--- |
+| `intentHash` | `path` | `string` | **Yes** | 64-character lowercase hex SHA-256 intent hash |
+
+#### Responses
+
+| Status | Description | Content-Type | Schema |
+| :--- | :--- | :--- | :--- |
+| `200` | Slippage breach detail with evidence | `application/json` | `object` |
+| `400` | Invalid intentHash format | `application/json` | `ApiError` |
+| `404` | Breach not found | `application/json` | `ApiError` |
+| `429` | Rate limited | `application/json` | `ApiError` |
+| `503` | Store unavailable | `application/json` | `ApiError` |
 
 ---
 
@@ -1102,6 +1212,31 @@ Admin only. Returns webhook delivery records filtered by status, subscription, o
 | `200` | Webhook delivery records | `application/json` | `object[]` |
 | `400` | Validation error | `application/json` | `ApiError` |
 | `401` | Missing or invalid credentials | `application/json` | `ApiError` |
+| `429` | Rate limited | `application/json` | `ApiError` |
+
+---
+
+### `POST /api/webhooks/deliveries/{id}/redeliver`
+
+**Summary:** Resend a logged webhook delivery  
+
+Admin only. Sends the stored event of one logged delivery to its subscription again, with the original event `id` and idempotency key, so a consumer that already processed it de-duplicates. The attempt is logged as a new delivery record. A 202 means the attempt was made, not that the subscriber accepted it. See docs/WEBHOOKS.md.
+
+#### Parameters
+
+| Name | In | Type | Required | Description |
+| :--- | :--- | :--- | :--- | :--- |
+| `id` | `path` | `string` | **Yes** | Delivery record id, as listed by GET /api/webhooks/deliveries |
+
+#### Responses
+
+| Status | Description | Content-Type | Schema |
+| :--- | :--- | :--- | :--- |
+| `202` | The delivery was attempted again and logged | `application/json` | `object` |
+| `403` | Missing or invalid admin key | `application/json` | `ApiError` |
+| `404` | Unknown delivery id (`NOT_FOUND`) | `application/json` | `ApiError` |
+| `409` | The subscription no longer subscribes to the event kind (`EVENT_KIND_UNSUBSCRIBED`) | `application/json` | `ApiError` |
+| `410` | The event is not in the event store (`EVENT_NOT_RETAINED`), or the subscription was deleted (`SUBSCRIPTION_DELETED`) | `application/json` | `ApiError` |
 | `429` | Rate limited | `application/json` | `ApiError` |
 
 ---

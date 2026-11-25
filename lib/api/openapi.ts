@@ -425,6 +425,64 @@ const MetricsSnapshotSchema = registry.register(
   })
 );
 
+const RefundAckPaymentSchema = registry.register(
+  'RefundAckPayment',
+  z.object({
+    id: z.string().min(1).max(128).describe('Payment identifier'),
+    idType: z.enum(['stellar', 'external']).describe('Type of payment identifier'),
+    amount: z.string().regex(AMOUNT_PATTERN).max(40).describe('Amount refunded in this payment'),
+  })
+);
+
+const RefundAckPayloadSchema = registry.register(
+  'RefundAckPayload',
+  z.object({
+    type: z.literal('refund-ack').describe('Payload type discriminator'),
+    version: z.literal(1).describe('Payload format version'),
+    intentHash: z
+      .string()
+      .regex(/^[0-9a-f]{64}$/)
+      .describe('64-hex SHA-256 intent hash'),
+    anchorId: z.string().min(1).max(64).describe('Anchor identifier'),
+    account: z
+      .string()
+      .regex(STELLAR_PUBKEY_PATTERN)
+      .describe('Stellar public key of acknowledging user'),
+    amountRefunded: z.string().regex(AMOUNT_PATTERN).max(40).describe('Total amount refunded'),
+    refundFee: z.string().regex(AMOUNT_PATTERN).max(40).describe('Total refund fee deducted'),
+    payments: z.array(RefundAckPaymentSchema).max(20).describe('Individual refund payments'),
+  })
+);
+
+const RefundAckRequestBodySchema = registry.register(
+  'RefundAckRequestBody',
+  z.object({
+    ack: RefundAckPayloadSchema,
+    signature: z
+      .string()
+      .min(1)
+      .max(256)
+      .describe('Cryptographic signature over the canonical refund-ack payload hash'),
+  })
+);
+
+const RefundAckResponseSchema = registry.register(
+  'RefundAckResponse',
+  z.object({
+    id: z.string().describe('Refund case identifier'),
+    intentHash: z
+      .string()
+      .regex(/^[0-9a-f]{64}$/)
+      .describe('Intent hash for the refund case'),
+    status: z.literal('acknowledged').describe('Status of the refund case'),
+    acknowledgedAt: z.string().describe('ISO 8601 timestamp when acknowledged'),
+    onChainCheck: z
+      .enum(['verified', 'mismatch', 'unverifiable'])
+      .nullable()
+      .describe('On-chain verification status'),
+  })
+);
+
 // Suppress unused-variable warnings
 void SignedIntentEnvelopeSchema;
 void AnchorRateSchema;
@@ -436,6 +494,8 @@ void AdjudicationLogResponseSchema;
 void LeaderboardResponseSchema;
 void PublisherHealthSchema;
 void MetricsSnapshotSchema;
+void RefundAckRequestBodySchema;
+void RefundAckResponseSchema;
 
 // ─── Route registrations ─────────────────────────────────────────────────────
 
@@ -921,37 +981,6 @@ registry.registerPath({
     200: {
       description: 'Bucketed history data',
       content: { 'application/json': { schema: z.any() } },
-    },
-    400: {
-      description: 'Validation error',
-      content: { 'application/json': { schema: ApiErrorSchema } },
-    },
-    404: {
-      description: 'Unknown anchor',
-      content: { 'application/json': { schema: ApiErrorSchema } },
-    },
-  },
-});
-
-registry.registerPath({
-  method: 'get',
-  path: '/api/reputation/{anchor}/sla',
-  summary: 'Get anchor execution SLA',
-  description:
-    'Returns trailing 30-day settlement SLA percentiles (nearest-rank, no trimming) for an anchor, requiring at least 30 completed samples (and 100 for p99), evaluated against breach thresholds.',
-  tags: ['Reputation'],
-  request: {
-    params: z.object({ anchor: AnchorPathParam }),
-    query: z.object({ corridor: CorridorQueryParam }),
-  },
-  responses: {
-    200: {
-      description: 'Execution SLA report',
-      content: {
-        'application/json': {
-          schema: registry.register('ExecutionSlaReport', ExecutionSlaReportSchema),
-        },
-      },
     },
     400: {
       description: 'Validation error',
@@ -1628,6 +1657,38 @@ const UNAUTHORIZED_401 = {
   description: 'Missing or invalid credentials',
   content: { 'application/json': { schema: ApiErrorSchema } },
 } as const;
+
+registry.registerPath({
+  method: 'get',
+  path: '/api/reputation/{anchor}/sla',
+  summary: 'Get anchor execution SLA',
+  description:
+    'Returns trailing 30-day settlement SLA percentiles (nearest-rank, no trimming) for an anchor, requiring at least 30 completed samples (and 100 for p99), evaluated against breach thresholds.',
+  tags: ['Reputation'],
+  request: {
+    params: z.object({ anchor: AnchorPathParam }),
+    query: z.object({ corridor: CorridorQueryParam }),
+  },
+  responses: {
+    200: {
+      description: 'Execution SLA report',
+      content: {
+        'application/json': {
+          schema: registry.register('ExecutionSlaReport', ExecutionSlaReportSchema),
+        },
+      },
+    },
+    400: {
+      description: 'Validation error',
+      content: { 'application/json': { schema: ApiErrorSchema } },
+    },
+    404: {
+      description: 'Unknown anchor',
+      content: { 'application/json': { schema: ApiErrorSchema } },
+    },
+    429: RATE_LIMITED_429,
+  },
+});
 
 registry.registerPath({
   method: 'post',
@@ -2381,7 +2442,351 @@ registry.registerPath({
   },
 });
 
+registry.registerPath({
+  method: 'post',
+  path: '/api/webhooks/deliveries/{id}/redeliver',
+  summary: 'Resend a logged webhook delivery',
+  description:
+    'Admin only. Sends the stored event of one logged delivery to its subscription again, with the original event `id` and idempotency key, so a consumer that already processed it de-duplicates. The attempt is logged as a new delivery record. A 202 means the attempt was made, not that the subscriber accepted it. See docs/WEBHOOKS.md.',
+  tags: ['System'],
+  security: [{ adminKey: [] }],
+  request: {
+    params: z.object({
+      id: z
+        .string()
+        .min(1)
+        .describe('Delivery record id, as listed by GET /api/webhooks/deliveries'),
+    }),
+  },
+  responses: {
+    202: {
+      description: 'The delivery was attempted again and logged',
+      content: {
+        'application/json': {
+          schema: z.object({
+            redelivered: z.literal(true),
+            eventId: z.string().describe('Id of the event that was resent'),
+            subscriptionId: z.string().describe('Subscription it was sent to'),
+          }),
+        },
+      },
+    },
+    403: {
+      description: 'Missing or invalid admin key',
+      content: { 'application/json': { schema: ApiErrorSchema } },
+    },
+    404: {
+      description: 'Unknown delivery id (`NOT_FOUND`)',
+      content: { 'application/json': { schema: ApiErrorSchema } },
+    },
+    409: {
+      description:
+        'The subscription no longer subscribes to the event kind (`EVENT_KIND_UNSUBSCRIBED`)',
+      content: { 'application/json': { schema: ApiErrorSchema } },
+    },
+    410: {
+      description:
+        'The event is not in the event store (`EVENT_NOT_RETAINED`), or the subscription was deleted (`SUBSCRIPTION_DELETED`)',
+      content: { 'application/json': { schema: ApiErrorSchema } },
+    },
+    429: RATE_LIMITED_429,
+  },
+});
+
+registry.registerPath({
+  method: 'post',
+  path: '/api/refunds/ack',
+  summary: 'Record user-signed refund acknowledgement',
+  description:
+    'Secured write route to record a user-signed refund acknowledgement for an owed or refunded case. ' +
+    'The server validates that only the original transfer signer can acknowledge, verifies the cryptographic signature over the canonical payload hash, and confirms the refunded amount does not exceed the paid amount.',
+  tags: ['Refunds'],
+  request: {
+    body: {
+      content: {
+        'application/json': {
+          schema: RefundAckRequestBodySchema,
+        },
+      },
+    },
+  },
+  responses: {
+    200: {
+      description: 'Refund acknowledgement recorded',
+      content: {
+        'application/json': {
+          schema: RefundAckResponseSchema,
+        },
+      },
+    },
+    400: {
+      description: 'Invalid JSON',
+      content: { 'application/json': { schema: ApiErrorSchema } },
+    },
+    401: UNAUTHORIZED_401,
+    403: {
+      description: 'Signer mismatch',
+      content: { 'application/json': { schema: ApiErrorSchema } },
+    },
+    404: {
+      description: 'No refund case found',
+      content: { 'application/json': { schema: ApiErrorSchema } },
+    },
+    409: {
+      description: 'Case already acknowledged',
+      content: { 'application/json': { schema: ApiErrorSchema } },
+    },
+    422: {
+      description: 'Validation error',
+      content: { 'application/json': { schema: ApiErrorSchema } },
+    },
+    429: RATE_LIMITED_429,
+  },
+});
+
 // ─── Spec builder ────────────────────────────────────────────────────────────
+
+const PublicRefundCaseSchema = registry.register(
+  'PublicRefundCase',
+  z.object({
+    id: z.string(),
+    intentHash: z.string(),
+    reason: z.enum([
+      'anchor_refunded',
+      'anchor_error_after_payment',
+      'expired_after_payment',
+      'slippage_breach',
+    ]),
+    anchorId: z.string(),
+    corridor: z.string(),
+    direction: z.enum(['withdraw', 'deposit']),
+    amountPaid: z.string(),
+    status: z.enum(['owed', 'refunded', 'acknowledged']),
+    amountRefunded: z.string().nullable(),
+    refundFee: z.string().nullable(),
+    payments: z.array(
+      z.object({
+        id: z.string(),
+        idType: z.enum(['stellar', 'external']),
+        amount: z.string(),
+        fee: z.string(),
+      })
+    ),
+    openedAt: z.string(),
+    refundedAt: z.string().nullable(),
+    acknowledgedAt: z.string().nullable(),
+    onChainCheck: z
+      .string()
+      .nullable()
+      .describe('verified, mismatch or unverifiable; null when no on-chain check was made'),
+  })
+);
+
+const IntentHashPathParam = z.string().openapi({
+  param: { name: 'intentHash', in: 'path' },
+  example: 'a3f1c2d4e5b60718293a4b5c6d7e8f90a1b2c3d4e5f60718293a4b5c6d7e8f90',
+  description: 'Lowercase hex SHA-256 intent hash (64 characters)',
+});
+
+registry.registerPath({
+  method: 'get',
+  path: '/api/refunds/{intentHash}',
+  summary: 'Look up refund cases for an intent',
+  description:
+    'Read-only lookup of the refund cases tracked for one intent, oldest first. An intent with ' +
+    'no cases returns an empty list, not 404. Only non-sensitive fields are returned; the signer ' +
+    'account and the acknowledgement proof are never exposed, and there is no lookup by account. ' +
+    'Responses are sent with Cache-Control: no-store.',
+  tags: ['Refunds'],
+  request: {
+    params: z.object({ intentHash: IntentHashPathParam }),
+  },
+  responses: {
+    200: {
+      description: 'Refund cases for the intent',
+      content: {
+        'application/json': {
+          schema: z.object({
+            intentHash: z.string(),
+            cases: z.array(PublicRefundCaseSchema),
+          }),
+        },
+      },
+    },
+    400: {
+      description: 'intentHash is not a lowercase 64-character hex string',
+      content: { 'application/json': { schema: ApiErrorSchema } },
+    },
+    429: RATE_LIMITED_429,
+  },
+});
+
+// ─── Slippage breaches (Issue #2106) ──────────────────────────────────────────
+
+const SlippageOnChainEvidenceSchema = registry.register(
+  'SlippageOnChainEvidence',
+  z.object({
+    txHash: z.string().describe('Stellar transaction hash'),
+    ledger: z.number().int().describe('Ledger sequence number'),
+    closedAt: z.string().describe('Ledger close time (ISO 8601)'),
+    successful: z.boolean().describe('Whether transaction succeeded'),
+    from: z.string().describe('Source account public key'),
+    to: z.string().describe('Destination account public key'),
+    assetCode: z.string().describe('Asset code transferred'),
+    assetIssuer: z.string().nullable().describe('Asset issuer public key'),
+    amount: z.string().describe('Amount transferred'),
+    memoType: z.string().describe('Memo type'),
+    memo: z.string().nullable().describe('Memo text or hash'),
+  })
+);
+
+const SlippageEvidenceSchema = registry.register(
+  'SlippageEvidence',
+  z.object({
+    v: z.literal(1).describe('Evidence schema version'),
+    networkPassphrase: z.string().describe('Stellar network passphrase'),
+    intentHash: z.string().describe('SHA-256 hash of the canonical intent'),
+    anchorId: z.string().describe('Anchor identifier'),
+    corridor: z.string().describe('Corridor identifier'),
+    signerAccount: z.string().describe('Signer Stellar account public key'),
+    minReceive: z.string().describe('Floor amount signed by user'),
+    anchorReported: z.object({
+      anchorTransactionId: z.string().nullable(),
+      amountOut: z.string(),
+      reportedBy: z.literal('sender'),
+    }),
+    shortfall: z.string().describe('Shortfall amount'),
+    shortfallBps: z.number().int().describe('Shortfall in basis points'),
+    onChain: SlippageOnChainEvidenceSchema.nullable(),
+    detectedAt: z.string().describe('ISO 8601 timestamp when breach was detected'),
+  })
+);
+
+const PublicSlippageBreachSummarySchema = registry.register(
+  'PublicSlippageBreachSummary',
+  z.object({
+    intentHash: z.string().describe('SHA-256 hash of the canonical intent'),
+    anchorId: z.string().describe('Anchor identifier'),
+    corridor: z.string().describe('Corridor identifier'),
+    minReceive: z.string().describe('Minimum receive amount signed in intent'),
+    amountOut: z.string().describe('Delivered amount reported by anchor'),
+    shortfall: z.string().describe('Amount by which delivery fell short of floor'),
+    shortfallBps: z.number().int().describe('Shortfall in basis points (1/100th of 1%)'),
+    status: z.enum(['detected', 'verified', 'rejected']).describe('Breach status'),
+    rejectionReason: z.string().nullable().describe('Reason for rejection if status is rejected'),
+    stellarTransactionId: z.string().nullable().describe('Stellar transaction hash'),
+    evidenceHash: z.string().describe('SHA-256 hash of the canonical evidence JSON'),
+    detectedAt: z.string().describe('ISO 8601 timestamp when breach was detected'),
+    verifiedAt: z
+      .string()
+      .nullable()
+      .describe('ISO 8601 timestamp when breach was verified/rejected'),
+  })
+);
+
+registry.registerPath({
+  method: 'get',
+  path: '/api/v1/slippage-breaches',
+  summary: 'List slippage breaches',
+  description:
+    'Returns a list of detected slippage breaches, newest first. Excludes sensitive signerAccount, recipient and raw evidence.',
+  tags: ['Reputation'],
+  request: {
+    query: z.object({
+      anchorId: z
+        .string()
+        .optional()
+        .openapi({
+          param: { name: 'anchorId', in: 'query' },
+          description: 'Filter by anchor identifier',
+        }),
+      status: z
+        .enum(['detected', 'verified', 'rejected'])
+        .optional()
+        .openapi({
+          param: { name: 'status', in: 'query' },
+          description: 'Filter by breach status',
+        }),
+      limit: z.coerce
+        .number()
+        .optional()
+        .openapi({
+          param: { name: 'limit', in: 'query' },
+          description: 'Maximum number of breaches to return (1-500, default 100)',
+          example: 100,
+        }),
+    }),
+  },
+  responses: {
+    200: {
+      description: 'List of slippage breaches',
+      content: {
+        'application/json': {
+          schema: z.object({
+            breaches: z.array(PublicSlippageBreachSummarySchema),
+          }),
+        },
+      },
+    },
+    400: {
+      description: 'Validation error',
+      content: { 'application/json': { schema: ApiErrorSchema } },
+    },
+    429: RATE_LIMITED_429,
+    503: {
+      description: 'Store unavailable',
+      content: { 'application/json': { schema: ApiErrorSchema } },
+    },
+  },
+});
+
+registry.registerPath({
+  method: 'get',
+  path: '/api/v1/slippage-breaches/{intentHash}',
+  summary: 'Get slippage breach detail',
+  description:
+    'Returns detailed information about a slippage breach, including full evidence and canonical evidence JSON string for independent SHA-256 verification.',
+  tags: ['Reputation'],
+  request: {
+    params: z.object({
+      intentHash: z
+        .string()
+        .regex(/^[0-9a-f]{64}$/)
+        .openapi({
+          param: { name: 'intentHash', in: 'path' },
+          description: '64-character lowercase hex SHA-256 intent hash',
+        }),
+    }),
+  },
+  responses: {
+    200: {
+      description: 'Slippage breach detail with evidence',
+      content: {
+        'application/json': {
+          schema: PublicSlippageBreachSummarySchema.extend({
+            evidence: SlippageEvidenceSchema,
+            canonicalEvidence: z
+              .string()
+              .describe('Canonical JSON representation of evidence for SHA-256 verification'),
+          }),
+        },
+      },
+    },
+    400: {
+      description: 'Invalid intentHash format',
+      content: { 'application/json': { schema: ApiErrorSchema } },
+    },
+    404: {
+      description: 'Breach not found',
+      content: { 'application/json': { schema: ApiErrorSchema } },
+    },
+    429: RATE_LIMITED_429,
+    503: {
+      description: 'Store unavailable',
+      content: { 'application/json': { schema: ApiErrorSchema } },
+    },
+  },
+});
 
 export function buildOpenApiSpec() {
   const generator = new OpenApiGeneratorV31(registry.definitions);
