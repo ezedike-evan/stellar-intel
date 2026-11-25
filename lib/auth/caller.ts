@@ -1,10 +1,13 @@
+import { NextResponse } from 'next/server';
 import { getClientIp } from '@/lib/api/rate-limit';
+import { apiErrorResponse } from '@/lib/api/response';
 import { getLogger } from '@/lib/logger';
-import { hashApiKey, hashesEqual, parseApiKey, type ApiScope } from './api-keys';
+import { isFlag } from '@/lib/flags';
+import { hasScope, hashApiKey, hashesEqual, parseApiKey, type ApiScope } from './api-keys';
 import { getApiKeyStore, type CallerTier } from './key-store';
 import { getTokenSecret, looksLikeToken, verifyCallerToken } from './token';
 
-// ─── Caller identity (AGS003, AGS011) ──────────────────────────────────────────
+// ─── Caller identity (AGS003, AGS008, AGS011, AGS015) ─────────────────────────
 //
 // One resolver for every surface (REST v1, MCP, GraphQL): request headers in,
 // Caller out. A bad credential is rejected, never downgraded to anonymous.
@@ -46,7 +49,9 @@ export function readPresentedCredential(headers: Headers): string | null {
 }
 
 export function anonymousScopes(): readonly ApiScope[] {
-  return ['quotes:read', 'intents:write', 'reputation:write'];
+  return isFlag('requireKeyForWrites')
+    ? ['quotes:read']
+    : ['quotes:read', 'intents:write', 'reputation:write'];
 }
 
 /**
@@ -148,4 +153,33 @@ export async function resolveCaller(
   return looksLikeToken(credential)
     ? resolveToken(credential, now)
     : resolveApiKey(credential, now);
+}
+
+/**
+ * Gate an unversioned route on a required scope (AGS015).
+ *
+ * Rejects unauthenticated callers with 401 UNAUTHORIZED, and callers lacking
+ * the scope with 403 INSUFFICIENT_SCOPE and a WWW-Authenticate header.
+ */
+export async function requireCallerScope(
+  request: Request,
+  scope: ApiScope
+): Promise<{ ok: true; caller: Caller } | { ok: false; response: NextResponse }> {
+  const resolution = await resolveCaller(request.headers);
+  if (!resolution.ok) {
+    return {
+      ok: false,
+      response: apiErrorResponse({ code: 'UNAUTHORIZED', message: resolution.message }, 401),
+    };
+  }
+  const caller = resolution.caller;
+  if (!hasScope(caller.scopes, scope)) {
+    const res = apiErrorResponse(
+      { code: 'INSUFFICIENT_SCOPE', message: `This call needs the "${scope}" scope` },
+      403
+    );
+    res.headers.set('WWW-Authenticate', `Bearer error="insufficient_scope", scope="${scope}"`);
+    return { ok: false, response: res };
+  }
+  return { ok: true, caller };
 }

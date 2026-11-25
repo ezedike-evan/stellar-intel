@@ -47,6 +47,7 @@ const EXPECTED_TOOLS: Record<string, { required: string[]; structured: boolean }
   'intel.execute': { required: ['unsignedEnvelope', 'signature', 'signedTx'], structured: true },
   'intel.anchor.health': { required: ['domain'], structured: true },
   'intel.anchor.reputation': { required: ['anchor'], structured: true },
+  'intel.anchor.sla': { required: ['anchor'], structured: true },
   // Nullary tools: they enumerate a fixed registry, so there is nothing to pass.
   'intel.corridors': { required: [], structured: true },
   'intel.leaderboard': { required: [], structured: false },

@@ -15,6 +15,8 @@ import { getFxRate } from '@/lib/fx/rates';
 import { referenceMidPrice } from '@/lib/fx/reference-mid';
 import { SepError, TimeoutError } from './errors';
 import { fetchReputationScores } from '@/lib/reputation/scores';
+import { flags } from '@/lib/flags';
+import { fetchCorridorSettleSummaries } from '@/lib/reputation/execution-sla-server';
 
 /**
  * Per-anchor diagnostic. When an anchor fails to quote we keep the reason so the
@@ -441,6 +443,21 @@ export async function fetchCorridorRates(
     });
   } catch {
     // Reputation annotation is best-effort — leave rates unsorted on failure.
+  }
+
+  if (flags.executionSla) {
+    try {
+      const settle = await fetchCorridorSettleSummaries(corridorId);
+      for (const rate of rates) {
+        const s = settle.get(rate.anchorId);
+        if (s) {
+          rate.settleP95Ms = s.p95Ms;
+          rate.settleSampleSize = s.sampleSize;
+        }
+      }
+    } catch {
+      /* best-effort, like the reputation annotation */
+    }
   }
 
   return { corridorId, rates, pending: [], bestRateId, errors };

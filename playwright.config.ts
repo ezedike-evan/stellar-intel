@@ -24,6 +24,8 @@ export default defineConfig({
   webServer: {
     command: webServerCommand,
     url: baseURL,
+    // The template e2e needs the feature flag enabled at server time.
+    env: { ...process.env, NEXT_PUBLIC_INTENT_TEMPLATES: 'on' } as Record<string, string>,
     // The post-merge Playwright run (.github/workflows/postmerge-playwright.yml)
     // builds and starts the app itself via `next start` before invoking Playwright,
     // so it needs webServer to attach to that already-running server instead of

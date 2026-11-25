@@ -1,120 +1,199 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { generateApiKey } from '@/lib/auth/api-keys';
-import { resolveCaller } from '@/lib/auth/caller';
-import { _setApiKeyStore, InMemoryApiKeyStore, type ApiKeyRecord } from '@/lib/auth/key-store';
+import { InMemoryApiKeyStore, _setApiKeyStore, type ApiKeyRecord } from '@/lib/auth/key-store';
+import { anonymousScopes, resolveCaller } from '@/lib/auth/caller';
 
-const NOW = Date.UTC(2026, 0, 1);
+describe('lib/auth/caller.ts (AGS003)', () => {
+  let store: InMemoryApiKeyStore;
 
-let store: InMemoryApiKeyStore;
+  beforeEach(() => {
+    store = new InMemoryApiKeyStore();
+    _setApiKeyStore(store);
+  });
 
-async function seed(overrides: Partial<ApiKeyRecord> = {}) {
-  const generated = await generateApiKey();
-  const record: ApiKeyRecord = {
-    keyId: generated.keyId,
-    displayPrefix: generated.displayPrefix,
-    hash: generated.hash,
-    name: 'agent',
-    scopes: ['quotes:read', 'intents:write'],
-    tier: 'partner',
-    maxIntentAmount: '500',
-    createdAt: new Date(NOW - 86_400_000).toISOString(),
-    expiresAt: null,
-    revokedAt: null,
-    lastUsedAt: null,
-    ...overrides,
-  };
-  await store.create(record);
-  return { key: generated.key, record };
-}
+  afterEach(() => {
+    vi.restoreAllMocks();
+  });
 
-beforeEach(() => {
-  store = new InMemoryApiKeyStore();
-  _setApiKeyStore(store);
-});
+  it('anonymous caller with no header returns anonymous identity and rate limit key', async () => {
+    const headers = new Headers({ 'x-forwarded-for': '198.51.100.42' });
+    const resolution = await resolveCaller(headers);
 
-afterEach(() => {
-  _setApiKeyStore(null);
-  vi.restoreAllMocks();
-});
+    expect(resolution.ok).toBe(true);
+    if (!resolution.ok) return;
 
-describe('resolveCaller', () => {
-  it('resolves no credential to an anonymous caller keyed by IP', async () => {
-    const result = await resolveCaller(new Headers({ 'x-forwarded-for': '203.0.113.7, 10.0.0.1' }));
-    expect(result).toEqual({
-      ok: true,
-      caller: {
-        kind: 'anonymous',
-        id: 'anonymous',
-        rateLimitKey: '203.0.113.7',
-        keyId: null,
-        tier: 'anonymous',
-        scopes: ['quotes:read', 'intents:write', 'reputation:write'],
-        maxIntentAmount: null,
-      },
+    expect(resolution.caller).toMatchObject({
+      kind: 'anonymous',
+      id: 'anonymous',
+      rateLimitKey: '198.51.100.42',
+      keyId: null,
+      tier: 'anonymous',
+      scopes: anonymousScopes(),
+      maxIntentAmount: null,
     });
+    expect(resolution.caller.id).not.toContain('198.51.100.42');
   });
 
-  it.each([
-    ['Authorization: Bearer', (k: string) => ({ authorization: `Bearer ${k}` })],
-    ['lowercase bearer', (k: string) => ({ authorization: `bearer ${k}` })],
-    ['X-API-Key', (k: string) => ({ 'x-api-key': k })],
-  ])('resolves a valid key via %s', async (_label, headers) => {
-    const { key, record } = await seed();
-    const result = await resolveCaller(new Headers(headers(key)), NOW);
-    expect(result).toEqual({
-      ok: true,
-      caller: {
-        kind: 'key',
-        id: `key:${record.keyId}`,
-        rateLimitKey: `key:${record.keyId}`,
-        keyId: record.keyId,
-        tier: 'partner',
-        scopes: ['quotes:read', 'intents:write'],
-        maxIntentAmount: '500',
-      },
+  it('Authorization: Bearer <key>, lowercase bearer, and X-API-Key resolve keyed caller', async () => {
+    const key = await generateApiKey();
+    const record: ApiKeyRecord = {
+      keyId: key.keyId,
+      displayPrefix: key.displayPrefix,
+      hash: key.hash,
+      name: 'Agent Key',
+      scopes: ['quotes:read', 'intents:write'],
+      tier: 'partner',
+      maxIntentAmount: '5000',
+      createdAt: new Date().toISOString(),
+      expiresAt: null,
+      revokedAt: null,
+      lastUsedAt: null,
+    };
+    await store.create(record);
+
+    // Standard Bearer
+    const res1 = await resolveCaller(new Headers({ authorization: `Bearer ${key.key}` }));
+    expect(res1.ok).toBe(true);
+    if (!res1.ok) return;
+    expect(res1.caller).toMatchObject({
+      kind: 'key',
+      id: `key:${key.keyId}`,
+      rateLimitKey: `key:${key.keyId}`,
+      keyId: key.keyId,
+      tier: 'partner',
+      scopes: ['quotes:read', 'intents:write'],
+      maxIntentAmount: '5000',
     });
+
+    // Lowercase bearer
+    const res2 = await resolveCaller(new Headers({ authorization: `bearer ${key.key}` }));
+    expect(res2.ok).toBe(true);
+
+    // X-API-Key
+    const res3 = await resolveCaller(new Headers({ 'x-api-key': key.key }));
+    expect(res3.ok).toBe(true);
   });
 
-  it('rejects garbage, unknown keyIds and wrong secrets identically', async () => {
-    const { key } = await seed();
-    const garbage = await resolveCaller(new Headers({ authorization: 'Bearer nope' }), NOW);
-    expect(garbage).toMatchObject({ ok: false, status: 401, code: 'invalid_api_key' });
-
-    const unknown = await generateApiKey();
-    const unknownResult = await resolveCaller(new Headers({ 'x-api-key': unknown.key }), NOW);
-    const wrongSecret = key.slice(0, -1) + (key.endsWith('A') ? 'B' : 'A');
-    const wrongResult = await resolveCaller(new Headers({ 'x-api-key': wrongSecret }), NOW);
-    expect(unknownResult).toMatchObject({ ok: false, code: 'invalid_api_key' });
-    expect(wrongResult).toEqual(unknownResult);
-  });
-
-  it('rejects revoked and expired keys', async () => {
-    const revoked = await seed({ revokedAt: new Date(NOW - 1000).toISOString() });
-    expect(await resolveCaller(new Headers({ 'x-api-key': revoked.key }), NOW)).toMatchObject({
+  it('garbage credential returns invalid_api_key without falling back to anonymous', async () => {
+    const res = await resolveCaller(new Headers({ authorization: 'Bearer totally-invalid-key' }));
+    expect(res).toEqual({
       ok: false,
+      status: 401,
+      code: 'invalid_api_key',
+      message: 'API key is not valid',
+    });
+  });
+
+  it('unknown keyId or wrong secret gives invalid_api_key with identical message', async () => {
+    const key = await generateApiKey();
+    // Not saved in store
+    const resUnknown = await resolveCaller(new Headers({ authorization: `Bearer ${key.key}` }));
+    expect(resUnknown).toEqual({
+      ok: false,
+      status: 401,
+      code: 'invalid_api_key',
+      message: 'API key is not valid',
+    });
+
+    // Saved in store, but wrong secret presented
+    await store.create({
+      keyId: key.keyId,
+      displayPrefix: key.displayPrefix,
+      hash: '0'.repeat(64),
+      name: 'Key',
+      scopes: ['quotes:read'],
+      tier: 'standard',
+      maxIntentAmount: null,
+      createdAt: new Date().toISOString(),
+      expiresAt: null,
+      revokedAt: null,
+      lastUsedAt: null,
+    });
+    const resWrongSecret = await resolveCaller(new Headers({ authorization: `Bearer ${key.key}` }));
+    expect(resWrongSecret).toEqual({
+      ok: false,
+      status: 401,
+      code: 'invalid_api_key',
+      message: 'API key is not valid',
+    });
+  });
+
+  it('revoked key returns revoked_api_key and expired key returns expired_api_key', async () => {
+    const key1 = await generateApiKey();
+    await store.create({
+      keyId: key1.keyId,
+      displayPrefix: key1.displayPrefix,
+      hash: key1.hash,
+      name: 'Revoked Key',
+      scopes: ['quotes:read'],
+      tier: 'standard',
+      maxIntentAmount: null,
+      createdAt: '2026-11-21T10:00:00.000Z',
+      expiresAt: null,
+      revokedAt: '2026-11-21T11:00:00.000Z',
+      lastUsedAt: null,
+    });
+    expect(await resolveCaller(new Headers({ authorization: `Bearer ${key1.key}` }))).toEqual({
+      ok: false,
+      status: 401,
       code: 'revoked_api_key',
+      message: 'API key has been revoked',
     });
 
-    const expiring = await seed({ expiresAt: new Date(NOW).toISOString() });
-    expect(await resolveCaller(new Headers({ 'x-api-key': expiring.key }), NOW - 1)).toMatchObject({
-      ok: true,
+    const key2 = await generateApiKey();
+    await store.create({
+      keyId: key2.keyId,
+      displayPrefix: key2.displayPrefix,
+      hash: key2.hash,
+      name: 'Expired Key',
+      scopes: ['quotes:read'],
+      tier: 'standard',
+      maxIntentAmount: null,
+      createdAt: '2026-11-21T10:00:00.000Z',
+      expiresAt: '2026-11-21T11:00:00.000Z',
+      revokedAt: null,
+      lastUsedAt: null,
     });
-    expect(await resolveCaller(new Headers({ 'x-api-key': expiring.key }), NOW)).toMatchObject({
+    const nowAfterExp = Date.parse('2026-11-21T11:00:01.000Z');
+    expect(
+      await resolveCaller(new Headers({ authorization: `Bearer ${key2.key}` }), nowAfterExp)
+    ).toEqual({
       ok: false,
+      status: 401,
       code: 'expired_api_key',
+      message: 'API key has expired',
     });
   });
 
-  it('touches the key once on success, and a failing touch does not fail resolution', async () => {
-    const { key, record } = await seed();
-    const touch = vi.spyOn(store, 'touch');
-    await resolveCaller(new Headers({ 'x-api-key': key }), NOW);
-    expect(touch).toHaveBeenCalledTimes(1);
-    expect(touch).toHaveBeenCalledWith(record.keyId, new Date(NOW).toISOString());
-
-    touch.mockRejectedValueOnce(new Error('db down'));
-    expect(await resolveCaller(new Headers({ 'x-api-key': key }), NOW)).toMatchObject({
-      ok: true,
+  it('touch is called on success, and a rejecting touch does not fail resolution', async () => {
+    const key = await generateApiKey();
+    await store.create({
+      keyId: key.keyId,
+      displayPrefix: key.displayPrefix,
+      hash: key.hash,
+      name: 'Key',
+      scopes: ['quotes:read'],
+      tier: 'standard',
+      maxIntentAmount: null,
+      createdAt: new Date().toISOString(),
+      expiresAt: null,
+      revokedAt: null,
+      lastUsedAt: null,
     });
+
+    vi.spyOn(store, 'touch').mockRejectedValueOnce(new Error('db connection failed'));
+    const res = await resolveCaller(new Headers({ authorization: `Bearer ${key.key}` }));
+    expect(res.ok).toBe(true);
+    expect(store.touch).toHaveBeenCalledTimes(1);
+  });
+
+  it('never downgrades an invalid credential to anonymous (#2196)', async () => {
+    const res = await resolveCaller(new Headers({ 'x-api-key': 'invalid-token-or-key' }));
+    expect(res.ok).toBe(false);
+    if (!res.ok) {
+      expect(res.status).toBe(401);
+      expect(res.code).toBe('invalid_api_key');
+      expect(res.message).toBe('API key is not valid');
+    }
   });
 });

@@ -158,6 +158,40 @@ describe('getSep24Transaction', () => {
     expect(result.id).toBe(TRANSACTION_ID);
   });
 
+  it('returns the refunds object validated, and omits one that is not an object', async () => {
+    const respond = (refunds: unknown) =>
+      vi.stubGlobal(
+        'fetch',
+        vi.fn(async () => ({
+          ok: true,
+          json: async () => ({
+            transaction: { id: TRANSACTION_ID, status: 'refunded', refunds },
+          }),
+        }))
+      );
+
+    respond({
+      amount_refunded: 100,
+      amount_fee: '2.5',
+      payments: [
+        { id: 'tx-1', id_type: 'stellar', amount: '100', fee: '2.5' },
+        { id: 'DE89370400440532013000', id_type: 'iban', amount: '100', fee: '0' },
+      ],
+    });
+    const refunded = await getSep24Transaction(TRANSFER_SERVER, TRANSACTION_ID, JWT);
+    expect(refunded.refunds).toEqual({
+      amount_refunded: '100',
+      amount_fee: '2.5',
+      payments: [{ id: 'tx-1', id_type: 'stellar', amount: '100', fee: '2.5' }],
+    });
+
+    // A hostile or broken anchor: the field is absent, never passed through as it came.
+    respond('oops');
+    const malformed = await getSep24Transaction(TRANSFER_SERVER, TRANSACTION_ID, JWT);
+    expect(malformed.status).toBe('refunded');
+    expect('refunds' in malformed).toBe(false);
+  });
+
   it('throws a descriptive error on a non-ok HTTP response', async () => {
     vi.stubGlobal(
       'fetch',
