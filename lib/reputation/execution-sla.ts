@@ -36,6 +36,11 @@ export const SLA_MIN_SAMPLES = 30;
 /** p99 is reported only from this many samples (below it, nearest-rank p99 is just the maximum). */
 export const SLA_P99_MIN_SAMPLES = 100;
 
+/** A day's p95 is published only from this many samples. */
+export const SLA_DAILY_MIN_SAMPLES = 5;
+
+const DAY_MS = 24 * 60 * 60 * 1000;
+
 const MS_PER_DAY = 86_400_000;
 
 interface ExecutionSlaBase {
@@ -89,6 +94,29 @@ function inWindow(createdAt: string, windowStartMs: number, windowEndMs: number)
   return Number.isFinite(t) && windowStartMs <= t && t <= windowEndMs;
 }
 
+/** A withdrawal by this anchor (and corridor, when scoped) that is not disputed. */
+function isInScope(row: OutcomeLogRow, scope: ExecutionSlaScope): boolean {
+  if (row.anchorId !== scope.anchorId) return false;
+  if (scope.corridor !== undefined && row.corridor !== scope.corridor) return false;
+  if (row.direction !== 'withdraw') return false;
+  return row.disputed === false;
+}
+
+/**
+ * Whether a row is a settle-time sample: in scope, completed, and with a
+ * finite, non-negative `settleSeconds`. Shared by the trailing-window SLA and
+ * the daily series (SLA005) so the two can never count differently.
+ */
+function isSettleSample(row: OutcomeLogRow, scope: ExecutionSlaScope): boolean {
+  if (!isInScope(row, scope)) return false;
+  if (row.outcome !== 'completed') return false;
+  return (
+    typeof row.settleSeconds === 'number' &&
+    Number.isFinite(row.settleSeconds) &&
+    row.settleSeconds >= 0
+  );
+}
+
 /**
  * Collects the scope's settle-latency samples in milliseconds, sorted
  * ascending, plus the count of every in-scope row regardless of outcome.
@@ -103,19 +131,13 @@ export function settleSamplesMs(
   let terminalCount = 0;
 
   for (const row of rows) {
-    if (row.anchorId !== scope.anchorId) continue;
-    if (scope.corridor !== undefined && row.corridor !== scope.corridor) continue;
-    if (row.direction !== 'withdraw') continue;
-    if (row.disputed !== false) continue;
+    if (!isInScope(row, scope)) continue;
     if (!inWindow(row.createdAt, windowStartMs, windowEndMs)) continue;
 
     terminalCount++;
 
-    if (row.outcome !== 'completed') continue;
-    if (row.settleSeconds === null || !Number.isFinite(row.settleSeconds)) continue;
-    if (row.settleSeconds < 0) continue;
-
-    samplesMs.push(Math.round(row.settleSeconds * 1000));
+    if (!isSettleSample(row, scope)) continue;
+    samplesMs.push(Math.round((row.settleSeconds as number) * 1000));
   }
 
   samplesMs.sort((a, b) => a - b);
@@ -243,6 +265,19 @@ export const ExecutionSlaEntrySchema = z.object({
   breach: SlaBreachAssessmentSchema,
 });
 
+export interface SlaDailyPoint {
+  /** UTC day, `YYYY-MM-DD`. */
+  day: string;
+  p95Ms: number | null;
+  sampleSize: number;
+}
+
+export const SlaDailyPointSchema = z.object({
+  day: z.string().regex(/^\d{4}-\d{2}-\d{2}$/),
+  p95Ms: z.number().nullable(),
+  sampleSize: z.number().int().nonnegative(),
+});
+
 export interface ExecutionSlaReport {
   anchorId: string;
   windowDays: number;
@@ -250,6 +285,8 @@ export interface ExecutionSlaReport {
   thresholds: SlaThresholds;
   overall: ExecutionSlaEntry;
   corridors: Array<ExecutionSlaEntry & { corridor: string }>;
+  /** Per-UTC-day p95 over the trailing window, oldest first (SLA005). */
+  history: SlaDailyPoint[];
 }
 
 export const ExecutionSlaReportSchema = z.object({
@@ -259,6 +296,7 @@ export const ExecutionSlaReportSchema = z.object({
   thresholds: SlaThresholdsSchema,
   overall: ExecutionSlaEntrySchema,
   corridors: z.array(ExecutionSlaEntrySchema.extend({ corridor: z.string() })),
+  history: z.array(SlaDailyPointSchema),
 });
 
 export interface ExecutionSlaReportOptions extends ExecutionSlaOptions {
@@ -334,5 +372,49 @@ export function buildExecutionSlaReport(
       const sla = slaFor(corridor);
       return { corridor, sla, breach: evaluateSlaBreach(sla, thresholds) };
     }),
+    history: buildDailyP95Series(
+      rows,
+      options?.corridor ? { anchorId, corridor: options.corridor } : { anchorId },
+      { nowMs }
+    ),
   };
+}
+
+/**
+ * A per-UTC-day p95 settle-time series (SLA005), for the sparkline and for
+ * API clients that want the trend. Exactly `days` points, oldest first; the
+ * last is the UTC day containing `nowMs`. A day publishes a p95 only from
+ * SLA_DAILY_MIN_SAMPLES samples; `sampleSize` is always that day's count.
+ *
+ * The series covers whole UTC days, so its first day can start up to 24 h
+ * before `windowStart` of the trailing window.
+ */
+export function buildDailyP95Series(
+  rows: readonly OutcomeLogRow[],
+  scope: ExecutionSlaScope,
+  options?: { nowMs?: number; days?: number }
+): SlaDailyPoint[] {
+  const nowMs = options?.nowMs ?? Date.now();
+  const days = options?.days ?? SLA_WINDOW_DAYS;
+  const now = new Date(nowMs);
+  const lastDayStart = Date.UTC(now.getUTCFullYear(), now.getUTCMonth(), now.getUTCDate());
+  const firstDayStart = lastDayStart - (days - 1) * DAY_MS;
+
+  const byDay: number[][] = Array.from({ length: days }, () => []);
+  for (const row of rows) {
+    if (!isSettleSample(row, scope)) continue;
+    const t = Date.parse(row.createdAt);
+    if (!Number.isFinite(t) || t > nowMs || t < firstDayStart) continue;
+    const index = Math.floor((t - firstDayStart) / DAY_MS);
+    if (index < days) byDay[index]!.push(Math.round((row.settleSeconds as number) * 1000));
+  }
+
+  return byDay.map((samples, index) => {
+    samples.sort((a, b) => a - b);
+    return {
+      day: new Date(firstDayStart + index * DAY_MS).toISOString().slice(0, 10),
+      p95Ms: samples.length >= SLA_DAILY_MIN_SAMPLES ? nearestRankPercentile(samples, 95) : null,
+      sampleSize: samples.length,
+    };
+  });
 }
