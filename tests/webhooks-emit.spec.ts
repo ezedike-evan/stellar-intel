@@ -1,6 +1,7 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { InMemoryWebhookStore, _setWebhookStore } from '@/lib/webhooks/store';
 import { emitWebhookEvent, _setWebhookEmitter } from '@/lib/webhooks/emit';
+import { makeWebhookEvent } from '@/lib/webhooks/events';
 import type { WebhookSubscription } from '@/lib/webhooks/types';
 
 const SUB: WebhookSubscription = {
@@ -34,6 +35,8 @@ afterEach(() => {
 });
 
 const CREATED_PAYLOAD = {
+  intentHash: 'aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa',
+  direction: 'offramp' as const,
   corridorId: 'usdc-ngn',
   anchorId: 'cowrie',
   quoteId: 'q-1',
@@ -85,5 +88,31 @@ describe('emitWebhookEvent', () => {
 
     expect(seen).toEqual([['intent.settled', SETTLED_PAYLOAD]]);
     expect(fetch).not.toHaveBeenCalled();
+  });
+
+  it('passes an explicit idempotency key through to the seam and to the stored event (WHK004)', async () => {
+    const seen: unknown[] = [];
+    _setWebhookEmitter((_kind, _payload, opts) => {
+      seen.push(opts);
+    });
+    emitWebhookEvent('intent.settled', SETTLED_PAYLOAD, { idempotencyKey: 'settle:tx-1' });
+    expect(seen).toEqual([{ idempotencyKey: 'settle:tx-1' }]);
+
+    _setWebhookEmitter(null);
+    const fetchMock = vi.fn().mockResolvedValue({ ok: true, status: 200 });
+    vi.stubGlobal('fetch', fetchMock);
+    await store.saveSubscription({ ...SUB, events: ['intent.settled'] });
+    emitWebhookEvent('intent.settled', SETTLED_PAYLOAD, { idempotencyKey: 'settle:tx-1' });
+    await flush();
+    const headers = (fetchMock.mock.calls[0]![1] as RequestInit).headers as Record<string, string>;
+    expect(headers['x-webhook-idempotency-key']).toBe('settle:tx-1');
+  });
+
+  it('defaults the idempotency key to <kind>:<event id>', () => {
+    const event = makeWebhookEvent('intent.created', CREATED_PAYLOAD);
+    expect(event.idempotencyKey).toBe(`intent.created:${event.id}`);
+    expect(event.idempotencyKey).toMatch(
+      /^intent\.created:[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/
+    );
   });
 });

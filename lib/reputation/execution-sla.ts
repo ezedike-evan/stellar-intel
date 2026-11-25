@@ -17,8 +17,15 @@
  */
 
 import { z } from 'zod';
+import { extendZodWithOpenApi } from '@asteasolutions/zod-to-openapi';
 import type { OutcomeLogRow } from '@/types/reputation';
 import { nearestRankPercentile } from './percentile';
+import { ANCHORS } from '@/constants/anchors';
+import { getSlaThresholds, type SlaThresholds } from '@/constants/sla-thresholds';
+
+// The report schema is registered in lib/api/openapi.ts. Zod builds each schema's
+// methods when it is created, so `.openapi()` must exist before the schemas below are.
+extendZodWithOpenApi(z);
 
 /** Trailing window an SLA is computed over. */
 export const SLA_WINDOW_DAYS = 30;
@@ -28,6 +35,11 @@ export const SLA_MIN_SAMPLES = 30;
 
 /** p99 is reported only from this many samples (below it, nearest-rank p99 is just the maximum). */
 export const SLA_P99_MIN_SAMPLES = 100;
+
+/** A day's p95 is published only from this many samples. */
+export const SLA_DAILY_MIN_SAMPLES = 5;
+
+const DAY_MS = 24 * 60 * 60 * 1000;
 
 const MS_PER_DAY = 86_400_000;
 
@@ -82,6 +94,29 @@ function inWindow(createdAt: string, windowStartMs: number, windowEndMs: number)
   return Number.isFinite(t) && windowStartMs <= t && t <= windowEndMs;
 }
 
+/** A withdrawal by this anchor (and corridor, when scoped) that is not disputed. */
+function isInScope(row: OutcomeLogRow, scope: ExecutionSlaScope): boolean {
+  if (row.anchorId !== scope.anchorId) return false;
+  if (scope.corridor !== undefined && row.corridor !== scope.corridor) return false;
+  if (row.direction !== 'withdraw') return false;
+  return row.disputed === false;
+}
+
+/**
+ * Whether a row is a settle-time sample: in scope, completed, and with a
+ * finite, non-negative `settleSeconds`. Shared by the trailing-window SLA and
+ * the daily series (SLA005) so the two can never count differently.
+ */
+function isSettleSample(row: OutcomeLogRow, scope: ExecutionSlaScope): boolean {
+  if (!isInScope(row, scope)) return false;
+  if (row.outcome !== 'completed') return false;
+  return (
+    typeof row.settleSeconds === 'number' &&
+    Number.isFinite(row.settleSeconds) &&
+    row.settleSeconds >= 0
+  );
+}
+
 /**
  * Collects the scope's settle-latency samples in milliseconds, sorted
  * ascending, plus the count of every in-scope row regardless of outcome.
@@ -96,19 +131,13 @@ export function settleSamplesMs(
   let terminalCount = 0;
 
   for (const row of rows) {
-    if (row.anchorId !== scope.anchorId) continue;
-    if (scope.corridor !== undefined && row.corridor !== scope.corridor) continue;
-    if (row.direction !== 'withdraw') continue;
-    if (row.disputed !== false) continue;
+    if (!isInScope(row, scope)) continue;
     if (!inWindow(row.createdAt, windowStartMs, windowEndMs)) continue;
 
     terminalCount++;
 
-    if (row.outcome !== 'completed') continue;
-    if (row.settleSeconds === null || !Number.isFinite(row.settleSeconds)) continue;
-    if (row.settleSeconds < 0) continue;
-
-    samplesMs.push(Math.round(row.settleSeconds * 1000));
+    if (!isSettleSample(row, scope)) continue;
+    samplesMs.push(Math.round((row.settleSeconds as number) * 1000));
   }
 
   samplesMs.sort((a, b) => a - b);
@@ -194,3 +223,198 @@ export const ExecutionSlaSchema = z.discriminatedUnion('state', [
   }),
   executionSlaBaseSchema.extend({ state: z.literal('insufficient_data') }),
 ]);
+
+// ─── Breach thresholds and the SLA report (SLA003) ────────────────────────────
+
+export const SlaThresholdsSchema = z.object({
+  p95Ms: z.number(),
+  p99Ms: z.number(),
+});
+
+export type SlaBreachStatus = 'within' | 'breach' | 'unknown';
+
+export interface SlaBreach {
+  metric: 'p95' | 'p99';
+  observedMs: number;
+  thresholdMs: number;
+}
+
+export const SlaBreachSchema = z.object({
+  metric: z.enum(['p95', 'p99']),
+  observedMs: z.number(),
+  thresholdMs: z.number(),
+});
+
+export interface SlaBreachAssessment {
+  status: SlaBreachStatus;
+  breaches: SlaBreach[];
+}
+
+export const SlaBreachAssessmentSchema = z.object({
+  status: z.enum(['within', 'breach', 'unknown']),
+  breaches: z.array(SlaBreachSchema),
+});
+
+export interface ExecutionSlaEntry {
+  sla: ExecutionSla;
+  breach: SlaBreachAssessment;
+}
+
+export const ExecutionSlaEntrySchema = z.object({
+  sla: ExecutionSlaSchema,
+  breach: SlaBreachAssessmentSchema,
+});
+
+export interface SlaDailyPoint {
+  /** UTC day, `YYYY-MM-DD`. */
+  day: string;
+  p95Ms: number | null;
+  sampleSize: number;
+}
+
+export const SlaDailyPointSchema = z.object({
+  day: z.string().regex(/^\d{4}-\d{2}-\d{2}$/),
+  p95Ms: z.number().nullable(),
+  sampleSize: z.number().int().nonnegative(),
+});
+
+export interface ExecutionSlaReport {
+  anchorId: string;
+  windowDays: number;
+  computedAt: string;
+  thresholds: SlaThresholds;
+  overall: ExecutionSlaEntry;
+  corridors: Array<ExecutionSlaEntry & { corridor: string }>;
+  /** Per-UTC-day p95 over the trailing window, oldest first (SLA005). */
+  history: SlaDailyPoint[];
+}
+
+export const ExecutionSlaReportSchema = z.object({
+  anchorId: z.string(),
+  windowDays: z.number().int().positive(),
+  computedAt: z.string(),
+  thresholds: SlaThresholdsSchema,
+  overall: ExecutionSlaEntrySchema,
+  corridors: z.array(ExecutionSlaEntrySchema.extend({ corridor: z.string() })),
+  history: z.array(SlaDailyPointSchema),
+});
+
+export interface ExecutionSlaReportOptions extends ExecutionSlaOptions {
+  /** Defaults to getSlaThresholds(anchorId). */
+  thresholds?: SlaThresholds;
+  /** Restricts `corridors` to exactly this one corridor, even with zero rows. */
+  corridor?: string;
+}
+
+/**
+ * Compares an SLA with its thresholds. Equal is within; insufficient data is
+ * unknown, never a breach; a p99 that is not reported (too few samples) never
+ * breaches.
+ */
+export function evaluateSlaBreach(
+  sla: ExecutionSla,
+  thresholds: SlaThresholds
+): SlaBreachAssessment {
+  if (sla.state === 'insufficient_data') {
+    return { status: 'unknown', breaches: [] };
+  }
+
+  const breaches: SlaBreach[] = [];
+  if (sla.p95Ms > thresholds.p95Ms) {
+    breaches.push({ metric: 'p95', observedMs: sla.p95Ms, thresholdMs: thresholds.p95Ms });
+  }
+  if (sla.p99Ms !== null && sla.p99Ms > thresholds.p99Ms) {
+    breaches.push({ metric: 'p99', observedMs: sla.p99Ms, thresholdMs: thresholds.p99Ms });
+  }
+
+  return { status: breaches.length > 0 ? 'breach' : 'within', breaches };
+}
+
+/**
+ * The anchor's SLA report: overall and per corridor, each with its breach
+ * assessment. `nowMs` is resolved once so every figure shares one window.
+ */
+export function buildExecutionSlaReport(
+  rows: readonly OutcomeLogRow[],
+  anchorId: string,
+  options?: ExecutionSlaReportOptions
+): ExecutionSlaReport {
+  const nowMs = options?.nowMs ?? Date.now();
+  const shared: ExecutionSlaOptions = {
+    nowMs,
+    ...(options?.windowDays !== undefined ? { windowDays: options.windowDays } : {}),
+    ...(options?.minSamples !== undefined ? { minSamples: options.minSamples } : {}),
+  };
+  const thresholds = options?.thresholds ?? getSlaThresholds(anchorId);
+
+  const overallSla = computeExecutionSla(rows, { anchorId }, shared);
+  const byCorridor = new Map(
+    computeExecutionSlaByCorridor(rows, anchorId, shared).map((entry) => [
+      entry.corridor,
+      entry.sla,
+    ])
+  );
+  const slaFor = (corridor: string): ExecutionSla =>
+    byCorridor.get(corridor) ?? computeExecutionSla(rows, { anchorId, corridor }, shared);
+
+  const registered = ANCHORS.find((a) => a.id === anchorId)?.corridors ?? [];
+  const corridorIds = options?.corridor
+    ? [options.corridor]
+    : [...new Set([...registered, ...byCorridor.keys()])].sort();
+
+  return {
+    anchorId,
+    windowDays: overallSla.windowDays,
+    computedAt: overallSla.computedAt,
+    thresholds,
+    overall: { sla: overallSla, breach: evaluateSlaBreach(overallSla, thresholds) },
+    corridors: corridorIds.map((corridor) => {
+      const sla = slaFor(corridor);
+      return { corridor, sla, breach: evaluateSlaBreach(sla, thresholds) };
+    }),
+    history: buildDailyP95Series(
+      rows,
+      options?.corridor ? { anchorId, corridor: options.corridor } : { anchorId },
+      { nowMs }
+    ),
+  };
+}
+
+/**
+ * A per-UTC-day p95 settle-time series (SLA005), for the sparkline and for
+ * API clients that want the trend. Exactly `days` points, oldest first; the
+ * last is the UTC day containing `nowMs`. A day publishes a p95 only from
+ * SLA_DAILY_MIN_SAMPLES samples; `sampleSize` is always that day's count.
+ *
+ * The series covers whole UTC days, so its first day can start up to 24 h
+ * before `windowStart` of the trailing window.
+ */
+export function buildDailyP95Series(
+  rows: readonly OutcomeLogRow[],
+  scope: ExecutionSlaScope,
+  options?: { nowMs?: number; days?: number }
+): SlaDailyPoint[] {
+  const nowMs = options?.nowMs ?? Date.now();
+  const days = options?.days ?? SLA_WINDOW_DAYS;
+  const now = new Date(nowMs);
+  const lastDayStart = Date.UTC(now.getUTCFullYear(), now.getUTCMonth(), now.getUTCDate());
+  const firstDayStart = lastDayStart - (days - 1) * DAY_MS;
+
+  const byDay: number[][] = Array.from({ length: days }, () => []);
+  for (const row of rows) {
+    if (!isSettleSample(row, scope)) continue;
+    const t = Date.parse(row.createdAt);
+    if (!Number.isFinite(t) || t > nowMs || t < firstDayStart) continue;
+    const index = Math.floor((t - firstDayStart) / DAY_MS);
+    if (index < days) byDay[index]!.push(Math.round((row.settleSeconds as number) * 1000));
+  }
+
+  return byDay.map((samples, index) => {
+    samples.sort((a, b) => a - b);
+    return {
+      day: new Date(firstDayStart + index * DAY_MS).toISOString().slice(0, 10),
+      p95Ms: samples.length >= SLA_DAILY_MIN_SAMPLES ? nearestRankPercentile(samples, 95) : null,
+      sampleSize: samples.length,
+    };
+  });
+}
