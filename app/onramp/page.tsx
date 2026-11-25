@@ -6,6 +6,7 @@ import { WalletButton } from '@/components/ui/WalletButton';
 import { CorridorSelector } from '@/components/ui/CorridorSelector';
 import { DisclaimerBanner } from '@/components/offramp/DisclaimerBanner';
 import { TemplatePicker } from '@/components/templates/TemplatePicker';
+import { TemplateManager } from '@/components/templates/TemplateManager';
 import { DepositRateTable } from '@/components/onramp/DepositRateTable';
 import { DepositStatusTracker } from '@/components/onramp/DepositStatusTracker';
 import { useWallet } from '@/contexts/WalletContext';
@@ -117,6 +118,8 @@ function OnrampContent() {
     flags.intentTemplates && isConnected ? publicKey : null,
     'onramp'
   );
+  const [managerOpen, setManagerOpen] = useState(false);
+  const manageButtonRef = useRef<HTMLButtonElement>(null);
 
   const handleApplyTemplate = useCallback(
     (t: IntentTemplate) => {
@@ -341,8 +344,18 @@ function OnrampContent() {
           templates={templatesApi.templates}
           visibleCorridorIds={VALID_CORRIDOR_IDS}
           onApply={handleApplyTemplate}
+          onManage={() => setManagerOpen(true)}
+          manageButtonRef={manageButtonRef}
         />
       )}
+      <TemplateManager
+        open={managerOpen}
+        onClose={() => {
+          setManagerOpen(false);
+          manageButtonRef.current?.focus();
+        }}
+        api={templatesApi}
+      />
 
       <div className="border-border bg-bg-sunken grid grid-cols-1 gap-4 rounded-xl border p-4 sm:grid-cols-3">
         <CorridorSelector value={corridorId} onChange={setCorridorId} assetCode={corridor.from} />

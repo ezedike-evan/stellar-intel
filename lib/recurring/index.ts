@@ -89,3 +89,11 @@ export {
   type ExecutionCheckCode,
   type ProposedExecution,
 } from './enforce';
+
+// Due reminders, computed lazily from terms and history (REC006)
+export {
+  computeAuthorizationState,
+  type AuthorizationPhase,
+  type AuthorizationState,
+  type DueReminder,
+} from './due';

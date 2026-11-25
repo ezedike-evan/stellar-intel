@@ -28,6 +28,7 @@ import { useWithdrawStatus, type OutcomeAppendContext } from '@/hooks/useWithdra
 import { useWalletBalance } from '@/hooks/useWalletBalance';
 import { amountBucket, FUNNEL_EVENTS, TEMPLATE_EVENTS, trackFunnelEvent } from '@/lib/analytics';
 import { TemplatePicker } from '@/components/templates/TemplatePicker';
+import { TemplateManager } from '@/components/templates/TemplateManager';
 import { useIntentTemplates } from '@/hooks/useIntentTemplates';
 import type { IntentTemplate, IntentTemplateDraft } from '@/lib/templates/schema';
 import { SaveTemplateForm } from '@/components/templates/SaveTemplateForm';
@@ -104,6 +105,8 @@ function OfframpContent() {
     flags.intentTemplates && isConnected ? publicKey : null,
     'offramp'
   );
+  const [managerOpen, setManagerOpen] = useState(false);
+  const manageButtonRef = useRef<HTMLButtonElement>(null);
   // Offered after a completed off-ramp started in this page session (TPL008).
   const [templateDraft, setTemplateDraft] = useState<IntentTemplateDraft | null>(null);
 
@@ -367,8 +370,18 @@ function OfframpContent() {
           templates={templatesApi.templates}
           visibleCorridorIds={VALID_CORRIDOR_IDS}
           onApply={handleApplyTemplate}
+          onManage={() => setManagerOpen(true)}
+          manageButtonRef={manageButtonRef}
         />
       )}
+      <TemplateManager
+        open={managerOpen}
+        onClose={() => {
+          setManagerOpen(false);
+          manageButtonRef.current?.focus();
+        }}
+        api={templatesApi}
+      />
 
       <div className="grid grid-cols-1 gap-4 rounded-xl border border-border bg-bg-sunken p-4 /50 sm:grid-cols-3">
         <AssetSelector

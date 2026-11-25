@@ -195,3 +195,19 @@ describe('/offramp save as template (#2161)', () => {
     expect(screen.queryByLabelText('Template name')).not.toBeInTheDocument();
   });
 });
+
+describe('/offramp template manager (#2163)', () => {
+  it('opens from the picker and returns focus to the button on close', async () => {
+    connect(true);
+    render(<OfframpPage />);
+    const manage = await screen.findByRole('button', { name: 'Manage templates' });
+    fireEvent.click(manage);
+    expect(await screen.findByRole('dialog', { name: 'Manage templates' })).toBeInTheDocument();
+
+    fireEvent.click(screen.getByRole('button', { name: 'Close' }));
+    await waitFor(() =>
+      expect(screen.queryByRole('dialog', { name: 'Manage templates' })).not.toBeInTheDocument()
+    );
+    expect(document.activeElement).toBe(manage);
+  });
+});
