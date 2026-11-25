@@ -31,6 +31,26 @@ registry.registerComponent('securitySchemes', 'callerKey', {
     'Caller API key (sik_…) or a short-lived caller token. Optional on public routes: anonymous calls are served at the anonymous tier.',
 });
 
+registry.registerComponent('securitySchemes', 'adminKey', {
+  type: 'apiKey',
+  in: 'header',
+  name: 'x-admin-key',
+  description: 'Server-side ADMIN_SECRET_KEY. Operator only.',
+});
+
+registry.registerComponent('securitySchemes', 'bearerAuth', {
+  type: 'http',
+  scheme: 'bearer',
+  description: 'CRON_SECRET. Vercel Cron and the operator only.',
+});
+
+registry.registerComponent('securitySchemes', 'callerKey', {
+  type: 'http',
+  scheme: 'bearer',
+  description:
+    'Caller API key (sik_…) or a short-lived caller token. Optional on public routes: anonymous calls are served at the anonymous tier.',
+});
+
 // ─── Reusable param helpers ─────────────────────────────────────────────────
 
 const CorridorPathParam = z.string().openapi({
@@ -1688,6 +1708,56 @@ const UNAUTHORIZED_401 = {
 
 registry.registerPath({
   method: 'get',
+  path: '/api/admin/audit/export',
+  summary: 'Export audit log (admin)',
+  description:
+    'Export audit log events over a date range as NDJSON or CSV. Requires adminKey or callerKey with admin scope.',
+  tags: ['Admin'],
+  security: [{ adminKey: [] }, { callerKey: [] }],
+  request: {
+    query: z.object({
+      from: z.string().openapi({ description: 'Start of ISO 8601 date range (inclusive)' }),
+      to: z.string().openapi({ description: 'End of ISO 8601 date range (exclusive)' }),
+      format: z
+        .enum(['ndjson', 'csv'])
+        .optional()
+        .openapi({ description: 'Export format ("ndjson" or "csv", default "ndjson")' }),
+      callerId: z
+        .string()
+        .optional()
+        .openapi({ description: 'Filter by caller id (e.g. "anonymous" or "key:<16-hex>")' }),
+    }),
+  },
+  responses: {
+    200: {
+      description: 'Audit log export stream',
+      content: {
+        'application/x-ndjson': {
+          schema: z.string(),
+        },
+        'text/csv': {
+          schema: z.string(),
+        },
+      },
+    },
+    400: {
+      description: 'Validation error',
+      content: { 'application/json': { schema: ApiErrorSchema } },
+    },
+    401: {
+      description: 'Authentication required',
+      content: { 'application/json': { schema: ApiErrorSchema } },
+    },
+    403: {
+      description: 'Forbidden',
+      content: { 'application/json': { schema: ApiErrorSchema } },
+    },
+    429: RATE_LIMITED_429,
+  },
+});
+
+registry.registerPath({
+  method: 'get',
   path: '/api/reputation/{anchor}/sla',
   summary: 'Get anchor execution SLA',
   description:
@@ -2991,6 +3061,75 @@ registry.registerPath({
       content: { 'application/json': { schema: ApiErrorSchema } },
     },
     429: RATE_LIMITED_429,
+  },
+});
+
+registry.registerPath({
+  method: 'post',
+  path: '/api/intent/status',
+  summary: 'Observe anchor transaction status',
+  description:
+    'Observes the current settlement status of a SEP-24 or SEP-6 transaction server-side. Forwards the caller-provided SEP-10 JWT for a single read of the anchor transfer server without storing or logging it. Tracks status transitions to support webhook notifications.',
+  tags: ['Intent'],
+  request: {
+    headers: z.object({
+      authorization: z.string().describe('Bearer <jwt> containing SEP-10 authentication token'),
+    }),
+    body: {
+      required: true,
+      content: {
+        'application/json': {
+          schema: z.object({
+            anchorId: z.string().describe('Registered anchor ID'),
+            transferServer: z.string().describe('HTTPS URL of the anchor transfer server'),
+            transactionId: z.string().min(1).max(200).describe('Anchor transaction ID'),
+            protocol: z.enum(['sep24', 'sep6']).describe('Transfer protocol used'),
+            direction: z.enum(['withdraw', 'deposit']).describe('Transaction direction'),
+            intentHash: z
+              .string()
+              .regex(/^[0-9a-f]{64}$/)
+              .optional()
+              .describe('64-hex canonical intent hash'),
+          }),
+        },
+      },
+    },
+  },
+  responses: {
+    200: {
+      description: 'Status observation recorded',
+      content: {
+        'application/json': {
+          schema: z.object({
+            status: z.string().describe('Current status reported by the anchor'),
+            previous: z
+              .string()
+              .nullable()
+              .describe('Previous status observed by the server, or null if first observation'),
+            changed: z
+              .boolean()
+              .describe('Whether the status changed since the last server observation'),
+            terminal: z.boolean().describe('Whether the current status is terminal'),
+          }),
+        },
+      },
+    },
+    400: {
+      description: 'Validation error or transfer server not allowed',
+      content: { 'application/json': { schema: ApiErrorSchema } },
+    },
+    401: {
+      description: 'Bearer authorization token required',
+      content: { 'application/json': { schema: ApiErrorSchema } },
+    },
+    429: {
+      description: 'Rate limit exceeded',
+      content: { 'application/json': { schema: ApiErrorSchema } },
+    },
+    502: {
+      description: 'Upstream anchor returned an error',
+      content: { 'application/json': { schema: ApiErrorSchema } },
+    },
   },
 });
 

@@ -27,6 +27,7 @@ the hardening contract (see `lib/api/v1.ts`):
 ## Table of Contents
 
 - **Admin**
+  - [`GET /api/admin/audit/export`](#get-apiadminauditexport)
   - [`GET /api/admin/disputes`](#get-apiadmindisputes)
   - [`POST /api/admin/disputes`](#post-apiadmindisputes)
   - [`GET /api/admin/keys`](#get-apiadminkeys)
@@ -42,6 +43,7 @@ the hardening contract (see `lib/api/v1.ts`):
 - **Intent**
   - [`POST /api/intent`](#post-apiintent)
   - [`POST /api/intent/offramp`](#post-apiintentofframp)
+  - [`POST /api/intent/status`](#post-apiintentstatus)
   - [`POST /api/v1/intent/offramp`](#post-apiv1intentofframp)
   - [`POST /api/v1/intent/onramp`](#post-apiv1intentonramp)
 - **On-ramp**
@@ -97,6 +99,34 @@ the hardening contract (see `lib/api/v1.ts`):
   - [`DELETE /api/webhooks/subscriptions/{id}`](#delete-apiwebhookssubscriptionsid)
 
 ## Admin
+
+### `GET /api/admin/audit/export`
+
+**Summary:** Export audit log (admin)  
+
+Export audit log events over a date range as NDJSON or CSV. Requires adminKey or callerKey with admin scope.
+
+#### Parameters
+
+| Name | In | Type | Required | Description |
+| :--- | :--- | :--- | :--- | :--- |
+| `from` | `query` | `string` | **Yes** | Start of ISO 8601 date range (inclusive) |
+| `to` | `query` | `string` | **Yes** | End of ISO 8601 date range (exclusive) |
+| `format` | `query` | `"ndjson" | "csv"` | No | Export format ("ndjson" or "csv", default "ndjson") |
+| `callerId` | `query` | `string` | No | Filter by caller id (e.g. "anonymous" or "key:<16-hex>") |
+
+#### Responses
+
+| Status | Description | Content-Type | Schema |
+| :--- | :--- | :--- | :--- |
+| `200` | Audit log export stream | `application/x-ndjson` | `string` |
+| `200` | Audit log export stream | `text/csv` | `string` |
+| `400` | Validation error | `application/json` | `ApiError` |
+| `401` | Authentication required | `application/json` | `ApiError` |
+| `403` | Forbidden | `application/json` | `ApiError` |
+| `429` | Rate limited | `application/json` | `ApiError` |
+
+---
 
 ### `GET /api/admin/disputes`
 
@@ -400,6 +430,43 @@ Resolves an anchor route for the given asset corridor, builds an unsigned Stella
 | `400` | Validation error or no route found | `application/json` | `ApiError` |
 | `429` | Rate limited | `application/json` | `ApiError` |
 | `500` | Transaction build failure | `application/json` | `ApiError` |
+
+---
+
+### `POST /api/intent/status`
+
+**Summary:** Observe anchor transaction status  
+
+Observes the current settlement status of a SEP-24 or SEP-6 transaction server-side. Forwards the caller-provided SEP-10 JWT for a single read of the anchor transfer server without storing or logging it. Tracks status transitions to support webhook notifications.
+
+#### Parameters
+
+| Name | In | Type | Required | Description |
+| :--- | :--- | :--- | :--- | :--- |
+| `authorization` | `header` | `string` | **Yes** | Bearer <jwt> containing SEP-10 authentication token |
+
+#### Request Body
+
+**Content-Type:** `application/json`
+
+| Field | Type | Required | Description |
+| :--- | :--- | :--- | :--- |
+| `anchorId` | `string` | **Yes** | Registered anchor ID |
+| `transferServer` | `string` | **Yes** | HTTPS URL of the anchor transfer server |
+| `transactionId` | `string` | **Yes** | Anchor transaction ID |
+| `protocol` | `"sep24" | "sep6"` | **Yes** | Transfer protocol used |
+| `direction` | `"withdraw" | "deposit"` | **Yes** | Transaction direction |
+| `intentHash` | `string` | No | 64-hex canonical intent hash |
+
+#### Responses
+
+| Status | Description | Content-Type | Schema |
+| :--- | :--- | :--- | :--- |
+| `200` | Status observation recorded | `application/json` | `object` |
+| `400` | Validation error or transfer server not allowed | `application/json` | `ApiError` |
+| `401` | Bearer authorization token required | `application/json` | `ApiError` |
+| `429` | Rate limit exceeded | `application/json` | `ApiError` |
+| `502` | Upstream anchor returned an error | `application/json` | `ApiError` |
 
 ---
 

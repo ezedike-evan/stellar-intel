@@ -17,9 +17,12 @@ const IntentDirectionSchema = z.enum(['offramp', 'onramp']);
 
 export const IntentCreatedPayloadSchema = z
   .object({
+    intentHash: IntentHashSchema,
+    direction: IntentDirectionSchema,
     corridorId: z.string(),
     anchorId: z.string(),
-    quoteId: z.string(),
+    // Null for an on-ramp, which has no quote id (WHK008).
+    quoteId: z.string().nullable(),
     amount: z.string(),
     sourceAsset: z.string(),
     destinationAsset: z.string(),

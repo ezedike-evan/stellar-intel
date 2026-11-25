@@ -1,6 +1,6 @@
 # Non-Custody Manifesto
 
-**Last reviewed:** 2026-08-26
+**Last reviewed:** 2026-11-22
 
 Stellar Intel is **non-custodial by construction**. This is an architectural
 property, not a policy promise — the system has no code path that could take
@@ -18,6 +18,7 @@ custody.
   SEP-24 / SEP-6 flow. We are not in the settlement path.
 - **KYC data.** KYC is collected by the anchor (anchor-hosted SEP-24 interactive
   flow, or the anchor's SEP-12 customer API). We do not store KYC fields.
+- **Anchor authentication tokens.** When observing transaction settlement status (`POST /api/intent/status`), the user's SEP-10 JWT is forwarded for a single read of the anchor's own transaction record. The token is never stored, persisted, or logged.
 
 ## How the boundary is enforced
 

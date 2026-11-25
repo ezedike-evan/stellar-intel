@@ -10,6 +10,8 @@ import { emitWebhookEvent } from '@/lib/webhooks/emit';
 
 const VALID_PAYLOADS: { [K in keyof WebhookEventPayloadMap]: WebhookEventPayloadMap[K] } = {
   'intent.created': {
+    intentHash: 'aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa',
+    direction: 'offramp',
     corridorId: 'usdc-ngn',
     anchorId: 'cowrie',
     quoteId: 'q-123',

@@ -5068,6 +5068,126 @@
         }
       }
     },
+    "/api/admin/audit/export": {
+      "get": {
+        "summary": "Export audit log (admin)",
+        "description": "Export audit log events over a date range as NDJSON or CSV. Requires adminKey or callerKey with admin scope.",
+        "tags": [
+          "Admin"
+        ],
+        "security": [
+          {
+            "adminKey": []
+          },
+          {
+            "callerKey": []
+          }
+        ],
+        "parameters": [
+          {
+            "schema": {
+              "type": "string",
+              "description": "Start of ISO 8601 date range (inclusive)"
+            },
+            "required": true,
+            "description": "Start of ISO 8601 date range (inclusive)",
+            "name": "from",
+            "in": "query"
+          },
+          {
+            "schema": {
+              "type": "string",
+              "description": "End of ISO 8601 date range (exclusive)"
+            },
+            "required": true,
+            "description": "End of ISO 8601 date range (exclusive)",
+            "name": "to",
+            "in": "query"
+          },
+          {
+            "schema": {
+              "type": "string",
+              "enum": [
+                "ndjson",
+                "csv"
+              ],
+              "description": "Export format (\"ndjson\" or \"csv\", default \"ndjson\")"
+            },
+            "required": false,
+            "description": "Export format (\"ndjson\" or \"csv\", default \"ndjson\")",
+            "name": "format",
+            "in": "query"
+          },
+          {
+            "schema": {
+              "type": "string",
+              "description": "Filter by caller id (e.g. \"anonymous\" or \"key:<16-hex>\")"
+            },
+            "required": false,
+            "description": "Filter by caller id (e.g. \"anonymous\" or \"key:<16-hex>\")",
+            "name": "callerId",
+            "in": "query"
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Audit log export stream",
+            "content": {
+              "application/x-ndjson": {
+                "schema": {
+                  "type": "string"
+                }
+              },
+              "text/csv": {
+                "schema": {
+                  "type": "string"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Validation error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiError"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Authentication required",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiError"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Forbidden",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiError"
+                }
+              }
+            }
+          },
+          "429": {
+            "description": "Rate limited",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
     "/api/reputation/{anchor}/sla": {
       "get": {
         "summary": "Get anchor execution SLA",
@@ -7206,6 +7326,160 @@
           },
           "429": {
             "description": "Rate limited",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/intent/status": {
+      "post": {
+        "summary": "Observe anchor transaction status",
+        "description": "Observes the current settlement status of a SEP-24 or SEP-6 transaction server-side. Forwards the caller-provided SEP-10 JWT for a single read of the anchor transfer server without storing or logging it. Tracks status transitions to support webhook notifications.",
+        "tags": [
+          "Intent"
+        ],
+        "parameters": [
+          {
+            "schema": {
+              "type": "string",
+              "description": "Bearer <jwt> containing SEP-10 authentication token"
+            },
+            "required": true,
+            "description": "Bearer <jwt> containing SEP-10 authentication token",
+            "name": "authorization",
+            "in": "header"
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "properties": {
+                  "anchorId": {
+                    "type": "string",
+                    "description": "Registered anchor ID"
+                  },
+                  "transferServer": {
+                    "type": "string",
+                    "description": "HTTPS URL of the anchor transfer server"
+                  },
+                  "transactionId": {
+                    "type": "string",
+                    "minLength": 1,
+                    "maxLength": 200,
+                    "description": "Anchor transaction ID"
+                  },
+                  "protocol": {
+                    "type": "string",
+                    "enum": [
+                      "sep24",
+                      "sep6"
+                    ],
+                    "description": "Transfer protocol used"
+                  },
+                  "direction": {
+                    "type": "string",
+                    "enum": [
+                      "withdraw",
+                      "deposit"
+                    ],
+                    "description": "Transaction direction"
+                  },
+                  "intentHash": {
+                    "type": "string",
+                    "pattern": "^[0-9a-f]{64}$",
+                    "description": "64-hex canonical intent hash"
+                  }
+                },
+                "required": [
+                  "anchorId",
+                  "transferServer",
+                  "transactionId",
+                  "protocol",
+                  "direction"
+                ]
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Status observation recorded",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "status": {
+                      "type": "string",
+                      "description": "Current status reported by the anchor"
+                    },
+                    "previous": {
+                      "type": [
+                        "string",
+                        "null"
+                      ],
+                      "description": "Previous status observed by the server, or null if first observation"
+                    },
+                    "changed": {
+                      "type": "boolean",
+                      "description": "Whether the status changed since the last server observation"
+                    },
+                    "terminal": {
+                      "type": "boolean",
+                      "description": "Whether the current status is terminal"
+                    }
+                  },
+                  "required": [
+                    "status",
+                    "previous",
+                    "changed",
+                    "terminal"
+                  ]
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Validation error or transfer server not allowed",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiError"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Bearer authorization token required",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiError"
+                }
+              }
+            }
+          },
+          "429": {
+            "description": "Rate limit exceeded",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiError"
+                }
+              }
+            }
+          },
+          "502": {
+            "description": "Upstream anchor returned an error",
             "content": {
               "application/json": {
                 "schema": {
