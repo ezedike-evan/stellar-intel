@@ -50,6 +50,7 @@ in the "no API route handler signs a transaction" guard.
 
 - Public, non-sensitive data: anchor outcomes (fill rate, slippage, settle latency)
   and their public reputation scores.
+- **Refunds.** [`docs/REFUNDS.md`](REFUNDS.md) — refund case records and user-signed acknowledgements; never the refund itself.
 - Server-side config (`ADMIN_SECRET_KEY` for admin routes; see
   [`docs/SECURITY.md`](SECURITY.md)).
 

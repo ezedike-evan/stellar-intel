@@ -3,9 +3,10 @@ import type { WebhookEventKind } from '@/types/webhooks';
 
 export interface WebhookEvent {
   id: string;
-  idempotencyKey: string;
   kind: WebhookEventKind;
   createdAt: string;
+  /** Same key, same event: a store records and delivers it once (WHK004). */
+  idempotencyKey: string;
   payload: Record<string, unknown>;
 }
 

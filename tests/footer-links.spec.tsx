@@ -31,6 +31,16 @@ describe('Footer legal links (#740)', () => {
     expect(hrefs.indexOf('/onramp')).toBe(hrefs.indexOf('/offramp') + 1);
   });
 
+  it('links to the Dispute log page, right after Anchors', () => {
+    render(<Footer />);
+    const disputes = screen.getByRole('link', { name: 'Dispute log' });
+    expect(disputes).toHaveAttribute('href', '/disputes');
+    expect(disputes).not.toHaveAttribute('target', '_blank');
+
+    const hrefs = screen.getAllByRole('link').map((a) => a.getAttribute('href'));
+    expect(hrefs.indexOf('/disputes')).toBe(hrefs.indexOf('/anchors') + 1);
+  });
+
   it('renders Terms as an internal link, not an external one', () => {
     render(<Footer />);
     const terms = screen.getByRole('link', { name: /terms/i });

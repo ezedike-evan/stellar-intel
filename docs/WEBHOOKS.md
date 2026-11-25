@@ -1,37 +1,35 @@
 # Webhooks
 
-**Last reviewed:** 2026-11-22
+**Last reviewed:** 2026-11-25
 
 Stellar Intel can push real-time event notifications to your HTTPS endpoint instead of requiring you to poll the API. Each delivery is HMAC-SHA256 signed so you can verify authenticity before acting on the payload.
 
-A reference receiver demonstrating signature verification, idempotency handling, and mock event ingestion is available at [`examples/webhook-consumer/`](../examples/webhook-consumer/).
-
 ## Event types
 
-Stellar Intel supports 14 webhook event kinds across the lifecycle of intents, settlements, reputation data, anchor health, disputes, refunds, and oracle operations:
+Twelve kinds can be subscribed to. "Live" kinds have a producer; the others are accepted
+by `POST /api/webhooks/subscriptions` and start arriving once their producer ships.
 
-| Kind | Producing Route / Trigger | Status |
-| --- | --- | --- |
-| `intent.created` | `POST /api/intent/offramp`, `POST /api/v1/intent/offramp`, `POST /api/v1/intent/onramp` returns 200/201 | Live |
-| `intent.settled` | `POST /api/reputation/append` returns 200 (terminal `completed`) | Live |
-| `intent.failed` | `POST /api/reputation/append` returns 200 (terminal `error`, `expired`, `refunded`) | Live |
-| `reputation.event_written` | `POST /api/reputation/append` returns 200 (new outcome row written) | Live |
-| `anchor.health_status_changed` | Publisher cycle detects an anchor degraded status transition | Live |
-| `intent.rejected` | `POST /api/intent/offramp`, `POST /api/v1/intent/offramp` returns 400, 401, 409 | Live |
-| `intent.expired` | `POST /api/intent/offramp`, `POST /api/v1/intent/offramp` returns 410 (deadline passed) | Live |
-| `settlement.status_changed` | `POST /api/intent/status` returns 200 (anchor status transition observed) | Live |
-| `dispute.opened` | `POST /api/reputation/dispute` returns 201 | Live |
-| `dispute.resolved` | `POST /api/admin/disputes` returns 200 | Live |
-| `oracle.published` | Publisher tick writes batch of outcomes and rates on-chain | Live |
-| `refund.opened` | Refund case opened for failed or refunded outcome | Subscribable; producer pending |
-| `refund.acknowledged` | User signs acknowledgment of refund | Subscribable; producer pending |
-| `intent.slippage_breach` | Realized rate breaches quoted minimum floor | Subscribable; producer pending |
+| Kind                           | Fires when                                                                                                                | Status                         |
+| ------------------------------ | ------------------------------------------------------------------------------------------------------------------------- | ------------------------------ |
+| `intent.created`               | `POST /api/intent/offramp`, `POST /api/v1/intent/offramp` or `POST /api/v1/intent/onramp` returns 200                     | Live                           |
+| `intent.settled`               | `POST /api/reputation/append` returns 201 for a `completed` outcome                                                       | Live                           |
+| `intent.failed`                | `POST /api/reputation/append` returns 201 for an `error`, `expired` or `refunded` outcome                                 | Live                           |
+| `reputation.event_written`     | `POST /api/reputation/append` returns 201                                                                                 | Live                           |
+| `anchor.health_status_changed` | The publisher tick sees an anchor's `degraded` flag change                                                                | Live                           |
+| `intent.rejected`              | An off-ramp intent route refuses a signed intent (401 bad signature, 400 missing replay fields, 409 replay, 422 no route) | Live                           |
+| `intent.expired`               | An off-ramp intent route answers 410: the intent's `deadline` has passed                                                  | Live                           |
+| `settlement.status_changed`    | An anchor transaction changes status                                                                                      | Subscribable; producer pending |
+| `dispute.opened`               | `POST /api/reputation/dispute` returns 201                                                                                | Live                           |
+| `dispute.resolved`             | `POST /api/admin/disputes` accepts or rejects a dispute (200)                                                             | Live                           |
+| `oracle.published`             | The publisher tick writes outcomes, rates, metrics or probe signals on chain                                              | Live                           |
+| `intent.slippage_breach`       | `POST /api/reputation/append` records an outcome below the intent's `minReceive`                                          | Live                           |
 
----
+Every payload is built field by field. None carries a sender, recipient, public key,
+signature, dispute reason or JWT.
 
 ### intent.created
 
-Fires when an off-ramp or on-ramp intent is created and routed:
+An intent was accepted and routed. `quoteId` is `null` for an on-ramp, which has no quote:
 
 ```json
 {
@@ -39,7 +37,7 @@ Fires when an off-ramp or on-ramp intent is created and routed:
   "direction": "offramp",
   "corridorId": "usdc-ngn",
   "anchorId": "cowrie",
-  "quoteId": "quote-123",
+  "quoteId": "0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef",
   "amount": "100",
   "sourceAsset": "USDC",
   "destinationAsset": "NGN"
@@ -48,7 +46,7 @@ Fires when an off-ramp or on-ramp intent is created and routed:
 
 ### intent.settled
 
-Fires when an intent reaches a terminal `completed` state:
+A signed outcome reports the intent completed:
 
 ```json
 {
@@ -62,7 +60,7 @@ Fires when an intent reaches a terminal `completed` state:
 
 ### intent.failed
 
-Fires when an intent reaches a terminal failed status (`error`, `expired`, `refunded`):
+A signed outcome reports the intent ended in `error`, `expired` or `refunded`:
 
 ```json
 {
@@ -75,7 +73,7 @@ Fires when an intent reaches a terminal failed status (`error`, `expired`, `refu
 
 ### reputation.event_written
 
-Fires when a new outcome row is recorded in the reputation store:
+A new outcome row was appended to the reputation log:
 
 ```json
 {
@@ -89,27 +87,34 @@ Fires when a new outcome row is recorded in the reputation store:
 
 ### anchor.health_status_changed
 
-Fires when an anchor transitions between `healthy` and `degraded`:
+Emitted by the publisher tick (every five minutes) when an anchor's `degraded` flag in
+the nightly health ledger (`constants/anchor-health.json`) differs from the last
+snapshot it notified, so a change arrives within a tick of the deploy that carries
+it. One event per anchor, in anchor-id order:
 
 ```json
 {
   "anchorId": "cowrie",
   "from": "healthy",
   "to": "degraded",
-  "lastCheckedAt": "2026-11-20T10:00:00.000Z",
+  "lastCheckedAt": "2026-10-25T00:00:00.000Z",
   "lastError": "stellar.toml returned HTTP 503"
 }
 ```
 
+`from` and `to` are `healthy` or `degraded`. The first run only records a baseline and
+emits nothing, and without a database there is no baseline to keep, so nothing is
+emitted. `lastCheckedAt` and `lastError` are `null` when the ledger has none.
+
 ### intent.rejected
 
-Fires when an intent request is refused before routing due to signature, replay, or corridor issues:
+An off-ramp intent route refused a signed intent. `reason` is one of `invalid_signature`, `missing_replay_fields`, `replay_detected` or `no_route`, never free text:
 
 ```json
 {
   "intentHash": "0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef",
   "direction": "offramp",
-  "reason": "invalid_signature",
+  "reason": "replay_detected",
   "sourceAsset": "USDC",
   "destinationAsset": "NGN",
   "amount": "100"
@@ -118,13 +123,13 @@ Fires when an intent request is refused before routing due to signature, replay,
 
 ### intent.expired
 
-Fires when an intent arrives after its deadline:
+An off-ramp intent arrived after its signed `deadline`:
 
 ```json
 {
   "intentHash": "0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef",
   "direction": "offramp",
-  "deadline": "2026-11-20T10:00:00.000Z",
+  "deadline": "2026-11-20T10:05:00.000Z",
   "sourceAsset": "USDC",
   "destinationAsset": "NGN",
   "amount": "100"
@@ -133,171 +138,148 @@ Fires when an intent arrives after its deadline:
 
 ### settlement.status_changed
 
-Fires when a server-side observation records a transaction status transition:
+An anchor transaction moved from one status to another. `from` is `null` for the first status seen, and `intentHash` is `null` when the transaction has no intent. Subscribable; the producer is pending:
 
 ```json
 {
   "anchorId": "cowrie",
-  "transactionId": "tx-12345",
+  "transactionId": "82fhs729f63dh0v4",
   "protocol": "sep24",
   "direction": "withdraw",
   "from": "pending_anchor",
   "to": "completed",
   "terminal": true,
   "intentHash": "0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef",
-  "observedAt": "2026-11-20T10:00:00.000Z"
+  "observedAt": "2026-11-20T10:10:00.000Z"
 }
 ```
 
 ### dispute.opened
 
-Fires when a user submits a dispute against an outcome:
+A signed dispute was filed. Who filed it and what they wrote are not part of the event:
 
 ```json
 {
-  "disputeId": "disp-123",
+  "disputeId": "5b0e2f5e-6c1d-4a0e-9b1f-2d3c4e5f6a7b",
   "intentHash": "0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef",
   "anchorId": "cowrie",
-  "createdAt": "2026-11-20T10:00:00.000Z"
+  "createdAt": "2026-11-20T11:00:00.000Z"
 }
 ```
 
 ### dispute.resolved
 
-Fires when a dispute is resolved by an operator:
+An admin accepted or rejected a dispute:
 
 ```json
 {
-  "disputeId": "disp-123",
+  "disputeId": "5b0e2f5e-6c1d-4a0e-9b1f-2d3c4e5f6a7b",
   "intentHash": "0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef",
   "anchorId": "cowrie",
   "status": "accepted",
-  "resolvedAt": "2026-11-20T10:00:00.000Z"
+  "resolvedAt": "2026-11-21T09:00:00.000Z"
 }
 ```
 
 ### oracle.published
 
-Fires when an oracle publisher batch completes:
+The publisher tick wrote something on chain. It is not sent when the gate is closed or nothing was written:
 
 ```json
 {
   "network": "testnet",
-  "contractId": "CCORRIDOR123",
+  "contractId": "CDLZFC3SYJYDZT7K67VZ75HPJVIEUVNIXF47ZG2FB2RMQQVU2HHGCYSC",
   "txHash": "0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef",
-  "outcomesPublished": 5,
-  "corridorRatesPublished": 2,
-  "corridorMetricsPublished": 2,
-  "probeSignalsPublished": 1,
-  "publishedAt": "2026-11-20T10:00:00.000Z"
-}
-```
-
-### refund.opened
-
-Fires when a refund case is opened for an outcome:
-
-```json
-{
-  "caseId": "ref-123",
-  "intentHash": "0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef",
-  "anchorId": "cowrie",
-  "corridor": "usdc-ngn",
-  "direction": "offramp",
-  "reason": "paid_then_failed",
-  "status": "opened",
-  "openedAt": "2026-11-20T10:00:00.000Z"
-}
-```
-
-### refund.acknowledged
-
-Fires when a refund recipient acknowledges confirmation:
-
-```json
-{
-  "caseId": "ref-123",
-  "intentHash": "0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef",
-  "anchorId": "cowrie",
-  "acknowledgedAt": "2026-11-20T10:00:00.000Z"
+  "outcomesPublished": 2,
+  "corridorRatesPublished": 3,
+  "corridorMetricsPublished": 3,
+  "probeSignalsPublished": 0,
+  "publishedAt": "2026-11-20T12:00:00.000Z"
 }
 ```
 
 ### intent.slippage_breach
 
-Fires when a delivered outcome breaches the quoted slippage floor:
+Emitted when an outcome is appended to the reputation log and the amount it reports as
+delivered is below the `minReceive` the intent was signed with. It is sent after the
+other events of the same outcome (`reputation.event_written`, then `intent.settled`):
 
 ```json
 {
-  "intentHash": "0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef",
+  "intentHash": "3f6a0c1d9b2e47f58a6c0d1e2f3a4b5c6d7e8f90a1b2c3d4e5f60718293a4b5c",
   "anchorId": "cowrie",
-  "corridor": "usdc-ngn",
-  "minReceive": "99.5",
-  "amountOut": "95.0",
-  "shortfall": "4.5",
-  "shortfallBps": 450,
-  "evidenceHash": "0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef",
+  "corridor": "ngnt-ngn",
+  "minReceive": "1400",
+  "amountOut": "1350",
+  "shortfall": "50",
+  "shortfallBps": 357,
+  "evidenceHash": "9c1e7a44d0b25f6831c7e9a2b4d6f8013a5c7e9b1d3f507294b6d8fa1c3e5072",
   "status": "detected",
-  "detectedAt": "2026-11-20T10:00:00.000Z"
+  "detectedAt": "2026-11-20T12:00:00.000Z"
 }
 ```
 
----
+`minReceive`, `amountOut` and `shortfall` are decimal strings, and `shortfallBps` is the
+shortfall in basis points of `minReceive`, rounded down. `status` is always `detected`:
+the breach has been recorded and has not yet been checked against the Stellar payment.
+`evidenceHash` identifies the evidence kept with the breach. The evidence itself, the
+signer's account and the anchor's transaction id are not sent.
 
-## Payload envelope and idempotency
+## Payload envelope
 
-Every delivery is a `POST` request with `Content-Type: application/json` and a standard envelope:
+Every delivery is a `POST` request with `Content-Type: application/json` and a body of the form:
 
 ```json
 {
   "id": "3f2a1b4c-9f8e-4a6d-b2a1-0e1f2a3b4c5d",
-  "idempotencyKey": "intent.created:0123456789abcdef...",
   "kind": "intent.created",
-  "createdAt": "2026-11-22T12:00:00.000Z",
+  "createdAt": "2026-07-28T12:00:00.000Z",
+  "idempotencyKey": "intent.created:<quoteId>",
   "payload": { ... }
 }
 ```
 
-### De-duplication
+De-duplicate on `idempotencyKey`, not on `id`. The key is derived from the fact the event
+reports, so the same fact always has the same key, even when a producer emits it again
+(for example after a failed snapshot write) or an operator resends it. The formats are:
 
-Consumers should de-duplicate on `idempotencyKey`, not `id`. The `id` identifies a specific delivery attempt, while `idempotencyKey` identifies the logical event:
+| Kind                           | `idempotencyKey`                                                                      |
+| ------------------------------ | ------------------------------------------------------------------------------------- |
+| `intent.created`               | `intent.created:<quoteId>` (off-ramp), `intent.created:onramp:<intentHash>` (on-ramp) |
+| `intent.settled`               | `intent.settled:<intentHash>`                                                         |
+| `intent.failed`                | `intent.failed:<intentHash>`                                                          |
+| `reputation.event_written`     | `reputation.event_written:<intentHash>`                                               |
+| `anchor.health_status_changed` | `anchor.health_status_changed:<anchorId>:<to>:<lastCheckedAt or none>`                |
+| `intent.rejected`              | `intent.rejected:<reason>:<intentHash>`                                               |
+| `intent.expired`               | `intent.expired:<intentHash>`                                                         |
+| `dispute.opened`               | `dispute.opened:<disputeId>`                                                          |
+| `dispute.resolved`             | `dispute.resolved:<disputeId>`                                                        |
+| `oracle.published`             | `oracle.published:<txHash>`, or `oracle.published:<publishedAt>` without one          |
+| `intent.slippage_breach`       | `intent.slippage_breach:<intentHash>`                                                 |
 
-| Event Kind | Idempotency Key Format |
-| --- | --- |
-| `intent.created` (off-ramp) | `intent.created:${intentHash}` |
-| `intent.created` (on-ramp) | `intent.created:onramp:${intentHash}` |
-| `intent.settled` | `intent.settled:${intentHash}` |
-| `intent.failed` | `intent.failed:${intentHash}` |
-| `reputation.event_written` | `reputation.event_written:${intentHash}` |
-| `anchor.health_status_changed` | `anchor.health_status_changed:${anchorId}:${to}:${lastCheckedAt}` |
-| `intent.rejected` | `intent.rejected:${reason}:${intentHash}` |
-| `intent.expired` | `intent.expired:${intentHash}` |
-| `settlement.status_changed` | `settlement.status_changed:${anchorId}:${transactionId}:${to}` |
-| `dispute.opened` | `dispute.opened:${disputeId}` |
-| `dispute.resolved` | `dispute.resolved:${disputeId}:${status}` |
-| `oracle.published` | `oracle.published:${network}:${contractId}:${txHash ?? 'none'}` |
-| `refund.opened` | `refund.opened:${caseId}` |
-| `refund.acknowledged` | `refund.acknowledged:${caseId}` |
-| `intent.slippage_breach` | `intent.slippage_breach:${intentHash}:${status}` |
+## Signature verification
 
-## Signature verification and headers
+Each delivery includes four headers:
 
-Each delivery includes four standard headers:
+| Header                      | Value                                                                 |
+| --------------------------- | --------------------------------------------------------------------- |
+| `x-webhook-signature`       | `t={unix_timestamp_sec},v1={hex_hmac}`                                |
+| `x-webhook-timestamp`       | Unix timestamp in seconds (same value as `t` in the signature header) |
+| `x-webhook-id`              | The event's `id`                                                      |
+| `x-webhook-idempotency-key` | The event's `idempotencyKey`                                          |
 
-| Header | Value |
-| --- | --- |
-| `x-webhook-signature` | `t={unix_timestamp_sec},v1={hex_hmac}` |
-| `x-webhook-timestamp` | Unix timestamp in seconds (same value as `t` in signature header) |
-| `x-webhook-id` | Unique UUID of the delivery attempt |
-| `x-webhook-idempotency-key` | Deterministic event idempotency key for de-duplication |
+A runnable consumer that verifies signatures and de-duplicates on the idempotency key is
+in [`examples/webhook-consumer/`](../examples/webhook-consumer/).
 
 ### How to verify
 
 1. Extract `t` (timestamp) and `v1` (signature) from `x-webhook-signature`.
-2. Build the signed payload string: concatenate `t`, a literal `.`, and the raw request body bytes exactly as received.
+2. Build the signed payload string: concatenate the timestamp, a literal `.`, and the raw request body bytes exactly as received (do not parse and re-serialize).
 3. Compute `HMAC-SHA256(your_secret, signed_payload)` and encode as lowercase hex.
-4. Compare your computed value to `v1` using constant-time comparison to prevent timing attacks.
+4. Compare your computed value to `v1` using **constant-time** comparison to prevent timing attacks.
 5. Reject the request if the timestamp is more than 5 minutes old (replay protection).
+
+### Verification example (Node.js)
 
 ```ts
 import { createHmac, timingSafeEqual } from 'crypto';
@@ -316,7 +298,7 @@ function verify(secret: string, header: string, rawBody: string): boolean {
   if (Number.isNaN(timestamp)) return false;
 
   const now = Math.floor(Date.now() / 1000);
-  if (Math.abs(now - timestamp) > 300) return false;
+  if (Math.abs(now - timestamp) > 300) return false; // 5-minute window
 
   const expected = createHmac('sha256', secret).update(`${timestamp}.${rawBody}`).digest('hex');
 
@@ -328,36 +310,13 @@ function verify(secret: string, header: string, rawBody: string): boolean {
 }
 ```
 
-## Delivery log and redelivery
+> Use the raw body bytes, not `JSON.stringify(req.body)`. Any whitespace or key-ordering difference will break verification.
 
-Operators can inspect delivery history and manually re-send events:
+## Retry and dead-letter
 
-### List deliveries
+If your endpoint does not respond with a 2xx status code, Stellar Intel makes up to 5 delivery attempts (the first plus 4 retries) with exponential backoff (1 s, 2 s, 4 s, 8 s between attempts). After all attempts are exhausted the delivery is moved to the dead-letter log, visible via `GET /api/webhooks/failures` (admin key required).
 
-```http
-GET /api/webhooks/deliveries?status=dead_letter&limit=50
-x-admin-key: <admin_key>
-```
-
-Supported query filters:
-- `status`: `'success' | 'failed' | 'dead_letter'`
-- `subscriptionId`: string filter
-- `eventId`: string filter
-- `limit`: number between 1 and 500 (default: 100)
-
-### Redeliver a delivery
-
-```http
-POST /api/webhooks/deliveries/{id}/redeliver
-x-admin-key: <admin_key>
-```
-
-Status codes:
-- `202 Accepted`: Event redelivered successfully with the original event `id` and `idempotencyKey`.
-- `403 Forbidden`: Admin authentication missing or invalid.
-- `404 Not Found`: Delivery ID does not exist.
-- `409 Conflict`: Subscription no longer subscribes to this event kind.
-- `410 Gone`: Event envelope was not retained or subscription was deleted.
+Your endpoint should return `200` (or any 2xx) as quickly as possible and process the event asynchronously to avoid triggering retries due to slow processing.
 
 ## Subscription management
 
@@ -376,12 +335,27 @@ Content-Type: application/json
 }
 ```
 
+Response `201`:
+
+```json
+{
+  "id": "3f2a1b4c-...",
+  "url": "https://your-server.example.com/webhooks",
+  "events": ["intent.created", "intent.settled"],
+  "secret": "a9f3..."
+}
+```
+
+The `secret` is returned **only once**. Store it immediately — it cannot be retrieved again.
+
 ### List subscriptions
 
 ```http
 GET /api/webhooks/subscriptions
 x-admin-key: <admin_key>
 ```
+
+Secrets are omitted from the list response.
 
 ### Delete a subscription
 
@@ -390,9 +364,56 @@ DELETE /api/webhooks/subscriptions/{id}
 x-admin-key: <admin_key>
 ```
 
+Returns `204 No Content` on success.
+
 ### List dead-letter failures
 
 ```http
 GET /api/webhooks/failures
 x-admin-key: <admin_key>
 ```
+
+Returns all delivery records that exhausted retries without a successful response.
+
+### List deliveries
+
+```http
+GET /api/webhooks/deliveries?status=dead_letter&subscriptionId=...&eventId=...&limit=100
+x-admin-key: <admin_key>
+```
+
+Returns logged delivery records, newest first. Every filter is optional: `status` is
+`success`, `failed` or `dead_letter`, `subscriptionId` and `eventId` narrow to one
+subscription or event, and `limit` is 1 to 500 (default 100).
+
+### Redeliver a logged delivery
+
+```http
+POST /api/webhooks/deliveries/{id}/redeliver
+x-admin-key: <admin_key>
+```
+
+Sends one logged delivery to its subscription again, for use once a subscriber has fixed an outage. `{id}` is the `id` of a delivery record, as listed by `GET /api/webhooks/failures` or `GET /api/webhooks/deliveries`. Any logged delivery can be resent, not only a dead-lettered one.
+
+The stored event goes out unchanged: the same `id`, `createdAt`, `idempotencyKey` and `payload`, and so the same `x-webhook-id` and `x-webhook-idempotency-key` headers. Only the timestamp and the signature are new. A consumer that de-duplicates on the event `id` or on the idempotency key processes a resent event once.
+
+Response `202`:
+
+```json
+{
+  "redelivered": true,
+  "eventId": "3f2a1b4c-...",
+  "subscriptionId": "9e8d7c6b-..."
+}
+```
+
+`202` means the delivery was attempted, with the usual retries, before the response was sent. It does not mean the subscriber accepted it. The attempt is logged as a new delivery record and the original record is left as it was, so read the new record's `status` to see how it went.
+
+| Status | `code`                    | Meaning                                                     |
+| ------ | ------------------------- | ----------------------------------------------------------- |
+| `403`  | `FORBIDDEN`               | Missing or invalid admin key                                |
+| `404`  | `NOT_FOUND`               | No delivery record has this id                              |
+| `410`  | `EVENT_NOT_RETAINED`      | The event is not in the event store, so it cannot be resent |
+| `410`  | `SUBSCRIPTION_DELETED`    | The subscription the delivery went to was deleted           |
+| `409`  | `EVENT_KIND_UNSUBSCRIBED` | The subscription no longer lists the event's kind           |
+| `429`  | `RATE_LIMITED`            | More than 10 requests in a minute                           |

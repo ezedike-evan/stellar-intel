@@ -265,6 +265,8 @@ export async function POST(request: NextRequest): Promise<NextResponse> {
     recordIntentSuccess();
     // Field by field, never a spread: the intent carries sender and recipient.
     // A replay returns from the cache above and never reaches this line.
+    // The key is the quote id: one accepted intent has one quote, so the event for it
+    // is the same event if this line is ever reached twice.
     emitWebhookEvent(
       'intent.created',
       {
@@ -277,7 +279,7 @@ export async function POST(request: NextRequest): Promise<NextResponse> {
         sourceAsset: intent.sourceAsset,
         destinationAsset: intent.destinationAsset,
       },
-      { idempotencyKey: `intent.created:${intentHash}` }
+      { idempotencyKey: `intent.created:${result.response.quoteId}` }
     );
     return await respond<OfframpIntentResponse>(result.response, 200);
   });

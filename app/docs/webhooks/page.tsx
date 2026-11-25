@@ -7,10 +7,10 @@ export const metadata: Metadata = {
     'Receive signed event notifications from Stellar Intel — intent created, settled and failed, reputation events, and anchor health changes — without polling the API.',
 };
 
-const EVENTS: { kind: string; description: string; emitted: boolean }[] = [
+export const EVENTS: { kind: string; description: string; emitted: boolean }[] = [
   {
     kind: 'intent.created',
-    description: 'An off-ramp or on-ramp intent is accepted for routing',
+    description: 'An off-ramp intent is accepted for routing',
     emitted: true,
   },
   {
@@ -46,7 +46,7 @@ const EVENTS: { kind: string; description: string; emitted: boolean }[] = [
   {
     kind: 'settlement.status_changed',
     description: "An anchor transaction's status changes",
-    emitted: true,
+    emitted: false,
   },
   {
     kind: 'dispute.opened',
@@ -64,23 +64,15 @@ const EVENTS: { kind: string; description: string; emitted: boolean }[] = [
     emitted: true,
   },
   {
-    kind: 'refund.opened',
-    description: 'A refund case is opened for an outcome',
-    emitted: false,
-  },
-  {
-    kind: 'refund.acknowledged',
-    description: 'A refund recipient acknowledges receipt',
-    emitted: false,
-  },
-  {
     kind: 'intent.slippage_breach',
-    description: 'A delivered rate breaches the quoted slippage floor',
-    emitted: false,
+    description: "A recorded outcome delivered less than the intent's minimum receive",
+    emitted: true,
   },
 ];
 
-const LIVE_KINDS = EVENTS.filter((e) => e.emitted).length;
+/** How many of the kinds above a producer emits today. The banner is computed, never typed. */
+const LIVE_KINDS = EVENTS.filter((event) => event.emitted).length;
+const allEmitted = EVENTS.every((event) => event.emitted);
 
 export default function WebhooksPage() {
   return (
@@ -94,8 +86,9 @@ export default function WebhooksPage() {
 
       <div className="rounded-xl border border-status-unknown/40 bg-bg-sunken p-5 /50">
         <p className="text-sm font-medium text-status-unknown">
-          Live for {LIVE_KINDS} of {EVENTS.length} kinds; the rest can be subscribed to and will
-          start arriving as producers ship.
+          {allEmitted
+            ? 'Status: Live — every listed event kind is delivered.'
+            : `Live for ${LIVE_KINDS} of ${EVENTS.length} kinds; the rest can be subscribed to and will start arriving as producers ship.`}
         </p>
       </div>
 
@@ -143,8 +136,8 @@ export default function WebhooksPage() {
           language="json"
           code={`{
   "id": "3f2a1b4c-9f8e-4a6d-b2a1-0e1f2a3b4c5d",
-  "idempotencyKey": "intent.created:0123456789abcdef...",
   "kind": "intent.settled",
+  "idempotencyKey": "intent.settled:0123456789abcdef...",
   "createdAt": "2026-07-28T12:00:00.000Z",
   "payload": { ... }
 }`}
@@ -173,13 +166,13 @@ export default function WebhooksPage() {
       <section className="space-y-4">
         <h2 className="text-xl font-semibold text-primary-text">Signature Verification</h2>
         <p className="text-secondary-text">
-          Each delivery carries four headers: <code>x-webhook-signature</code> (formatted as{' '}
-          <code>t=&lt;unix_seconds&gt;,v1=&lt;hex_hmac&gt;</code>), <code>x-webhook-timestamp</code>{' '}
-          (the same timestamp), <code>x-webhook-id</code> (delivery UUID), and{' '}
-          <code>x-webhook-idempotency-key</code> (deterministic event key). The HMAC-SHA256 is
-          computed over <code>{'`${t}.${rawBody}`'}</code> with your subscription secret. Use the raw
-          body exactly as received, compare in constant time, and reject timestamps more than 300
-          seconds old.
+          Each delivery carries four headers: <code>x-webhook-signature</code>, formatted as{' '}
+          <code>t=&lt;unix_seconds&gt;,v1=&lt;hex_hmac&gt;</code>; <code>x-webhook-timestamp</code>,
+          the same timestamp; <code>x-webhook-id</code>, the event id; and{' '}
+          <code>x-webhook-idempotency-key</code>, the event&apos;s deterministic key. The
+          HMAC-SHA256 is computed over <code>{'`${t}.${rawBody}`'}</code> with your subscription
+          secret. Use the raw body exactly as received, compare in constant time, and reject
+          timestamps more than 300 seconds old.
         </p>
         <CodeBlock
           language="typescript"
@@ -213,11 +206,12 @@ function verify(secret: string, header: string, rawBody: string): boolean {
       </section>
 
       <section className="space-y-4">
-        <h2 className="text-xl font-semibold text-primary-text">Delivery Log and Redelivery</h2>
+        <h2 className="text-xl font-semibold text-primary-text">Delivery log and redelivery</h2>
         <p className="text-secondary-text">
-          Operators can query historical deliveries with status, subscription, and event filters via{' '}
-          <code>GET /api/webhooks/deliveries</code>, and re-send failed or dead-lettered deliveries
-          with their original identifiers via <code>POST /api/webhooks/deliveries/[id]/redeliver</code>.
+          Operators can list deliveries with <code>GET /api/webhooks/deliveries</code>, filtered by
+          status, subscription or event, and resend one with{' '}
+          <code>POST /api/webhooks/deliveries/[id]/redeliver</code>. A resent event keeps its
+          original id and idempotency key. Both need the admin key.
         </p>
       </section>
 
@@ -237,8 +231,9 @@ function verify(secret: string, header: string, rawBody: string): boolean {
           </li>
           <li>• Store the raw payload and verify the signature before processing</li>
           <li>
-            • Idempotency: de-duplicate by <code>x-webhook-idempotency-key</code> or the payload{' '}
-            <code>idempotencyKey</code>
+            • Idempotency: de-duplicate on <code>x-webhook-idempotency-key</code> (the
+            envelope&apos;s <code>idempotencyKey</code>), not on <code>id</code>: a re-sent event
+            keeps its key
           </li>
         </ul>
       </section>
