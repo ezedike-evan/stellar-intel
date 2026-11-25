@@ -69,28 +69,43 @@ function emitSlippageBreachEvent(breach: SlippageBreach): void {
 function emitOutcomeEvents(row: OutcomeLogRow): void {
   const { intentHash, anchorId, corridor, outcome } = row;
 
-  emitWebhookEvent('reputation.event_written', {
-    intentHash,
-    anchorId,
-    corridor,
-    outcome,
-    createdAt: row.createdAt,
-  });
+  // Each key below is the kind and the intent hash. The log holds one row per intent
+  // hash and never rewrites it, so an event about that row is the same event however
+  // often it is emitted, and a subscriber processes it once.
+  emitWebhookEvent(
+    'reputation.event_written',
+    {
+      intentHash,
+      anchorId,
+      corridor,
+      outcome,
+      createdAt: row.createdAt,
+    },
+    { idempotencyKey: `reputation.event_written:${intentHash}` }
+  );
 
   switch (outcome) {
     case 'completed':
-      emitWebhookEvent('intent.settled', {
-        intentHash,
-        anchorId,
-        corridor,
-        quotedAmount: row.quotedAmount,
-        stellarTransactionId: row.stellarTransactionId,
-      });
+      emitWebhookEvent(
+        'intent.settled',
+        {
+          intentHash,
+          anchorId,
+          corridor,
+          quotedAmount: row.quotedAmount,
+          stellarTransactionId: row.stellarTransactionId,
+        },
+        { idempotencyKey: `intent.settled:${intentHash}` }
+      );
       break;
     case 'error':
     case 'expired':
     case 'refunded':
-      emitWebhookEvent('intent.failed', { intentHash, anchorId, corridor, outcome });
+      emitWebhookEvent(
+        'intent.failed',
+        { intentHash, anchorId, corridor, outcome },
+        { idempotencyKey: `intent.failed:${intentHash}` }
+      );
       break;
     case 'partial':
       break;
