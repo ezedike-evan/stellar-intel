@@ -1,14 +1,26 @@
 import { getSqlExecutor, hasDatabaseUrl } from '@/lib/reputation/pool';
 import { canonicalEvidenceJson } from '@/lib/reputation/slippage-evidence';
-import type { SlippageBreach, SlippageBreachStatus, SlippageEvidence } from '@/types/reputation';
+
+import {
+  SLIPPAGE_BREACH_STATUSES,
+  type SlippageBreach,
+  type SlippageBreachStatus,
+  type SlippageEvidence,
+  type SlippageOnChainEvidence,
+} from '@/types/reputation';
+
+// The breach and evidence types live in types/reputation.ts (#2104); re-exported
+// here so existing imports from this module keep working.
+export { SLIPPAGE_BREACH_STATUSES };
+export type { SlippageBreach, SlippageBreachStatus, SlippageEvidence, SlippageOnChainEvidence };
 
 // ─── Slippage breach store (Issue #2103) ──────────────────────────────────────
 
 export interface SlippageBreachFilter {
-  anchorId?: string | undefined;
-  status?: SlippageBreachStatus | undefined;
-  since?: string | undefined;
-  limit?: number | undefined;
+  anchorId?: string;
+  status?: SlippageBreachStatus;
+  since?: string;
+  limit?: number;
 }
 
 export interface SlippageBreachStore {
@@ -147,16 +159,16 @@ CREATE INDEX IF NOT EXISTS idx_slippage_breaches_status ON slippage_breaches (st
 
 let schemaReady: Promise<void> | null = null;
 
-async function ensureSchema(): Promise<void> {
-  if (schemaReady) return schemaReady;
-  schemaReady = (async () => {
-    try {
-      await getSqlExecutor().query(SCHEMA_SQL);
-    } catch (err) {
-      schemaReady = null;
-      throw err;
-    }
-  })();
+function ensureSchema(): Promise<void> {
+  if (!schemaReady) {
+    schemaReady = getSqlExecutor()
+      .query(SCHEMA_SQL)
+      .then(() => undefined)
+      .catch((err: unknown) => {
+        schemaReady = null;
+        throw err;
+      });
+  }
   return schemaReady;
 }
 
@@ -309,6 +321,7 @@ export function _resetSlippageBreachStore(): void {
   schemaReady = null;
 }
 
+/** Test seam: reset schema initialization state. */
 export function _resetSlippageBreachSchema(): void {
   schemaReady = null;
 }

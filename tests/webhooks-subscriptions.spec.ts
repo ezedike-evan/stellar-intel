@@ -4,6 +4,7 @@ import { POST, GET } from '@/app/api/webhooks/subscriptions/route';
 import { DELETE } from '@/app/api/webhooks/subscriptions/[id]/route';
 import { GET as getFailures } from '@/app/api/webhooks/failures/route';
 import { InMemoryWebhookStore, _setWebhookStore } from '@/lib/webhooks/store';
+import { WEBHOOK_EVENT_KINDS } from '@/lib/webhooks/schema';
 import { clearRateLimitStore } from '@/lib/api/rate-limit';
 import type { DeliveryRecord } from '@/lib/webhooks/types';
 
@@ -112,6 +113,39 @@ describe('POST /api/webhooks/subscriptions', () => {
     const body = (await res.json()) as { events: string[] };
     expect(body.events).toHaveLength(3);
   });
+
+  it('accepts a subscription to intent.slippage_breach (SLP014)', async () => {
+    const res = await POST(
+      postReq({ url: 'https://example.com/hook', events: ['intent.slippage_breach'] })
+    );
+    expect(res.status).toBe(201);
+    const body = (await res.json()) as { events: string[] };
+    expect(body.events).toEqual(['intent.slippage_breach']);
+  });
+
+  it('accepts the kinds added by WHK003, before any producer emits them', async () => {
+    const res = await POST(
+      postReq({
+        url: 'https://example.com/hook',
+        events: ['settlement.status_changed', 'dispute.opened'],
+      })
+    );
+    expect(res.status).toBe(201);
+    const body = (await res.json()) as { events: string[] };
+    expect(body.events).toEqual(['settlement.status_changed', 'dispute.opened']);
+
+    // Every kind in the catalogue is subscribable, in one subscription.
+    const all = await POST(
+      postReq({ url: 'https://example.com/all', events: [...WEBHOOK_EVENT_KINDS] })
+    );
+    expect(all.status).toBe(201);
+    expect(((await all.json()) as { events: string[] }).events).toHaveLength(12);
+    // The strings an older design used are still not kinds.
+    for (const stale of ['dispute.created', 'publisher.tick']) {
+      const refused = await POST(postReq({ url: 'https://example.com/hook', events: [stale] }));
+      expect(refused.status, stale).toBe(400);
+    }
+  });
 });
 
 // ─── GET /api/webhooks/subscriptions ──────────────────────────────────────────
@@ -145,14 +179,14 @@ describe('GET /api/webhooks/subscriptions', () => {
     expect(res.status).toBe(403);
   });
 
-  it('rate-limits the list: the 11th GET in a window is 429, even with a wrong admin key', async () => {
+  it('rate-limits the list: the 31st GET in a window is 429, even with a wrong admin key', async () => {
     const guess = () =>
       new NextRequest('http://localhost/api/webhooks/subscriptions', {
         method: 'GET',
         headers: { 'x-admin-key': 'a-wrong-guess', 'x-forwarded-for': '198.51.100.40' },
       });
 
-    for (let i = 0; i < 10; i += 1) {
+    for (let i = 0; i < 30; i += 1) {
       expect((await GET(guess())).status).toBe(403);
     }
     const throttled = await GET(guess());

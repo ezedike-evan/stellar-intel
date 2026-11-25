@@ -18,7 +18,7 @@ export const runtime = 'nodejs';
 export async function POST(request: NextRequest): Promise<NextResponse> {
   return withV1(
     request,
-    { bucket: 'v1.intent.offramp', maxRequests: 20, idempotent: true },
+    { bucket: 'v1.intent.offramp', maxRequests: 20, scope: 'intents:write', idempotent: true },
     async (ctx) => {
       const body = await request.json().catch(() => null);
 
@@ -67,16 +67,26 @@ export async function POST(request: NextRequest): Promise<NextResponse> {
 
       // Field by field, never a spread: the intent carries sender and recipient.
       // withV1 answers a replay from the cache before this handler runs.
-      emitWebhookEvent('intent.created', {
-        corridorId: result.response.route.corridorId,
-        anchorId: result.response.route.anchorId,
-        quoteId: result.response.quoteId,
-        amount: intent.amount,
-        sourceAsset: intent.sourceAsset,
-        destinationAsset: intent.destinationAsset,
-      });
+      // The key is the quote id: one accepted intent has one quote, so the event for it
+      // is the same event if this line is ever reached twice.
+      emitWebhookEvent(
+        'intent.created',
+        {
+          corridorId: result.response.route.corridorId,
+          anchorId: result.response.route.anchorId,
+          quoteId: result.response.quoteId,
+          amount: intent.amount,
+          sourceAsset: intent.sourceAsset,
+          destinationAsset: intent.destinationAsset,
+        },
+        { idempotencyKey: `intent.created:${result.response.quoteId}` }
+      );
 
-      return { status: 200, body: result.response };
+      return {
+        status: 200,
+        body: result.response,
+        auditIntentHash: result.response.quoteId,
+      };
     }
   );
 }

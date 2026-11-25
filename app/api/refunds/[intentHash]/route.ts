@@ -6,7 +6,16 @@ import type { ApiError } from '@/types';
 
 export const runtime = 'nodejs';
 
-const INTENT_HASH_REGEX = /^[0-9a-f]{64}$/;
+const INTENT_HASH_PATTERN = /^[0-9a-f]{64}$/;
+
+const NO_STORE = { 'Cache-Control': 'no-store' };
+
+// ─── GET /api/refunds/[intentHash] ─────────────────────────────────────────────
+//
+// Read-only lookup of the refund cases tracked for one intent. Only the public
+// view of a case is returned (see `toPublicRefundCase`); the signer account and
+// the acknowledgement proof never leave the store. There is deliberately no
+// listing by account, because that would link a wallet to its refunds publicly.
 
 export async function GET(
   request: NextRequest,
@@ -21,28 +30,23 @@ export async function GET(
 
     const { intentHash } = await params;
 
-    if (!intentHash || !INTENT_HASH_REGEX.test(intentHash)) {
-      logger.warn({ event: 'refund_lookup_invalid_hash', intentHash });
+    if (!INTENT_HASH_PATTERN.test(intentHash)) {
+      logger.warn({ event: 'invalid_intent_hash' });
       return NextResponse.json<ApiError>(
-        { code: 'VALIDATION_ERROR', message: 'intentHash must be 64 lowercase hex characters' },
-        { status: 400 }
+        {
+          code: 'VALIDATION_ERROR',
+          message: 'intentHash must be a lowercase hex-encoded SHA-256 (64 chars)',
+        },
+        { status: 400, headers: NO_STORE }
       );
     }
 
-    const store = getRefundStore();
-    const cases = await store.getByIntentHash(intentHash);
+    // Oldest first, per the store's contract. An intent with no cases is a normal
+    // answer, not a 404: the caller is asking whether anything is tracked.
+    const cases = await getRefundStore().getByIntentHash(intentHash);
+    logger.info({ event: 'refund_lookup', caseCount: cases.length });
 
-    return NextResponse.json(
-      {
-        intentHash,
-        cases: cases.map(toPublicRefundCase),
-      },
-      {
-        status: 200,
-        headers: {
-          'Cache-Control': 'no-store',
-        },
-      }
-    );
+    const body = { intentHash, cases: cases.map(toPublicRefundCase) };
+    return NextResponse.json(body, { headers: NO_STORE });
   });
 }

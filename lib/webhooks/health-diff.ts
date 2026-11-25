@@ -1,7 +1,6 @@
 import { getHealthSnapshot, setHealthSnapshot } from '@/lib/api/shared-state';
 import { getAnchorHealthLedger } from '@/lib/stellar/anchors';
 import { emitWebhookEvent } from './emit';
-import type { WebhookEventKind } from './types';
 
 export type HealthState = 'healthy' | 'degraded';
 
@@ -43,7 +42,7 @@ export interface HealthDiffDeps {
   ledger?: () => ReturnType<typeof getAnchorHealthLedger>;
   getSnapshot?: () => Promise<string | null>;
   setSnapshot?: (json: string) => Promise<void>;
-  emit?: (kind: WebhookEventKind, payload: Record<string, unknown>) => void;
+  emit?: typeof emitWebhookEvent;
 }
 
 function parseSnapshot(json: string): Record<string, boolean> | null {
@@ -89,13 +88,23 @@ export async function emitHealthChanges(deps: HealthDiffDeps = {}): Promise<numb
   const changes = diffDegraded(prev, next);
   for (const change of changes) {
     const health = ledger.anchors[change.anchorId];
-    emit('anchor.health_status_changed', {
-      anchorId: change.anchorId,
-      from: change.from,
-      to: change.to,
-      lastCheckedAt: health?.lastCheckedAt ?? null,
-      lastError: health?.lastError ?? null,
-    });
+    const lastCheckedAt = health?.lastCheckedAt ?? null;
+    emit(
+      'anchor.health_status_changed',
+      {
+        anchorId: change.anchorId,
+        from: change.from,
+        to: change.to,
+        lastCheckedAt,
+        lastError: health?.lastError ?? null,
+      },
+      // The anchor, the status it moved to and the check that found it. When the
+      // snapshot write below fails, the next run reports the same change again, with
+      // the same three values and so the same key. A later flip has another check time.
+      {
+        idempotencyKey: `anchor.health_status_changed:${change.anchorId}:${change.to}:${lastCheckedAt ?? 'none'}`,
+      }
+    );
   }
 
   await setSnapshot(JSON.stringify(next));

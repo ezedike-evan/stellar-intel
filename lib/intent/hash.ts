@@ -14,25 +14,6 @@ export interface Intent extends HashableIntent {
 }
 
 /**
- * Recursively sorts keys of objects so JSON serialization is deterministic.
- */
-function sortKeys(value: unknown): unknown {
-  if (Array.isArray(value)) {
-    return value.map(sortKeys);
-  }
-  if (value !== null && typeof value === 'object') {
-    const obj = value as Record<string, unknown>;
-    return Object.keys(obj)
-      .sort()
-      .reduce<Record<string, unknown>>((acc, k) => {
-        acc[k] = sortKeys(obj[k]);
-        return acc;
-      }, {});
-  }
-  return value;
-}
-
-/**
  * Serialize an arbitrary value to canonical JSON: object keys sorted
  * alphabetically (recursively), arrays preserved in order, no whitespace.
  */
@@ -41,9 +22,14 @@ export function canonicalJsonValue(value: unknown): string {
 }
 
 /**
- * Serialize any value to canonical JSON: keys sorted alphabetically recursively,
- * no whitespace. Alias for canonicalJsonValue.
+ * SHA-256 hash of the canonical JSON of an arbitrary value, returned as 64 lowercase hex characters.
+ * Uses the Web Crypto API so it works in both browser and Node.js 20+.
  */
+export async function hashCanonical(value: unknown): Promise<string> {
+  return sha256Hex(canonicalJsonValue(value));
+}
+
+/** Alias of {@link canonicalJsonValue}, kept for the slippage-evidence callers. */
 export const canonicalize = canonicalJsonValue;
 
 /**
@@ -56,14 +42,6 @@ export async function sha256Hex(text: string): Promise<string> {
   return Array.from(new Uint8Array(hashBuffer))
     .map((b) => b.toString(16).padStart(2, '0'))
     .join('');
-}
-
-/**
- * SHA-256 hash of the canonical JSON of an arbitrary value, returned as 64 lowercase hex characters.
- * Uses the Web Crypto API so it works in both browser and Node.js 20+.
- */
-export async function hashCanonical(value: unknown): Promise<string> {
-  return sha256Hex(canonicalJsonValue(value));
 }
 
 /**
@@ -80,4 +58,20 @@ export function canonicalJson(intent: HashableIntent): string {
  */
 export async function hashIntent(intent: HashableIntent): Promise<string> {
   return hashCanonical(intent);
+}
+
+function sortKeys(value: unknown): unknown {
+  if (Array.isArray(value)) {
+    return value.map(sortKeys);
+  }
+  if (value !== null && typeof value === 'object') {
+    const obj = value as Record<string, unknown>;
+    return Object.keys(obj)
+      .sort()
+      .reduce<Record<string, unknown>>((acc, k) => {
+        acc[k] = sortKeys(obj[k]);
+        return acc;
+      }, {});
+  }
+  return value;
 }

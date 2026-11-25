@@ -127,7 +127,7 @@ describe('withV1 per-caller tiered rate limiting (#2200)', () => {
     // 1st attempt: 401 invalid_api_key
     const res1 = await withV1(
       makeInvalidReq(),
-      { bucket: 'test.bucket', maxRequests: 10 },
+      { bucket: 'test.bucket', maxRequests: 10, scope: null },
       handlerSpy
     );
     expect(res1.status).toBe(401);
@@ -140,7 +140,7 @@ describe('withV1 per-caller tiered rate limiting (#2200)', () => {
     for (let i = 2; i <= 30; i++) {
       const res = await withV1(
         makeInvalidReq(),
-        { bucket: 'test.bucket', maxRequests: 10 },
+        { bucket: 'test.bucket', maxRequests: 10, scope: null },
         handlerSpy
       );
       expect(res.status).toBe(401);
@@ -149,7 +149,7 @@ describe('withV1 per-caller tiered rate limiting (#2200)', () => {
     // 31st attempt -> 429 rate_limited
     const res31 = await withV1(
       makeInvalidReq(),
-      { bucket: 'test.bucket', maxRequests: 10 },
+      { bucket: 'test.bucket', maxRequests: 10, scope: null },
       handlerSpy
     );
     expect(res31.status).toBe(429);
@@ -178,7 +178,7 @@ describe('withV1 per-caller tiered rate limiting (#2200)', () => {
       new Request('http://localhost/api/v1/test', {
         headers: { authorization: `Bearer ${key.rawKey}` },
       }),
-      { bucket: 'test.caller', maxRequests: 10 },
+      { bucket: 'test.caller', maxRequests: 10, scope: null },
       async (ctx) => {
         capturedCtx = ctx;
         return { status: 200, body: { ok: true } };

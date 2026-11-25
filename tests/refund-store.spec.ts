@@ -1,10 +1,11 @@
-import { beforeEach, describe, expect, it, vi } from 'vitest';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import {
   InMemoryRefundStore,
   PostgresRefundStore,
   _resetRefundSchema,
   _setRefundStore,
   getRefundStore,
+  toRefundCase,
   type RefundAckUpdate,
   type RefundCase,
 } from '@/lib/refunds/store';
@@ -16,19 +17,16 @@ vi.mock('@/lib/reputation/pool', () => ({
   hasDatabaseUrl: () => Boolean(process.env.DATABASE_URL),
 }));
 
-const SIGNER = 'GA5ZSEJYB37JRC5AVCIA5MOP4RHTM335X2KGX3IHOJAPP5RE34K4KZVN';
-
 function refundCase(overrides: Partial<RefundCase> = {}): RefundCase {
-  const id = overrides.id ?? 'rc-1';
   return {
-    id,
-    intentHash: overrides.intentHash ?? (id.length === 1 ? id.repeat(64) : 'a'.repeat(64)),
+    id: 'r-1',
+    intentHash: 'a'.repeat(64),
     reason: 'anchor_error_after_payment',
-    anchorId: 'cowrie',
-    corridor: 'ngnt-ngn',
+    anchorId: 'moneygram',
+    corridor: 'USDC-NGN',
     direction: 'withdraw',
-    signerAccount: SIGNER,
-    amountPaid: '100',
+    signerAccount: 'GA5ZSEJYB37JRC5AVCIA5MOP4RHTM335X2KGX3IHOJAPP5RE34K4KZVN',
+    amountPaid: '100.00',
     status: 'owed',
     amountRefunded: null,
     refundFee: null,
@@ -43,14 +41,14 @@ function refundCase(overrides: Partial<RefundCase> = {}): RefundCase {
   };
 }
 
-function ackUpdate(overrides: Partial<RefundAckUpdate> = {}): RefundAckUpdate {
+function ack(overrides: Partial<RefundAckUpdate> = {}): RefundAckUpdate {
   return {
-    amountRefunded: '100',
-    refundFee: '0',
-    payments: [{ id: 'p-1', idType: 'stellar', amount: '100', fee: '0' }],
-    ackHash: 'c'.repeat(64),
-    ackSignature: 'sig',
-    acknowledgedAt: '2026-10-03T00:00:00.000Z',
+    amountRefunded: '99.50',
+    refundFee: '0.50',
+    payments: [{ id: 'p-1', idType: 'stellar', amount: '99.50', fee: '0.50' }],
+    ackHash: 'b'.repeat(64),
+    ackSignature: 'c'.repeat(128),
+    acknowledgedAt: '2026-10-05T12:00:00.000Z',
     onChainCheck: 'verified',
     ...overrides,
   };
@@ -63,176 +61,211 @@ describe('InMemoryRefundStore', () => {
     store = new InMemoryRefundStore();
   });
 
-  it('opens and gets a case', async () => {
+  it('opens a case and gets it back', async () => {
     expect(await store.open(refundCase())).toBe(true);
-    expect(await store.get('rc-1')).toEqual(refundCase());
+    expect(await store.get('r-1')).toEqual(refundCase());
   });
 
   it('returns null for an unknown id', async () => {
     expect(await store.get('missing')).toBeNull();
   });
 
-  it('refuses a duplicate (intentHash, reason) and keeps the first record', async () => {
+  it('refuses a second case for the same intent and reason, keeping the first', async () => {
     expect(await store.open(refundCase())).toBe(true);
-    expect(await store.open(refundCase({ id: 'rc-2', amountPaid: '200' }))).toBe(false);
-    expect(await store.get('rc-1')).toEqual(refundCase());
-    expect(await store.get('rc-2')).toBeNull();
+    expect(await store.open(refundCase({ id: 'r-2', amountPaid: '5.00' }))).toBe(false);
+    expect(await store.get('r-2')).toBeNull();
+    expect(await store.get('r-1')).toEqual(refundCase());
   });
 
   it('allows the same intent with a different reason', async () => {
     expect(await store.open(refundCase())).toBe(true);
-    expect(await store.open(refundCase({ id: 'rc-2', reason: 'expired_after_payment' }))).toBe(
-      true
-    );
+    expect(await store.open(refundCase({ id: 'r-2', reason: 'slippage_breach' }))).toBe(true);
     expect(await store.getByIntentHash('a'.repeat(64))).toHaveLength(2);
   });
 
-  it('lists cases for an intent oldest first', async () => {
-    await store.open(refundCase({ id: 'new', openedAt: '2026-10-02T10:00:00.000Z' }));
+  it('lists every case for an intent oldest first', async () => {
     await store.open(
-      refundCase({
-        id: 'old',
-        reason: 'expired_after_payment',
-        openedAt: '2026-10-01T10:00:00.000Z',
-      })
+      refundCase({ id: 'new', reason: 'slippage_breach', openedAt: '2026-10-03T00:00:00.000Z' })
     );
+    await store.open(refundCase({ id: 'old', openedAt: '2026-10-01T00:00:00.000Z' }));
+    await store.open(refundCase({ id: 'other', intentHash: 'f'.repeat(64) }));
     expect((await store.getByIntentHash('a'.repeat(64))).map((c) => c.id)).toEqual(['old', 'new']);
   });
 
-  it('lists cases newest first and honours each filter field', async () => {
-    await store.open(refundCase({ id: 'a', openedAt: '2026-10-01T10:00:00.000Z' }));
+  it('lists newest first and honours each filter field', async () => {
+    await store.open(
+      refundCase({ id: 'r-1', intentHash: '1'.repeat(64), openedAt: '2026-10-01T00:00:00.000Z' })
+    );
     await store.open(
       refundCase({
-        id: 'b',
-        anchorId: 'moneygram',
-        status: 'refunded',
-        refundedAt: '2026-10-02T10:00:00.000Z',
-        openedAt: '2026-10-02T10:00:00.000Z',
+        id: 'r-2',
+        intentHash: '2'.repeat(64),
+        anchorId: 'cowrie',
+        openedAt: '2026-10-02T00:00:00.000Z',
       })
     );
-    await store.open(refundCase({ id: 'c', openedAt: '2026-10-03T10:00:00.000Z' }));
+    await store.open(
+      refundCase({
+        id: 'r-3',
+        intentHash: '3'.repeat(64),
+        status: 'refunded',
+        refundedAt: '2026-10-03T06:00:00.000Z',
+        openedAt: '2026-10-03T00:00:00.000Z',
+      })
+    );
+    const ids = async (filter?: Parameters<InMemoryRefundStore['list']>[0]) =>
+      (await store.list(filter)).map((c) => c.id);
 
-    expect((await store.list()).map((c) => c.id)).toEqual(['c', 'b', 'a']);
-    expect((await store.list({ status: 'refunded' })).map((c) => c.id)).toEqual(['b']);
-    expect((await store.list({ anchorId: 'moneygram' })).map((c) => c.id)).toEqual(['b']);
-    expect(
-      (await store.list({ openedSince: '2026-10-02T00:00:00.000Z' })).map((c) => c.id)
-    ).toEqual(['c', 'b']);
-    expect((await store.list({ status: 'owed', anchorId: 'cowrie' })).map((c) => c.id)).toEqual([
-      'c',
-      'a',
-    ]);
+    expect(await ids()).toEqual(['r-3', 'r-2', 'r-1']);
+    expect(await ids({ status: 'owed' })).toEqual(['r-2', 'r-1']);
+    expect(await ids({ status: 'refunded' })).toEqual(['r-3']);
+    expect(await ids({ anchorId: 'cowrie' })).toEqual(['r-2']);
+    expect(await ids({ openedSince: '2026-10-02T00:00:00.000Z' })).toEqual(['r-3', 'r-2']);
+    expect(await ids({ status: 'owed', anchorId: 'moneygram' })).toEqual(['r-1']);
   });
 
-  it('acknowledges an owed case, fills refundedAt and records the ack', async () => {
+  it('acknowledges an owed case and fills refundedAt from the acknowledgement', async () => {
     await store.open(refundCase());
-    const acknowledged = await store.acknowledge('rc-1', ackUpdate());
-    expect(acknowledged).toMatchObject({
-      status: 'acknowledged',
-      amountRefunded: '100',
-      refundFee: '0',
-      refundedAt: '2026-10-03T00:00:00.000Z',
-      acknowledgedAt: '2026-10-03T00:00:00.000Z',
-      ackHash: 'c'.repeat(64),
-      ackSignature: 'sig',
-      onChainCheck: 'verified',
-    });
-    expect(acknowledged?.payments).toEqual([
-      { id: 'p-1', idType: 'stellar', amount: '100', fee: '0' },
-    ]);
-    expect(await store.get('rc-1')).toEqual(acknowledged);
+    const acknowledged = await store.acknowledge('r-1', ack());
+    expect(acknowledged).toEqual(
+      refundCase({
+        status: 'acknowledged',
+        amountRefunded: '99.50',
+        refundFee: '0.50',
+        payments: [{ id: 'p-1', idType: 'stellar', amount: '99.50', fee: '0.50' }],
+        acknowledgedAt: '2026-10-05T12:00:00.000Z',
+        refundedAt: '2026-10-05T12:00:00.000Z',
+        ackHash: 'b'.repeat(64),
+        ackSignature: 'c'.repeat(128),
+        onChainCheck: 'verified',
+      })
+    );
+    expect(await store.get('r-1')).toEqual(acknowledged);
   });
 
   it('keeps an existing refundedAt when acknowledging a refunded case', async () => {
-    await store.open(refundCase({ status: 'refunded', refundedAt: '2026-10-02T10:00:00.000Z' }));
-    const acknowledged = await store.acknowledge('rc-1', ackUpdate());
-    expect(acknowledged?.refundedAt).toBe('2026-10-02T10:00:00.000Z');
+    await store.open(
+      refundCase({
+        status: 'refunded',
+        reason: 'anchor_refunded',
+        refundedAt: '2026-10-02T08:00:00.000Z',
+      })
+    );
+    const acknowledged = await store.acknowledge('r-1', ack());
+    expect(acknowledged?.status).toBe('acknowledged');
+    expect(acknowledged?.refundedAt).toBe('2026-10-02T08:00:00.000Z');
   });
 
-  it('returns null when acknowledging twice, and for an unknown id', async () => {
+  it('returns null when acknowledging twice or an unknown id', async () => {
     await store.open(refundCase());
-    expect(await store.acknowledge('rc-1', ackUpdate())).not.toBeNull();
-    expect(await store.acknowledge('rc-1', ackUpdate())).toBeNull();
-    expect(await store.acknowledge('missing', ackUpdate())).toBeNull();
+    expect(await store.acknowledge('r-1', ack())).not.toBeNull();
+    expect(await store.acknowledge('r-1', ack({ amountRefunded: '1.00' }))).toBeNull();
+    expect((await store.get('r-1'))?.amountRefunded).toBe('99.50');
+    expect(await store.acknowledge('missing', ack())).toBeNull();
   });
 
-  it('does not let callers mutate stored state', async () => {
-    await store.open(refundCase());
-    const fetched = await store.get('rc-1');
-    if (fetched) {
-      fetched.amountPaid = 'tampered';
-      fetched.payments.push({ id: 'p-2', idType: 'external', amount: '1', fee: '0' });
+  it('never hands out internal references', async () => {
+    const original = refundCase({
+      payments: [{ id: 'p-0', idType: 'external', amount: '1.00', fee: '0.00' }],
+    });
+    await store.open(original);
+    original.anchorId = 'changed';
+    original.payments[0]!.amount = '999';
+
+    const fetched = (await store.get('r-1'))!;
+    fetched.status = 'acknowledged';
+    fetched.payments.push({ id: 'p-9', idType: 'stellar', amount: '9', fee: '0' });
+    (await store.list())[0]!.payments[0]!.fee = '5';
+    (await store.getByIntentHash('a'.repeat(64)))[0]!.anchorId = 'x';
+
+    const update = ack();
+    const acknowledged = (await store.acknowledge('r-1', update))!;
+    update.payments[0]!.amount = '0';
+    acknowledged.payments[0]!.id = 'tampered';
+
+    const stored = (await store.get('r-1'))!;
+    expect(stored.anchorId).toBe('moneygram');
+    expect(stored.payments).toEqual([
+      { id: 'p-1', idType: 'stellar', amount: '99.50', fee: '0.50' },
+    ]);
+  });
+});
+
+describe('toRefundCase', () => {
+  const row = {
+    id: 'r-1',
+    intent_hash: 'a'.repeat(64),
+    reason: 'anchor_error_after_payment',
+    anchor_id: 'moneygram',
+    corridor: 'USDC-NGN',
+    direction: 'withdraw',
+    signer_account: 'GA5ZSEJYB37JRC5AVCIA5MOP4RHTM335X2KGX3IHOJAPP5RE34K4KZVN',
+    amount_paid: '100.00',
+    status: 'owed',
+    amount_refunded: null,
+    refund_fee: null,
+    payments_json: '[]',
+    opened_at: '2026-10-01T10:00:00.000Z',
+    refunded_at: null,
+    acknowledged_at: null,
+    ack_hash: null,
+    ack_signature: null,
+    on_chain_check: null,
+  };
+
+  it('maps every column', () => {
+    expect(toRefundCase(row)).toEqual(refundCase());
+  });
+
+  it('parses payments and falls back to none when payments_json is not a list', () => {
+    const payments = [{ id: 'p-1', idType: 'stellar', amount: '1', fee: '0' }];
+    expect(toRefundCase({ ...row, payments_json: JSON.stringify(payments) }).payments).toEqual(
+      payments
+    );
+    for (const bad of ['not json', '{"a":1}', 'null', '', null, 42]) {
+      expect(toRefundCase({ ...row, payments_json: bad }).payments).toEqual([]);
     }
-    expect((await store.get('rc-1'))?.amountPaid).toBe('100');
-    expect((await store.get('rc-1'))?.payments).toEqual([]);
   });
 });
 
 describe('PostgresRefundStore', () => {
-  /** A tiny fake of the `refund_cases` table, keyed by id. */
+  /** A refund_cases table good enough to exercise the store's SQL. */
   function fakeTable() {
     const rows = new Map<string, Record<string, unknown>>();
     executor.query.mockImplementation(async (sql: string, params: unknown[] = []) => {
-      if (sql.includes('CREATE TABLE')) return { rows: [] };
+      if (sql.includes('CREATE TABLE') || sql.includes('CREATE INDEX')) return { rows: [] };
       if (sql.includes('INSERT INTO refund_cases')) {
-        const [
-          id,
-          intent_hash,
-          reason,
-          anchor_id,
-          corridor,
-          direction,
-          signer_account,
-          amount_paid,
-          status,
-          amount_refunded,
-          refund_fee,
-          payments_json,
-          opened_at,
-          refunded_at,
-          acknowledged_at,
-          ack_hash,
-          ack_signature,
-          on_chain_check,
-        ] = params;
-        for (const existing of rows.values()) {
-          if (existing['intent_hash'] === intent_hash && existing['reason'] === reason) {
-            return { rows: [] };
-          }
-        }
-        rows.set(String(id), {
-          id,
-          intent_hash,
-          reason,
-          anchor_id,
-          corridor,
-          direction,
-          signer_account,
-          amount_paid,
-          status,
-          amount_refunded,
-          refund_fee,
-          payments_json,
-          opened_at,
-          refunded_at,
-          acknowledged_at,
-          ack_hash,
-          ack_signature,
-          on_chain_check,
-        });
-        return { rows: [{ id }] };
+        const columns = [
+          'id',
+          'intent_hash',
+          'reason',
+          'anchor_id',
+          'corridor',
+          'direction',
+          'signer_account',
+          'amount_paid',
+          'status',
+          'amount_refunded',
+          'refund_fee',
+          'payments_json',
+          'opened_at',
+          'refunded_at',
+          'acknowledged_at',
+          'ack_hash',
+          'ack_signature',
+          'on_chain_check',
+        ];
+        const row = Object.fromEntries(columns.map((c, i) => [c, params[i]]));
+        const conflict = [...rows.values()].some(
+          (r) => r['intent_hash'] === row['intent_hash'] && r['reason'] === row['reason']
+        );
+        if (conflict) return { rows: [] };
+        rows.set(String(row['id']), row);
+        return { rows: [{ id: row['id'] }] };
       }
       if (sql.includes('UPDATE refund_cases')) {
-        const [
-          id,
-          amountRefunded,
-          refundFee,
-          paymentsJson,
-          ackHash,
-          ackSignature,
-          acknowledgedAt,
-          onChainCheck,
-        ] = params;
+        const [id, amountRefunded, refundFee, paymentsJson, ackHash, ackSignature, at, check] =
+          params;
         const found = rows.get(String(id));
         if (!found || found['status'] === 'acknowledged') return { rows: [] };
         const updated = {
@@ -243,9 +276,9 @@ describe('PostgresRefundStore', () => {
           payments_json: paymentsJson,
           ack_hash: ackHash,
           ack_signature: ackSignature,
-          acknowledged_at: acknowledgedAt,
-          refunded_at: found['refunded_at'] ?? acknowledgedAt,
-          on_chain_check: onChainCheck,
+          acknowledged_at: at,
+          on_chain_check: check,
+          refunded_at: found['refunded_at'] ?? at,
         };
         rows.set(String(id), updated);
         return { rows: [updated] };
@@ -255,168 +288,148 @@ describe('PostgresRefundStore', () => {
         return { rows: found ? [found] : [] };
       }
       if (sql.includes('WHERE intent_hash = $1')) {
-        const found = [...rows.values()]
-          .filter((r) => r['intent_hash'] === params[0])
-          .sort((a, b) => String(a['opened_at']).localeCompare(String(b['opened_at'])));
-        return { rows: found };
+        return {
+          rows: [...rows.values()]
+            .filter((r) => r['intent_hash'] === params[0])
+            .sort((a, b) => String(a['opened_at']).localeCompare(String(b['opened_at']))),
+        };
       }
-      if (sql.includes('ORDER BY opened_at DESC')) {
-        let found = [...rows.values()];
-        const statusMatch = sql.match(/status = \$(\d+)/);
-        if (statusMatch) {
-          found = found.filter((r) => r['status'] === params[Number(statusMatch[1]) - 1]);
-        }
-        const anchorMatch = sql.match(/anchor_id = \$(\d+)/);
-        if (anchorMatch) {
-          found = found.filter((r) => r['anchor_id'] === params[Number(anchorMatch[1]) - 1]);
-        }
-        const sinceMatch = sql.match(/opened_at >= \$(\d+)/);
-        if (sinceMatch) {
-          found = found.filter(
-            (r) => String(r['opened_at']) >= String(params[Number(sinceMatch[1]) - 1])
-          );
-        }
-        found.sort((a, b) => String(b['opened_at']).localeCompare(String(a['opened_at'])));
-        return { rows: found };
+      if (sql.includes('SELECT * FROM refund_cases')) {
+        return {
+          rows: [...rows.values()].sort((a, b) =>
+            String(b['opened_at']).localeCompare(String(a['opened_at']))
+          ),
+        };
       }
-      return { rows: [] };
+      throw new Error(`unexpected SQL: ${sql}`);
     });
+    return rows;
   }
+
+  const executed = () => executor.query.mock.calls.map(([sql]) => String(sql));
 
   beforeEach(() => {
     executor.query.mockReset();
     _resetRefundSchema();
+  });
+
+  it('runs the DDL once across calls, with the table, primary key and unique pair', async () => {
     fakeTable();
-  });
-
-  it('creates the table once per process, not once per call', async () => {
     const store = new PostgresRefundStore();
-    await store.open(refundCase({ id: 'a' }));
-    await store.open(refundCase({ id: 'b', reason: 'expired_after_payment' }));
-    const ddl = executor.query.mock.calls.filter(([sql]) => String(sql).includes('CREATE TABLE'));
+    await store.get('a');
+    await store.list();
+    const ddl = executed().filter((sql) => sql.includes('CREATE TABLE'));
     expect(ddl).toHaveLength(1);
-    expect(String(ddl[0]?.[0])).toContain('refund_cases');
+    expect(ddl[0]).toContain('CREATE TABLE IF NOT EXISTS refund_cases');
+    expect(ddl[0]).toContain('PRIMARY KEY (id)');
+    expect(ddl[0]).toContain('UNIQUE (intent_hash, reason)');
+    expect(ddl[0]).toContain("payments_json   TEXT NOT NULL DEFAULT '[]'");
   });
 
-  it('round-trips open, get, getByIntentHash, list and acknowledge', async () => {
+  it('retries the DDL after a failure instead of poisoning the process', async () => {
+    executor.query.mockRejectedValueOnce(new Error('connection reset'));
     const store = new PostgresRefundStore();
-    await store.open(refundCase({ id: 'old', openedAt: '2026-10-01T10:00:00.000Z' }));
-    await store.open(
-      refundCase({
-        id: 'new',
-        reason: 'expired_after_payment',
-        openedAt: '2026-10-02T10:00:00.000Z',
-      })
-    );
+    await expect(store.get('a')).rejects.toThrow('connection reset');
+    fakeTable();
+    await expect(store.get('a')).resolves.toBeNull();
+  });
 
-    expect(await store.get('old')).toEqual(refundCase({ id: 'old' }));
-    expect((await store.getByIntentHash('a'.repeat(64))).map((c) => c.id)).toEqual(['old', 'new']);
-    expect((await store.list()).map((c) => c.id)).toEqual(['new', 'old']);
-    expect((await store.list({ status: 'owed' })).map((c) => c.id)).toEqual(['new', 'old']);
+  it('opens with ON CONFLICT (intent_hash, reason) DO NOTHING and reports a duplicate', async () => {
+    fakeTable();
+    const store = new PostgresRefundStore();
+    const payments = [{ id: 'p-1', idType: 'external' as const, amount: '1.00', fee: '0.10' }];
+    expect(await store.open(refundCase({ payments }))).toBe(true);
+    expect(await store.open(refundCase({ id: 'r-2' }))).toBe(false);
+    const insert = executed().find((sql) => sql.includes('INSERT INTO refund_cases'))!;
+    expect(insert).toContain('ON CONFLICT (intent_hash, reason) DO NOTHING');
+    expect(insert).toContain('RETURNING id');
+    expect(await store.get('r-1')).toEqual(refundCase({ payments }));
+    expect(await store.get('r-2')).toBeNull();
+  });
 
-    const acknowledged = await store.acknowledge('old', ackUpdate());
+  it('acknowledges with one guarded UPDATE, and only once', async () => {
+    fakeTable();
+    const store = new PostgresRefundStore();
+    await store.open(refundCase());
+    const acknowledged = await store.acknowledge('r-1', ack());
     expect(acknowledged).toMatchObject({
       status: 'acknowledged',
-      refundedAt: '2026-10-03T00:00:00.000Z',
+      refundedAt: '2026-10-05T12:00:00.000Z',
+      payments: ack().payments,
     });
-    expect(await store.acknowledge('old', ackUpdate())).toBeNull();
-  });
-
-  it('returns false on a duplicate open and keeps the first record', async () => {
-    const store = new PostgresRefundStore();
-    expect(await store.open(refundCase())).toBe(true);
-    expect(await store.open(refundCase({ id: 'rc-2', amountPaid: '200' }))).toBe(false);
-    expect((await store.get('rc-1'))?.amountPaid).toBe('100');
-  });
-
-  it('sends ON CONFLICT (intent_hash, reason) DO NOTHING on open', async () => {
-    const store = new PostgresRefundStore();
-    await store.open(refundCase());
-    const insert = executor.query.mock.calls.find(([sql]) =>
-      String(sql).includes('INSERT INTO refund_cases')
-    );
-    expect(String(insert?.[0])).toContain('ON CONFLICT (intent_hash, reason) DO NOTHING');
-  });
-
-  it('guards acknowledge with status <> acknowledged and never deletes', async () => {
-    const store = new PostgresRefundStore();
-    await store.open(refundCase());
-    await store.acknowledge('rc-1', ackUpdate());
-    await store.get('rc-1');
-    await store.list();
-    const update = executor.query.mock.calls.find(([sql]) =>
-      String(sql).includes('UPDATE refund_cases')
-    );
-    expect(String(update?.[0])).toContain("status <> 'acknowledged'");
-    for (const [sql] of executor.query.mock.calls) {
-      expect(String(sql)).not.toContain('DELETE');
+    expect(await store.acknowledge('r-1', ack())).toBeNull();
+    const updates = executed().filter((sql) => sql.includes('UPDATE'));
+    expect(updates).toHaveLength(2);
+    for (const sql of updates) {
+      expect(sql).toContain("WHERE id = $1 AND status <> 'acknowledged'");
+      expect(sql).toContain('RETURNING *');
+      expect(sql).toContain('COALESCE(refunded_at, $7)');
     }
   });
 
-  it('parses a broken payments_json as an empty list', async () => {
+  it('passes list filters as parameters, newest first', async () => {
+    fakeTable();
     const store = new PostgresRefundStore();
-    await store.open(refundCase());
-    executor.query.mockImplementationOnce(async (sql: string) => {
-      if (sql.includes('WHERE id = $1')) {
-        return {
-          rows: [
-            {
-              id: 'rc-1',
-              intent_hash: 'a'.repeat(64),
-              reason: 'anchor_error_after_payment',
-              anchor_id: 'cowrie',
-              corridor: 'ngnt-ngn',
-              direction: 'withdraw',
-              signer_account: SIGNER,
-              amount_paid: '100',
-              status: 'owed',
-              amount_refunded: null,
-              refund_fee: null,
-              payments_json: '{not json',
-              opened_at: '2026-10-01T10:00:00.000Z',
-              refunded_at: null,
-              acknowledged_at: null,
-              ack_hash: null,
-              ack_signature: null,
-              on_chain_check: null,
-            },
-          ],
-        };
-      }
-      return { rows: [] };
+    await store.list({
+      status: 'owed',
+      anchorId: 'moneygram',
+      openedSince: '2026-10-01T00:00:00.000Z',
     });
-    expect((await store.get('rc-1'))?.payments).toEqual([]);
+    const [sql, params] = executor.query.mock.calls.at(-1)!;
+    expect(sql).toBe(
+      'SELECT * FROM refund_cases WHERE status = $1 AND anchor_id = $2 AND opened_at >= $3 ORDER BY opened_at DESC'
+    );
+    expect(params).toEqual(['owed', 'moneygram', '2026-10-01T00:00:00.000Z']);
   });
 
-  it('retries the DDL after a failed attempt instead of caching the failure', async () => {
-    executor.query.mockRejectedValueOnce(new Error('connection refused'));
+  it('orders an intent oldest first', async () => {
+    fakeTable();
     const store = new PostgresRefundStore();
-    await expect(store.list()).rejects.toThrow('connection refused');
-    await expect(store.list()).resolves.toEqual([]);
+    await store.getByIntentHash('a'.repeat(64));
+    expect(executed().at(-1)).toContain('WHERE intent_hash = $1 ORDER BY opened_at ASC');
+  });
+
+  it('never deletes anything', async () => {
+    fakeTable();
+    const store = new PostgresRefundStore();
+    await store.open(refundCase());
+    await store.get('r-1');
+    await store.getByIntentHash('a'.repeat(64));
+    await store.list({ status: 'owed' });
+    await store.acknowledge('r-1', ack());
+    await store.acknowledge('r-1', ack());
+    for (const sql of executed()) expect(sql.toUpperCase()).not.toContain('DELETE');
   });
 });
 
 describe('getRefundStore', () => {
-  beforeEach(() => {
-    _setRefundStore(null);
-    vi.unstubAllEnvs();
-  });
+  const saved = process.env.DATABASE_URL;
 
-  it('uses the in-memory store without a database, and keeps it between calls', () => {
-    expect(getRefundStore()).toBeInstanceOf(InMemoryRefundStore);
-    expect(getRefundStore()).toBe(getRefundStore());
+  afterEach(() => {
+    if (saved === undefined) delete process.env.DATABASE_URL;
+    else process.env.DATABASE_URL = saved;
+    _setRefundStore(null);
   });
 
   it('uses Postgres when DATABASE_URL is set', () => {
-    vi.stubEnv('DATABASE_URL', 'postgres://localhost/test');
+    process.env.DATABASE_URL = 'postgres://localhost/test';
     expect(getRefundStore()).toBeInstanceOf(PostgresRefundStore);
   });
 
-  it('honours an injected store, and drops it on reset', () => {
-    const injected = new InMemoryRefundStore();
-    _setRefundStore(injected);
-    expect(getRefundStore()).toBe(injected);
+  it('uses the in-memory store otherwise', () => {
+    delete process.env.DATABASE_URL;
+    expect(getRefundStore()).toBeInstanceOf(InMemoryRefundStore);
+  });
+
+  it('honours a pinned store, and dropping the pin drops the in-memory state', async () => {
+    delete process.env.DATABASE_URL;
+    const pinned = new InMemoryRefundStore();
+    _setRefundStore(pinned);
+    expect(getRefundStore()).toBe(pinned);
+
     _setRefundStore(null);
-    expect(getRefundStore()).not.toBe(injected);
+    await getRefundStore().open(refundCase());
+    _setRefundStore(null);
+    expect(await getRefundStore().get('r-1')).toBeNull();
   });
 });
