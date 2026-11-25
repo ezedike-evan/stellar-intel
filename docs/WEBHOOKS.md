@@ -190,3 +190,35 @@ x-admin-key: <admin_key>
 ```
 
 Returns all delivery records that exhausted retries without a successful response.
+
+### Redeliver a logged delivery
+
+```http
+POST /api/webhooks/deliveries/{id}/redeliver
+x-admin-key: <admin_key>
+```
+
+Sends one logged delivery to its subscription again, for use once a subscriber has fixed an outage. `{id}` is the `id` of a delivery record, as listed by `GET /api/webhooks/failures` or `GET /api/webhooks/deliveries`. Any logged delivery can be resent, not only a dead-lettered one.
+
+The stored event goes out unchanged: the same `id`, `createdAt`, `idempotencyKey` and `payload`, and so the same `x-webhook-id` and `x-webhook-idempotency-key` headers. Only the timestamp and the signature are new. A consumer that de-duplicates on the event `id` or on the idempotency key processes a resent event once.
+
+Response `202`:
+
+```json
+{
+  "redelivered": true,
+  "eventId": "3f2a1b4c-...",
+  "subscriptionId": "9e8d7c6b-..."
+}
+```
+
+`202` means the delivery was attempted, with the usual retries, before the response was sent. It does not mean the subscriber accepted it. The attempt is logged as a new delivery record and the original record is left as it was, so read the new record's `status` to see how it went.
+
+| Status | `code`                    | Meaning                                                     |
+| ------ | ------------------------- | ----------------------------------------------------------- |
+| `403`  | `FORBIDDEN`               | Missing or invalid admin key                                |
+| `404`  | `NOT_FOUND`               | No delivery record has this id                              |
+| `410`  | `EVENT_NOT_RETAINED`      | The event is not in the event store, so it cannot be resent |
+| `410`  | `SUBSCRIPTION_DELETED`    | The subscription the delivery went to was deleted           |
+| `409`  | `EVENT_KIND_UNSUBSCRIBED` | The subscription no longer lists the event's kind           |
+| `429`  | `RATE_LIMITED`            | More than 10 requests in a minute                           |

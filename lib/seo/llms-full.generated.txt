@@ -987,6 +987,7 @@ the hardening contract (see `lib/api/v1.ts`):
   - [`GET /api/status`](#get-apistatus)
   - [`GET /api/v1/health`](#get-apiv1health)
   - [`GET /api/webhooks/deliveries`](#get-apiwebhooksdeliveries)
+  - [`POST /api/webhooks/deliveries/{id}/redeliver`](#post-apiwebhooksdeliveriesidredeliver)
   - [`GET /api/webhooks/failures`](#get-apiwebhooksfailures)
   - [`GET /api/webhooks/subscriptions`](#get-apiwebhookssubscriptions)
   - [`POST /api/webhooks/subscriptions`](#post-apiwebhookssubscriptions)
@@ -1985,6 +1986,31 @@ Admin only. Returns webhook delivery records filtered by status, subscription, o
 | `200` | Webhook delivery records | `application/json` | `object[]` |
 | `400` | Validation error | `application/json` | `ApiError` |
 | `401` | Missing or invalid credentials | `application/json` | `ApiError` |
+| `429` | Rate limited | `application/json` | `ApiError` |
+
+---
+
+### `POST /api/webhooks/deliveries/{id}/redeliver`
+
+**Summary:** Resend a logged webhook delivery  
+
+Admin only. Sends the stored event of one logged delivery to its subscription again, with the original event `id` and idempotency key, so a consumer that already processed it de-duplicates. The attempt is logged as a new delivery record. A 202 means the attempt was made, not that the subscriber accepted it. See docs/WEBHOOKS.md.
+
+#### Parameters
+
+| Name | In | Type | Required | Description |
+| :--- | :--- | :--- | :--- | :--- |
+| `id` | `path` | `string` | **Yes** | Delivery record id, as listed by GET /api/webhooks/deliveries |
+
+#### Responses
+
+| Status | Description | Content-Type | Schema |
+| :--- | :--- | :--- | :--- |
+| `202` | The delivery was attempted again and logged | `application/json` | `object` |
+| `403` | Missing or invalid admin key | `application/json` | `ApiError` |
+| `404` | Unknown delivery id (`NOT_FOUND`) | `application/json` | `ApiError` |
+| `409` | The subscription no longer subscribes to the event kind (`EVENT_KIND_UNSUBSCRIBED`) | `application/json` | `ApiError` |
+| `410` | The event is not in the event store (`EVENT_NOT_RETAINED`), or the subscription was deleted (`SUBSCRIPTION_DELETED`) | `application/json` | `ApiError` |
 | `429` | Rate limited | `application/json` | `ApiError` |
 
 ---
@@ -3910,6 +3936,38 @@ x-admin-key: <admin_key>
 ```
 
 Returns all delivery records that exhausted retries without a successful response.
+
+### Redeliver a logged delivery
+
+```http
+POST /api/webhooks/deliveries/{id}/redeliver
+x-admin-key: <admin_key>
+```
+
+Sends one logged delivery to its subscription again, for use once a subscriber has fixed an outage. `{id}` is the `id` of a delivery record, as listed by `GET /api/webhooks/failures` or `GET /api/webhooks/deliveries`. Any logged delivery can be resent, not only a dead-lettered one.
+
+The stored event goes out unchanged: the same `id`, `createdAt`, `idempotencyKey` and `payload`, and so the same `x-webhook-id` and `x-webhook-idempotency-key` headers. Only the timestamp and the signature are new. A consumer that de-duplicates on the event `id` or on the idempotency key processes a resent event once.
+
+Response `202`:
+
+```json
+{
+  "redelivered": true,
+  "eventId": "3f2a1b4c-...",
+  "subscriptionId": "9e8d7c6b-..."
+}
+```
+
+`202` means the delivery was attempted, with the usual retries, before the response was sent. It does not mean the subscriber accepted it. The attempt is logged as a new delivery record and the original record is left as it was, so read the new record's `status` to see how it went.
+
+| Status | `code`                    | Meaning                                                     |
+| ------ | ------------------------- | ----------------------------------------------------------- |
+| `403`  | `FORBIDDEN`               | Missing or invalid admin key                                |
+| `404`  | `NOT_FOUND`               | No delivery record has this id                              |
+| `410`  | `EVENT_NOT_RETAINED`      | The event is not in the event store, so it cannot be resent |
+| `410`  | `SUBSCRIPTION_DELETED`    | The subscription the delivery went to was deleted           |
+| `409`  | `EVENT_KIND_UNSUBSCRIBED` | The subscription no longer lists the event's kind           |
+| `429`  | `RATE_LIMITED`            | More than 10 requests in a minute                           |
 
 ==============================================================================
 SECTION: DATA AND METHODOLOGY

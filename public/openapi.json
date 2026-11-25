@@ -5202,6 +5202,116 @@
           }
         }
       }
+    },
+    "/api/webhooks/deliveries/{id}/redeliver": {
+      "post": {
+        "summary": "Resend a logged webhook delivery",
+        "description": "Admin only. Sends the stored event of one logged delivery to its subscription again, with the original event `id` and idempotency key, so a consumer that already processed it de-duplicates. The attempt is logged as a new delivery record. A 202 means the attempt was made, not that the subscriber accepted it. See docs/WEBHOOKS.md.",
+        "tags": [
+          "System"
+        ],
+        "security": [
+          {
+            "adminKey": []
+          }
+        ],
+        "parameters": [
+          {
+            "schema": {
+              "type": "string",
+              "minLength": 1,
+              "description": "Delivery record id, as listed by GET /api/webhooks/deliveries"
+            },
+            "required": true,
+            "description": "Delivery record id, as listed by GET /api/webhooks/deliveries",
+            "name": "id",
+            "in": "path"
+          }
+        ],
+        "responses": {
+          "202": {
+            "description": "The delivery was attempted again and logged",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "redelivered": {
+                      "type": "boolean",
+                      "enum": [
+                        true
+                      ]
+                    },
+                    "eventId": {
+                      "type": "string",
+                      "description": "Id of the event that was resent"
+                    },
+                    "subscriptionId": {
+                      "type": "string",
+                      "description": "Subscription it was sent to"
+                    }
+                  },
+                  "required": [
+                    "redelivered",
+                    "eventId",
+                    "subscriptionId"
+                  ]
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Missing or invalid admin key",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiError"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Unknown delivery id (`NOT_FOUND`)",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiError"
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "The subscription no longer subscribes to the event kind (`EVENT_KIND_UNSUBSCRIBED`)",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiError"
+                }
+              }
+            }
+          },
+          "410": {
+            "description": "The event is not in the event store (`EVENT_NOT_RETAINED`), or the subscription was deleted (`SUBSCRIPTION_DELETED`)",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiError"
+                }
+              }
+            }
+          },
+          "429": {
+            "description": "Rate limited",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiError"
+                }
+              }
+            }
+          }
+        }
+      }
     }
   },
   "webhooks": {}
