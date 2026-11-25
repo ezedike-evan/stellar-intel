@@ -197,17 +197,15 @@ describe('POST /api/intent/status', () => {
 
     const logCalls: any[] = [];
     const originalWithRequestLogger = loggerModule.withRequestLogger;
-    vi.spyOn(loggerModule, 'withRequestLogger').mockImplementation(
-      async (req, scope, handler) => {
-        const dummyLogger = {
-          info: vi.fn((obj) => logCalls.push(obj)),
-          warn: vi.fn((obj) => logCalls.push(obj)),
-          error: vi.fn((obj) => logCalls.push(obj)),
-          debug: vi.fn((obj) => logCalls.push(obj)),
-        };
-        return handler(dummyLogger as any);
-      }
-    );
+    vi.spyOn(loggerModule, 'withRequestLogger').mockImplementation(async (req, scope, handler) => {
+      const dummyLogger = {
+        info: vi.fn((obj) => logCalls.push(obj)),
+        warn: vi.fn((obj) => logCalls.push(obj)),
+        error: vi.fn((obj) => logCalls.push(obj)),
+        debug: vi.fn((obj) => logCalls.push(obj)),
+      };
+      return handler(dummyLogger as any);
+    });
 
     await POST(makeRequest(VALID_BODY));
 

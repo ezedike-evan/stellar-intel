@@ -120,7 +120,9 @@ describe('PostgresSettlementStatusStore', () => {
 
     expect(prev).toBeNull();
     expect(executor.query).toHaveBeenCalledTimes(2);
-    expect(executor.query.mock.calls[0]?.[0]).toContain('CREATE TABLE IF NOT EXISTS settlement_status');
+    expect(executor.query.mock.calls[0]?.[0]).toContain(
+      'CREATE TABLE IF NOT EXISTS settlement_status'
+    );
     expect(executor.query.mock.calls[1]?.[0]).toContain('WITH old AS');
   });
 

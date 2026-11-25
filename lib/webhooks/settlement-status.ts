@@ -8,21 +8,13 @@ export interface SettlementStatusKey {
 }
 
 export interface SettlementStatusStore {
-  swap(
-    key: SettlementStatusKey,
-    status: string,
-    observedAt: string
-  ): Promise<string | null>;
+  swap(key: SettlementStatusKey, status: string, observedAt: string): Promise<string | null>;
 }
 
 export class InMemorySettlementStatusStore implements SettlementStatusStore {
   private readonly table = new Map<string, { status: string; observedAt: string }>();
 
-  async swap(
-    key: SettlementStatusKey,
-    status: string,
-    observedAt: string
-  ): Promise<string | null> {
+  async swap(key: SettlementStatusKey, status: string, observedAt: string): Promise<string | null> {
     const k = `${key.anchorId}:${key.transactionId}`;
     const previous = this.table.get(k);
     this.table.set(k, { status, observedAt });
@@ -64,11 +56,7 @@ export function _resetSettlementStatusSchema(): void {
 }
 
 export class PostgresSettlementStatusStore implements SettlementStatusStore {
-  async swap(
-    key: SettlementStatusKey,
-    status: string,
-    observedAt: string
-  ): Promise<string | null> {
+  async swap(key: SettlementStatusKey, status: string, observedAt: string): Promise<string | null> {
     await ensureSchema();
     const sql = `
       WITH old AS (

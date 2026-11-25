@@ -20,7 +20,10 @@ const StatusBodySchema = z.object({
   transactionId: z.string().min(1).max(200),
   protocol: z.enum(['sep24', 'sep6']),
   direction: z.enum(['withdraw', 'deposit']),
-  intentHash: z.string().regex(/^[0-9a-f]{64}$/).optional(),
+  intentHash: z
+    .string()
+    .regex(/^[0-9a-f]{64}$/)
+    .optional(),
 });
 
 export async function POST(request: NextRequest): Promise<NextResponse> {
