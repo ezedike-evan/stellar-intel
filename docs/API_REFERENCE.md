@@ -65,9 +65,11 @@ the hardening contract (see `lib/api/v1.ts`):
   - [`GET /api/reputation/sdf-export`](#get-apireputationsdf-export)
   - [`GET /api/reputation/{anchor}`](#get-apireputationanchor)
   - [`GET /api/reputation/{anchor}/history`](#get-apireputationanchorhistory)
+  - [`GET /api/reputation/{anchor}/sla`](#get-apireputationanchorsla)
   - [`GET /api/v1/disputes/log`](#get-apiv1disputeslog)
   - [`GET /api/v1/slippage-breaches`](#get-apiv1slippage-breaches)
   - [`GET /api/v1/slippage-breaches/{intentHash}`](#get-apiv1slippage-breachesintenthash)
+  - [`GET /api/v1/slippage-compliance`](#get-apiv1slippage-compliance)
   - [`GET /v1/public/scores`](#get-v1publicscores)
 - **SEP-10**
   - [`POST /api/sep10/client-domain`](#post-apisep10client-domain)
@@ -878,6 +880,30 @@ Returns bucketed outcome history for a specific anchor over a configurable time 
 
 ---
 
+### `GET /api/reputation/{anchor}/sla`
+
+**Summary:** Get anchor execution SLA  
+
+Returns trailing 30-day settlement SLA percentiles (nearest-rank, no trimming) for an anchor, requiring at least 30 completed samples (and 100 for p99), evaluated against breach thresholds.
+
+#### Parameters
+
+| Name | In | Type | Required | Description |
+| :--- | :--- | :--- | :--- | :--- |
+| `anchor` | `path` | `string` | **Yes** | Anchor ID from the registry |
+| `corridor` | `query` | `string` | No | Filter by corridor ID |
+
+#### Responses
+
+| Status | Description | Content-Type | Schema |
+| :--- | :--- | :--- | :--- |
+| `200` | Execution SLA report | `application/json` | `ExecutionSlaReport` |
+| `400` | Validation error | `application/json` | `ApiError` |
+| `404` | Unknown anchor | `application/json` | `ApiError` |
+| `429` | Rate limited | `application/json` | `ApiError` |
+
+---
+
 ### `GET /api/v1/disputes/log`
 
 **Summary:** Get the public dispute adjudication log  
@@ -945,6 +971,29 @@ Returns detailed information about a slippage breach, including full evidence an
 | `200` | Slippage breach detail with evidence | `application/json` | `object` |
 | `400` | Invalid intentHash format | `application/json` | `ApiError` |
 | `404` | Breach not found | `application/json` | `ApiError` |
+| `429` | Rate limited | `application/json` | `ApiError` |
+| `503` | Store unavailable | `application/json` | `ApiError` |
+
+---
+
+### `GET /api/v1/slippage-compliance`
+
+**Summary:** Get slippage compliance metrics  
+
+Returns slippage compliance metrics and release gate status for the specified rolling window (30, 90 days, or all).
+
+#### Parameters
+
+| Name | In | Type | Required | Description |
+| :--- | :--- | :--- | :--- | :--- |
+| `window` | `query` | `"30" | "90" | "all"` | No | Evaluation window: 30, 90, or all (default 30) |
+
+#### Responses
+
+| Status | Description | Content-Type | Schema |
+| :--- | :--- | :--- | :--- |
+| `200` | Slippage compliance metrics and release gate status | `application/json` | `SlippageCompliance` |
+| `400` | Validation error | `application/json` | `ApiError` |
 | `429` | Rate limited | `application/json` | `ApiError` |
 | `503` | Store unavailable | `application/json` | `ApiError` |
 

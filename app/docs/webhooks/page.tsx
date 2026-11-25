@@ -51,12 +51,12 @@ export const EVENTS: { kind: string; description: string; emitted: boolean }[] =
   {
     kind: 'dispute.opened',
     description: 'A dispute is opened against an outcome',
-    emitted: false,
+    emitted: true,
   },
   {
     kind: 'dispute.resolved',
     description: 'A dispute is accepted or rejected',
-    emitted: false,
+    emitted: true,
   },
   {
     kind: 'oracle.published',

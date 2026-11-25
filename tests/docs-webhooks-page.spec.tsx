@@ -25,11 +25,11 @@ describe('Webhooks docs page (#1343)', () => {
 
   it('counts the live kinds in the banner instead of stating them (WHK003)', () => {
     const content = text();
-    // Six kinds have a producer today (SLP014 added intent.slippage_breach); the six added
-    // by WHK003 can only be subscribed to.
+    // Nine kinds have a producer today (WHK012 added dispute.opened and dispute.resolved);
+    // the other three can only be subscribed to.
     expect(WEBHOOK_EVENT_KINDS).toHaveLength(12);
     expect(content).toContain(
-      'Live for 7 of 12 kinds; the rest can be subscribed to and will start arriving as producers ship.'
+      'Live for 9 of 12 kinds; the rest can be subscribed to and will start arriving as producers ship.'
     );
     expect(content).not.toContain('four of the five');
   });
@@ -48,8 +48,6 @@ describe('Webhooks docs page (#1343)', () => {
       'intent.rejected',
       'intent.expired',
       'settlement.status_changed',
-      'dispute.opened',
-      'dispute.resolved',
     ]);
   });
 

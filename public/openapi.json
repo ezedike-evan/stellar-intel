@@ -949,6 +949,84 @@
           "staleSinceMs"
         ]
       },
+      "SlippageCompliance": {
+        "type": "object",
+        "properties": {
+          "window": {
+            "anyOf": [
+              {
+                "type": "number",
+                "enum": [
+                  30
+                ]
+              },
+              {
+                "type": "number",
+                "enum": [
+                  90
+                ]
+              },
+              {
+                "type": "string",
+                "enum": [
+                  "all"
+                ]
+              }
+            ],
+            "description": "Evaluation window in days or \"all\""
+          },
+          "eligibleIntents": {
+            "type": "integer",
+            "description": "Total withdraw intents settled in the window"
+          },
+          "breaches": {
+            "type": "integer",
+            "description": "Total slippage breaches detected in the window"
+          },
+          "verifiedBreaches": {
+            "type": "integer",
+            "description": "Total verified breaches in the window"
+          },
+          "compliancePct": {
+            "type": [
+              "number",
+              "null"
+            ],
+            "description": "Percentage of withdraws meeting slippage floor (0-100), null if eligibleIntents is 0"
+          },
+          "gate": {
+            "type": "object",
+            "properties": {
+              "targetPct": {
+                "type": "number",
+                "description": "Target compliance percentage required to pass gate (99.0)"
+              },
+              "minIntents": {
+                "type": "integer",
+                "description": "Minimum number of eligible intents required (100)"
+              },
+              "met": {
+                "type": "boolean",
+                "description": "Whether the release gate criteria are met"
+              }
+            },
+            "required": [
+              "targetPct",
+              "minIntents",
+              "met"
+            ],
+            "description": "V3 release gate compliance criteria"
+          }
+        },
+        "required": [
+          "window",
+          "eligibleIntents",
+          "breaches",
+          "verifiedBreaches",
+          "compliancePct",
+          "gate"
+        ]
+      },
       "MetricsSnapshot": {
         "type": "object",
         "properties": {
@@ -1013,13 +1091,28 @@
           },
           "publisherHealth": {
             "$ref": "#/components/schemas/PublisherHealth"
+          },
+          "slippageCompliance": {
+            "allOf": [
+              {
+                "$ref": "#/components/schemas/SlippageCompliance"
+              },
+              {
+                "type": [
+                  "object",
+                  "null"
+                ],
+                "description": "Slippage compliance metrics for 30-day window, or null if store is unavailable"
+              }
+            ]
           }
         },
         "required": [
           "intents",
           "anchorLatency",
           "ratesCache",
-          "publisherHealth"
+          "publisherHealth",
+          "slippageCompliance"
         ]
       },
       "RefundAckPayment": {
@@ -1178,6 +1271,373 @@
           "status",
           "acknowledgedAt",
           "onChainCheck"
+        ]
+      },
+      "ExecutionSlaReport": {
+        "type": "object",
+        "properties": {
+          "anchorId": {
+            "type": "string"
+          },
+          "windowDays": {
+            "type": "integer",
+            "exclusiveMinimum": 0
+          },
+          "computedAt": {
+            "type": "string"
+          },
+          "thresholds": {
+            "type": "object",
+            "properties": {
+              "p95Ms": {
+                "type": "number"
+              },
+              "p99Ms": {
+                "type": "number"
+              }
+            },
+            "required": [
+              "p95Ms",
+              "p99Ms"
+            ]
+          },
+          "overall": {
+            "type": "object",
+            "properties": {
+              "sla": {
+                "oneOf": [
+                  {
+                    "type": "object",
+                    "properties": {
+                      "windowDays": {
+                        "type": "number"
+                      },
+                      "windowStart": {
+                        "type": "string"
+                      },
+                      "windowEnd": {
+                        "type": "string"
+                      },
+                      "sampleSize": {
+                        "type": "integer",
+                        "minimum": 0
+                      },
+                      "terminalCount": {
+                        "type": "integer",
+                        "minimum": 0
+                      },
+                      "minSamples": {
+                        "type": "integer",
+                        "minimum": 0
+                      },
+                      "computedAt": {
+                        "type": "string"
+                      },
+                      "state": {
+                        "type": "string",
+                        "enum": [
+                          "ok"
+                        ]
+                      },
+                      "p50Ms": {
+                        "type": "number"
+                      },
+                      "p95Ms": {
+                        "type": "number"
+                      },
+                      "p99Ms": {
+                        "type": [
+                          "number",
+                          "null"
+                        ]
+                      }
+                    },
+                    "required": [
+                      "windowDays",
+                      "windowStart",
+                      "windowEnd",
+                      "sampleSize",
+                      "terminalCount",
+                      "minSamples",
+                      "computedAt",
+                      "state",
+                      "p50Ms",
+                      "p95Ms",
+                      "p99Ms"
+                    ]
+                  },
+                  {
+                    "type": "object",
+                    "properties": {
+                      "windowDays": {
+                        "type": "number"
+                      },
+                      "windowStart": {
+                        "type": "string"
+                      },
+                      "windowEnd": {
+                        "type": "string"
+                      },
+                      "sampleSize": {
+                        "type": "integer",
+                        "minimum": 0
+                      },
+                      "terminalCount": {
+                        "type": "integer",
+                        "minimum": 0
+                      },
+                      "minSamples": {
+                        "type": "integer",
+                        "minimum": 0
+                      },
+                      "computedAt": {
+                        "type": "string"
+                      },
+                      "state": {
+                        "type": "string",
+                        "enum": [
+                          "insufficient_data"
+                        ]
+                      }
+                    },
+                    "required": [
+                      "windowDays",
+                      "windowStart",
+                      "windowEnd",
+                      "sampleSize",
+                      "terminalCount",
+                      "minSamples",
+                      "computedAt",
+                      "state"
+                    ]
+                  }
+                ]
+              },
+              "breach": {
+                "type": "object",
+                "properties": {
+                  "status": {
+                    "type": "string",
+                    "enum": [
+                      "within",
+                      "breach",
+                      "unknown"
+                    ]
+                  },
+                  "breaches": {
+                    "type": "array",
+                    "items": {
+                      "type": "object",
+                      "properties": {
+                        "metric": {
+                          "type": "string",
+                          "enum": [
+                            "p95",
+                            "p99"
+                          ]
+                        },
+                        "observedMs": {
+                          "type": "number"
+                        },
+                        "thresholdMs": {
+                          "type": "number"
+                        }
+                      },
+                      "required": [
+                        "metric",
+                        "observedMs",
+                        "thresholdMs"
+                      ]
+                    }
+                  }
+                },
+                "required": [
+                  "status",
+                  "breaches"
+                ]
+              }
+            },
+            "required": [
+              "sla",
+              "breach"
+            ]
+          },
+          "corridors": {
+            "type": "array",
+            "items": {
+              "type": "object",
+              "properties": {
+                "sla": {
+                  "oneOf": [
+                    {
+                      "type": "object",
+                      "properties": {
+                        "windowDays": {
+                          "type": "number"
+                        },
+                        "windowStart": {
+                          "type": "string"
+                        },
+                        "windowEnd": {
+                          "type": "string"
+                        },
+                        "sampleSize": {
+                          "type": "integer",
+                          "minimum": 0
+                        },
+                        "terminalCount": {
+                          "type": "integer",
+                          "minimum": 0
+                        },
+                        "minSamples": {
+                          "type": "integer",
+                          "minimum": 0
+                        },
+                        "computedAt": {
+                          "type": "string"
+                        },
+                        "state": {
+                          "type": "string",
+                          "enum": [
+                            "ok"
+                          ]
+                        },
+                        "p50Ms": {
+                          "type": "number"
+                        },
+                        "p95Ms": {
+                          "type": "number"
+                        },
+                        "p99Ms": {
+                          "type": [
+                            "number",
+                            "null"
+                          ]
+                        }
+                      },
+                      "required": [
+                        "windowDays",
+                        "windowStart",
+                        "windowEnd",
+                        "sampleSize",
+                        "terminalCount",
+                        "minSamples",
+                        "computedAt",
+                        "state",
+                        "p50Ms",
+                        "p95Ms",
+                        "p99Ms"
+                      ]
+                    },
+                    {
+                      "type": "object",
+                      "properties": {
+                        "windowDays": {
+                          "type": "number"
+                        },
+                        "windowStart": {
+                          "type": "string"
+                        },
+                        "windowEnd": {
+                          "type": "string"
+                        },
+                        "sampleSize": {
+                          "type": "integer",
+                          "minimum": 0
+                        },
+                        "terminalCount": {
+                          "type": "integer",
+                          "minimum": 0
+                        },
+                        "minSamples": {
+                          "type": "integer",
+                          "minimum": 0
+                        },
+                        "computedAt": {
+                          "type": "string"
+                        },
+                        "state": {
+                          "type": "string",
+                          "enum": [
+                            "insufficient_data"
+                          ]
+                        }
+                      },
+                      "required": [
+                        "windowDays",
+                        "windowStart",
+                        "windowEnd",
+                        "sampleSize",
+                        "terminalCount",
+                        "minSamples",
+                        "computedAt",
+                        "state"
+                      ]
+                    }
+                  ]
+                },
+                "breach": {
+                  "type": "object",
+                  "properties": {
+                    "status": {
+                      "type": "string",
+                      "enum": [
+                        "within",
+                        "breach",
+                        "unknown"
+                      ]
+                    },
+                    "breaches": {
+                      "type": "array",
+                      "items": {
+                        "type": "object",
+                        "properties": {
+                          "metric": {
+                            "type": "string",
+                            "enum": [
+                              "p95",
+                              "p99"
+                            ]
+                          },
+                          "observedMs": {
+                            "type": "number"
+                          },
+                          "thresholdMs": {
+                            "type": "number"
+                          }
+                        },
+                        "required": [
+                          "metric",
+                          "observedMs",
+                          "thresholdMs"
+                        ]
+                      }
+                    }
+                  },
+                  "required": [
+                    "status",
+                    "breaches"
+                  ]
+                },
+                "corridor": {
+                  "type": "string"
+                }
+              },
+              "required": [
+                "sla",
+                "breach",
+                "corridor"
+              ]
+            }
+          }
+        },
+        "required": [
+          "anchorId",
+          "windowDays",
+          "computedAt",
+          "thresholds",
+          "overall",
+          "corridors"
         ]
       },
       "OnrampIntentRequest": {
@@ -4574,6 +5034,81 @@
         }
       }
     },
+    "/api/reputation/{anchor}/sla": {
+      "get": {
+        "summary": "Get anchor execution SLA",
+        "description": "Returns trailing 30-day settlement SLA percentiles (nearest-rank, no trimming) for an anchor, requiring at least 30 completed samples (and 100 for p99), evaluated against breach thresholds.",
+        "tags": [
+          "Reputation"
+        ],
+        "parameters": [
+          {
+            "schema": {
+              "type": "string",
+              "example": "cowrie",
+              "description": "Anchor ID from the registry"
+            },
+            "required": true,
+            "description": "Anchor ID from the registry",
+            "name": "anchor",
+            "in": "path"
+          },
+          {
+            "schema": {
+              "type": "string",
+              "example": "usdc-ngn",
+              "description": "Filter by corridor ID"
+            },
+            "required": false,
+            "description": "Filter by corridor ID",
+            "name": "corridor",
+            "in": "query"
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Execution SLA report",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ExecutionSlaReport"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Validation error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiError"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Unknown anchor",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiError"
+                }
+              }
+            }
+          },
+          "429": {
+            "description": "Rate limited",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
     "/api/graphql": {
       "post": {
         "summary": "GraphQL endpoint",
@@ -6475,6 +7010,75 @@
           "404": {
             "description": "Unknown or already revoked key",
             "description": "Breach not found",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiError"
+                }
+              }
+            }
+          },
+          "429": {
+            "description": "Rate limited",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiError"
+                }
+              }
+            }
+          },
+          "503": {
+            "description": "Store unavailable",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/slippage-compliance": {
+      "get": {
+        "summary": "Get slippage compliance metrics",
+        "description": "Returns slippage compliance metrics and release gate status for the specified rolling window (30, 90 days, or all).",
+        "tags": [
+          "Reputation"
+        ],
+        "parameters": [
+          {
+            "schema": {
+              "type": "string",
+              "enum": [
+                "30",
+                "90",
+                "all"
+              ],
+              "description": "Evaluation window: 30, 90, or all (default 30)",
+              "example": "30"
+            },
+            "required": false,
+            "description": "Evaluation window: 30, 90, or all (default 30)",
+            "name": "window",
+            "in": "query"
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Slippage compliance metrics and release gate status",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/SlippageCompliance"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Validation error",
             "content": {
               "application/json": {
                 "schema": {

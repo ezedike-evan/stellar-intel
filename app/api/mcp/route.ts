@@ -5,6 +5,7 @@ import { createServer } from '@/lib/mcp/server';
 import { checkRateLimit, getClientIp } from '@/lib/api/rate-limit';
 import { checkDailyQuota, quotaHeaders } from '@/lib/api/quota';
 import { resolveCaller } from '@/lib/auth/caller';
+import { withApiHeaders, withRateLimitHeaders } from '@/lib/api/response';
 import { getLogger } from '@/lib/logger';
 
 /**
@@ -39,17 +40,16 @@ export async function POST(request: NextRequest): Promise<Response> {
   const rl = await checkRateLimit(ip, MCP_RATE_LIMIT);
   if (!rl.allowed) {
     logger.warn({ event: 'rate_limit_exceeded', ip, retryAfter: rl.retryAfter });
-    return NextResponse.json(
+    const limited = NextResponse.json(
       {
         jsonrpc: '2.0',
         error: { code: -32000, message: 'Too many requests' },
         id: null,
       },
-      {
-        status: 429,
-        headers: { 'Retry-After': String(rl.retryAfter), 'X-RateLimit-Remaining': '0' },
-      }
+      { status: 429, headers: { 'Retry-After': String(rl.retryAfter) } }
     );
+    // X-RateLimit-* plus the IETF RateLimit / RateLimit-Policy pair (AGS009).
+    return withApiHeaders(withRateLimitHeaders(limited, rl, 'api.mcp'));
   }
 
   // Daily quota (AGS024), shared with REST and GraphQL: one unit per request.

@@ -8,7 +8,7 @@ import {
   scopedIdempotencyKey,
   storeIdempotentResponse as storeSharedIdempotentResponse,
 } from './idempotency';
-import { API_VERSION } from './response';
+import { API_VERSION, standardRateLimitHeaders } from './response';
 import { getLogger } from '@/lib/logger';
 import { hasScope, type ApiScope } from '@/lib/auth/api-keys';
 import { resolveCaller, type Caller } from '@/lib/auth/caller';
@@ -57,12 +57,18 @@ export function v1Error(
  * interpret it without knowing that (#914). `Retry-After` is the header that
  * carries a delta.
  */
-export function rateLimitHeaders(limit: number, result: RateLimitResult): Record<string, string> {
+export function rateLimitHeaders(
+  limit: number,
+  result: RateLimitResult,
+  policy = 'default'
+): Record<string, string> {
   const headers: Record<string, string> = {
     'API-Version': API_VERSION,
     'X-RateLimit-Limit': String(limit),
     'X-RateLimit-Remaining': String(Math.max(0, result.remaining)),
     'X-RateLimit-Reset': String(Math.ceil(result.resetAt / 1000)),
+    // IETF RateLimit / RateLimit-Policy alongside the legacy X- headers (AGS009).
+    ...standardRateLimitHeaders(policy, { ...result, limit }),
   };
   if (!result.allowed) headers['Retry-After'] = String(result.retryAfter);
   return headers;
@@ -188,7 +194,7 @@ export async function withV1(
     const invalidHeaders = {
       'X-Request-Id': requestId,
       'X-Caller-Tier': 'anonymous',
-      ...rateLimitHeaders(30, invalidRl),
+      ...rateLimitHeaders(30, invalidRl, 'auth.invalid'),
     };
     if (!invalidRl.allowed) {
       recordAudit('anonymous', 'anonymous', 'rate_limited', 429);
@@ -210,7 +216,7 @@ export async function withV1(
   const baseHeaders = {
     'X-Request-Id': requestId,
     'X-Caller-Tier': caller.tier,
-    ...rateLimitHeaders(limit, rl),
+    ...rateLimitHeaders(limit, rl, options.bucket),
   };
 
   if (!rl.allowed) {
