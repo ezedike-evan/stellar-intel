@@ -21,7 +21,7 @@ export interface AnchorProfileData {
   history: Bucket[];
   disputes: PublicDisputeItem[];
   oracleTxId: string | null;
-  refunds?: AnchorRefundStats | null;
+  refunds: AnchorRefundStats | null;
 }
 
 function scoreToPercent(score: number | null): number | null {
