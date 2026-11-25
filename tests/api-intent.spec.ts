@@ -420,6 +420,8 @@ describe('POST /api/intent/offramp — intent.created webhook', () => {
       {
         kind: 'intent.created',
         payload: {
+          intentHash: expect.stringMatching(/^[0-9a-f]{64}$/),
+          direction: 'offramp',
           corridorId: data.route.corridorId,
           anchorId: data.route.anchorId,
           quoteId: data.quoteId,
@@ -434,18 +436,44 @@ describe('POST /api/intent/offramp — intent.created webhook', () => {
     expect(emitted[0]?.payload).not.toHaveProperty('unsignedTx');
   });
 
+  it('keys intent.created on the quote id (WHK005)', async () => {
+    const keys: Array<{ kind: string; opts: unknown }> = [];
+    _setWebhookEmitter((kind, _payload, opts) => keys.push({ kind, opts }));
+
+    const res = await POST(makeRequest(VALID_INTENT));
+    expect(res.status).toBe(200);
+    const data = (await res.json()) as OfframpIntentResponse;
+
+    expect(data.quoteId).toEqual(expect.any(String));
+    expect(keys).toEqual([
+      { kind: 'intent.created', opts: { idempotencyKey: `intent.created:${data.quoteId}` } },
+    ]);
+  });
+
   it('emits nothing on a 400', async () => {
     const res = await POST(makeRequest({ ...VALID_INTENT, amount: '-1' }));
     expect(res.status).toBe(400);
     expect(emitted).toEqual([]);
   });
 
-  it('emits nothing on NO_ROUTE', async () => {
+  it('emits intent.rejected on NO_ROUTE', async () => {
     vi.stubEnv('ANCHOR_PAYMENT_ACCOUNTS', JSON.stringify({}));
 
     const res = await POST(makeRequest(VALID_INTENT));
     expect(((await res.json()) as ApiError).code).toBe('NO_ROUTE');
-    expect(emitted).toEqual([]);
+    expect(emitted).toEqual([
+      {
+        kind: 'intent.rejected',
+        payload: {
+          intentHash: expect.stringMatching(/^[0-9a-f]{64}$/),
+          direction: 'offramp',
+          reason: 'no_route',
+          sourceAsset: 'USDC',
+          destinationAsset: 'NGN',
+          amount: '100',
+        },
+      },
+    ]);
   });
 
   it('emits nothing on an idempotent replay', async () => {

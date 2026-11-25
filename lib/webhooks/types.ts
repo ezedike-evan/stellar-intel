@@ -5,6 +5,8 @@ export interface WebhookEvent {
   id: string;
   kind: WebhookEventKind;
   createdAt: string;
+  /** Same key, same event: a store records and delivers it once (WHK004). */
+  idempotencyKey: string;
   payload: Record<string, unknown>;
 }
 

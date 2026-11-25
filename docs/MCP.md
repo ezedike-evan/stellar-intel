@@ -212,29 +212,39 @@ Its fee must be at most 100,000 stroops, and it must carry an expiry
 Any mismatch is rejected (`TX_MISMATCH`) before anything reaches Horizon.
 
 - **Input:**
-  `{ unsignedEnvelope: { intent, intentHash }, signature, signedTx }` — the
+  `{ unsignedEnvelope: { intent, intentHash }, signature, signedTx, dryRun? }` — the
   exact `unsignedEnvelope` from `intel.offramp.prepare`, a base64 ed25519
   signature over `intentHash` from the sender's key, and the base64 XDR of
-  `unsignedTx` after the sender has signed it. The signature is accepted in
+  `unsignedTx` after the sender has signed it. Optional `dryRun: true` performs
+  every verification check without broadcasting the transaction to Horizon. The signature is accepted in
   the same two forms as the web app: over the 32 raw bytes the hex
   `intentHash` decodes to (`Keypair.sign`), or SEP-53 (`Keypair.signMessage`,
   which is what a wallet's `signMessage` produces). A signature over the
   hash's UTF-8 bytes is deprecated; it is still accepted, and each use is
   logged as `mcp_legacy_signature_format`.
-- **Output:** `{ status: "submitted", hash, ledger, corridorId, anchorId }`
+- **Output:** `{ status: "submitted" | "verified", hash, ledger: number | null, corridorId, anchorId }`. When `dryRun: true` is passed, `status` is `"verified"` and `ledger` is `null`.
 
 ```jsonc
 // input
 {
   "unsignedEnvelope": { "intent": { "type": "offramp", "..." }, "intentHash": "<64-hex>" },
   "signature": "<base64 ed25519 sig over intentHash (raw bytes or SEP-53)>",
-  "signedTx": "<base64 signed transaction XDR>"
+  "signedTx": "<base64 signed transaction XDR>",
+  "dryRun": false // optional, true to verify without broadcasting
 }
-// output
+// output (submitted)
 {
   "status": "submitted",
   "hash": "<64-hex tx hash>",
   "ledger": 12345,
+  "corridorId": "usdc-ngn",
+  "anchorId": "cowrie"
+}
+// output (dryRun: true)
+{
+  "status": "verified",
+  "hash": "<64-hex tx hash>",
+  "ledger": null,
   "corridorId": "usdc-ngn",
   "anchorId": "cowrie"
 }

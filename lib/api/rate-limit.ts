@@ -39,6 +39,8 @@ export interface RateLimitResult {
   limit: number;
   /** Epoch ms when the current window resets. */
   resetAt: number;
+  /** Length of the rate-limit window in milliseconds. */
+  windowMs: number;
   /**
    * False when the count came from this instance's memory rather than shared
    * state, i.e. the limit is per-instance. Lets a caller reason about whether
@@ -69,6 +71,7 @@ function checkInProcess(
       retryAfter: 0,
       limit: maxRequests,
       resetAt: now + windowMs,
+      windowMs,
       shared: false,
     };
   }
@@ -82,6 +85,7 @@ function checkInProcess(
       retryAfter: Math.ceil((resetAt - now) / 1000),
       limit: maxRequests,
       resetAt,
+      windowMs,
       shared: false,
     };
   }
@@ -93,6 +97,7 @@ function checkInProcess(
     retryAfter: 0,
     limit: maxRequests,
     resetAt,
+    windowMs,
     shared: false,
   };
 }
@@ -161,6 +166,7 @@ export async function checkRateLimit(
       retryAfter: Math.ceil((resetAt - now) / 1000),
       limit: maxRequests,
       resetAt,
+      windowMs,
       shared: true,
     };
   }
@@ -171,6 +177,7 @@ export async function checkRateLimit(
     retryAfter: 0,
     limit: maxRequests,
     resetAt,
+    windowMs,
     shared: true,
   };
 }

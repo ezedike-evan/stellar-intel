@@ -1,13 +1,8 @@
 import Link from 'next/link';
 import { STELLAR_EXPERT_URL } from '@/constants';
 import type { Bucket } from '@/lib/reputation/buckets';
-
-type DisputeItem = {
-  id: string;
-  createdAt: string;
-  reason: string;
-  status: 'open' | 'resolved';
-};
+import type { PublicDisputeItem } from '@/lib/reputation/disputes';
+import type { AnchorRefundStats } from '@/lib/refunds/anchor-stats';
 
 type CorridorItem = {
   id: string;
@@ -24,8 +19,9 @@ export interface AnchorProfileData {
   sampleSize: number;
   corridors: CorridorItem[];
   history: Bucket[];
-  disputes: DisputeItem[];
+  disputes: PublicDisputeItem[];
   oracleTxId: string | null;
+  refunds: AnchorRefundStats | null;
 }
 
 function scoreToPercent(score: number | null): number | null {
@@ -156,6 +152,25 @@ export function AnchorProfile({ data }: { data: AnchorProfileData }) {
       </article>
 
       <article className="rounded-2xl border border-border bg-bg-subtle p-6">
+        <h2 className="text-lg font-semibold text-primary-text">Refunds (90 days)</h2>
+        {data.refunds ? (
+          <div className="mt-3 space-y-1 text-sm">
+            <p className="text-primary-text">
+              {data.refunds.refunded} refunded · {data.refunds.acknowledged} confirmed by users ·{' '}
+              {data.refunds.overdueOwed} overdue
+            </p>
+            {data.refunds.medianHoursToRefund !== null && (
+              <p className="text-xs text-fg-muted">
+                Median time to refund: {data.refunds.medianHoursToRefund} h
+              </p>
+            )}
+          </div>
+        ) : (
+          <p className="mt-3 text-sm text-fg-muted">No refund data.</p>
+        )}
+      </article>
+
+      <article className="rounded-2xl border border-border bg-bg-subtle p-6">
         <h2 className="text-lg font-semibold text-primary-text">Disputes</h2>
         {data.disputes.length === 0 ? (
           <p className="mt-3 text-sm text-fg-muted">No disputes on record.</p>
@@ -182,6 +197,12 @@ export function AnchorProfile({ data }: { data: AnchorProfileData }) {
             ))}
           </ul>
         )}
+        <Link
+          href="/disputes"
+          className="mt-4 inline-block text-xs font-medium text-accent hover:underline dark:text-accent"
+        >
+          Full dispute log
+        </Link>
       </article>
     </section>
   );

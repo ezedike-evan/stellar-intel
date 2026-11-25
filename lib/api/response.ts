@@ -31,21 +31,46 @@ export function withApiHeaders(response: NextResponse): NextResponse {
   return response;
 }
 
-/** Sets the standard X-RateLimit-* headers from a checkRateLimit result. */
-export function withRateLimitHeaders(response: NextResponse, rl: RateLimitResult): NextResponse {
+/**
+ * Structured-field form of draft-ietf-httpapi-ratelimit-headers:
+ *   RateLimit-Policy: "<policy>";q=<limit>;w=<windowSeconds>
+ *   RateLimit: "<policy>";r=<remaining>;t=<secondsUntilReset>
+ */
+export function standardRateLimitHeaders(
+  policy: string,
+  rl: RateLimitResult,
+  now = Date.now()
+): Record<string, string> {
+  const windowSeconds = Math.round(rl.windowMs / 1000);
+  const t = Math.max(0, Math.ceil((rl.resetAt - now) / 1000));
+  return {
+    'RateLimit-Policy': `"${policy}";q=${rl.limit};w=${windowSeconds}`,
+    RateLimit: `"${policy}";r=${Math.max(0, rl.remaining)};t=${t}`,
+  };
+}
+
+/** Sets the standard X-RateLimit-* and IETF RateLimit headers from a checkRateLimit result. */
+export function withRateLimitHeaders(
+  response: NextResponse,
+  rl: RateLimitResult,
+  policy = 'default'
+): NextResponse {
   response.headers.set('X-RateLimit-Limit', String(rl.limit));
   response.headers.set('X-RateLimit-Remaining', String(rl.remaining));
   response.headers.set('X-RateLimit-Reset', String(Math.ceil(rl.resetAt / 1000)));
+  for (const [name, value] of Object.entries(standardRateLimitHeaders(policy, rl))) {
+    response.headers.set(name, value);
+  }
   return response;
 }
 
 /** Builds the consistent 429 response: ApiError envelope + Retry-After + rate-limit headers. */
-export function rateLimitedResponse(rl: RateLimitResult): NextResponse {
+export function rateLimitedResponse(rl: RateLimitResult, policy = 'default'): NextResponse {
   const response = NextResponse.json<ApiError>(
     { code: 'RATE_LIMITED', message: 'Too many requests', retryAfter: rl.retryAfter },
     { status: 429, headers: { 'Retry-After': String(rl.retryAfter) } }
   );
-  return withApiHeaders(withRateLimitHeaders(response, rl));
+  return withApiHeaders(withRateLimitHeaders(response, rl, policy));
 }
 
 /** Builds a typed ApiError response, stamped with the standard API headers. */
@@ -74,5 +99,5 @@ export async function enforceRateLimit(
   options: RateLimitOptions & { bucket: string }
 ): Promise<NextResponse | null> {
   const rl = await checkRateLimit(getClientIp(request.headers), options);
-  return rl.allowed ? null : rateLimitedResponse(rl);
+  return rl.allowed ? null : rateLimitedResponse(rl, options.bucket);
 }
