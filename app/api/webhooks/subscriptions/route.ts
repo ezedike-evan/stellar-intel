@@ -1,7 +1,7 @@
 import { randomUUID, randomBytes } from 'crypto';
 import { NextRequest, NextResponse } from 'next/server';
 import { withRequestLogger } from '@/lib/logger';
-import { isAdminRequest } from '@/lib/auth/admin';
+import { isAdminRequest, throttleFailedAdminAuth } from '@/lib/auth/admin';
 import { CreateSubscriptionSchema } from '@/lib/webhooks/schema';
 import { getWebhookStore } from '@/lib/webhooks/store';
 import type { ApiError } from '@/types';
@@ -23,6 +23,8 @@ export async function POST(request: NextRequest): Promise<NextResponse> {
     if (limited) return limited;
 
     if (!isAdminRequest(request)) {
+      const throttled = await throttleFailedAdminAuth(request);
+      if (throttled) return throttled;
       return NextResponse.json<ApiError>(
         { code: 'FORBIDDEN', message: 'Admin key required' },
         { status: 403 }
@@ -77,6 +79,8 @@ export async function GET(request: NextRequest): Promise<NextResponse> {
     if (limited) return limited;
 
     if (!isAdminRequest(request)) {
+      const throttled = await throttleFailedAdminAuth(request);
+      if (throttled) return throttled;
       return NextResponse.json<ApiError>(
         { code: 'FORBIDDEN', message: 'Admin key required' },
         { status: 403 }

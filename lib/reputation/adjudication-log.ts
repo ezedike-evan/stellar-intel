@@ -61,6 +61,12 @@ export function assertPublicSafe(text: string): void {
   if (/G[A-Z0-9]{55}/i.test(text)) {
     throw new PublicTextError('Rationale contains a Stellar public key, which cannot be published');
   }
+  // A muxed (M…) address encodes the underlying G account, so it identifies the user just the same.
+  if (/M[A-Z2-7]{68}/i.test(text)) {
+    throw new PublicTextError(
+      'Rationale contains a Stellar muxed address, which cannot be published'
+    );
+  }
   if (/[^\s@]+@[^\s@]+\.[^\s@]+/.test(text)) {
     throw new PublicTextError('Rationale contains an email address, which cannot be published');
   }
@@ -69,6 +75,19 @@ export function assertPublicSafe(text: string): void {
   }
 }
 
+/**
+ * The entry hash, which anyone can recompute from the public log (DSP013 publishes this):
+ *
+ *   entryHash = lowercase hex SHA-256 of
+ *     'stellar-intel/adjudication/v1\n' + JSON.stringify({
+ *       action, anchorId, category, decidedAt, disputeRef, level, prevHash, rationale, seq
+ *     })
+ *
+ * The keys are written in exactly that (alphabetical) order, `seq` as a JSON number and every
+ * other field as a JSON string. The first entry's `prevHash` is `GENESIS_HASH` (64 zeros); each
+ * later entry's `prevHash` is the previous entry's `entryHash`, so rewriting, removing or
+ * reordering any past entry changes every hash after it.
+ */
 export function computeEntryHash(entry: Omit<AdjudicationEntry, 'entryHash'>): string {
   const payload = {
     action: entry.action,
@@ -119,14 +138,85 @@ export function verifyChain(entries: readonly AdjudicationEntry[]): ChainVerific
   return { ok: true, length: entries.length, head: expectedPrevHash };
 }
 
+export interface AdjudicationSummary {
+  filed: number;
+  resolved: number;
+  accepted: number;
+  rejected: number;
+  open: number;
+  appealed: number;
+}
+
+export function summarizeLog(entries: readonly AdjudicationEntry[]): AdjudicationSummary {
+  const byRef = new Map<
+    string,
+    { lastSeq: number; lastAction: AdjudicationAction; hasAppealed: boolean }
+  >();
+
+  for (const entry of entries) {
+    const existing = byRef.get(entry.disputeRef);
+    if (!existing) {
+      byRef.set(entry.disputeRef, {
+        lastSeq: entry.seq,
+        lastAction: entry.action,
+        hasAppealed: entry.action === 'appealed',
+      });
+    } else {
+      if (entry.seq >= existing.lastSeq) {
+        existing.lastSeq = entry.seq;
+        existing.lastAction = entry.action;
+      }
+      if (entry.action === 'appealed') {
+        existing.hasAppealed = true;
+      }
+    }
+  }
+
+  let accepted = 0;
+  let rejected = 0;
+  let appealed = 0;
+
+  for (const info of byRef.values()) {
+    if (info.lastAction === 'accepted') accepted++;
+    else if (info.lastAction === 'rejected') rejected++;
+    if (info.hasAppealed) appealed++;
+  }
+
+  const filed = byRef.size;
+  const resolved = accepted + rejected;
+  const open = filed - resolved;
+
+  return {
+    filed,
+    resolved,
+    accepted,
+    rejected,
+    open,
+    appealed,
+  };
+}
+
 export interface AdjudicationLogStore {
   append(input: AdjudicationEntryInput): Promise<AdjudicationEntry>;
   list(opts?: { afterSeq?: number; limit?: number }): Promise<AdjudicationEntry[]>;
   head(): Promise<AdjudicationEntry | null>;
 }
 
+const DISPUTE_REF_PATTERN = /^[0-9a-f]{16}$/;
+const ISO_DATETIME_PATTERN = /^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}(\.\d{1,3})?(Z|[+-]\d{2}:\d{2})$/;
+
+// An entry can never be edited or removed once appended, so anything wrong in it is wrong in the
+// public log for good. Beyond the rationale, the two free-form fields are checked too: the dispute
+// must be referenced by its public ref (never the internal id) and the decision time must be a real
+// ISO 8601 timestamp.
 function validateInput(input: AdjudicationEntryInput): void {
   assertPublicSafe(input.rationale);
+  if (!DISPUTE_REF_PATTERN.test(input.disputeRef)) {
+    throw new TypeError('disputeRef must be publicDisputeRef(dispute.id): 16 lowercase hex chars');
+  }
+  if (!ISO_DATETIME_PATTERN.test(input.decidedAt) || Number.isNaN(Date.parse(input.decidedAt))) {
+    throw new TypeError(`decidedAt must be an ISO 8601 timestamp, got: ${input.decidedAt}`);
+  }
   if (!ADJUDICATION_ACTIONS.includes(input.action)) {
     throw new TypeError(`Invalid adjudication action: ${input.action}`);
   }

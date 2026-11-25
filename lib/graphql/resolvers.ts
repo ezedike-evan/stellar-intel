@@ -12,6 +12,8 @@ import { resolveCorridorRates } from '@/lib/api/rates-resolver';
 import { getPublisherHealth, getMetricsSnapshot } from '@/lib/metrics';
 import { IntentSchema, createOfframpIntent } from '@/lib/intent/offramp';
 import { AMOUNT_PATTERN } from '@/lib/patterns';
+import { hasScope } from '@/lib/auth/api-keys';
+import type { GraphQLContext } from '@/lib/graphql/context';
 import type { Anchor, AnchorRate } from '@/types';
 import type { Intent } from '@/lib/intent/hash';
 
@@ -100,8 +102,15 @@ async function resolveSubmitOfframpIntent(
       sender: string;
       recipient: string;
     };
-  }
+  },
+  ctx: GraphQLContext
 ) {
+  if (!hasScope(ctx.caller.scopes, 'intents:write')) {
+    throw new GraphQLError('This call needs the "intents:write" scope', {
+      extensions: { code: 'FORBIDDEN' },
+    });
+  }
+
   const parsed = IntentSchema.safeParse({ type: 'offramp', ...args.input });
   if (!parsed.success) {
     const first = parsed.error.issues[0];

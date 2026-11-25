@@ -1,6 +1,6 @@
 import { hasDatabaseUrl } from '@/lib/reputation/pool';
 import { PostgresWebhookStore } from './postgres';
-import type { WebhookSubscription, DeliveryRecord, DeliveryStatus } from './types';
+import type { WebhookEvent, WebhookSubscription, DeliveryRecord, DeliveryStatus } from './types';
 
 export interface DeliveryQuery {
   status?: DeliveryStatus | undefined;
@@ -17,11 +17,34 @@ export interface WebhookStore {
   recordDelivery(record: DeliveryRecord): Promise<void>;
   listDeadLetters(): Promise<DeliveryRecord[]>;
   listDeliveries(query: DeliveryQuery): Promise<DeliveryRecord[]>;
+  /** One logged delivery by its id, for resending it. `null` when the log has no such record. */
+  getDelivery(id: string): Promise<DeliveryRecord | null>;
+  /**
+   * Stores the event envelope once. Returns `false`, storing nothing, when an event with the
+   * same `idempotencyKey` was already recorded, so the caller does not deliver it again.
+   */
+  recordEvent(event: WebhookEvent): Promise<boolean>;
+  /** The stored envelope for a dispatched event, for replaying a dead-lettered delivery. */
+  getEvent(id: string): Promise<WebhookEvent | null>;
 }
 
 export class InMemoryWebhookStore implements WebhookStore {
   private readonly subs = new Map<string, WebhookSubscription>();
   private readonly deliveries: DeliveryRecord[] = [];
+  private readonly events = new Map<string, WebhookEvent>();
+  private readonly eventKeys = new Set<string>();
+
+  async recordEvent(event: WebhookEvent): Promise<boolean> {
+    if (this.eventKeys.has(event.idempotencyKey)) return false;
+    this.eventKeys.add(event.idempotencyKey);
+    this.events.set(event.id, structuredClone(event));
+    return true;
+  }
+
+  async getEvent(id: string): Promise<WebhookEvent | null> {
+    const event = this.events.get(id);
+    return event ? structuredClone(event) : null;
+  }
 
   async saveSubscription(sub: WebhookSubscription): Promise<void> {
     this.subs.set(sub.id, { ...sub });
@@ -45,6 +68,11 @@ export class InMemoryWebhookStore implements WebhookStore {
 
   async listDeadLetters(): Promise<DeliveryRecord[]> {
     return this.deliveries.filter((r) => r.status === 'dead_letter').map((r) => ({ ...r }));
+  }
+
+  async getDelivery(id: string): Promise<DeliveryRecord | null> {
+    const record = this.deliveries.find((r) => r.id === id);
+    return record ? { ...record } : null;
   }
 
   async listDeliveries(query: DeliveryQuery): Promise<DeliveryRecord[]> {
