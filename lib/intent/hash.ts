@@ -26,8 +26,18 @@ export function canonicalJsonValue(value: unknown): string {
  * Uses the Web Crypto API so it works in both browser and Node.js 20+.
  */
 export async function hashCanonical(value: unknown): Promise<string> {
-  const canonical = canonicalJsonValue(value);
-  const encoded = new TextEncoder().encode(canonical);
+  return sha256Hex(canonicalJsonValue(value));
+}
+
+/** Alias of {@link canonicalJsonValue}, kept for the slippage-evidence callers. */
+export const canonicalize = canonicalJsonValue;
+
+/**
+ * SHA-256 hash of a string, returned as lowercase hex.
+ * Uses the Web Crypto API so it works in both browser and Node.js 20+.
+ */
+export async function sha256Hex(text: string): Promise<string> {
+  const encoded = new TextEncoder().encode(text);
   const hashBuffer = await crypto.subtle.digest('SHA-256', encoded);
   return Array.from(new Uint8Array(hashBuffer))
     .map((b) => b.toString(16).padStart(2, '0'))

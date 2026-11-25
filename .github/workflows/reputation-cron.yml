@@ -24,7 +24,7 @@ jobs:
       # `== 'failure'` rather than `!= 'success'`: a step skipped by the
       # STORE_UNAVAILABLE gate below reports `skipped`, and naming that as the
       # failing step would misdirect whoever reads the alert.
-      failure_step: ${{ steps.refresh.outcome == 'failure' && 'refresh' || steps.reconcile.outcome == 'failure' && 'reconcile' || steps.tick.outcome == 'failure' && 'publisher tick' || steps.health.outcome == 'failure' && 'publisher health' || 'unknown' }}
+      failure_step: ${{ steps.refresh.outcome == 'failure' && 'refresh' || steps.reconcile.outcome == 'failure' && 'reconcile' || steps.dispute_sweep.outcome == 'failure' && 'dispute sweep' || steps.tick.outcome == 'failure' && 'publisher tick' || steps.health.outcome == 'failure' && 'publisher health' || 'unknown' }}
     env:
       CRON_SECRET: ${{ secrets.CRON_SECRET }}
     steps:
@@ -93,6 +93,21 @@ jobs:
           case "$CODE" in
             2*) ;;
             *) echo "::error::reconcile returned HTTP $CODE"; exit 1 ;;
+          esac
+
+      - name: Dispute sweep
+        id: dispute_sweep
+        if: env.STORE_UNAVAILABLE != '1'
+        run: |
+          set -euo pipefail
+          CODE=$(curl -sS -L --proto '=https' --fail-with-body \
+            -o /tmp/dispute_sweep.out -w '%{http_code}' \
+            -X POST "$APP/api/reputation/dispute-sweep" \
+            -H "Authorization: Bearer $CRON_SECRET") || true
+          cat /tmp/dispute_sweep.out
+          case "$CODE" in
+            2*) ;;
+            *) echo "::error::dispute sweep returned HTTP $CODE"; exit 1 ;;
           esac
 
       - name: Publisher tick
