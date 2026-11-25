@@ -17,35 +17,39 @@ export async function GET(
   request: NextRequest,
   { params }: { params: Promise<{ intentHash: string }> }
 ): Promise<NextResponse> {
-  return withV1(request, { bucket: 'v1.slippage-breach', maxRequests: 60 }, async (ctx) => {
-    const { intentHash } = await params;
-    if (!INTENT_HASH_PATTERN.test(intentHash)) {
-      return ctx.error(
-        'validation_error',
-        'intentHash must be a lowercase hex SHA-256 (64 chars)',
-        400
-      );
-    }
+  return withV1(
+    request,
+    { bucket: 'v1.slippage-breach', maxRequests: 60, scope: 'quotes:read' },
+    async (ctx) => {
+      const { intentHash } = await params;
+      if (!INTENT_HASH_PATTERN.test(intentHash)) {
+        return ctx.error(
+          'validation_error',
+          'intentHash must be a lowercase hex SHA-256 (64 chars)',
+          400
+        );
+      }
 
-    let breach: SlippageBreach | null;
-    try {
-      breach = await getSlippageBreachStore().get(intentHash);
-    } catch {
-      return ctx.error('store_unavailable', 'Slippage breach store is not available', 503);
-    }
+      let breach: SlippageBreach | null;
+      try {
+        breach = await getSlippageBreachStore().get(intentHash);
+      } catch {
+        return ctx.error('store_unavailable', 'Slippage breach store is not available', 503);
+      }
 
-    if (!breach) {
-      return ctx.error('not_found', `Slippage breach not found for intent: "${intentHash}"`, 404);
-    }
+      if (!breach) {
+        return ctx.error('not_found', `Slippage breach not found for intent: "${intentHash}"`, 404);
+      }
 
-    return {
-      status: 200,
-      body: {
-        ...toPublicBreachSummary(breach),
-        evidence: breach.evidence,
-        canonicalEvidence: canonicalEvidenceJson(breach.evidence),
-      },
-      headers: { 'Cache-Control': 'public, max-age=300' },
-    };
-  });
+      return {
+        status: 200,
+        body: {
+          ...toPublicBreachSummary(breach),
+          evidence: breach.evidence,
+          canonicalEvidence: canonicalEvidenceJson(breach.evidence),
+        },
+        headers: { 'Cache-Control': 'public, max-age=300' },
+      };
+    }
+  );
 }

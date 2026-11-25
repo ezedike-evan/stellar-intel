@@ -38,8 +38,8 @@ describe('GET /api/metrics', () => {
       verifiedBreaches: 0,
       compliancePct: null,
       gate: {
-        targetPct: 99.0,
-        minIntents: 100,
+        targetPct: 99.5,
+        minIntents: 10_000,
         met: false,
       },
     });

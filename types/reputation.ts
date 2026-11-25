@@ -54,6 +54,8 @@ export interface OutcomeLogRow {
   attested: boolean;
   /** Stellar account (G...) whose signature attested this row; null when unattested. */
   signerAccount: string | null;
+  /** Floor amount signed by user in intent; null when no floor was specified. */
+  minReceive?: string | null;
 }
 
 // ─── Uptime / quote-latency / issuer-mismatch / toml-integrity probe ledger ────
@@ -152,7 +154,7 @@ export interface QuoteHistoryRow {
   observedAt: string;
 }
 
-// ─── Slippage breaches (Issue #2097 / #2103 / #2106) ──────────────────────────
+// ─── Slippage breaches (Issue #2097 / #2103) ──────────────────────────────────
 
 export const SLIPPAGE_BREACH_STATUSES = ['detected', 'verified', 'rejected'] as const;
 export type SlippageBreachStatus = (typeof SLIPPAGE_BREACH_STATUSES)[number];
@@ -208,4 +210,3 @@ export interface SlippageBreach {
   detectedAt: string;
   verifiedAt: string | null;
 }
-

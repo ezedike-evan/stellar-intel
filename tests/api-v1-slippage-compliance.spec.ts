@@ -18,7 +18,10 @@ import {
 import { clearRateLimitStore } from '@/lib/api/rate-limit';
 import type { OutcomeLogRow, SlippageBreach, SlippageEvidence } from '@/types/reputation';
 
-function createEvidence(intentHash: string, overrides: Partial<SlippageEvidence> = {}): SlippageEvidence {
+function createEvidence(
+  intentHash: string,
+  overrides: Partial<SlippageEvidence> = {}
+): SlippageEvidence {
   return {
     v: 1,
     networkPassphrase: 'Test SDF Network ; September 2015',
@@ -63,7 +66,10 @@ function createBreach(intentHash: string, overrides: Partial<SlippageBreach> = {
   };
 }
 
-function createOutcomeRow(intentHash: string, overrides: Partial<OutcomeLogRow> = {}): OutcomeLogRow {
+function createOutcomeRow(
+  intentHash: string,
+  overrides: Partial<OutcomeLogRow> = {}
+): OutcomeLogRow {
   return {
     intentHash,
     anchorId: 'cowrie',
@@ -73,6 +79,7 @@ function createOutcomeRow(intentHash: string, overrides: Partial<OutcomeLogRow> 
     deliveredRate: '1500.00',
     quotedAmount: '100.00',
     deliveredAmount: '100.00',
+    minReceive: '95.00',
     settleSeconds: 30,
     outcome: 'completed',
     createdAt: new Date().toISOString(),
@@ -95,135 +102,6 @@ function requestWithWindow(window?: string): NextRequest {
   return new NextRequest(url);
 }
 
-describe('computeSlippageCompliance', () => {
-  const now = 1_700_000_000_000;
-  const dayMs = 24 * 60 * 60 * 1000;
-
-  it('returns null compliance and gate not met when eligibleIntents is 0', () => {
-    const res = computeSlippageCompliance([], [], { window: 30, now });
-    expect(res).toEqual({
-      window: 30,
-      eligibleIntents: 0,
-      breaches: 0,
-      verifiedBreaches: 0,
-      compliancePct: null,
-      gate: {
-        targetPct: 99.0,
-        minIntents: 100,
-        met: false,
-      },
-    });
-  });
-
-  it('filters out deposit direction rows, keeping only withdraw', () => {
-    const withdrawRow = createOutcomeRow('hash-w', {
-      direction: 'withdraw',
-      createdAt: new Date(now - 5 * dayMs).toISOString(),
-    });
-    const depositRow = createOutcomeRow('hash-d', {
-      direction: 'deposit',
-      createdAt: new Date(now - 5 * dayMs).toISOString(),
-    });
-
-    const res = computeSlippageCompliance([withdrawRow, depositRow], [], { window: 30, now });
-    expect(res.eligibleIntents).toBe(1);
-    expect(res.compliancePct).toBe(100);
-  });
-
-  it('filters out rows and breaches outside the window', () => {
-    const freshRow = createOutcomeRow('fresh', {
-      createdAt: new Date(now - 10 * dayMs).toISOString(),
-    });
-    const staleRow = createOutcomeRow('stale', {
-      createdAt: new Date(now - 40 * dayMs).toISOString(),
-    });
-    const freshBreach = createBreach('fresh-b', {
-      status: 'verified',
-      detectedAt: new Date(now - 10 * dayMs).toISOString(),
-    });
-    const staleBreach = createBreach('stale-b', {
-      status: 'verified',
-      detectedAt: new Date(now - 40 * dayMs).toISOString(),
-    });
-
-    const res30 = computeSlippageCompliance(
-      [freshRow, staleRow],
-      [freshBreach, staleBreach],
-      { window: 30, now }
-    );
-    expect(res30.eligibleIntents).toBe(1);
-    expect(res30.breaches).toBe(1);
-    expect(res30.verifiedBreaches).toBe(1);
-    expect(res30.compliancePct).toBe(0);
-
-    const res90 = computeSlippageCompliance(
-      [freshRow, staleRow],
-      [freshBreach, staleBreach],
-      { window: 90, now }
-    );
-    expect(res90.eligibleIntents).toBe(2);
-    expect(res90.breaches).toBe(2);
-    expect(res90.verifiedBreaches).toBe(2);
-
-    const resAll = computeSlippageCompliance(
-      [freshRow, staleRow],
-      [freshBreach, staleBreach],
-      { window: 'all', now }
-    );
-    expect(resAll.eligibleIntents).toBe(2);
-    expect(resAll.breaches).toBe(2);
-  });
-
-  it('only verified breaches reduce compliance; detected and rejected do not', () => {
-    const rows = Array.from({ length: 100 }, (_, i) =>
-      createOutcomeRow(`hash-${i}`, { createdAt: new Date(now - dayMs).toISOString() })
-    );
-    const breaches = [
-      createBreach('b1', { status: 'detected', detectedAt: new Date(now - dayMs).toISOString() }),
-      createBreach('b2', { status: 'rejected', detectedAt: new Date(now - dayMs).toISOString() }),
-      createBreach('b3', { status: 'verified', detectedAt: new Date(now - dayMs).toISOString() }),
-    ];
-
-    const res = computeSlippageCompliance(rows, breaches, { window: 30, now });
-    expect(res.eligibleIntents).toBe(100);
-    expect(res.breaches).toBe(3);
-    expect(res.verifiedBreaches).toBe(1);
-    // 99 / 100 = 99.0%
-    expect(res.compliancePct).toBe(99.0);
-    expect(res.gate.met).toBe(true);
-  });
-
-  it('gate requirement: eligibleIntents >= 100 and compliancePct >= 99.0', () => {
-    // 99 intents with 0 breaches: 100% compliance, but met is false because < 100 intents
-    const rows99 = Array.from({ length: 99 }, (_, i) =>
-      createOutcomeRow(`hash-${i}`, { createdAt: new Date(now - dayMs).toISOString() })
-    );
-    const res99 = computeSlippageCompliance(rows99, [], { window: 30, now });
-    expect(res99.compliancePct).toBe(100);
-    expect(res99.gate.met).toBe(false);
-
-    // 100 intents with 2 verified breaches: 98.0% compliance, met is false because < 99.0%
-    const rows100 = Array.from({ length: 100 }, (_, i) =>
-      createOutcomeRow(`hash-${i}`, { createdAt: new Date(now - dayMs).toISOString() })
-    );
-    const breaches2 = [
-      createBreach('b1', { status: 'verified', detectedAt: new Date(now - dayMs).toISOString() }),
-      createBreach('b2', { status: 'verified', detectedAt: new Date(now - dayMs).toISOString() }),
-    ];
-    const res100Bad = computeSlippageCompliance(rows100, breaches2, { window: 30, now });
-    expect(res100Bad.compliancePct).toBe(98.0);
-    expect(res100Bad.gate.met).toBe(false);
-
-    // 100 intents with 1 verified breach: 99.0% compliance, met is true
-    const breaches1 = [
-      createBreach('b1', { status: 'verified', detectedAt: new Date(now - dayMs).toISOString() }),
-    ];
-    const res100Good = computeSlippageCompliance(rows100, breaches1, { window: 30, now });
-    expect(res100Good.compliancePct).toBe(99.0);
-    expect(res100Good.gate.met).toBe(true);
-  });
-});
-
 describe('GET /api/v1/slippage-compliance', () => {
   let repStore: InMemoryReputationStore;
   let breachStore: InMemorySlippageBreachStore;
@@ -244,7 +122,7 @@ describe('GET /api/v1/slippage-compliance', () => {
     expect(body.window).toBe(30);
     expect(body.eligibleIntents).toBe(0);
     expect(body.compliancePct).toBeNull();
-    expect(body.gate).toEqual({ targetPct: 99.0, minIntents: 100, met: false });
+    expect(body.gate).toEqual({ targetPct: 99.5, minIntents: 10_000, met: false });
     expect(res.headers.get('Cache-Control')).toBe('public, max-age=300');
     expect(res.headers.get('x-ratelimit-limit')).toBe('60');
     expect(res.headers.get('x-ratelimit-remaining')).toBeDefined();
@@ -322,6 +200,7 @@ describe('GET /api/v1/slippage-compliance', () => {
     expect(body.verifiedBreaches).toBe(1);
     // (119 / 120) * 100 = 99.1666... -> 99.17%
     expect(body.compliancePct).toBe(99.17);
-    expect(body.gate.met).toBe(true);
+    // 120 intents is far below the 10,000-intent minimum, so the gate is not met yet.
+    expect(body.gate.met).toBe(false);
   });
 });

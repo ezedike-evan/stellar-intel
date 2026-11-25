@@ -28,7 +28,10 @@ const HASH_1 = 'a'.repeat(64);
 const HASH_2 = 'b'.repeat(64);
 const HASH_3 = 'c'.repeat(64);
 
-function createEvidence(intentHash: string, overrides: Partial<SlippageEvidence> = {}): SlippageEvidence {
+function createEvidence(
+  intentHash: string,
+  overrides: Partial<SlippageEvidence> = {}
+): SlippageEvidence {
   return {
     v: 1,
     networkPassphrase: 'Test SDF Network ; September 2015',
@@ -80,9 +83,12 @@ function callList(query = '') {
 }
 
 function callDetail(intentHash: string) {
-  return detailGET(new Request(`http://localhost/api/v1/slippage-breaches/${intentHash}`) as never, {
-    params: Promise.resolve({ intentHash }),
-  });
+  return detailGET(
+    new Request(`http://localhost/api/v1/slippage-breaches/${intentHash}`) as never,
+    {
+      params: Promise.resolve({ intentHash }),
+    }
+  );
 }
 
 describe('Slippage Breaches API (Issue #2106)', () => {
@@ -161,7 +167,9 @@ describe('Slippage Breaches API (Issue #2106)', () => {
 
     it('filters by status', async () => {
       await store.create(createBreach(HASH_1, { status: 'detected' }));
-      await store.create(createBreach(HASH_2, { status: 'verified', verifiedAt: '2026-10-26T12:00:00.000Z' }));
+      await store.create(
+        createBreach(HASH_2, { status: 'verified', verifiedAt: '2026-10-26T12:00:00.000Z' })
+      );
 
       const res = await callList('?status=verified');
       const body = await res.json();
@@ -216,8 +224,12 @@ describe('Slippage Breaches API (Issue #2106)', () => {
     it('returns 503 store_unavailable when breach store throws', async () => {
       const failingStore: SlippageBreachStore = {
         create: async () => false,
-        get: async () => { throw new Error('Database connection failed'); },
-        list: async () => { throw new Error('Database connection failed'); },
+        get: async () => {
+          throw new Error('Database connection failed');
+        },
+        list: async () => {
+          throw new Error('Database connection failed');
+        },
         resolveVerification: async () => null,
       };
       _setSlippageBreachStore(failingStore);
@@ -246,9 +258,7 @@ describe('Slippage Breaches API (Issue #2106)', () => {
       expect(typeof body.canonicalEvidence).toBe('string');
 
       // Cryptographic verification: recomputing SHA-256 of canonicalEvidence matches evidenceHash
-      const recomputedHash = createHash('sha256')
-        .update(body.canonicalEvidence)
-        .digest('hex');
+      const recomputedHash = createHash('sha256').update(body.canonicalEvidence).digest('hex');
       expect(recomputedHash).toBe(body.evidenceHash);
     });
 
@@ -284,8 +294,12 @@ describe('Slippage Breaches API (Issue #2106)', () => {
     it('returns 503 store_unavailable when store throws', async () => {
       const failingStore: SlippageBreachStore = {
         create: async () => false,
-        get: async () => { throw new Error('Database connection failed'); },
-        list: async () => { throw new Error('Database connection failed'); },
+        get: async () => {
+          throw new Error('Database connection failed');
+        },
+        list: async () => {
+          throw new Error('Database connection failed');
+        },
         resolveVerification: async () => null,
       };
       _setSlippageBreachStore(failingStore);

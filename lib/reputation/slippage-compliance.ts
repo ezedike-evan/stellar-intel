@@ -1,97 +1,91 @@
 import type { OutcomeLogRow, SlippageBreach } from '@/types/reputation';
 
-export type SlippageComplianceWindow = 30 | 90 | 'all';
+/** The v3 gate: at least this share of eligible intents landed at or above their floor. */
+export const SLIPPAGE_COMPLIANCE_TARGET_PCT = 99.5;
 
-export interface SlippageComplianceGate {
-  targetPct: number;
-  minIntents: number;
-  met: boolean;
-}
+/** The gate is only met over at least this many eligible intents. */
+export const SLIPPAGE_COMPLIANCE_MIN_INTENTS = 10_000;
+
+/** A number of days back from now, or every row there is. */
+export type SlippageComplianceWindow = 30 | 90 | 'all';
 
 export interface SlippageCompliance {
   window: SlippageComplianceWindow;
+  /** Attested, completed, undisputed withdrawals in the window that carry a floor and a delivered amount. */
   eligibleIntents: number;
+  /** Eligible intents with a breach on record that was not rejected. */
   breaches: number;
+  /** The part of `breaches` already verified against the Stellar payment. */
   verifiedBreaches: number;
+  /** Share of eligible intents without a breach, in percent to two decimals; null when none is eligible. */
   compliancePct: number | null;
-  gate: SlippageComplianceGate;
+  gate: { targetPct: number; minIntents: number; met: boolean };
 }
 
-export interface ComputeSlippageComplianceOptions {
-  window: SlippageComplianceWindow;
-  now?: number;
-}
-
-const TARGET_COMPLIANCE_PCT = 99.0;
-const MIN_ELIGIBLE_INTENTS = 100;
+const DAY_MS = 24 * 60 * 60 * 1000;
 
 /**
- * Computes the slippage compliance metrics and v3 release gate status over a
- * rolling window of withdraw intents and detected slippage breaches.
+ * Slippage-bound compliance: of the intents that named a minimum to receive and
+ * reported what was delivered, the share that has no breach on record.
  *
- * Rules:
- * - Only withdraw intents (direction === 'withdraw') are eligible.
- * - Rows and breaches are filtered to the evaluation window (30/90 days or all).
- * - Only 'verified' breaches reduce the compliance score.
- * - If eligibleIntents === 0: compliancePct is null and gate.met is false.
- * - Otherwise: compliancePct = Math.round(((eligibleIntents - verifiedBreaches) / eligibleIntents) * 10000) / 100
- * - Release gate: met = eligibleIntents >= 100 && compliancePct >= 99.0
+ * An intent is eligible when it can be judged at all: an attested, completed,
+ * undisputed withdrawal with both a `minReceive` and a `deliveredAmount`, created
+ * inside the window. Deposits are measured on another basis, and a row whose date
+ * cannot be read is left out of every window, `'all'` included.
+ *
+ * A breach counts when it belongs to an eligible intent and has not been rejected,
+ * so a breach that is still only `detected` already lowers the figure. It counts
+ * once per intent, however many records name that intent.
+ *
+ * The gate asks for volume as well as the percentage: a perfect score over a
+ * handful of intents does not meet it.
  */
 export function computeSlippageCompliance(
-  rows: OutcomeLogRow[],
-  breaches: SlippageBreach[],
-  opts: ComputeSlippageComplianceOptions
+  rows: readonly OutcomeLogRow[],
+  breaches: readonly Pick<SlippageBreach, 'intentHash' | 'status'>[],
+  opts: { window: SlippageComplianceWindow; now?: number }
 ): SlippageCompliance {
-  const now = opts.now ?? Date.now();
-  const window = opts.window;
-  const cutoff = window === 'all' ? 0 : now - window * 24 * 60 * 60 * 1000;
+  const { window } = opts;
+  const cutoff = window === 'all' ? null : (opts.now ?? Date.now()) - window * DAY_MS;
 
-  const eligibleRows = rows.filter((r) => {
-    if (r.direction !== 'withdraw') return false;
-    if (window === 'all') return true;
-    const createdAtMs = new Date(r.createdAt).getTime();
-    return !Number.isNaN(createdAtMs) && createdAtMs >= cutoff;
-  });
-
-  const windowBreaches = breaches.filter((b) => {
-    if (window === 'all') return true;
-    const detectedAtMs = new Date(b.detectedAt).getTime();
-    return !Number.isNaN(detectedAtMs) && detectedAtMs >= cutoff;
-  });
-
-  const eligibleIntents = eligibleRows.length;
-  const breachesCount = windowBreaches.length;
-  const verifiedBreaches = windowBreaches.filter((b) => b.status === 'verified').length;
-
-  if (eligibleIntents === 0) {
-    return {
-      window,
-      eligibleIntents: 0,
-      breaches: breachesCount,
-      verifiedBreaches,
-      compliancePct: null,
-      gate: {
-        targetPct: TARGET_COMPLIANCE_PCT,
-        minIntents: MIN_ELIGIBLE_INTENTS,
-        met: false,
-      },
-    };
+  const eligible = new Set<string>();
+  for (const row of rows) {
+    if (!row.attested || row.direction !== 'withdraw') continue;
+    if (row.outcome !== 'completed' || row.disputed) continue;
+    if (row.minReceive == null || row.deliveredAmount === null) continue;
+    const created = Date.parse(row.createdAt);
+    if (!Number.isFinite(created)) continue;
+    if (cutoff !== null && created < cutoff) continue;
+    eligible.add(row.intentHash);
   }
 
-  const rawRatio = ((eligibleIntents - verifiedBreaches) / eligibleIntents) * 10000;
-  const compliancePct = Math.max(0, Math.round(rawRatio) / 100);
-  const met = eligibleIntents >= MIN_ELIGIBLE_INTENTS && compliancePct >= TARGET_COMPLIANCE_PCT;
+  const breached = new Set<string>();
+  const verified = new Set<string>();
+  for (const breach of breaches) {
+    if (breach.status === 'rejected' || !eligible.has(breach.intentHash)) continue;
+    breached.add(breach.intentHash);
+    if (breach.status === 'verified') verified.add(breach.intentHash);
+  }
+
+  const eligibleIntents = eligible.size;
+  const compliancePct =
+    eligibleIntents === 0
+      ? null
+      : Math.round(((eligibleIntents - breached.size) / eligibleIntents) * 10_000) / 100;
 
   return {
     window,
     eligibleIntents,
-    breaches: breachesCount,
-    verifiedBreaches,
+    breaches: breached.size,
+    verifiedBreaches: verified.size,
     compliancePct,
     gate: {
-      targetPct: TARGET_COMPLIANCE_PCT,
-      minIntents: MIN_ELIGIBLE_INTENTS,
-      met,
+      targetPct: SLIPPAGE_COMPLIANCE_TARGET_PCT,
+      minIntents: SLIPPAGE_COMPLIANCE_MIN_INTENTS,
+      met:
+        eligibleIntents >= SLIPPAGE_COMPLIANCE_MIN_INTENTS &&
+        compliancePct !== null &&
+        compliancePct >= SLIPPAGE_COMPLIANCE_TARGET_PCT,
     },
   };
 }

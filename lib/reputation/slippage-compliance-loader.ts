@@ -23,9 +23,7 @@ export async function loadSlippageCompliance(
     const breachStore = getSlippageBreachStore();
     const rows = await store.query({ direction: 'withdraw' });
     const since =
-      window === 'all'
-        ? undefined
-        : new Date(now - window * 24 * 60 * 60 * 1000).toISOString();
+      window === 'all' ? undefined : new Date(now - window * 24 * 60 * 60 * 1000).toISOString();
     const breaches = await breachStore.list({
       ...(since ? { since } : {}),
       limit: 100_000,
