@@ -664,7 +664,7 @@ Scope is decomposed post-v2; the shape is already committed.
 - [ ] **Slippage bounds** — `minReceive` enforced at settlement; refund on
       breach with on-chain evidence
 - [ ] **Recurring intents** — standing-order semantics (signed
-      authorization with per-period cap, hard stop date, due reminders, and single-signature execution; see [docs/RECURRING.md](docs/RECURRING.md))
+      authorization with per-period cap and hard stop date)
 - [ ] **Execution SLA** — per-anchor SLA card: p50/p95/p99 settle latency
       with 30-day trailing window
 - [ ] **Refund guarantees** — automatic refund flow with user-signed
@@ -769,8 +769,11 @@ decomposed into the child issues below.
   backoff, dead-letter after repeated failures
   ([#869](https://github.com/ezedike-evan/stellar-intel/issues/869)).
   `app/api/webhooks/*` + `lib/webhooks/sign.ts`. Subscription API and
-  HMAC signing shipped; no production code emits events yet
-  (`dispatchEvent` has no caller)
+  HMAC signing shipped; `intent.created` is emitted from
+  `app/api/intent/offramp/route.ts` and `app/api/v1/intent/offramp/route.ts`,
+  `reputation.event_written`, `intent.settled` and `intent.failed` from
+  `app/api/reputation/append/route.ts`, and `anchor.health_status_changed`
+  from `app/api/publisher/tick/route.ts`
 - [x] **GraphQL layer (additive)** — query corridor rates, anchor
       reputation, and intent status in one round trip, alongside the REST
       API rather than replacing it
@@ -807,14 +810,13 @@ above. Each is gated on something that does not exist yet, which is why no
 wave claimed them. Recorded here so the sequencing is not lost; placement is
 still open.
 
-- [-] **Recurring intents / subscription remittance** — standing-order
-  semantics with signed authorization terms, server-enforced limits, due
-  reminders, and single-signature payment confirmation (see [docs/RECURRING.md](docs/RECURRING.md)).
-  A flag-gated implementation exists (`lib/recurring/`, `types/recurring.ts`,
-  behind `NEXT_PUBLIC_RECURRING_INTENTS` in `lib/flags.ts`, off by default).
-  Fully automated execution without a fresh signature remains parked on
-  wallet pre-authorization standards: Freighter exposes no pre-authorization
-  primitive today.
+- [-] **Recurring intents / subscription remittance** — sign once, later
+  executions run without a fresh signature. A flag-gated implementation
+  exists (`lib/recurring/`, `types/recurring.ts`, behind
+  `NEXT_PUBLIC_RECURRING_INTENTS` in `lib/flags.ts`, off by default).
+  Still gated on wallet pre-auth standards: Freighter exposes no
+  pre-authorization primitive today, so executions without a fresh
+  signature cannot ship until that lands upstream
 - [ ] **Settlement-guaranteed SLA** — gated on ~10k actuarial observations
       before a guarantee can be priced; start with $100 caps. Reads the same
       outcome log the reputation write path already produces

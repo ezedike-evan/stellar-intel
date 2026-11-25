@@ -7,7 +7,7 @@ export const metadata: Metadata = {
     'Receive signed event notifications from Stellar Intel — intent created, settled and failed, reputation events, and anchor health changes — without polling the API.',
 };
 
-const EVENTS: { kind: string; description: string; emitted: boolean }[] = [
+export const EVENTS: { kind: string; description: string; emitted: boolean }[] = [
   {
     kind: 'intent.created',
     description: 'An off-ramp intent is accepted for routing',
@@ -51,22 +51,28 @@ const EVENTS: { kind: string; description: string; emitted: boolean }[] = [
   {
     kind: 'dispute.opened',
     description: 'A dispute is opened against an outcome',
-    emitted: false,
+    emitted: true,
   },
   {
     kind: 'dispute.resolved',
     description: 'A dispute is accepted or rejected',
-    emitted: false,
+    emitted: true,
   },
   {
     kind: 'oracle.published',
     description: 'The oracle writes a batch of outcomes and rates on chain',
-    emitted: false,
+    emitted: true,
+  },
+  {
+    kind: 'intent.slippage_breach',
+    description: "A recorded outcome delivered less than the intent's minimum receive",
+    emitted: true,
   },
 ];
 
 /** How many of the kinds above a producer emits today. The banner is computed, never typed. */
 const LIVE_KINDS = EVENTS.filter((event) => event.emitted).length;
+const allEmitted = EVENTS.every((event) => event.emitted);
 
 export default function WebhooksPage() {
   return (
@@ -80,8 +86,9 @@ export default function WebhooksPage() {
 
       <div className="rounded-xl border border-status-unknown/40 bg-bg-sunken p-5 /50">
         <p className="text-sm font-medium text-status-unknown">
-          Live for {LIVE_KINDS} of {EVENTS.length} kinds; the rest can be subscribed to and will
-          start arriving as producers ship.
+          {allEmitted
+            ? 'Status: Live — every listed event kind is delivered.'
+            : `Live for ${LIVE_KINDS} of ${EVENTS.length} kinds; the rest can be subscribed to and will start arriving as producers ship.`}
         </p>
       </div>
 

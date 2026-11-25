@@ -261,7 +261,9 @@ describe('intent-templates-schema (#2154 / TPL001)', () => {
     it('checks corridor availability', () => {
       const visible = new Set(['usdc-ngn']);
       expect(isTemplateCorridorAvailable(validOfframp as any, visible)).toBe(true);
-      expect(isTemplateCorridorAvailable({ ...validOfframp, corridorId: 'usdc-brl' } as any, visible)).toBe(false);
+      expect(
+        isTemplateCorridorAvailable({ ...validOfframp, corridorId: 'usdc-brl' } as any, visible)
+      ).toBe(false);
     });
   });
 });

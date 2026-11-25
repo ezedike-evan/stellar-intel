@@ -4,6 +4,8 @@ import { TERMINAL_STATES, getSep24Transaction } from '@/lib/stellar/sep24';
 import { realizedRate } from '@/lib/stellar/realized-rate';
 import type { Sep24Transaction, WithdrawStatusValue } from '@/types';
 import type { OutcomeDirection, OutcomeStatus } from '@/types/reputation';
+// Type-only: nothing from the server-side schema module reaches the client bundle.
+import type { OutcomeIntent } from '@/lib/reputation/schema';
 
 /**
  * Context the page supplies so a terminal outcome can be logged (#129/#220).
@@ -14,7 +16,9 @@ import type { OutcomeDirection, OutcomeStatus } from '@/types/reputation';
  * required: the append route rejects an unsigned outcome with 401 (#1267), so
  * a caller with no signature must not set a context at all. `direction`
  * separates on-ramp deposits from off-ramp withdrawals (ONR031); omitted, the
- * server defaults it to 'withdraw'.
+ * server defaults it to 'withdraw'. `minReceive` is the floor the user agreed to and
+ * `outcomeIntent` the signed intent that carries it (SLP005); set together, and only when there
+ * was a floor, so without one the append body is unchanged.
  */
 export interface OutcomeAppendContext {
   intentHash: string;
@@ -25,6 +29,8 @@ export interface OutcomeAppendContext {
   direction?: OutcomeDirection;
   publicKey: string;
   signature: string;
+  minReceive?: string;
+  outcomeIntent?: OutcomeIntent;
 }
 
 function outcomeFromStatus(status: WithdrawStatusValue): OutcomeStatus {

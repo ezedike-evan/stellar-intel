@@ -120,8 +120,6 @@ export const LLMS_FULL_SECTIONS: LlmsFullSection[] = [
  * telling the next person whether the decision still holds.
  */
 export const EXCLUDED_DOCS: Record<string, string> = {
-  'RECURRING.md':
-    'Flag-gated and off in production; describes behaviour a model must not report as live.',
   'ROADMAP.md':
     'Forward-looking plan. Describes what does not exist yet, which is exactly what a model must not report as behaviour.',
   'PROPOSAL.md':

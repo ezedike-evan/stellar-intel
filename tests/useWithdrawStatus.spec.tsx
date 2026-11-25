@@ -9,6 +9,8 @@ import {
   WITHDRAW_POLL_INITIAL_MS,
   WITHDRAW_POLL_MAX_MS,
 } from '@/hooks/useWithdrawStatus';
+import { hashIntent } from '@/lib/intent/hash';
+import type { OutcomeIntent } from '@/lib/reputation/schema';
 
 const wrapper = ({ children }: { children: React.ReactNode }) =>
   createElement(SWRConfig, { value: { provider: () => new Map() } }, children);
@@ -389,6 +391,56 @@ describe('useWithdrawStatus — reputation recording (#799)', () => {
     expect(body.direction).toBe('deposit');
     expect(body.signature).toBe(OUTCOME_CONTEXT.signature);
     expect(body.publicKey).toBe(OUTCOME_CONTEXT.publicKey);
+  });
+
+  it('sends minReceive and the signed outcomeIntent when the context carries a floor (SLP005)', async () => {
+    const fn = mockFetchWithAppend('completed');
+    const outcomeIntent: OutcomeIntent = {
+      type: 'offramp-outcome',
+      sourceAsset: 'USDC',
+      destinationAsset: 'NGN',
+      amount: '100',
+      sender: OUTCOME_CONTEXT.publicKey,
+      recipient: OUTCOME_CONTEXT.anchorId,
+      anchorId: OUTCOME_CONTEXT.anchorId,
+      corridor: OUTCOME_CONTEXT.corridor,
+      transactionId: TXN_ID,
+      minReceive: '95.00',
+    };
+    const withFloor = { ...OUTCOME_CONTEXT, minReceive: '95.00', outcomeIntent };
+    renderHook(() => useWithdrawStatus(TRANSFER_SERVER, TXN_ID, JWT, withFloor), { wrapper });
+    await waitFor(() => expect(findAppend(fn)).toBeDefined());
+
+    const body = appendBody(fn);
+    expect(body.minReceive).toBe('95.00');
+    expect(body.outcomeIntent).toEqual(outcomeIntent);
+  });
+
+  it('leaves minReceive and outcomeIntent out when there was no floor (SLP005)', async () => {
+    const fn = mockFetchWithAppend('completed');
+    renderHook(() => useWithdrawStatus(TRANSFER_SERVER, TXN_ID, JWT, OUTCOME_CONTEXT), { wrapper });
+    await waitFor(() => expect(findAppend(fn)).toBeDefined());
+
+    const body = appendBody(fn);
+    expect(body).not.toHaveProperty('minReceive');
+    expect(body).not.toHaveProperty('outcomeIntent');
+  });
+
+  it('binds the floor into the signed hash: the same intent without minReceive hashes differently', async () => {
+    const base = {
+      type: 'offramp-outcome',
+      sourceAsset: 'USDC',
+      destinationAsset: 'NGN',
+      amount: '100',
+      sender: OUTCOME_CONTEXT.publicKey,
+      recipient: OUTCOME_CONTEXT.anchorId,
+      anchorId: OUTCOME_CONTEXT.anchorId,
+      corridor: OUTCOME_CONTEXT.corridor,
+      transactionId: TXN_ID,
+    };
+    const signed = await hashIntent({ ...base, minReceive: '95.00' });
+    expect(signed).not.toBe(await hashIntent(base));
+    expect(await hashIntent({ ...base, minReceive: '95.00' })).toBe(signed);
   });
 
   it('never includes key material in the appended outcome (non-custodial)', async () => {

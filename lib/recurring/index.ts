@@ -4,51 +4,6 @@
  * Barrel export for the recurring intents module.
  */
 
-// Standing authorization (v3)
-export type {
-  StandingAuthorizationPeriod,
-  StandingAuthorizationStatus,
-  StandingAuthorizationTerms,
-  SignedStandingAuthorization,
-} from '@/types/recurring';
-
-export {
-  STANDING_AUTHORIZATION_PERIODS,
-  StandingAuthorizationTermsSchema,
-  SignedStandingAuthorizationSchema,
-} from '@/types/recurring';
-
-export {
-  STANDING_AUTHORIZATION_MAX_DAYS,
-  hashStandingAuthorization,
-} from './authorization';
-
-export {
-  formatScaledDecimal,
-  periodWindow,
-  remainingCapForPeriod,
-  checkExecutionAgainstAuthorization,
-  type PeriodWindow,
-  type ExecutionCheckCode,
-} from './enforce';
-
-export {
-  type StandingAuthorizationRecord,
-  type StandingExecutionStatus,
-  type StandingExecutionRecord,
-  type StandingAuthorizationStore,
-  InMemoryStandingAuthorizationStore,
-  getStandingAuthorizationStore,
-  _setStandingAuthorizationStore,
-} from './authorization-store';
-
-export {
-  type AuthorizationPhase,
-  type DueReminder,
-  type AuthorizationState,
-  computeAuthorizationState,
-} from './due';
-
 // Types re-exported from @/types/recurring
 export type {
   Cadence,
@@ -102,6 +57,5 @@ export {
   evaluateAllDueIntents,
   compareDecimals,
   computeSlippageBps,
-  parseDecimal,
   MAX_CONSECUTIVE_SKIPS,
 } from './scheduler';

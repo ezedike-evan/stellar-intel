@@ -121,7 +121,7 @@ This is not standardised for Stellar today but is _buildable_ as a custom Soroba
 The sign-once execution engine (the follow-up implementation issue) should:
 
 1. **Phase 1 (implemented behind `NEXT_PUBLIC_RECURRING_INTENTS` in `lib/recurring/`):**
-   _Note:_ The shipped Phase 1 implementation uses signed `StandingAuthorizationTerms` plus a per-payment user signature (due-reminder model, documented in `docs/RECURRING.md`), rather than server-held JWT delegation tokens.
+   The SEP-10 delegation engine is implemented:
    - Zod schemas and types (`types/recurring.ts` / `lib/recurring/index.ts`): `RecurringIntent`, `RecurringAuthorization`, `RecurringExecution`, and `Cadence`.
    - Cadence engine (`lib/recurring/cadence.ts`): `computeNextExecutionAt`, `isDue`, `isStopDatePassed`, `isMaxCyclesReached`, and `isValidCadence`.
    - Persistent store (`lib/recurring/store.ts`): `initRecurringStore`, `registerRecurringIntent`, `updateRecurringIntent`, `listDueIntents`, `recordExecution`.

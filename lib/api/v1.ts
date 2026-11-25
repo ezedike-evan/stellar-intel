@@ -1,5 +1,6 @@
 import { NextResponse } from 'next/server';
 import { checkRateLimit, getClientIp, type RateLimitResult } from './rate-limit';
+import { checkDailyQuota, quotaHeaders } from './quota';
 import {
   clearIdempotencyStore,
   getIdempotentResponse as getStoredIdempotent,
@@ -7,10 +8,11 @@ import {
   scopedIdempotencyKey,
   storeIdempotentResponse as storeSharedIdempotentResponse,
 } from './idempotency';
-import { API_VERSION } from './response';
+import { API_VERSION, standardRateLimitHeaders } from './response';
 import { getLogger } from '@/lib/logger';
 import { hasScope, type ApiScope } from '@/lib/auth/api-keys';
 import { resolveCaller, type Caller } from '@/lib/auth/caller';
+import { limitForTier } from './rate-limit-tiers';
 import { recordAuditEvent } from '@/lib/audit/record';
 import type { AuditOutcome } from '@/lib/audit/types';
 
@@ -55,12 +57,18 @@ export function v1Error(
  * interpret it without knowing that (#914). `Retry-After` is the header that
  * carries a delta.
  */
-export function rateLimitHeaders(limit: number, result: RateLimitResult): Record<string, string> {
+export function rateLimitHeaders(
+  limit: number,
+  result: RateLimitResult,
+  policy = 'default'
+): Record<string, string> {
   const headers: Record<string, string> = {
     'API-Version': API_VERSION,
     'X-RateLimit-Limit': String(limit),
     'X-RateLimit-Remaining': String(Math.max(0, result.remaining)),
     'X-RateLimit-Reset': String(Math.ceil(result.resetAt / 1000)),
+    // IETF RateLimit / RateLimit-Policy alongside the legacy X- headers (AGS009).
+    ...standardRateLimitHeaders(policy, { ...result, limit }),
   };
   if (!result.allowed) headers['Retry-After'] = String(result.retryAfter);
   return headers;
@@ -130,8 +138,8 @@ export interface V1Options {
 }
 
 /**
- * Wraps a v1 handler with the hardening contract: a request id, per-IP rate
- * limiting with `X-RateLimit-*` headers on every response, the standard error
+ * Wraps a v1 handler with the hardening contract: a request id, per-caller
+ * tiered rate limiting with `X-RateLimit-*` headers on every response, the standard error
  * envelope (including on throw), and — when `idempotent` — replaying the stored
  * response for a repeated `Idempotency-Key` so a retried request never
  * double-submits.
@@ -143,9 +151,6 @@ export async function withV1(
 ): Promise<NextResponse> {
   const requestId = request.headers.get('x-request-id') ?? globalThis.crypto.randomUUID();
   const ip = getClientIp(request.headers);
-
-  const rl = await checkRateLimit(ip, { bucket: options.bucket, maxRequests: options.maxRequests });
-  const baseHeaders = { 'X-Request-Id': requestId, ...rateLimitHeaders(options.maxRequests, rl) };
 
   const recordAudit = (
     callerId: string,
@@ -178,24 +183,65 @@ export async function withV1(
     }
   };
 
+  // The caller is resolved first, so each one gets its own rate-limit budget
+  // sized by its tier (AGS007). Anonymous callers keep the per-IP key
+  // `${bucket}:${ip}` they had before. A bad credential never reaches the
+  // handler, and its attempts are counted per IP so keys cannot be guessed
+  // without limit.
+  const callerRes = await resolveCaller(request.headers);
+  if (!callerRes.ok) {
+    const invalidRl = await checkRateLimit(ip, { bucket: 'auth.invalid', maxRequests: 30 });
+    const invalidHeaders = {
+      'X-Request-Id': requestId,
+      'X-Caller-Tier': 'anonymous',
+      ...rateLimitHeaders(30, invalidRl, 'auth.invalid'),
+    };
+    if (!invalidRl.allowed) {
+      recordAudit('anonymous', 'anonymous', 'rate_limited', 429);
+      return v1Error('rate_limited', 'Too many requests', requestId, 429, invalidHeaders);
+    }
+    recordAudit('anonymous', 'anonymous', 'denied', 401);
+    return v1Error(callerRes.code, callerRes.message, requestId, 401, {
+      ...invalidHeaders,
+      'WWW-Authenticate': 'Bearer realm="stellar-intel", error="invalid_token"',
+    });
+  }
+  const caller = callerRes.caller;
+
+  const limit = limitForTier(options.maxRequests, caller.tier);
+  const rl = await checkRateLimit(caller.rateLimitKey, {
+    bucket: options.bucket,
+    maxRequests: limit,
+  });
+  const baseHeaders = {
+    'X-Request-Id': requestId,
+    'X-Caller-Tier': caller.tier,
+    ...rateLimitHeaders(limit, rl, options.bucket),
+  };
+
   if (!rl.allowed) {
-    const callerRes = await resolveCaller(request.headers);
-    const caller = callerRes.ok
-      ? callerRes.caller
-      : { id: 'anonymous', kind: 'anonymous' as const, scopes: [] };
     recordAudit(caller.id, caller.kind, 'rate_limited', 429);
     return v1Error('rate_limited', 'Too many requests', requestId, 429, baseHeaders);
   }
 
-  const callerRes = await resolveCaller(request.headers);
-  if (!callerRes.ok) {
-    recordAudit('anonymous', 'anonymous', 'denied', callerRes.status);
-    return v1Error(callerRes.code, callerRes.message, requestId, callerRes.status, {
-      ...baseHeaders,
-      'WWW-Authenticate': 'Bearer error="invalid_token"',
-    });
+  // Daily quota for keyed callers (AGS024), counted once across every surface.
+  // Anonymous callers have none.
+  let quotaHeadersOut: Record<string, string> = {};
+  if (caller.kind !== 'anonymous') {
+    const quota = await checkDailyQuota(caller);
+    if (quota) {
+      quotaHeadersOut = quotaHeaders(quota);
+      if (!quota.allowed) {
+        recordAudit(caller.id, caller.kind, 'rate_limited', 429);
+        return v1Error('quota_exceeded', 'Daily quota exceeded', requestId, 429, {
+          ...baseHeaders,
+          ...quotaHeadersOut,
+          'Retry-After': String(quota.retryAfter),
+        });
+      }
+    }
   }
-  const caller = callerRes.caller;
+  const headersWithQuota = { ...baseHeaders, ...quotaHeadersOut };
 
   if (options.scope && !hasScope(caller.scopes, options.scope)) {
     recordAudit(caller.id, caller.kind, 'denied', 403);
@@ -205,7 +251,7 @@ export async function withV1(
       requestId,
       403,
       {
-        ...baseHeaders,
+        ...headersWithQuota,
         'WWW-Authenticate': `Bearer error="insufficient_scope", scope="${options.scope}"`,
       }
     );
@@ -230,7 +276,7 @@ export async function withV1(
       recordAudit(caller.id, caller.kind, 'ok', entry.status, intentHash);
       return NextResponse.json(entry.body, {
         status: entry.status,
-        headers: { ...baseHeaders, 'Idempotency-Replayed': 'true' },
+        headers: { ...headersWithQuota, 'Idempotency-Replayed': 'true' },
       });
     }
   }
@@ -258,7 +304,7 @@ export async function withV1(
       stack: err instanceof Error ? err.stack : undefined,
     });
     recordAudit(caller.id, caller.kind, 'error', 500);
-    return v1Error('internal_error', 'Internal error', requestId, 500, baseHeaders);
+    return v1Error('internal_error', 'Internal error', requestId, 500, headersWithQuota);
   }
 
   // Only successful mutations are cached, so a client can safely retry a failure.
@@ -272,6 +318,6 @@ export async function withV1(
 
   return NextResponse.json(result.body, {
     status: result.status,
-    headers: { ...result.headers, ...baseHeaders },
+    headers: { ...result.headers, ...headersWithQuota },
   });
 }
