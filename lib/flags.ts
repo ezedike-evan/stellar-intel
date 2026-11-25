@@ -8,7 +8,8 @@ export type FlagName =
   | 'intentTemplates'
   | 'firmQuoteBonus'
   | 'disputeLadder'
-  | 'refundGuarantees';
+  | 'refundGuarantees'
+  | 'executionSla';
 
 export const flags: Record<FlagName, boolean> = {
   // Default to enabled unless explicitly set to 'off'
@@ -37,6 +38,8 @@ export const flags: Record<FlagName, boolean> = {
   // Refund guarantees: sign refund acknowledgements on status screens.
   // Default OFF; opt in with NEXT_PUBLIC_REFUND_GUARANTEES=on.
   refundGuarantees: (process.env.NEXT_PUBLIC_REFUND_GUARANTEES || 'off') === 'on',
+  // Execution SLA card on the anchor page. Default OFF until anchors have settlement volume.
+  executionSla: (process.env.NEXT_PUBLIC_EXECUTION_SLA || 'off') === 'on',
 };
 
 export function isFlag(name: FlagName) {
