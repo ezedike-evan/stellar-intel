@@ -1,4 +1,13 @@
-import { hasSharedBackend, incrementRateLimitCount, pruneRateLimitBuckets } from './shared-state';
+import {
+  getRateLimitCounts,
+  hasSharedBackend,
+  incrementRateLimitCount,
+  pruneRateLimitBuckets,
+} from './shared-state';
+// quota.ts imports checkRateLimit from here, so this is a cycle; it is safe
+// because both sides only use the other's bindings inside function bodies,
+// never at module-evaluation time.
+import { QUOTA_BUCKET, QUOTA_WINDOW_MS } from './quota';
 import { getLogger } from '@/lib/logger';
 
 interface RateLimitEntry {
@@ -180,6 +189,72 @@ export async function checkRateLimit(
     windowMs,
     shared: true,
   };
+}
+
+/**
+ * Reads a caller's current-window usage without incrementing anything, so a
+ * caller can ask how much budget it has left instead of discovering limits by
+ * hitting 429s (AGS025).
+ *
+ * With a shared backend it reads the current window from `rate_limit_buckets`;
+ * otherwise it scans the in-process `store` for live entries. The bucket name
+ * is the key with the `:<rateLimitKey>` suffix stripped. The daily-quota
+ * bucket is excluded from the per-minute windows — quota is reported
+ * separately, not as a window — and is only returned when the requested
+ * window is the daily quota window itself.
+ *
+ * Falls back to the in-process scan if the shared read errors — a limiter
+ * outage should degrade the answer, not take the endpoint down with it.
+ */
+export async function peekRateLimitUsage(
+  rateLimitKey: string,
+  windowMs: number = 60_000
+): Promise<Array<{ bucket: string; used: number; resetAt: number }>> {
+  const now = Date.now();
+  const suffix = `:${rateLimitKey}`;
+  const windowStart = Math.floor(now / windowMs) * windowMs;
+  const resetAt = windowStart + windowMs;
+  // The quota bucket is only a window when the caller asked for the daily
+  // quota window itself (the usage route reads quota that way); in the
+  // per-minute windows it would double-report the quota.
+  const includeQuotaBucket = windowMs === QUOTA_WINDOW_MS;
+
+  if (hasSharedBackend()) {
+    try {
+      const rows = await getRateLimitCounts(rateLimitKey, windowStart);
+      if (rows !== null) {
+        return rows
+          .filter((row) => {
+            const bucket = row.bucketKey.slice(0, -suffix.length);
+            return includeQuotaBucket || bucket !== QUOTA_BUCKET;
+          })
+          .map((row) => ({
+            bucket: row.bucketKey.slice(0, -suffix.length),
+            used: row.count,
+            resetAt,
+          }));
+      }
+    } catch (err) {
+      if (now - lastBackendErrorWarnAt >= BACKEND_ERROR_WARN_INTERVAL_MS) {
+        lastBackendErrorWarnAt = now;
+        getLogger('api.rate-limit').warn({
+          event: 'rate_limit_shared_backend_error',
+          error: String(err),
+        });
+      }
+    }
+  }
+
+  const usage: Array<{ bucket: string; used: number; resetAt: number }> = [];
+  for (const [key, entry] of store) {
+    if (!key.endsWith(suffix)) continue;
+    // A window the caller has not touched since it closed is not live usage.
+    if (now - entry.windowStart >= windowMs) continue;
+    const bucket = key.slice(0, -suffix.length);
+    if (!includeQuotaBucket && bucket === QUOTA_BUCKET) continue;
+    usage.push({ bucket, used: entry.count, resetAt: entry.windowStart + windowMs });
+  }
+  return usage;
 }
 
 export function clearRateLimitStore(): void {
