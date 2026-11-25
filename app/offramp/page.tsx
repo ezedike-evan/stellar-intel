@@ -1,5 +1,5 @@
 'use client';
-import { Suspense, useState, useCallback, useEffect, useRef } from 'react';
+import { Suspense, useState, useCallback, useEffect, useMemo, useRef } from 'react';
 import dynamic from 'next/dynamic';
 import { useRouter, useSearchParams } from 'next/navigation';
 import { TERMINAL_STATES } from '@/lib/stellar/sep24';
@@ -26,7 +26,11 @@ import { useCountdown } from '@/hooks/useCountdown';
 import { useWallet } from '@/contexts/WalletContext';
 import { useWithdrawStatus, type OutcomeAppendContext } from '@/hooks/useWithdrawStatus';
 import { useWalletBalance } from '@/hooks/useWalletBalance';
-import { amountBucket, FUNNEL_EVENTS, trackFunnelEvent } from '@/lib/analytics';
+import { amountBucket, FUNNEL_EVENTS, TEMPLATE_EVENTS, trackFunnelEvent } from '@/lib/analytics';
+import { TemplatePicker } from '@/components/templates/TemplatePicker';
+import { useIntentTemplates } from '@/hooks/useIntentTemplates';
+import type { IntentTemplate, IntentTemplateDraft } from '@/lib/templates/schema';
+import { SaveTemplateForm } from '@/components/templates/SaveTemplateForm';
 import { VISIBLE_CORRIDORS } from '@/constants/anchors';
 import { getCorridorAsset, getCorridorById } from '@/lib/stellar/anchors';
 import { signIntent } from '@/lib/intent/sign';
@@ -34,10 +38,12 @@ import { quotedAllInRate } from '@/lib/stellar/realized-rate';
 import type { Intent } from '@/lib/intent/hash';
 import type { AnchorRate } from '@/types';
 import { MIN_RECEIVE_TOLERANCE } from '@/lib/rate-ranking';
+import type { OutcomeIntent } from '@/lib/reputation/schema';
 import { flags } from '@/lib/flags';
 import { submitDispute } from '@/lib/reputation/dispute-client';
 import { DisputeModal } from '@/components/offramp/DisputeModal';
 import { DisputeStatusBadge } from '@/components/offramp/DisputeStatusBadge';
+import { RefundAckCard } from '@/components/refunds/RefundAckCard';
 
 // Not needed until the user picks a rate to execute — split into its own
 // chunk so it doesn't pad the initial /offramp bundle.
@@ -88,6 +94,30 @@ function OfframpContent() {
   const [outcomeContext, setOutcomeContext] = useState<OutcomeAppendContext | null>(null);
 
   const { isConnected, publicKey, network } = useWallet();
+
+  // Saved intent templates (TPL006), behind the intentTemplates flag. Applying
+  // one fills the corridor and amount only: it never selects an anchor or
+  // opens the drawer.
+  const templatesEnabled =
+    flags.intentTemplates && isConnected && !!publicKey && !trackingTransactionId;
+  const templatesApi = useIntentTemplates(
+    flags.intentTemplates && isConnected ? publicKey : null,
+    'offramp'
+  );
+  // Offered after a completed off-ramp started in this page session (TPL008).
+  const [templateDraft, setTemplateDraft] = useState<IntentTemplateDraft | null>(null);
+
+  const handleApplyTemplate = (template: IntentTemplate) => {
+    if (template.direction !== 'offramp' || !VALID_CORRIDOR_IDS.has(template.corridorId)) return;
+    setCorridorId(template.corridorId);
+    setAmount(template.amount);
+    templatesApi.markUsed(template.id);
+    trackFunnelEvent(TEMPLATE_EVENTS.templateApplied, {
+      direction: 'offramp',
+      corridor: template.corridorId,
+      amount_bucket: amountBucket(template.amount),
+    });
+  };
   const { rates, anchorErrors, isLoading, error, mutate, refreshInflight, lastFetchedAt } =
     useAnchorRates(corridorId, amount);
   const { secondsRemaining, elapsedSeconds, prefersReducedMotion, progress, totalSeconds } =
@@ -167,6 +197,16 @@ function OfframpContent() {
     setSelectedRate(null);
   }, []);
 
+  // The floor the drawer enforces before payment. It is signed into the outcome intent so a
+  // breach is judged against what the user agreed to, and survives the drawer closing.
+  const minReceive = useMemo(
+    () =>
+      selectedRate?.totalReceived != null
+        ? (selectedRate.totalReceived * (1 - MIN_RECEIVE_TOLERANCE)).toFixed(2)
+        : undefined,
+    [selectedRate]
+  );
+
   const handleExecuteStarted = useCallback(
     (transactionId: string, transferServer: string, jwt: string, anchorHomeDomain: string) => {
       const nonce = generateNonce();
@@ -177,6 +217,14 @@ function OfframpContent() {
       setTrackingJwt(jwt);
       setTrackingNonce(nonce);
       setTrackingAnchorHomeDomain(anchorHomeDomain);
+      if (selectedRate) {
+        setTemplateDraft({
+          direction: 'offramp',
+          corridorId: selectedRate.corridorId,
+          amount,
+          anchorId: selectedRate.anchorId,
+        });
+      }
 
       // Capture the quote so the terminal outcome of this real transaction is
       // logged to the reputation store (#799). A null exchangeRate can't be
@@ -190,8 +238,8 @@ function OfframpContent() {
       // simply isn't recorded.
       if (selectedRate && selectedRate.exchangeRate !== null && publicKey) {
         const [sourceAsset = '', destinationAsset = ''] = selectedRate.corridorId.split('-');
-        const intent: Intent = {
-          type: 'offramp-outcome',
+        const baseIntent = {
+          type: 'offramp-outcome' as const,
           sourceAsset: sourceAsset.toUpperCase(),
           destinationAsset: destinationAsset.toUpperCase(),
           amount,
@@ -201,6 +249,11 @@ function OfframpContent() {
           corridor: selectedRate.corridorId,
           transactionId,
         };
+        // With a floor, it is part of what the user signs; without one the intent, and so the
+        // append body, is exactly what it was before.
+        const outcomeIntent: OutcomeIntent | undefined =
+          minReceive !== undefined ? { ...baseIntent, minReceive } : undefined;
+        const intent: Intent = outcomeIntent ?? baseIntent;
         const quote = {
           anchorId: selectedRate.anchorId,
           corridor: selectedRate.corridorId,
@@ -211,7 +264,13 @@ function OfframpContent() {
         };
         signIntent(intent)
           .then(({ intentHash, signature, publicKey: signer }) => {
-            setOutcomeContext({ ...quote, intentHash, signature, publicKey: signer });
+            setOutcomeContext({
+              ...quote,
+              intentHash,
+              signature,
+              publicKey: signer,
+              ...(outcomeIntent ? { minReceive: outcomeIntent.minReceive, outcomeIntent } : {}),
+            });
           })
           .catch(() => {
             // Best-effort, like the append itself: an unsigned outcome would be
@@ -219,7 +278,7 @@ function OfframpContent() {
           });
       }
     },
-    [router, selectedRate, amount, publicKey]
+    [router, selectedRate, amount, publicKey, minReceive]
   );
 
   useEffect(() => {
@@ -252,6 +311,7 @@ function OfframpContent() {
     setTrackingNonce(null);
     setTrackingAnchorHomeDomain(null);
     setOutcomeContext(null);
+    setTemplateDraft(null);
     rateTableRef.current?.scrollIntoView({ behavior: 'smooth', block: 'start' });
   }, []);
 
@@ -301,6 +361,14 @@ function OfframpContent() {
       </div>
 
       <DisclaimerBanner />
+
+      {templatesEnabled && (
+        <TemplatePicker
+          templates={templatesApi.templates}
+          visibleCorridorIds={VALID_CORRIDOR_IDS}
+          onApply={handleApplyTemplate}
+        />
+      )}
 
       <div className="grid grid-cols-1 gap-4 rounded-xl border border-border bg-bg-sunken p-4 /50 sm:grid-cols-3">
         <AssetSelector
@@ -399,8 +467,33 @@ function OfframpContent() {
           {flags.disputeLadder && outcomeContext && (
             <DisputeStatusBadge intentHash={outcomeContext.intentHash} />
           )}
+          {flags.intentTemplates &&
+            publicKey &&
+            templateDraft &&
+            withdrawStatus.status === 'completed' && (
+              <SaveTemplateForm
+                draft={templateDraft}
+                onSave={templatesApi.save}
+                onDismiss={() => setTemplateDraft(null)}
+              />
+            )}
         </>
       )}
+
+      {flags.refundGuarantees &&
+        outcomeContext &&
+        trackingTransactionId &&
+        (withdrawStatus.status === 'refunded' ||
+          withdrawStatus.status === 'error' ||
+          withdrawStatus.status === 'expired') && (
+          <RefundAckCard
+            intentHash={outcomeContext.intentHash}
+            anchorId={outcomeContext.anchorId}
+            account={outcomeContext.publicKey}
+            refunds={withdrawStatus.refunds}
+            assetLabel="USDC"
+          />
+        )}
 
       {disputeOpen &&
         flags.disputeLadder &&
@@ -427,11 +520,7 @@ function OfframpContent() {
       <ExecuteDrawer
         rate={selectedRate}
         amount={amount}
-        minReceive={
-          selectedRate?.totalReceived != null
-            ? (selectedRate.totalReceived * (1 - MIN_RECEIVE_TOLERANCE)).toFixed(2)
-            : undefined
-        }
+        minReceive={minReceive}
         publicKey={publicKey ?? ''}
         onClose={handleDrawerClose}
         onExecuteStarted={handleExecuteStarted}

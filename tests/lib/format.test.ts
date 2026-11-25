@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import { formatDeliveredAmount } from '@/lib/format';
+import { formatDeliveredAmount, formatSettleDuration } from '@/lib/format';
 
 describe('formatDeliveredAmount', () => {
   it('formats NGN with currency style', () => {
@@ -38,5 +38,22 @@ describe('formatDeliveredAmount', () => {
 
   it('handles large numbers without throwing', () => {
     expect(() => formatDeliveredAmount('9999999.99', 'NGN')).not.toThrow();
+  });
+});
+
+describe('formatSettleDuration', () => {
+  it.each([
+    [0, '0s'],
+    [42_400, '42s'],
+    [59_600, '1m 00s'],
+    [245_000, '4m 05s'],
+    [3_600_000, '1h 00m'],
+    [5_430_000, '1h 30m'],
+  ])('formats %i ms as %s', (ms, expected) => {
+    expect(formatSettleDuration(ms)).toBe(expected);
+  });
+
+  it.each([[-1], [NaN], [Infinity]])('returns an em dash for %s', (ms) => {
+    expect(formatSettleDuration(ms)).toBe('—');
   });
 });

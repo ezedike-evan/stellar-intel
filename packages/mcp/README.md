@@ -10,7 +10,7 @@ and served over stdio (the default) or streamable HTTP.
 ## Status
 
 `createServer()` (`src/server.ts`) stands up the MCP server and registers
-ten tools (the off-ramp and discovery tools plus `intel.onramp.quote` and
+eleven tools (the off-ramp and discovery tools plus `intel.onramp.quote` and
 `intel.onramp.prepare`), backed directly by
 [`lib/mcp/offramp.ts`](https://github.com/ezedike-evan/stellar-intel/blob/main/lib/mcp/offramp.ts)
 in the main app (imported at build time — see below), so this package and the
@@ -49,6 +49,9 @@ share the exact same logic:
   for an anchor. Each scorecard shows state (ok or insufficient_data), sample
   size, fill rate, settlement latency percentiles (p50/p95), and slippage
   percentiles (p50/p95).
+- `intel.anchor.sla` — returns 30-day trailing p50/p95/p99 settle latency for
+  an anchor, overall and per corridor, with breach status and a daily p95
+  series (`readOnlyHint`).
 - `intel.probe.coverage` — whether probe history is trustworthy yet:
   fleetThresholdMet, daysUntilFleetThreshold, and per-anchor continuous days.
   Same payload as GET /api/reputation/probe-coverage.

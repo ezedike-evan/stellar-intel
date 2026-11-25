@@ -5,15 +5,23 @@ import { useRouter, useSearchParams } from 'next/navigation';
 import { WalletButton } from '@/components/ui/WalletButton';
 import { CorridorSelector } from '@/components/ui/CorridorSelector';
 import { DisclaimerBanner } from '@/components/offramp/DisclaimerBanner';
+import { TemplatePicker } from '@/components/templates/TemplatePicker';
 import { DepositRateTable } from '@/components/onramp/DepositRateTable';
 import { DepositStatusTracker } from '@/components/onramp/DepositStatusTracker';
 import { useWallet } from '@/contexts/WalletContext';
 import { useDepositRates } from '@/hooks/useDepositRates';
+import { useIntentTemplates } from '@/hooks/useIntentTemplates';
 import { useTransferStatus, type OutcomeAppendContext } from '@/hooks/useWithdrawStatus';
 import { VISIBLE_CORRIDORS } from '@/constants/anchors';
 import { getCorridorById } from '@/lib/stellar/anchors';
-import { ONRAMP_FUNNEL_EVENTS, amountBucket, trackFunnelEvent } from '@/lib/analytics';
+import {
+  ONRAMP_FUNNEL_EVENTS,
+  TEMPLATE_EVENTS,
+  amountBucket,
+  trackFunnelEvent,
+} from '@/lib/analytics';
 import { signIntent } from '@/lib/intent/sign';
+import type { IntentTemplate } from '@/lib/templates/schema';
 import {
   buildTrackingSearch,
   clearJwtFromSession,
@@ -25,6 +33,8 @@ import {
 import { TERMINAL_STATES } from '@/lib/stellar/sep24';
 import type { OnrampIntent } from '@/types/intent';
 import type { DepositRate } from '@/types';
+import { flags } from '@/lib/flags';
+import { RefundAckCard } from '@/components/refunds/RefundAckCard';
 
 // Only needed once the user picks a row, so it stays out of the initial bundle.
 const DepositDrawer = dynamic(
@@ -97,6 +107,29 @@ function OnrampContent() {
 
   const { isConnected, publicKey, network } = useWallet();
   const corridor = getCorridorById(corridorId);
+
+  const templatesEnabled =
+    flags.intentTemplates && isConnected && !!publicKey && !trackingTransactionId;
+  const templatesApi = useIntentTemplates(
+    flags.intentTemplates && isConnected ? publicKey : null,
+    'onramp'
+  );
+
+  const handleApplyTemplate = useCallback(
+    (t: IntentTemplate) => {
+      if (t.direction !== 'onramp' || !VALID_CORRIDOR_IDS.has(t.corridorId)) return;
+      setCorridorId(t.corridorId);
+      setAmount(t.amount);
+      setSelectedAssetId(t.assetId ?? null);
+      templatesApi.markUsed(t.id);
+      trackFunnelEvent(TEMPLATE_EVENTS.templateApplied, {
+        direction: 'onramp',
+        corridor: t.corridorId,
+        amount_bucket: amountBucket(parseFloat(t.amount)),
+      });
+    },
+    [templatesApi, setCorridorId, setAmount, setSelectedAssetId]
+  );
   const {
     rates: comparison,
     anchorErrors,
@@ -289,6 +322,14 @@ function OnrampContent() {
 
       <DisclaimerBanner />
 
+      {templatesEnabled && (
+        <TemplatePicker
+          templates={templatesApi.templates}
+          visibleCorridorIds={VALID_CORRIDOR_IDS}
+          onApply={handleApplyTemplate}
+        />
+      )}
+
       <div className="border-border bg-bg-sunken grid grid-cols-1 gap-4 rounded-xl border p-4 sm:grid-cols-3">
         <CorridorSelector value={corridorId} onChange={setCorridorId} assetCode={corridor.from} />
         <div>
@@ -366,6 +407,19 @@ function OnrampContent() {
           onStartAnother={handleStartAnother}
         />
       )}
+
+      {flags.refundGuarantees &&
+        outcomeContext &&
+        trackingTransactionId &&
+        depositStatus.status === 'refunded' && (
+          <RefundAckCard
+            intentHash={outcomeContext.intentHash}
+            anchorId={outcomeContext.anchorId}
+            account={outcomeContext.publicKey}
+            refunds={depositStatus.refunds}
+            assetLabel={corridor.to}
+          />
+        )}
 
       <DepositDrawer
         rate={selectedRate}
