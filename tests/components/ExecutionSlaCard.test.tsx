@@ -141,4 +141,52 @@ describe('ExecutionSlaCard (#2146)', () => {
   it('is behind a flag that is off by default', () => {
     expect(flags.executionSla).toBe(false);
   });
+
+  describe('daily p95 trend (#2147)', () => {
+    const day = (n: number, p95Ms: number | null) => ({
+      day: `2026-10-${String(n).padStart(2, '0')}`,
+      p95Ms,
+      sampleSize: p95Ms === null ? 2 : 10,
+    });
+
+    it('draws the sparkline with a caption when 3 days have a p95', () => {
+      render(
+        <ExecutionSlaCard
+          report={report({
+            history: [day(1, 80_000), day(2, null), day(3, 90_000), day(4, 100_000)],
+          })}
+        />
+      );
+      expect(screen.getByTestId('sparkline-svg')).toBeInTheDocument();
+      expect(
+        screen.getByText(/Daily 95th-percentile settle time, 2026-10-01 to 2026-10-04/)
+      ).toHaveTextContent('(3 days with enough data)');
+    });
+
+    it('falls back to text with only one day of data', () => {
+      render(<ExecutionSlaCard report={report({ history: [day(1, 80_000), day(2, null)] })} />);
+      expect(screen.queryByTestId('sparkline-svg')).not.toBeInTheDocument();
+      expect(screen.getByText('Not enough daily data for a trend yet.')).toBeInTheDocument();
+    });
+
+    it('falls back to text when every day is null', () => {
+      render(<ExecutionSlaCard report={report({ history: [day(1, null), day(2, null)] })} />);
+      expect(screen.queryByTestId('sparkline-svg')).not.toBeInTheDocument();
+      expect(screen.getByText('Not enough daily data for a trend yet.')).toBeInTheDocument();
+    });
+
+    it('shows the trend even when the 30-day total is insufficient', () => {
+      const sla = insufficient(12);
+      render(
+        <ExecutionSlaCard
+          report={report({
+            overall: { sla, breach: { status: 'unknown', breaches: [] } },
+            corridors: [],
+            history: [day(1, 80_000), day(2, 90_000)],
+          })}
+        />
+      );
+      expect(screen.getByTestId('sparkline-svg')).toBeInTheDocument();
+    });
+  });
 });

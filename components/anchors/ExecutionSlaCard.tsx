@@ -1,4 +1,5 @@
 import { Card } from '@/components/ui/Card';
+import { Sparkline } from '@/components/ui/Sparkline';
 import { formatSettleDuration } from '@/lib/format';
 import type { ExecutionSla, ExecutionSlaReport } from '@/lib/reputation/execution-sla';
 
@@ -11,6 +12,9 @@ import type { ExecutionSla, ExecutionSlaReport } from '@/lib/reputation/executio
  */
 export function ExecutionSlaCard({ report }: { report: ExecutionSlaReport }) {
   const { sla, breach } = report.overall;
+  // Days with enough samples to publish a p95 (SLA007). Shown in both states:
+  // a day can reach 5 samples while the 30-day total is still under 30.
+  const points = report.history.filter((p) => p.p95Ms !== null);
 
   return (
     <Card
@@ -65,6 +69,18 @@ export function ExecutionSlaCard({ report }: { report: ExecutionSlaReport }) {
           Not enough completed withdrawals yet to publish settlement times ({sla.sampleSize} of{' '}
           {sla.minSamples} needed).
         </p>
+      )}
+
+      {points.length >= 2 ? (
+        <figure className="space-y-1">
+          <Sparkline data={points.map((p) => (p.p95Ms as number) / 1000)} width={160} height={32} />
+          <figcaption className="text-fg-muted text-xs">
+            Daily 95th-percentile settle time, {points[0]!.day} to {points[points.length - 1]!.day}{' '}
+            ({points.length} days with enough data)
+          </figcaption>
+        </figure>
+      ) : (
+        <p className="text-fg-muted text-xs">Not enough daily data for a trend yet.</p>
       )}
 
       {report.corridors.length > 1 && (
