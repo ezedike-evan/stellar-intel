@@ -34,7 +34,11 @@ describe('TemplateManager', () => {
       save: vi.fn(),
       rename: vi.fn((id: string, label: string): SaveTemplateResult => {
         if (label === 'Existing') {
-          return { ok: false, error: 'duplicate_label', message: 'A template with this name already exists for this direction.' };
+          return {
+            ok: false,
+            error: 'duplicate_label',
+            message: 'A template with this name already exists for this direction.',
+          };
         }
         const t = mockTemplates.find((x) => x.id === id);
         if (t) t.label = label;
@@ -53,15 +57,27 @@ describe('TemplateManager', () => {
         return true;
       }),
       markUsed: vi.fn(),
-      exportJson: vi.fn(() => JSON.stringify({ format: 'stellar-intel/intent-templates', version: 1, exportedAt: '2026-11-20T10:00:00Z', templates: mockTemplates })),
-      importJson: vi.fn((text: string, _mode: ImportMode): { ok: true; summary: ImportSummary } | { ok: false; error: string } => {
-        try {
-          JSON.parse(text);
-          return { ok: true, summary: { added: 1, updated: 0, skipped: 0 } };
-        } catch {
-          return { ok: false, error: 'This file is not valid JSON.' };
+      exportJson: vi.fn(() =>
+        JSON.stringify({
+          format: 'stellar-intel/intent-templates',
+          version: 1,
+          exportedAt: '2026-11-20T10:00:00Z',
+          templates: mockTemplates,
+        })
+      ),
+      importJson: vi.fn(
+        (
+          text: string,
+          _mode: ImportMode
+        ): { ok: true; summary: ImportSummary } | { ok: false; error: string } => {
+          try {
+            JSON.parse(text);
+            return { ok: true, summary: { added: 1, updated: 0, skipped: 0 } };
+          } catch {
+            return { ok: false, error: 'This file is not valid JSON.' };
+          }
         }
-      }),
+      ),
     };
 
     onClose = vi.fn();
@@ -166,7 +182,9 @@ describe('TemplateManager', () => {
     // 1. Valid file
     const validFile = new File(['{"valid":true}'], 'templates.json', { type: 'application/json' });
     await user.upload(input, validFile);
-    expect(await screen.findByRole('status')).toHaveTextContent('Imported: 1 added, 0 updated, 0 skipped.');
+    expect(await screen.findByRole('status')).toHaveTextContent(
+      'Imported: 1 added, 0 updated, 0 skipped.'
+    );
 
     // 2. Non-JSON file
     const invalidFile = new File(['not json'], 'invalid.json', { type: 'application/json' });

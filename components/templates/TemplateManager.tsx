@@ -4,7 +4,11 @@ import React, { useEffect, useRef, useState, useCallback } from 'react';
 import type { UseIntentTemplatesResult } from '@/hooks/useIntentTemplates';
 import type { IntentTemplate } from '@/lib/templates/schema';
 import { templateCorridorLabel } from '@/lib/templates/schema';
-import { templateExportFilename, MAX_IMPORT_BYTES, type ImportMode } from '@/lib/templates/transfer';
+import {
+  templateExportFilename,
+  MAX_IMPORT_BYTES,
+  type ImportMode,
+} from '@/lib/templates/transfer';
 import { templateErrorMessage } from './SaveTemplateForm';
 
 export interface TemplateManagerProps {
@@ -13,7 +17,11 @@ export interface TemplateManagerProps {
   api: UseIntentTemplatesResult;
 }
 
-export function TemplateManager({ open, onClose, api }: TemplateManagerProps): React.ReactElement | null {
+export function TemplateManager({
+  open,
+  onClose,
+  api,
+}: TemplateManagerProps): React.ReactElement | null {
   const headingRef = useRef<HTMLHeadingElement>(null);
 
   const [editingId, setEditingId] = useState<string | null>(null);
@@ -161,7 +169,12 @@ export function TemplateManager({ open, onClose, api }: TemplateManagerProps): R
     >
       <div className="border-border bg-bg-base text-primary-text max-h-[90vh] w-full max-w-lg overflow-y-auto rounded-2xl border p-6 shadow-xl">
         <div className="flex items-center justify-between border-b border-border pb-4">
-          <h2 id="template-manager-heading" tabIndex={-1} ref={headingRef} className="text-xl font-bold outline-none">
+          <h2
+            id="template-manager-heading"
+            tabIndex={-1}
+            ref={headingRef}
+            className="text-xl font-bold outline-none"
+          >
             Manage templates
           </h2>
           <button

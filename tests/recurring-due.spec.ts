@@ -7,7 +7,9 @@ import {
 
 const SENDER = 'GA5ZSEJYB37JRC5AVCIA5MOP4RHTM335X2KGX3IHOJAPP5RE34K4KZVN';
 
-function createRecord(overrides: Partial<StandingAuthorizationRecord> = {}): StandingAuthorizationRecord {
+function createRecord(
+  overrides: Partial<StandingAuthorizationRecord> = {}
+): StandingAuthorizationRecord {
   return {
     id: 'auth-123',
     termsHash: 'a'.repeat(64),
@@ -73,7 +75,11 @@ describe('recurring-due (REC006)', () => {
         createdAt: '2026-11-20T06:00:00.000Z',
       },
     ];
-    const stConfirmed = computeAuthorizationState(record, executions, new Date('2026-11-20T12:00:00Z'));
+    const stConfirmed = computeAuthorizationState(
+      record,
+      executions,
+      new Date('2026-11-20T12:00:00Z')
+    );
     expect(stConfirmed.phase).toBe('confirmed_this_period');
     expect(stConfirmed.due).toBeNull();
     expect(stConfirmed.nextDueAt).toBe('2026-11-21T00:00:00.000Z');
@@ -94,18 +100,30 @@ describe('recurring-due (REC006)', () => {
         createdAt: '2026-11-20T07:00:00.000Z', // in period 0 window
       },
     ];
-    const stCap = computeAuthorizationState(record, capExecutions, new Date('2026-11-20T12:00:00Z'));
+    const stCap = computeAuthorizationState(
+      record,
+      capExecutions,
+      new Date('2026-11-20T12:00:00Z')
+    );
     expect(stCap.phase).toBe('cap_reached');
     expect(stCap.due).toBeNull();
 
     // 5. paused
-    const stPaused = computeAuthorizationState(createRecord({ status: 'paused' }), [], new Date('2026-11-20T12:00:00Z'));
+    const stPaused = computeAuthorizationState(
+      createRecord({ status: 'paused' }),
+      [],
+      new Date('2026-11-20T12:00:00Z')
+    );
     expect(stPaused.phase).toBe('paused');
     expect(stPaused.due).toBeNull();
     expect(stPaused.nextDueAt).toBeNull();
 
     // 6. cancelled
-    const stCancelled = computeAuthorizationState(createRecord({ status: 'cancelled' }), [], new Date('2026-11-20T12:00:00Z'));
+    const stCancelled = computeAuthorizationState(
+      createRecord({ status: 'cancelled' }),
+      [],
+      new Date('2026-11-20T12:00:00Z')
+    );
     expect(stCancelled.phase).toBe('cancelled');
     expect(stCancelled.due).toBeNull();
     expect(stCancelled.nextDueAt).toBeNull();
@@ -197,7 +215,11 @@ describe('recurring-due (REC006)', () => {
 
     // After stop date (completed): periods 0..4 total 5 periods.
     // Confirmed periods: 0 and 2. Missed periods: 1, 3, 4 -> total 3 missed!
-    const stateCompleted = computeAuthorizationState(record, executions, new Date('2026-11-25T12:00:00Z'));
+    const stateCompleted = computeAuthorizationState(
+      record,
+      executions,
+      new Date('2026-11-25T12:00:00Z')
+    );
     expect(stateCompleted.phase).toBe('completed');
     expect(stateCompleted.missedPeriods).toBe(3);
   });

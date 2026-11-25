@@ -1,6 +1,6 @@
 # Anchor Reputation
 
-**Last reviewed:** 2026-08-26
+**Last reviewed:** 2026-11-21
 
 Every quote, fill, failure, and settlement latency an anchor produces is recorded
 as an **outcome**. Outcomes aggregate into a public, user-verifiable score. The
@@ -228,9 +228,9 @@ roadmap gate (see [`docs/MAINNET_LAUNCH.md`](MAINNET_LAUNCH.md), the 90-day prob
 
 ## Disputes
 
-Terminal-state rows expose a "flag incorrect outcome" path. A dispute records the
-contesting party and the disputed outcome id; because every outcome carries the
-user's signature and is replayable from the ledger, adjudication is evidence-based.
+The account that attested an outcome can dispute it, and a maintainer accepts or
+rejects the dispute. See [`DISPUTES.md`](DISPUTES.md) for who can file, how
+resolution works and which routes are involved.
 
 ---
 
@@ -311,7 +311,7 @@ An anchor graduates to **live** status when it has accumulated at least
 scorecard window. At that point:
 
 - The scorecard `state` becomes `"ok"` and exposes full metrics: `fillRate`,
-  `settleMs` (p50 / p95), and `slippage` (p50 / p95)
+  `settleMs` (p50 / p95), and `slippage` (p50 / p95). (Note: Scorecard `settleMs` percentiles are computed via weighted interpolation with MAD outlier trimming for scoring; for public execution SLA benchmarks and breach evaluations without trimming, see [Execution SLA in SETTLEMENT_SLA.md](SETTLEMENT_SLA.md#execution-sla-public-settle-time-percentiles).)
 - A composite score is computed and mapped to a
   [score band](../lib/reputation/bands.ts):
 

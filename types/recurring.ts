@@ -18,8 +18,8 @@ export const StandingAuthorizationTermsSchema = z
     amount: z.string().regex(AMOUNT_PATTERN),
     perPeriodCap: z.string().regex(AMOUNT_PATTERN),
     period: z.enum(STANDING_AUTHORIZATION_PERIODS),
-    startAt: z.string().datetime(),
-    stopAt: z.string().datetime(),
+    startAt: z.iso.datetime(),
+    stopAt: z.iso.datetime(),
     anchorAllowlist: z.array(z.string().min(1).max(64)).min(1).max(10),
     nonce: z.string().regex(/^[0-9a-f]{32}$/),
   })

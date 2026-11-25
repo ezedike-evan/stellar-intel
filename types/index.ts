@@ -163,6 +163,15 @@ export interface AnchorRate {
   referenceSource?: 'fx' | 'sdex+fx';
   /** Human-readable explanation of how the reference price was derived. */
   referenceDetail?: string;
+  /**
+   * 30-day p95 settle time on this corridor, from completed withdrawals; absent
+   * below 30 samples or when the executionSla flag is off.
+   */
+  settleP95Ms?: number;
+  /**
+   * Number of completed withdrawals used to calculate settleP95Ms.
+   */
+  settleSampleSize?: number;
 }
 
 /**
@@ -475,7 +484,8 @@ export type WithdrawStatus =
 /** Payment breakdown for a refunded SEP-24 transaction. */
 export interface Sep24RefundPayment {
   id: string;
-  id_type: string;
+  /** SEP-24 defines exactly these two; `parseRefunds` drops a payment with any other. */
+  id_type: 'stellar' | 'external';
   amount: string;
   fee: string;
 }

@@ -59,9 +59,7 @@ test.describe('Intent Templates E2E', () => {
 
   test('choosing a template on /offramp updates URL and amount input', async ({ page }) => {
     await page.addInitScript(fakeFreighterInitScript(FAKE_PUBLIC_KEY));
-    await page.addInitScript(
-      seedTemplatesInitScript(FAKE_PUBLIC_KEY, [SAMPLE_OFFRAMP_TEMPLATE])
-    );
+    await page.addInitScript(seedTemplatesInitScript(FAKE_PUBLIC_KEY, [SAMPLE_OFFRAMP_TEMPLATE]));
 
     await page.goto('/offramp');
 
@@ -79,9 +77,7 @@ test.describe('Intent Templates E2E', () => {
 
   test('Manage templates -> rename -> reload persists the new name', async ({ page }) => {
     await page.addInitScript(fakeFreighterInitScript(FAKE_PUBLIC_KEY));
-    await page.addInitScript(
-      seedTemplatesInitScript(FAKE_PUBLIC_KEY, [SAMPLE_OFFRAMP_TEMPLATE])
-    );
+    await page.addInitScript(seedTemplatesInitScript(FAKE_PUBLIC_KEY, [SAMPLE_OFFRAMP_TEMPLATE]));
 
     await page.goto('/offramp');
 
@@ -102,13 +98,9 @@ test.describe('Intent Templates E2E', () => {
     await expect(select).toContainText('Mum in Mombasa');
   });
 
-  test('Manage templates -> delete -> confirm -> reload removes the template', async ({
-    page,
-  }) => {
+  test('Manage templates -> delete -> confirm -> reload removes the template', async ({ page }) => {
     await page.addInitScript(fakeFreighterInitScript(FAKE_PUBLIC_KEY));
-    await page.addInitScript(
-      seedTemplatesInitScript(FAKE_PUBLIC_KEY, [SAMPLE_OFFRAMP_TEMPLATE])
-    );
+    await page.addInitScript(seedTemplatesInitScript(FAKE_PUBLIC_KEY, [SAMPLE_OFFRAMP_TEMPLATE]));
 
     await page.goto('/offramp');
 
@@ -125,9 +117,7 @@ test.describe('Intent Templates E2E', () => {
 
   test('/onramp with a seeded on-ramp template updates #deposit-amount', async ({ page }) => {
     await page.addInitScript(fakeFreighterInitScript(FAKE_PUBLIC_KEY));
-    await page.addInitScript(
-      seedTemplatesInitScript(FAKE_PUBLIC_KEY, [SAMPLE_ONRAMP_TEMPLATE])
-    );
+    await page.addInitScript(seedTemplatesInitScript(FAKE_PUBLIC_KEY, [SAMPLE_ONRAMP_TEMPLATE]));
 
     await page.goto('/onramp');
 

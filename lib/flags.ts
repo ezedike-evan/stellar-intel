@@ -4,8 +4,12 @@ export type FlagName =
   | 'mcpAdvertisement'
   | 'v11Corridors'
   | 'recurringIntents'
+  | 'requireKeyForWrites'
+  | 'intentTemplates'
   | 'firmQuoteBonus'
-  | 'intentTemplates';
+  | 'disputeLadder'
+  | 'refundGuarantees'
+  | 'executionSla';
 
 export const flags: Record<FlagName, boolean> = {
   // Default to enabled unless explicitly set to 'off'
@@ -19,12 +23,23 @@ export const flags: Record<FlagName, boolean> = {
   // Recurring intents: sign-once execution engine. Default OFF — gated behind
   // the signed-intent flow. Opt in with NEXT_PUBLIC_RECURRING_INTENTS=on.
   recurringIntents: (process.env.NEXT_PUBLIC_RECURRING_INTENTS || 'off') === 'on',
+  // Require an API key for writes (intents, reputation, disputes). Default OFF —
+  // anonymous callers keep writes. Opt in with NEXT_PUBLIC_REQUIRE_KEY_FOR_WRITES=on.
+  requireKeyForWrites: (process.env.NEXT_PUBLIC_REQUIRE_KEY_FOR_WRITES || 'off') === 'on',
+  // Per-corridor intent templates, saved in the browser per wallet. Default OFF.
+  intentTemplates: (process.env.NEXT_PUBLIC_INTENT_TEMPLATES || 'off') === 'on',
   // Ranking bonus for firm (SEP-38) quotes over estimates of nearly the same size.
   // Default OFF; opt in with NEXT_PUBLIC_FIRM_QUOTE_BONUS=on. It reorders rows and
   // never changes a displayed amount.
   firmQuoteBonus: (process.env.NEXT_PUBLIC_FIRM_QUOTE_BONUS || 'off') === 'on',
-  // Per-corridor intent templates, saved in the browser per wallet. Default OFF.
-  intentTemplates: (process.env.NEXT_PUBLIC_INTENT_TEMPLATES || 'off') === 'on',
+  // Dispute escalation ladder: multi-level dispute management and status reporting.
+  // Default OFF until ladder is staffed. Opt in with NEXT_PUBLIC_DISPUTE_LADDER=on.
+  disputeLadder: (process.env.NEXT_PUBLIC_DISPUTE_LADDER || 'off') === 'on',
+  // Refund guarantees: sign refund acknowledgements on status screens.
+  // Default OFF; opt in with NEXT_PUBLIC_REFUND_GUARANTEES=on.
+  refundGuarantees: (process.env.NEXT_PUBLIC_REFUND_GUARANTEES || 'off') === 'on',
+  // Execution SLA card on the anchor page. Default OFF until anchors have settlement volume.
+  executionSla: (process.env.NEXT_PUBLIC_EXECUTION_SLA || 'off') === 'on',
 };
 
 export function isFlag(name: FlagName) {

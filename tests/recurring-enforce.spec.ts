@@ -1,175 +1,147 @@
-import { describe, it, expect } from 'vitest';
+import { describe, expect, it } from 'vitest';
 import {
+  checkExecutionAgainstAuthorization,
   formatScaledDecimal,
   periodWindow,
   remainingCapForPeriod,
-  checkExecutionAgainstAuthorization,
-  parseDecimal,
-  type StandingAuthorizationTerms,
-} from '@/lib/recurring';
+} from '@/lib/recurring/enforce';
+import { parseDecimal } from '@/lib/recurring/scheduler';
+import type { StandingAuthorizationTerms } from '@/types/recurring';
 
-const SENDER = 'GA5ZSEJYB37JRC5AVCIA5MOP4RHTM335X2KGX3IHOJAPP5RE34K4KZVN';
-
-const TERMS: StandingAuthorizationTerms = {
+const terms = (
+  overrides: Partial<StandingAuthorizationTerms> = {}
+): StandingAuthorizationTerms => ({
   type: 'recurring-authorization',
   version: 1,
-  sender: SENDER,
+  sender: 'GA5ZSEJYB37JRC5AVCIA5MOP4RHTM335X2KGX3IHOJAPP5RE34K4KZVN',
   corridorId: 'usdc-ngn',
   sourceAsset: 'USDC',
   destinationAsset: 'NGN',
-  amount: '100',
-  perPeriodCap: '250',
-  period: 'daily',
-  startAt: '2026-11-20T00:00:00.000Z',
-  stopAt: '2026-11-23T00:00:00.000Z',
-  anchorAllowlist: ['moneygram'],
+  amount: '50',
+  perPeriodCap: '100',
+  period: 'weekly',
+  startAt: '2026-01-01T00:00:00.000Z',
+  stopAt: '2026-12-31T00:00:00.000Z',
+  anchorAllowlist: ['cowrie', 'moneygram'],
   nonce: '0123456789abcdef0123456789abcdef',
-};
+  ...overrides,
+});
 
-describe('recurring-enforce', () => {
-  it('formatScaledDecimal round-trips with parseDecimal', () => {
-    for (const val of ['0', '100', '0.0000001', '123.45']) {
-      expect(formatScaledDecimal(parseDecimal(val))).toBe(val);
-    }
+const proposed = (overrides: Record<string, unknown> = {}) => ({
+  corridorId: 'usdc-ngn',
+  sourceAsset: 'USDC',
+  destinationAsset: 'NGN',
+  anchorId: 'cowrie',
+  amount: '50',
+  at: new Date('2026-01-03T00:00:00.000Z'),
+  ...overrides,
+});
+
+const at = (iso: string) => new Date(iso);
+
+describe('formatScaledDecimal (#2167)', () => {
+  it.each(['0', '100', '0.0000001', '123.45'])('round-trips %s with parseDecimal', (v) => {
+    expect(formatScaledDecimal(parseDecimal(v))).toBe(v);
   });
 
-  it('computes daily, weekly, and monthly period windows', () => {
-    // Daily
-    const d0 = periodWindow(TERMS, new Date('2026-11-20T05:00:00Z'));
-    expect(d0?.index).toBe(0);
-    expect(d0?.start.toISOString()).toBe('2026-11-20T00:00:00.000Z');
-    expect(d0?.end.toISOString()).toBe('2026-11-21T00:00:00.000Z');
+  it('trims trailing zeros', () => {
+    expect(formatScaledDecimal(1_000_000_000n)).toBe('100');
+    expect(formatScaledDecimal(1_234_500n)).toBe('0.12345');
+  });
+});
 
-    const d1 = periodWindow(TERMS, new Date('2026-11-21T00:00:00Z'));
-    expect(d1?.index).toBe(1);
-
-    // Stop at boundary is null
-    expect(periodWindow(TERMS, new Date('2026-11-23T00:00:00Z'))).toBeNull();
-    // Before start is null
-    expect(periodWindow(TERMS, new Date('2026-11-19T23:59:59Z'))).toBeNull();
-
-    // Monthly with start on Jan 31
-    const monthlyTerms: StandingAuthorizationTerms = {
-      ...TERMS,
-      period: 'monthly',
-      startAt: '2026-01-31T15:00:00.000Z',
-      stopAt: '2026-04-30T00:00:00.000Z',
-    };
-    const m0 = periodWindow(monthlyTerms, new Date('2026-01-31T20:00:00Z'));
-    expect(m0?.index).toBe(0);
-    expect(m0?.start.toISOString()).toBe('2026-01-31T15:00:00.000Z');
-    expect(m0?.end.toISOString()).toBe('2026-02-01T00:00:00.000Z');
-
-    const m1 = periodWindow(monthlyTerms, new Date('2026-02-15T10:00:00Z'));
-    expect(m1?.index).toBe(1);
-    expect(m1?.start.toISOString()).toBe('2026-02-01T00:00:00.000Z');
-    expect(m1?.end.toISOString()).toBe('2026-03-01T00:00:00.000Z');
+describe('periodWindow', () => {
+  it('counts daily windows from startAt', () => {
+    const t = terms({ period: 'daily' });
+    expect(periodWindow(t, at('2026-01-01T00:00:00.000Z'))?.index).toBe(0);
+    expect(periodWindow(t, at('2026-01-01T23:59:59.999Z'))?.index).toBe(0);
+    expect(periodWindow(t, at('2026-01-02T00:00:00.000Z'))?.index).toBe(1);
+    expect(periodWindow(t, at('2026-01-03T12:00:00.000Z'))?.index).toBe(2);
   });
 
-  it('remainingCapForPeriod sums only in-window priors and floors at 0', () => {
-    const priors = [
-      { amount: '100', at: '2026-11-19T10:00:00Z' }, // out of window
-      { amount: '50', at: '2026-11-20T02:00:00Z' },  // in window
-      { amount: '120', at: '2026-11-20T08:00:00Z' }, // in window (total 170 / cap 250)
+  it('counts weekly windows of seven days', () => {
+    const w = periodWindow(terms(), at('2026-01-08T00:00:00.000Z'));
+    expect(w?.index).toBe(1);
+    expect(w?.start.toISOString()).toBe('2026-01-08T00:00:00.000Z');
+    expect(w?.end.toISOString()).toBe('2026-01-15T00:00:00.000Z');
+  });
+
+  it('uses UTC calendar months, starting the next month on the 1st', () => {
+    const t = terms({ period: 'monthly', startAt: '2026-01-31T00:00:00.000Z' });
+    const jan = periodWindow(t, at('2026-01-31T12:00:00.000Z'));
+    expect(jan?.index).toBe(0);
+    expect(jan?.end.toISOString()).toBe('2026-02-01T00:00:00.000Z');
+    const feb = periodWindow(t, at('2026-02-10T00:00:00.000Z'));
+    expect(feb?.index).toBe(1);
+    expect(feb?.start.toISOString()).toBe('2026-02-01T00:00:00.000Z');
+  });
+
+  it('is null before the start and at the stop', () => {
+    expect(periodWindow(terms(), at('2025-12-31T23:59:59.999Z'))).toBeNull();
+    expect(periodWindow(terms(), at('2026-12-31T00:00:00.000Z'))).toBeNull();
+  });
+
+  it('caps the last window at stopAt', () => {
+    const t = terms({ stopAt: '2026-01-10T00:00:00.000Z' });
+    expect(periodWindow(t, at('2026-01-09T00:00:00.000Z'))?.end.toISOString()).toBe(
+      '2026-01-10T00:00:00.000Z'
+    );
+  });
+});
+
+describe('checkExecutionAgainstAuthorization', () => {
+  const run = (
+    overrides: Record<string, unknown> = {},
+    extra: Partial<Parameters<typeof checkExecutionAgainstAuthorization>[0]> = {}
+  ) =>
+    checkExecutionAgainstAuthorization({
+      terms: terms(),
+      status: 'active',
+      prior: [],
+      proposed: proposed(overrides),
+      ...extra,
+    });
+
+  it('accepts an execution inside every limit', () => {
+    expect(run()).toMatchObject({ ok: true, remainingAfter: '50' });
+  });
+
+  it.each([
+    ['authorization_inactive', {}, { status: 'paused' as const }],
+    ['not_started', { at: at('2025-12-30T00:00:00.000Z') }, {}],
+    ['stop_date_passed', { at: at('2027-01-01T00:00:00.000Z') }, {}],
+    ['corridor_mismatch', { corridorId: 'usdc-kes' }, {}],
+    ['asset_mismatch', { destinationAsset: 'KES' }, {}],
+    ['anchor_not_allowed', { anchorId: 'bitso' }, {}],
+    ['period_cap_exceeded', { amount: '100.0000001' }, {}],
+  ])('reports %s', (code, overrides, extra) => {
+    expect(run(overrides, extra)).toMatchObject({ ok: false, code });
+  });
+
+  it('only counts prior executions in the same window', () => {
+    const prior = [
+      { amount: '90', at: '2025-12-31T00:00:00.000Z' }, // before start, never in a window
+      { amount: '80', at: '2026-01-05T00:00:00.000Z' }, // week 0 (Jan 1-7)
     ];
-
-    const rem = remainingCapForPeriod(TERMS, priors, new Date('2026-11-20T12:00:00Z'));
-    expect(rem).toBe('80');
-
-    // Over cap
-    const overPriors = [
-      { amount: '300', at: '2026-11-20T02:00:00Z' },
-    ];
-    expect(remainingCapForPeriod(TERMS, overPriors, new Date('2026-11-20T12:00:00Z'))).toBe('0');
+    expect(run({ at: at('2026-01-09T00:00:00.000Z') }, { prior })).toMatchObject({ ok: true });
+    expect(run({ at: at('2026-01-06T00:00:00.000Z') }, { prior })).toMatchObject({
+      ok: false,
+      code: 'period_cap_exceeded',
+    });
   });
 
-  it('checkExecutionAgainstAuthorization produces each execution check code', () => {
-    const baseProposed = {
-      corridorId: 'usdc-ngn',
-      sourceAsset: 'USDC',
-      destinationAsset: 'NGN',
-      anchorId: 'moneygram',
-      amount: '50',
-      at: new Date('2026-11-20T10:00:00Z'),
-    };
-
-    // 1. authorization_inactive
-    const resInactive = checkExecutionAgainstAuthorization({
-      terms: TERMS,
-      status: 'paused',
-      prior: [],
-      proposed: baseProposed,
+  it('allows exactly the cap and refuses one stroop more', () => {
+    const prior = [{ amount: '60', at: '2026-01-02T00:00:00.000Z' }];
+    expect(run({ amount: '40' }, { prior })).toMatchObject({ ok: true, remainingAfter: '0' });
+    expect(run({ amount: '40.0000001' }, { prior })).toMatchObject({
+      ok: false,
+      code: 'period_cap_exceeded',
     });
-    expect(resInactive.ok).toBe(false);
-    if (!resInactive.ok) expect(resInactive.code).toBe('authorization_inactive');
+  });
 
-    // 2. not_started
-    const resNotStarted = checkExecutionAgainstAuthorization({
-      terms: TERMS,
-      status: 'active',
-      prior: [],
-      proposed: { ...baseProposed, at: new Date('2026-11-19T10:00:00Z') },
-    });
-    expect(resNotStarted.ok).toBe(false);
-    if (!resNotStarted.ok) expect(resNotStarted.code).toBe('not_started');
-
-    // 3. stop_date_passed
-    const resStopped = checkExecutionAgainstAuthorization({
-      terms: TERMS,
-      status: 'active',
-      prior: [],
-      proposed: { ...baseProposed, at: new Date('2026-11-23T10:00:00Z') },
-    });
-    expect(resStopped.ok).toBe(false);
-    if (!resStopped.ok) expect(resStopped.code).toBe('stop_date_passed');
-
-    // 4. corridor_mismatch
-    const resCorridor = checkExecutionAgainstAuthorization({
-      terms: TERMS,
-      status: 'active',
-      prior: [],
-      proposed: { ...baseProposed, corridorId: 'usdc-kes' },
-    });
-    expect(resCorridor.ok).toBe(false);
-    if (!resCorridor.ok) expect(resCorridor.code).toBe('corridor_mismatch');
-
-    // 5. asset_mismatch
-    const resAsset = checkExecutionAgainstAuthorization({
-      terms: TERMS,
-      status: 'active',
-      prior: [],
-      proposed: { ...baseProposed, sourceAsset: 'XLM' },
-    });
-    expect(resAsset.ok).toBe(false);
-    if (!resAsset.ok) expect(resAsset.code).toBe('asset_mismatch');
-
-    // 6. anchor_not_allowed
-    const resAnchor = checkExecutionAgainstAuthorization({
-      terms: TERMS,
-      status: 'active',
-      prior: [],
-      proposed: { ...baseProposed, anchorId: 'unauthorized-anchor' },
-    });
-    expect(resAnchor.ok).toBe(false);
-    if (!resAnchor.ok) expect(resAnchor.code).toBe('anchor_not_allowed');
-
-    // 7. period_cap_exceeded
-    const resCap = checkExecutionAgainstAuthorization({
-      terms: TERMS,
-      status: 'active',
-      prior: [{ amount: '200', at: '2026-11-20T05:00:00Z' }],
-      proposed: { ...baseProposed, amount: '50.0000001' },
-    });
-    expect(resCap.ok).toBe(false);
-    if (!resCap.ok) expect(resCap.code).toBe('period_cap_exceeded');
-
-    // Exact cap passes
-    const resExact = checkExecutionAgainstAuthorization({
-      terms: TERMS,
-      status: 'active',
-      prior: [{ amount: '200', at: '2026-11-20T05:00:00Z' }],
-      proposed: { ...baseProposed, amount: '50' },
-    });
-    expect(resExact.ok).toBe(true);
+  it('reports the remaining cap for the period', () => {
+    const prior = [{ amount: '30.5', at: '2026-01-02T00:00:00.000Z' }];
+    expect(remainingCapForPeriod(terms(), prior, at('2026-01-03T00:00:00.000Z'))).toBe('69.5');
+    expect(remainingCapForPeriod(terms(), prior, at('2026-01-09T00:00:00.000Z'))).toBe('100');
   });
 });

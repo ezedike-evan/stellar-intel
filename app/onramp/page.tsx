@@ -15,10 +15,15 @@ import { useIntentTemplates } from '@/hooks/useIntentTemplates';
 import { useTransferStatus, type OutcomeAppendContext } from '@/hooks/useWithdrawStatus';
 import { VISIBLE_CORRIDORS } from '@/constants/anchors';
 import { getCorridorById } from '@/lib/stellar/anchors';
-import { ONRAMP_FUNNEL_EVENTS, TEMPLATE_EVENTS, amountBucket, trackFunnelEvent } from '@/lib/analytics';
-import { flags } from '@/lib/flags';
+import {
+  ONRAMP_FUNNEL_EVENTS,
+  TEMPLATE_EVENTS,
+  amountBucket,
+  trackFunnelEvent,
+} from '@/lib/analytics';
 import { signIntent } from '@/lib/intent/sign';
-import type { IntentTemplate } from '@/lib/templates/schema';
+import type { IntentTemplate, IntentTemplateDraft } from '@/lib/templates/schema';
+import { SaveTemplateForm } from '@/components/templates/SaveTemplateForm';
 import {
   buildTrackingSearch,
   clearJwtFromSession,
@@ -30,6 +35,8 @@ import {
 import { TERMINAL_STATES } from '@/lib/stellar/sep24';
 import type { OnrampIntent } from '@/types/intent';
 import type { DepositRate } from '@/types';
+import { flags } from '@/lib/flags';
+import { RefundAckCard } from '@/components/refunds/RefundAckCard';
 
 // Only needed once the user picks a row, so it stays out of the initial bundle.
 const DepositDrawer = dynamic(
@@ -88,6 +95,8 @@ function OnrampContent() {
   );
   const [selectedAssetId, setSelectedAssetId] = useState<string | null>(initialAssetParam);
   const [selectedRate, setSelectedRate] = useState<DepositRate | null>(null);
+  // Offered after a completed deposit started in this page session (TPL009).
+  const [templateDraft, setTemplateDraft] = useState<IntentTemplateDraft | null>(null);
 
   const [trackingTransactionId, setTrackingTransactionId] = useState<string | null>(null);
   const [trackingTransferServer, setTrackingTransferServer] = useState<string | null>(null);
@@ -290,9 +299,19 @@ function OnrampContent() {
       setTrackingNonce(nonce);
       setTrackingAnchorHomeDomain(anchorHomeDomain);
 
-      if (selectedRate) void recordOutcomeIntent(selectedRate, transactionId);
+      if (selectedRate) {
+        void recordOutcomeIntent(selectedRate, transactionId);
+        // No depositMethod: the page always uses bank_transfer.
+        setTemplateDraft({
+          direction: 'onramp',
+          corridorId,
+          amount,
+          anchorId: selectedRate.anchorId,
+          assetId: selectedRate.asset,
+        });
+      }
     },
-    [router, selectedRate, recordOutcomeIntent]
+    [router, selectedRate, recordOutcomeIntent, corridorId, amount]
   );
 
   const handleStartAnother = useCallback(() => {
@@ -303,6 +322,7 @@ function OnrampContent() {
     setTrackingNonce(null);
     setTrackingAnchorHomeDomain(null);
     setOutcomeContext(null);
+    setTemplateDraft(null);
   }, [trackingNonce]);
 
   return (
@@ -320,24 +340,22 @@ function OnrampContent() {
       <DisclaimerBanner />
 
       {templatesEnabled && (
-        <>
-          <TemplatePicker
-            templates={templatesApi.templates}
-            visibleCorridorIds={VALID_CORRIDOR_IDS}
-            onApply={handleApplyTemplate}
-            onManage={() => setManagerOpen(true)}
-            manageButtonRef={manageButtonRef}
-          />
-          <TemplateManager
-            open={managerOpen}
-            onClose={() => {
-              setManagerOpen(false);
-              manageButtonRef.current?.focus();
-            }}
-            api={templatesApi}
-          />
-        </>
+        <TemplatePicker
+          templates={templatesApi.templates}
+          visibleCorridorIds={VALID_CORRIDOR_IDS}
+          onApply={handleApplyTemplate}
+          onManage={() => setManagerOpen(true)}
+          manageButtonRef={manageButtonRef}
+        />
       )}
+      <TemplateManager
+        open={managerOpen}
+        onClose={() => {
+          setManagerOpen(false);
+          manageButtonRef.current?.focus();
+        }}
+        api={templatesApi}
+      />
 
       <div className="border-border bg-bg-sunken grid grid-cols-1 gap-4 rounded-xl border p-4 sm:grid-cols-3">
         <CorridorSelector value={corridorId} onChange={setCorridorId} assetCode={corridor.from} />
@@ -416,6 +434,30 @@ function OnrampContent() {
           onStartAnother={handleStartAnother}
         />
       )}
+
+      {flags.intentTemplates &&
+        publicKey &&
+        templateDraft &&
+        depositStatus.status === 'completed' && (
+          <SaveTemplateForm
+            draft={templateDraft}
+            onSave={templatesApi.save}
+            onDismiss={() => setTemplateDraft(null)}
+          />
+        )}
+
+      {flags.refundGuarantees &&
+        outcomeContext &&
+        trackingTransactionId &&
+        depositStatus.status === 'refunded' && (
+          <RefundAckCard
+            intentHash={outcomeContext.intentHash}
+            anchorId={outcomeContext.anchorId}
+            account={outcomeContext.publicKey}
+            refunds={depositStatus.refunds}
+            assetLabel={corridor.to}
+          />
+        )}
 
       <DepositDrawer
         rate={selectedRate}

@@ -48,6 +48,7 @@ How scores, rates, settlement times, and on-chain published metrics are computed
 
 - Anchor Reputation (docs/ANCHOR_REPUTATION.md)
 - Settlement SLA ($100-capped) (docs/SETTLEMENT_SLA.md)
+- Refund Guarantees (docs/REFUNDS.md)
 - Reputation Oracle — Soroban Contract Spec (docs/ORACLE_SPEC.md)
 - On-Chain Volume + Savings Oracle (docs/VOLUME_SAVINGS.md)
 - SEP Compliance Matrix (docs/SEP_COMPLIANCE.md)
@@ -67,6 +68,7 @@ The security posture, the threat model, the regulatory basis, and the terms.
 - Threat Model (docs/THREAT_MODEL.md)
 - Jurisdictional Memo (docs/JURISDICTIONAL.md)
 - Governance: Multisig Contract Administration (docs/GOVERNANCE.md)
+- Disputes (docs/DISPUTES.md)
 - Terms of Service (docs/TERMS_OF_SERVICE.md)
 
 ==============================================================================
@@ -136,7 +138,7 @@ and open a PR. The [`docs/COOKBOOK.md`](COOKBOOK.md) has end-to-end recipes.
 
 # Non-Custody Manifesto
 
-**Last reviewed:** 2026-08-26
+**Last reviewed:** 2026-11-22
 
 Stellar Intel is **non-custodial by construction**. This is an architectural
 property, not a policy promise — the system has no code path that could take
@@ -154,6 +156,7 @@ custody.
   SEP-24 / SEP-6 flow. We are not in the settlement path.
 - **KYC data.** KYC is collected by the anchor (anchor-hosted SEP-24 interactive
   flow, or the anchor's SEP-12 customer API). We do not store KYC fields.
+- **Anchor authentication tokens.** When observing transaction settlement status (`POST /api/intent/status`), the user's SEP-10 JWT is forwarded for a single read of the anchor's own transaction record. The token is never stored, persisted, or logged.
 
 ## How the boundary is enforced
 
@@ -185,6 +188,7 @@ in the "no API route handler signs a transaction" guard.
 
 - Public, non-sensitive data: anchor outcomes (fill rate, slippage, settle latency)
   and their public reputation scores.
+- **Refunds.** [`docs/REFUNDS.md`](REFUNDS.md) — refund case records and user-signed acknowledgements; never the refund itself.
 - Server-side config (`ADMIN_SECRET_KEY` for admin routes; see
   [`docs/SECURITY.md`](SECURITY.md)).
 
@@ -717,6 +721,7 @@ and read reputation — with zero held keys.
 | `intel.offramp.prepare`   | Returns an unsigned intent envelope (intent + hash) and an unsigned Stellar transaction for agent signing.                                        | ✓                   |
 | `intel.execute`           | Verifies an agent-signed intent + transaction against the prepared intent and submits it to Horizon.                                              | ✓                   |
 | `intel.anchor.reputation` | Returns 7/30/90-day rolling percentile scorecards for an anchor (fill rate, settlement latency, slippage).                                        | ✓                   |
+| `intel.anchor.sla`        | Returns 30-day trailing p50/p95/p99 settle latency for an anchor, overall and per corridor, with breach status and a daily p95 series.            | ✓                   |
 | `intel.anchor.health`     | Returns the current status, consecutive failure count, degraded flag, last check timestamp, last error message, and staleness flag for an anchor. | ✓                   |
 | `intel.probe.coverage`    | Reports whether probe history is trustworthy yet: fleetThresholdMet, daysUntilFleetThreshold, and per-anchor continuous days.                     | ✓                   |
 | `intel.leaderboard`       | Returns anchors ranked by composite reputation score (fill rate, settlement speed, slippage).                                                     | ✓                   |
@@ -931,8 +936,12 @@ the hardening contract (see `lib/api/v1.ts`):
 ## Table of Contents
 
 - **Admin**
+  - [`GET /api/admin/audit/export`](#get-apiadminauditexport)
   - [`GET /api/admin/disputes`](#get-apiadmindisputes)
   - [`POST /api/admin/disputes`](#post-apiadmindisputes)
+  - [`GET /api/admin/keys`](#get-apiadminkeys)
+  - [`POST /api/admin/keys`](#post-apiadminkeys)
+  - [`DELETE /api/admin/keys/{keyId}`](#delete-apiadminkeyskeyid)
 - **Anchors**
   - [`GET /api/v1/anchor-health/ledger`](#get-apiv1anchor-healthledger)
   - [`GET /api/v1/anchors/census`](#get-apiv1anchorscensus)
@@ -943,6 +952,7 @@ the hardening contract (see `lib/api/v1.ts`):
 - **Intent**
   - [`POST /api/intent`](#post-apiintent)
   - [`POST /api/intent/offramp`](#post-apiintentofframp)
+  - [`POST /api/intent/status`](#post-apiintentstatus)
   - [`POST /api/v1/intent/offramp`](#post-apiv1intentofframp)
   - [`POST /api/v1/intent/onramp`](#post-apiv1intentonramp)
 - **On-ramp**
@@ -952,15 +962,25 @@ the hardening contract (see `lib/api/v1.ts`):
   - [`GET /api/rates/{corridor}`](#get-apiratescorridor)
   - [`GET /api/snapshot`](#get-apisnapshot)
   - [`GET /api/v1/corridors/{corridor}/volume-savings`](#get-apiv1corridorscorridorvolume-savings)
+- **Refunds**
+  - [`POST /api/refunds/ack`](#post-apirefundsack)
+  - [`GET /api/refunds/{intentHash}`](#get-apirefundsintenthash)
 - **Reputation**
   - [`GET /api/reputation/actuarial`](#get-apireputationactuarial)
   - [`POST /api/reputation/append`](#post-apireputationappend)
+  - [`GET /api/reputation/dispute`](#get-apireputationdispute)
   - [`POST /api/reputation/dispute`](#post-apireputationdispute)
+  - [`POST /api/reputation/dispute/appeal`](#post-apireputationdisputeappeal)
   - [`GET /api/reputation/leaderboard`](#get-apireputationleaderboard)
   - [`GET /api/reputation/probe-coverage`](#get-apireputationprobe-coverage)
   - [`GET /api/reputation/sdf-export`](#get-apireputationsdf-export)
   - [`GET /api/reputation/{anchor}`](#get-apireputationanchor)
   - [`GET /api/reputation/{anchor}/history`](#get-apireputationanchorhistory)
+  - [`GET /api/reputation/{anchor}/sla`](#get-apireputationanchorsla)
+  - [`GET /api/v1/disputes/log`](#get-apiv1disputeslog)
+  - [`GET /api/v1/slippage-breaches`](#get-apiv1slippage-breaches)
+  - [`GET /api/v1/slippage-breaches/{intentHash}`](#get-apiv1slippage-breachesintenthash)
+  - [`GET /api/v1/slippage-compliance`](#get-apiv1slippage-compliance)
   - [`GET /v1/public/scores`](#get-v1publicscores)
 - **SEP-10**
   - [`POST /api/sep10/client-domain`](#post-apisep10client-domain)
@@ -974,17 +994,48 @@ the hardening contract (see `lib/api/v1.ts`):
   - [`GET /api/metrics`](#get-apimetrics)
   - [`GET /api/publisher/health`](#get-apipublisherhealth)
   - [`GET /api/publisher/tick`](#get-apipublishertick)
+  - [`POST /api/reputation/dispute-sweep`](#post-apireputationdispute-sweep)
   - [`GET /api/reputation/reconcile`](#get-apireputationreconcile)
   - [`GET /api/reputation/reconcile-volume-savings`](#get-apireputationreconcile-volume-savings)
   - [`POST /api/reputation/refresh`](#post-apireputationrefresh)
   - [`GET /api/status`](#get-apistatus)
   - [`GET /api/v1/health`](#get-apiv1health)
+  - [`GET /api/webhooks/deliveries`](#get-apiwebhooksdeliveries)
+  - [`POST /api/webhooks/deliveries/{id}/redeliver`](#post-apiwebhooksdeliveriesidredeliver)
   - [`GET /api/webhooks/failures`](#get-apiwebhooksfailures)
   - [`GET /api/webhooks/subscriptions`](#get-apiwebhookssubscriptions)
   - [`POST /api/webhooks/subscriptions`](#post-apiwebhookssubscriptions)
   - [`DELETE /api/webhooks/subscriptions/{id}`](#delete-apiwebhookssubscriptionsid)
 
 ## Admin
+
+### `GET /api/admin/audit/export`
+
+**Summary:** Export audit log (admin)  
+
+Export audit log events over a date range as NDJSON or CSV. Requires adminKey or callerKey with admin scope.
+
+#### Parameters
+
+| Name | In | Type | Required | Description |
+| :--- | :--- | :--- | :--- | :--- |
+| `from` | `query` | `string` | **Yes** | Start of ISO 8601 date range (inclusive) |
+| `to` | `query` | `string` | **Yes** | End of ISO 8601 date range (exclusive) |
+| `format` | `query` | `"ndjson" | "csv"` | No | Export format ("ndjson" or "csv", default "ndjson") |
+| `callerId` | `query` | `string` | No | Filter by caller id (e.g. "anonymous" or "key:<16-hex>") |
+
+#### Responses
+
+| Status | Description | Content-Type | Schema |
+| :--- | :--- | :--- | :--- |
+| `200` | Audit log export stream | `application/x-ndjson` | `string` |
+| `200` | Audit log export stream | `text/csv` | `string` |
+| `400` | Validation error | `application/json` | `ApiError` |
+| `401` | Authentication required | `application/json` | `ApiError` |
+| `403` | Forbidden | `application/json` | `ApiError` |
+| `429` | Rate limited | `application/json` | `ApiError` |
+
+---
 
 ### `GET /api/admin/disputes`
 
@@ -1014,7 +1065,8 @@ Accepts or rejects a dispute. Requires admin authentication.
 | Field | Type | Required | Description |
 | :--- | :--- | :--- | :--- |
 | `id` | `string` | **Yes** | - |
-| `action` | `"accept" | "reject"` | **Yes** | - |
+| `action` | `"accept" | "reject" | "escalate"` | **Yes** | - |
+| `rationale` | `string` | No | - |
 
 #### Responses
 
@@ -1024,6 +1076,76 @@ Accepts or rejects a dispute. Requires admin authentication.
 | `400` | Invalid request | `application/json` | `ApiError` |
 | `401` | Admin access required | `application/json` | `ApiError` |
 | `404` | Dispute not found | `application/json` | `ApiError` |
+| `409` | Conflict: dispute not open or cannot escalate | `application/json` | `ApiError` |
+
+---
+
+### `GET /api/admin/keys`
+
+**Summary:** List caller API keys (admin)  
+
+Lists issued caller keys newest first, without their hashes.
+
+#### Responses
+
+| Status | Description | Content-Type | Schema |
+| :--- | :--- | :--- | :--- |
+| `200` | Caller keys, newest first | `application/json` | `ApiKeyRecord[]` |
+| `403` | Admin key required | `application/json` | `ApiError` |
+| `429` | Rate limited | `application/json` | `ApiError` |
+
+---
+
+### `POST /api/admin/keys`
+
+**Summary:** Issue a caller API key (admin)  
+
+Issues a caller key and returns the raw key exactly once, at creation. Only the SHA-256 hash is stored. Authenticated by ADMIN_SECRET_KEY only — a caller key with the `admin` scope cannot mint keys.
+
+#### Request Body
+
+**Content-Type:** `application/json`
+
+| Field | Type | Required | Description |
+| :--- | :--- | :--- | :--- |
+| `name` | `string` | **Yes** | Human label for the key holder |
+| `scopes` | `"quotes:read" | "intents:write" | "reputation:write" | "admin"[]` | **Yes** | Non-empty, no duplicates |
+| `tier` | `"standard" | "partner"` | No | Defaults to standard |
+| `expiresInDays` | `integer` | No | - |
+| `maxIntentAmount` | `string` | No | - |
+
+#### Responses
+
+| Status | Description | Content-Type | Schema |
+| :--- | :--- | :--- | :--- |
+| `201` | Caller key issued. The response is not cacheable. | `application/json` | `CreatedApiKey` |
+| `400` | Validation error | `application/json` | `ApiError` |
+| `403` | Admin key required | `application/json` | `ApiError` |
+| `429` | Rate limited | `application/json` | `ApiError` |
+
+---
+
+### `DELETE /api/admin/keys/{keyId}`
+
+**Summary:** Revoke a caller API key (admin)  
+
+Revokes a caller key immediately. Answers 404 for an unknown or already revoked key.
+
+#### Parameters
+
+| Name | In | Type | Required | Description |
+| :--- | :--- | :--- | :--- | :--- |
+| `keyId` | `path` | `string` | **Yes** | 16 lowercase hex characters |
+
+#### Responses
+
+| Status | Description | Content-Type | Schema |
+| :--- | :--- | :--- | :--- |
+| `204` | Key revoked | - | - |
+| `400` | Malformed keyId | `application/json` | `ApiError` |
+| `403` | Admin key required | `application/json` | `ApiError` |
+| `404` | Unknown or already revoked key | `application/json` | `ApiError` |
+| `429` | Rate limited | `application/json` | `ApiError` |
 
 ---
 
@@ -1033,7 +1155,7 @@ Accepts or rejects a dispute. Requires admin authentication.
 
 **Summary:** Get the anchor health ledger for a date  
 
-Publishes the nightly anchor health ledger as a dated artifact. Without `date`, returns the ledger this deployment was built with. With `date` (YYYY-MM-DD), returns the ledger as it stood on that date, resolved from the git history of `constants/anchor-health.json` — so the series is fetchable without cloning the repository. The committed file remains the source of truth; nothing is mirrored server-side. A dated response is immutable and cached as such.
+Publishes the nightly anchor health ledger as a dated artifact. Without `date`, returns the ledger this deployment was built with. With `date` (YYYY-MM-DD), returns the ledger as it stood on that date, resolved from the git history of `constants/anchor-health.json` — so the series is fetchable without cloning the repository. The committed file remains the source of truth; nothing is mirrored server-side. A dated response is immutable and cached as such. Required scope: quotes:read.
 
 #### Parameters
 
@@ -1057,7 +1179,7 @@ Publishes the nightly anchor health ledger as a dated artifact. Without `date`, 
 
 **Summary:** Get the anchor census  
 
-Serves the committed anchor census (constants/anchor-census-rows.json), covering every surveyed anchor — routable, health-only, or merely listed — not only the anchors registered for routing. Optionally filtered to a single tier.
+Serves the committed anchor census (constants/anchor-census-rows.json), covering every surveyed anchor — routable, health-only, or merely listed — not only the anchors registered for routing. Optionally filtered to a single tier. Required scope: quotes:read.
 
 #### Parameters
 
@@ -1079,7 +1201,7 @@ Serves the committed anchor census (constants/anchor-census-rows.json), covering
 
 **Summary:** Get anchor health status  
 
-Returns the anchor's current health status, last-probe timestamp, and score breakdown. Returns 'unknown' or 'stale' when probes haven't run recently — honest degradation rather than fabricated data.
+Returns the anchor's current health status, last-probe timestamp, and score breakdown. Returns 'unknown' or 'stale' when probes haven't run recently — honest degradation rather than fabricated data. Required scope: quotes:read.
 
 #### Parameters
 
@@ -1102,7 +1224,7 @@ Returns the anchor's current health status, last-probe timestamp, and score brea
 
 **Summary:** Get anchor SEP-38 price history  
 
-Returns recorded SEP-38 price observations for an anchor corridor, downsampled to at most 500 points (evenly spaced; first and last retained).
+Returns recorded SEP-38 price observations for an anchor corridor, downsampled to at most 500 points (evenly spaced; first and last retained). Required scope: quotes:read.
 
 #### Parameters
 
@@ -1128,7 +1250,7 @@ Returns recorded SEP-38 price observations for an anchor corridor, downsampled t
 
 **Summary:** Get how far an anchor lands from the rate it quoted  
 
-Signed gap between the rate shown before execution and the rate that landed, over completed, undisputed withdrawals in the window. Negative means users received less than quoted. Stands in for SEP-38 firm quotes, which most anchors do not offer. Null statistics mean no samples.
+Signed gap between the rate shown before execution and the rate that landed, over completed, undisputed withdrawals in the window. Negative means users received less than quoted. Stands in for SEP-38 firm quotes, which most anchors do not offer. Null statistics mean no samples. Required scope: quotes:read.
 
 #### Parameters
 
@@ -1153,7 +1275,7 @@ Signed gap between the rate shown before execution and the rate that landed, ove
 
 **Summary:** Get SEP-38 firm-quote readiness per anchor  
 
-For each registered anchor: whether the operator declares SEP-38, whether its stellar.toml advertises a quote server, whether that server’s /info answers, and whether it lists the anchor’s registered asset. Checked live and cached for ten minutes.
+For each registered anchor: whether the operator declares SEP-38, whether its stellar.toml advertises a quote server, whether that server’s /info answers, and whether it lists the anchor’s registered asset. Checked live and cached for ten minutes. Required scope: quotes:read.
 
 #### Responses
 
@@ -1220,11 +1342,48 @@ Resolves an anchor route for the given asset corridor, builds an unsigned Stella
 
 ---
 
+### `POST /api/intent/status`
+
+**Summary:** Observe anchor transaction status  
+
+Observes the current settlement status of a SEP-24 or SEP-6 transaction server-side. Forwards the caller-provided SEP-10 JWT for a single read of the anchor transfer server without storing or logging it. Tracks status transitions to support webhook notifications.
+
+#### Parameters
+
+| Name | In | Type | Required | Description |
+| :--- | :--- | :--- | :--- | :--- |
+| `authorization` | `header` | `string` | **Yes** | Bearer <jwt> containing SEP-10 authentication token |
+
+#### Request Body
+
+**Content-Type:** `application/json`
+
+| Field | Type | Required | Description |
+| :--- | :--- | :--- | :--- |
+| `anchorId` | `string` | **Yes** | Registered anchor ID |
+| `transferServer` | `string` | **Yes** | HTTPS URL of the anchor transfer server |
+| `transactionId` | `string` | **Yes** | Anchor transaction ID |
+| `protocol` | `"sep24" | "sep6"` | **Yes** | Transfer protocol used |
+| `direction` | `"withdraw" | "deposit"` | **Yes** | Transaction direction |
+| `intentHash` | `string` | No | 64-hex canonical intent hash |
+
+#### Responses
+
+| Status | Description | Content-Type | Schema |
+| :--- | :--- | :--- | :--- |
+| `200` | Status observation recorded | `application/json` | `object` |
+| `400` | Validation error or transfer server not allowed | `application/json` | `ApiError` |
+| `401` | Bearer authorization token required | `application/json` | `ApiError` |
+| `429` | Rate limit exceeded | `application/json` | `ApiError` |
+| `502` | Upstream anchor returned an error | `application/json` | `ApiError` |
+
+---
+
 ### `POST /api/v1/intent/offramp`
 
 **Summary:** Submit an off-ramp intent (v1)  
 
-The public v1 intent endpoint. Honours `Idempotency-Key`: a retried request replays the original response with `Idempotency-Replayed: true` rather than creating a second intent.
+The public v1 intent endpoint. Honours `Idempotency-Key`: a retried request replays the original response with `Idempotency-Replayed: true` rather than creating a second intent. Required scope: intents:write.
 
 #### Responses
 
@@ -1232,6 +1391,7 @@ The public v1 intent endpoint. Honours `Idempotency-Key`: a retried request repl
 | :--- | :--- | :--- | :--- |
 | `200` | Intent accepted | `application/json` | `OfframpIntentResponse` |
 | `400` | Validation error | `application/json` | `ApiError` |
+| `403` | Forbidden: insufficient scope | `application/json` | `ApiError` |
 | `429` | Rate limited | `application/json` | `ApiError` |
 
 ---
@@ -1240,7 +1400,7 @@ The public v1 intent endpoint. Honours `Idempotency-Key`: a retried request repl
 
 **Summary:** Submit an on-ramp intent (v1)  
 
-Routes a deposit intent to the best indicative anchor and returns the /onramp handoff URL, plus an unsigned changeTrust XDR when the destination account has no trustline. No anchor session is opened: KYC and the interactive deposit run in the browser. Honours `Idempotency-Key` like the off-ramp endpoint.
+Routes a deposit intent to the best indicative anchor and returns the /onramp handoff URL, plus an unsigned changeTrust XDR when the destination account has no trustline. No anchor session is opened: KYC and the interactive deposit run in the browser. Honours `Idempotency-Key` like the off-ramp endpoint. Required scope: intents:write.
 
 #### Parameters
 
@@ -1273,6 +1433,7 @@ Routes a deposit intent to the best indicative anchor and returns the /onramp ha
 | `200` | Route resolved | `application/json` | `OnrampIntentResponse` |
 | `400` | Validation error | `application/json` | `ApiError` |
 | `401` | Attestation signature did not verify | `application/json` | `ApiError` |
+| `403` | Forbidden: insufficient scope | `application/json` | `ApiError` |
 | `404` | No anchor serves this corridor | `application/json` | `ApiError` |
 | `422` | The destination account does not exist on Stellar | `application/json` | `ApiError` |
 | `429` | Rate limited | `application/json` | `ApiError` |
@@ -1286,7 +1447,7 @@ Routes a deposit intent to the best indicative anchor and returns the /onramp ha
 
 **Summary:** Get indicative deposit (on-ramp) quotes  
 
-Returns an indicative estimate per anchor for depositing a fiat amount into a Stellar asset. SEP-24 publishes deposit fees but the anchor sets the final conversion inside its interactive deposit window, so every figure is an estimate.
+Returns an indicative estimate per anchor for depositing a fiat amount into a Stellar asset. SEP-24 publishes deposit fees but the anchor sets the final conversion inside its interactive deposit window, so every figure is an estimate. Required scope: quotes:read.
 
 #### Parameters
 
@@ -1384,7 +1545,7 @@ Returns the best anchor per corridor for a given USDC amount. Used for the landi
 
 **Summary:** Get cumulative volume and fees saved for a corridor  
 
-Reads the on-chain volume/savings oracle for one corridor: cumulative USDC routed, USDC saved against the baseline rate, and the settlement count behind both. Amounts are microUSDC. Served from the contract, so the aggregate is checkable without trusting this app's own database. Zeroes are returned when the corridor has no on-chain entry yet.
+Reads the on-chain volume/savings oracle for one corridor: cumulative USDC routed, USDC saved against the baseline rate, and the settlement count behind both. Amounts are microUSDC. Served from the contract, so the aggregate is checkable without trusting this app's own database. Zeroes are returned when the corridor has no on-chain entry yet. Required scope: quotes:read.
 
 #### Parameters
 
@@ -1400,6 +1561,60 @@ Reads the on-chain volume/savings oracle for one corridor: cumulative USDC route
 | `400` | Invalid corridor ID | `application/json` | `ApiError` |
 | `429` | Rate limited | `application/json` | `ApiError` |
 | `500` | Oracle read failed | `application/json` | `ApiError` |
+
+---
+
+## Refunds
+
+### `POST /api/refunds/ack`
+
+**Summary:** Record user-signed refund acknowledgement  
+
+Secured write route to record a user-signed refund acknowledgement for an owed or refunded case. The server validates that only the original transfer signer can acknowledge, verifies the cryptographic signature over the canonical payload hash, and confirms the refunded amount does not exceed the paid amount.
+
+#### Request Body
+
+**Content-Type:** `application/json`
+
+| Field | Type | Required | Description |
+| :--- | :--- | :--- | :--- |
+| `ack` | `RefundAckPayload` | **Yes** | - |
+| `signature` | `string` | **Yes** | Cryptographic signature over the canonical refund-ack payload hash |
+
+#### Responses
+
+| Status | Description | Content-Type | Schema |
+| :--- | :--- | :--- | :--- |
+| `200` | Refund acknowledgement recorded | `application/json` | `RefundAckResponse` |
+| `400` | Invalid JSON | `application/json` | `ApiError` |
+| `401` | Missing or invalid credentials | `application/json` | `ApiError` |
+| `403` | Signer mismatch | `application/json` | `ApiError` |
+| `404` | No refund case found | `application/json` | `ApiError` |
+| `409` | Case already acknowledged | `application/json` | `ApiError` |
+| `422` | Validation error | `application/json` | `ApiError` |
+| `429` | Rate limited | `application/json` | `ApiError` |
+
+---
+
+### `GET /api/refunds/{intentHash}`
+
+**Summary:** Look up refund cases for an intent  
+
+Read-only lookup of the refund cases tracked for one intent, oldest first. An intent with no cases returns an empty list, not 404. Only non-sensitive fields are returned; the signer account and the acknowledgement proof are never exposed, and there is no lookup by account. Responses are sent with Cache-Control: no-store.
+
+#### Parameters
+
+| Name | In | Type | Required | Description |
+| :--- | :--- | :--- | :--- | :--- |
+| `intentHash` | `path` | `string` | **Yes** | Lowercase hex SHA-256 intent hash (64 characters) |
+
+#### Responses
+
+| Status | Description | Content-Type | Schema |
+| :--- | :--- | :--- | :--- |
+| `200` | Refund cases for the intent | `application/json` | `object` |
+| `400` | intentHash is not a lowercase 64-character hex string | `application/json` | `ApiError` |
+| `429` | Rate limited | `application/json` | `ApiError` |
 
 ---
 
@@ -1444,6 +1659,8 @@ The single server-side write path for reputation outcome rows. The body must car
 | `stellarTransactionId` | `object` | No | - |
 | `publicKey` | `string` | **Yes** | The sender account that signed intentHash |
 | `signature` | `string` | **Yes** | Base64 Ed25519 signature by publicKey over intentHash |
+| `minReceive` | `object` | No | Minimum receive floor amount signed in the outcome intent |
+| `outcomeIntent` | `object` | No | The exact outcome intent signed by sender |
 
 #### Responses
 
@@ -1453,6 +1670,28 @@ The single server-side write path for reputation outcome rows. The body must car
 | `400` | Validation error | `application/json` | `ApiError` |
 | `401` | Missing signature, or the signature does not verify for publicKey | `application/json` | `ApiError` |
 | `409` | An outcome for this intentHash is already recorded | `application/json` | `ApiError` |
+| `429` | Rate limited | `application/json` | `ApiError` |
+
+---
+
+### `GET /api/reputation/dispute`
+
+**Summary:** Look up disputes for an intent  
+
+Retrieves public dispute summaries for a given off-ramp intent hash. Returns newest first. Never includes personal data.
+
+#### Parameters
+
+| Name | In | Type | Required | Description |
+| :--- | :--- | :--- | :--- | :--- |
+| `intentHash` | `query` | `string` | **Yes** | Lowercase hex-encoded SHA-256 intent hash (64 chars) |
+
+#### Responses
+
+| Status | Description | Content-Type | Schema |
+| :--- | :--- | :--- | :--- |
+| `200` | List of disputes for the intent | `application/json` | `object` |
+| `422` | Invalid intentHash format | `application/json` | `ApiError` |
 | `429` | Rate limited | `application/json` | `ApiError` |
 
 ---
@@ -1474,6 +1713,7 @@ Submits a dispute against an intent outcome. The request must be Ed25519-signed 
 | `signature` | `string` | **Yes** | - |
 | `anchorId` | `string` | **Yes** | - |
 | `reason` | `string` | **Yes** | - |
+| `category` | `string` | No | - |
 
 #### Responses
 
@@ -1482,8 +1722,41 @@ Submits a dispute against an intent outcome. The request must be Ed25519-signed 
 | `201` | Dispute created | `application/json` | `DisputeRecord` |
 | `400` | Invalid request | `application/json` | `ApiError` |
 | `403` | Signature verification failed | `application/json` | `ApiError` |
+| `409` | Conflict: open dispute already exists | `application/json` | `ApiError` |
 | `422` | Validation error | `application/json` | `ApiError` |
 | `429` | Rate limited (10/24h) | `application/json` | `ApiError` |
+
+---
+
+### `POST /api/reputation/dispute/appeal`
+
+**Summary:** Appeal a resolved dispute  
+
+Appeals a resolved dispute (accepted or rejected) within the 14-day window. Must be signed by the original filer.
+
+#### Request Body
+
+**Content-Type:** `application/json`
+
+| Field | Type | Required | Description |
+| :--- | :--- | :--- | :--- |
+| `intentHash` | `string` | **Yes** | - |
+| `publicKey` | `string` | **Yes** | - |
+| `signature` | `string` | **Yes** | - |
+| `ref` | `string` | **Yes** | - |
+
+#### Responses
+
+| Status | Description | Content-Type | Schema |
+| :--- | :--- | :--- | :--- |
+| `200` | Appeal accepted and dispute reopened at appeal level | `application/json` | `object` |
+| `400` | Invalid request body | `application/json` | `ApiError` |
+| `403` | Invalid signature or caller is not original filer | `application/json` | `ApiError` |
+| `404` | Dispute not found | `application/json` | `ApiError` |
+| `409` | Dispute not resolved or already appealed | `application/json` | `ApiError` |
+| `410` | Appeal window closed (past 14 days) | `application/json` | `ApiError` |
+| `422` | Validation error | `application/json` | `ApiError` |
+| `429` | Rate limited | `application/json` | `ApiError` |
 
 ---
 
@@ -1580,6 +1853,125 @@ Returns bucketed outcome history for a specific anchor over a configurable time 
 | `200` | Bucketed history data | `application/json` | `object` |
 | `400` | Validation error | `application/json` | `ApiError` |
 | `404` | Unknown anchor | `application/json` | `ApiError` |
+
+---
+
+### `GET /api/reputation/{anchor}/sla`
+
+**Summary:** Get anchor execution SLA  
+
+Returns trailing 30-day settlement SLA percentiles (nearest-rank, no trimming) for an anchor, requiring at least 30 completed samples (and 100 for p99), evaluated against breach thresholds.
+
+#### Parameters
+
+| Name | In | Type | Required | Description |
+| :--- | :--- | :--- | :--- | :--- |
+| `anchor` | `path` | `string` | **Yes** | Anchor ID from the registry |
+| `corridor` | `query` | `string` | No | Filter by corridor ID |
+
+#### Responses
+
+| Status | Description | Content-Type | Schema |
+| :--- | :--- | :--- | :--- |
+| `200` | Execution SLA report | `application/json` | `ExecutionSlaReport` |
+| `400` | Validation error | `application/json` | `ApiError` |
+| `404` | Unknown anchor | `application/json` | `ApiError` |
+| `429` | Rate limited | `application/json` | `ApiError` |
+
+---
+
+### `GET /api/v1/disputes/log`
+
+**Summary:** Get the public dispute adjudication log  
+
+Serves the public, append-only, hash-chained dispute adjudication log, along with verification status and summary counts. Required scope: quotes:read.
+
+#### Parameters
+
+| Name | In | Type | Required | Description |
+| :--- | :--- | :--- | :--- | :--- |
+| `afterSeq` | `query` | `string` | No | Return entries strictly after this sequence number (integer >= 0, default 0) |
+| `limit` | `query` | `string` | No | Maximum number of entries to return (1-500, default 200) |
+
+#### Responses
+
+| Status | Description | Content-Type | Schema |
+| :--- | :--- | :--- | :--- |
+| `200` | The adjudication log entries and chain verification | `application/json` | `AdjudicationLogResponse` |
+| `400` | Invalid afterSeq or limit parameters | `application/json` | `ApiError` |
+| `429` | Rate limited | `application/json` | `ApiError` |
+
+---
+
+### `GET /api/v1/slippage-breaches`
+
+**Summary:** List slippage breaches  
+
+Returns a list of detected slippage breaches, newest first. Excludes sensitive signerAccount, recipient and raw evidence.
+
+#### Parameters
+
+| Name | In | Type | Required | Description |
+| :--- | :--- | :--- | :--- | :--- |
+| `anchorId` | `query` | `string` | No | Filter by anchor identifier |
+| `status` | `query` | `"detected" | "verified" | "rejected"` | No | Filter by breach status |
+| `limit` | `query` | `object` | No | Maximum number of breaches to return (1-500, default 100) |
+
+#### Responses
+
+| Status | Description | Content-Type | Schema |
+| :--- | :--- | :--- | :--- |
+| `200` | List of slippage breaches | `application/json` | `object` |
+| `400` | Validation error | `application/json` | `ApiError` |
+| `429` | Rate limited | `application/json` | `ApiError` |
+| `503` | Store unavailable | `application/json` | `ApiError` |
+
+---
+
+### `GET /api/v1/slippage-breaches/{intentHash}`
+
+**Summary:** Get slippage breach detail  
+
+Returns detailed information about a slippage breach, including full evidence and canonical evidence JSON string for independent SHA-256 verification.
+
+#### Parameters
+
+| Name | In | Type | Required | Description |
+| :--- | :--- | :--- | :--- | :--- |
+| `intentHash` | `path` | `string` | **Yes** | 64-character lowercase hex SHA-256 intent hash |
+
+#### Responses
+
+| Status | Description | Content-Type | Schema |
+| :--- | :--- | :--- | :--- |
+| `200` | Slippage breach detail with evidence | `application/json` | `object` |
+| `400` | Invalid intentHash format | `application/json` | `ApiError` |
+| `404` | Breach not found | `application/json` | `ApiError` |
+| `429` | Rate limited | `application/json` | `ApiError` |
+| `503` | Store unavailable | `application/json` | `ApiError` |
+
+---
+
+### `GET /api/v1/slippage-compliance`
+
+**Summary:** Get slippage compliance metrics  
+
+Returns slippage compliance metrics and release gate status for the specified rolling window (30, 90 days, or all).
+
+#### Parameters
+
+| Name | In | Type | Required | Description |
+| :--- | :--- | :--- | :--- | :--- |
+| `window` | `query` | `"30" | "90" | "all"` | No | Evaluation window: 30, 90, or all (default 30) |
+
+#### Responses
+
+| Status | Description | Content-Type | Schema |
+| :--- | :--- | :--- | :--- |
+| `200` | Slippage compliance metrics and release gate status | `application/json` | `SlippageCompliance` |
+| `400` | Validation error | `application/json` | `ApiError` |
+| `429` | Rate limited | `application/json` | `ApiError` |
+| `503` | Store unavailable | `application/json` | `ApiError` |
 
 ---
 
@@ -1777,6 +2169,21 @@ Triggers a batch of reputation outcome submissions to the Soroban oracle contrac
 
 ---
 
+### `POST /api/reputation/dispute-sweep`
+
+**Summary:** Escalate overdue disputes  
+
+Cron-triggered. Moves every open dispute that sat at the anchor response rung past its 72-hour deadline to maintainer review and records the move in the public adjudication log. Disputes already at review or appeal are left for a human to decide. Protected by CRON_SECRET.
+
+#### Responses
+
+| Status | Description | Content-Type | Schema |
+| :--- | :--- | :--- | :--- |
+| `200` | Sweep completed | `application/json` | `object` |
+| `401` | Missing or invalid credentials | `application/json` | `ApiError` |
+
+---
+
 ### `GET /api/reputation/reconcile`
 
 **Summary:** Reconcile settled outcomes against Horizon  
@@ -1844,13 +2251,64 @@ Current API version, the supported version window, and any announced deprecation
 
 **Summary:** Service health (v1)  
 
-Liveness and dependency status for the public v1 surface.
+Liveness and dependency status for the public v1 surface. Required scope: quotes:read.
 
 #### Responses
 
 | Status | Description | Content-Type | Schema |
 | :--- | :--- | :--- | :--- |
 | `200` | Health snapshot | `application/json` | `object` |
+| `429` | Rate limited | `application/json` | `ApiError` |
+
+---
+
+### `GET /api/webhooks/deliveries`
+
+**Summary:** List webhook delivery records  
+
+Admin only. Returns webhook delivery records filtered by status, subscription, or event, newest first.
+
+#### Parameters
+
+| Name | In | Type | Required | Description |
+| :--- | :--- | :--- | :--- | :--- |
+| `status` | `query` | `"success" | "failed" | "dead_letter"` | No | Filter by delivery status (success, failed, dead_letter) |
+| `subscriptionId` | `query` | `string` | No | Filter by subscription ID |
+| `eventId` | `query` | `string` | No | Filter by event ID |
+| `limit` | `query` | `integer` | No | Maximum number of deliveries to return (1-500, default 100) |
+
+#### Responses
+
+| Status | Description | Content-Type | Schema |
+| :--- | :--- | :--- | :--- |
+| `200` | Webhook delivery records | `application/json` | `object[]` |
+| `400` | Validation error | `application/json` | `ApiError` |
+| `401` | Missing or invalid credentials | `application/json` | `ApiError` |
+| `429` | Rate limited | `application/json` | `ApiError` |
+
+---
+
+### `POST /api/webhooks/deliveries/{id}/redeliver`
+
+**Summary:** Resend a logged webhook delivery  
+
+Admin only. Sends the stored event of one logged delivery to its subscription again, with the original event `id` and idempotency key, so a consumer that already processed it de-duplicates. The attempt is logged as a new delivery record. A 202 means the attempt was made, not that the subscriber accepted it. See docs/WEBHOOKS.md.
+
+#### Parameters
+
+| Name | In | Type | Required | Description |
+| :--- | :--- | :--- | :--- | :--- |
+| `id` | `path` | `string` | **Yes** | Delivery record id, as listed by GET /api/webhooks/deliveries |
+
+#### Responses
+
+| Status | Description | Content-Type | Schema |
+| :--- | :--- | :--- | :--- |
+| `202` | The delivery was attempted again and logged | `application/json` | `object` |
+| `403` | Missing or invalid admin key | `application/json` | `ApiError` |
+| `404` | Unknown delivery id (`NOT_FOUND`) | `application/json` | `ApiError` |
+| `409` | The subscription no longer subscribes to the event kind (`EVENT_KIND_UNSUBSCRIBED`) | `application/json` | `ApiError` |
+| `410` | The event is not in the event store (`EVENT_NOT_RETAINED`), or the subscription was deleted (`SUBSCRIPTION_DELETED`) | `application/json` | `ApiError` |
 | `429` | Rate limited | `application/json` | `ApiError` |
 
 ---
@@ -2644,6 +3102,35 @@ prefix using the provided `publicKey`. The request body carries `signature` and
 > Implementation note: treat `lib/intent` as authoritative for the exact ordering
 > and serialization, and verify against its tests rather than hand-ordering keys.
 
+## Other signed payloads
+
+In addition to intents, the canonical JSON serialization and hashing rules apply to other signed protocol messages:
+
+### Refund acknowledgements (`type: 'refund-ack'`)
+
+Defined in [`lib/refunds/ack.ts`](../lib/refunds/ack.ts). When a user acknowledges receipt of a refund issued by an anchor, the payload is signed using Freighter and submitted to `POST /api/refunds/ack`:
+
+```jsonc
+{
+  "type": "refund-ack",
+  "version": 1,
+  "intentHash": "f24f63585861ffb5fc8d06ddb5d572215650e15332831af81f62a71b056b562e",
+  "anchorId": "test-anchor",
+  "account": "GABCDEFGHIJKLMNOPQRSTUVWXYZ012345678901234567890123456789",
+  "amountRefunded": "95.00",
+  "refundFee": "5.00",
+  "payments": [
+    {
+      "id": "pay_1",
+      "idType": "stellar",
+      "amount": "95.00",
+    },
+  ],
+}
+```
+
+The payload is canonicalized using `canonicalJsonValue(ack)` (keys sorted recursively, payments array preserving order) and hashed via `hashRefundAck(ack)` (`hashCanonical(ack)`). The resulting 64-character lowercase hex digest is signed via `signHash(hash)`.
+
 ## Related
 
 - [`docs/INTENT_API.md`](INTENT_API.md) — the envelope and endpoint.
@@ -3153,6 +3640,7 @@ The entry points expose the full tool set:
 | `intel.offramp.prepare`   | ✓                   | ✓              | ✓                             |
 | `intel.execute`           | ✓                   | ✓              | ✓                             |
 | `intel.anchor.reputation` | ✓                   | ✓              | ✓                             |
+| `intel.anchor.sla`        | ✓                   | ✓              | ✓                             |
 | `intel.anchor.health`     | ✓                   | ✓              | ✓                             |
 | `intel.probe.coverage`    | ✓                   | ✓              | ✓                             |
 | `intel.leaderboard`       | ✓                   | ✓              | ✓                             |
@@ -3348,29 +3836,39 @@ Its fee must be at most 100,000 stroops, and it must carry an expiry
 Any mismatch is rejected (`TX_MISMATCH`) before anything reaches Horizon.
 
 - **Input:**
-  `{ unsignedEnvelope: { intent, intentHash }, signature, signedTx }` — the
+  `{ unsignedEnvelope: { intent, intentHash }, signature, signedTx, dryRun? }` — the
   exact `unsignedEnvelope` from `intel.offramp.prepare`, a base64 ed25519
   signature over `intentHash` from the sender's key, and the base64 XDR of
-  `unsignedTx` after the sender has signed it. The signature is accepted in
+  `unsignedTx` after the sender has signed it. Optional `dryRun: true` performs
+  every verification check without broadcasting the transaction to Horizon. The signature is accepted in
   the same two forms as the web app: over the 32 raw bytes the hex
   `intentHash` decodes to (`Keypair.sign`), or SEP-53 (`Keypair.signMessage`,
   which is what a wallet's `signMessage` produces). A signature over the
   hash's UTF-8 bytes is deprecated; it is still accepted, and each use is
   logged as `mcp_legacy_signature_format`.
-- **Output:** `{ status: "submitted", hash, ledger, corridorId, anchorId }`
+- **Output:** `{ status: "submitted" | "verified", hash, ledger: number | null, corridorId, anchorId }`. When `dryRun: true` is passed, `status` is `"verified"` and `ledger` is `null`.
 
 ```jsonc
 // input
 {
   "unsignedEnvelope": { "intent": { "type": "offramp", "..." }, "intentHash": "<64-hex>" },
   "signature": "<base64 ed25519 sig over intentHash (raw bytes or SEP-53)>",
-  "signedTx": "<base64 signed transaction XDR>"
+  "signedTx": "<base64 signed transaction XDR>",
+  "dryRun": false // optional, true to verify without broadcasting
 }
-// output
+// output (submitted)
 {
   "status": "submitted",
   "hash": "<64-hex tx hash>",
   "ledger": 12345,
+  "corridorId": "usdc-ngn",
+  "anchorId": "cowrie"
+}
+// output (dryRun: true)
+{
+  "status": "verified",
+  "hash": "<64-hex tx hash>",
+  "ledger": null,
   "corridorId": "usdc-ngn",
   "anchorId": "cowrie"
 }
@@ -3413,6 +3911,36 @@ the Stellar Intel API (`/api/reputation/{anchor}`).
     },
     "30": { "state": "insufficient_data", "window": 30, "sampleSize": 3, "computedAt": "2026-…Z", "lastPublisherTxTimestamp": null }
   }
+}
+```
+
+### `intel.anchor.sla`
+
+Returns 30-day trailing p50/p95/p99 settle latency for an anchor, overall and per corridor, with breach status and a daily p95 series. Fetched from the Stellar Intel API (`/api/reputation/{anchor}/sla`).
+`state` is `insufficient_data` until 30 completed withdrawals exist, and `p99Ms`
+is `null` below 100.
+
+- **Input:** `{ anchor: string, corridor?: string }`: anchor identifier (e.g.
+  `moneygram`) and an optional corridor to restrict the per-corridor entries to
+- **Output:** the `ExecutionSlaReport`: `{ anchorId, windowDays, computedAt,
+thresholds: { p95Ms, p99Ms }, overall: { sla, breach }, corridors: [{ corridor,
+sla, breach }], history: [{ day, p95Ms, sampleSize }] }`, where `breach.status`
+  is `within`, `breach` or `unknown`
+
+```jsonc
+// input
+{ "anchor": "moneygram", "corridor": "usdc-ngn" }
+// output (abridged)
+{
+  "anchorId": "moneygram",
+  "windowDays": 30,
+  "thresholds": { "p95Ms": 900000, "p99Ms": 3600000 },
+  "overall": {
+    "sla": { "state": "ok", "sampleSize": 120, "p50Ms": 60000, "p95Ms": 240000, "p99Ms": 610000 },
+    "breach": { "status": "within", "breaches": [] }
+  },
+  "corridors": [{ "corridor": "usdc-ngn", "sla": { "state": "ok", "…": "…" }, "breach": { "status": "within", "breaches": [] } }],
+  "history": [{ "day": "2026-11-01", "p95Ms": 230000, "sampleSize": 6 }]
 }
 ```
 
@@ -3557,21 +4085,92 @@ npm run test -- tests/mcp-offramp.spec.ts tests/mcp-e2e.spec.ts tests/mcp-http-e
 
 # Webhooks
 
-**Last reviewed:** 2026-10-24
+**Last reviewed:** 2026-11-25
 
 Stellar Intel can push real-time event notifications to your HTTPS endpoint instead of requiring you to poll the API. Each delivery is HMAC-SHA256 signed so you can verify authenticity before acting on the payload.
 
 ## Event types
 
-| Kind                           | When it fires                                                        |
-| ------------------------------ | -------------------------------------------------------------------- |
-| `intent.created`               | An off-ramp intent is accepted for routing                           |
-| `intent.settled`               | An intent reaches a terminal `completed` state                       |
-| `intent.failed`                | An intent reaches a terminal `failed` state                          |
-| `reputation.event_written`     | A new outcome row is appended to the reputation log                  |
-| `anchor.health_status_changed` | An anchor's health status transitions (e.g. `healthy` to `degraded`) |
+Twelve kinds can be subscribed to. "Live" kinds have a producer; the others are accepted
+by `POST /api/webhooks/subscriptions` and start arriving once their producer ships.
 
-### `anchor.health_status_changed`
+| Kind                           | Fires when                                                                                                                | Status                         |
+| ------------------------------ | ------------------------------------------------------------------------------------------------------------------------- | ------------------------------ |
+| `intent.created`               | `POST /api/intent/offramp`, `POST /api/v1/intent/offramp` or `POST /api/v1/intent/onramp` returns 200                     | Live                           |
+| `intent.settled`               | `POST /api/reputation/append` returns 201 for a `completed` outcome                                                       | Live                           |
+| `intent.failed`                | `POST /api/reputation/append` returns 201 for an `error`, `expired` or `refunded` outcome                                 | Live                           |
+| `reputation.event_written`     | `POST /api/reputation/append` returns 201                                                                                 | Live                           |
+| `anchor.health_status_changed` | The publisher tick sees an anchor's `degraded` flag change                                                                | Live                           |
+| `intent.rejected`              | An off-ramp intent route refuses a signed intent (401 bad signature, 400 missing replay fields, 409 replay, 422 no route) | Live                           |
+| `intent.expired`               | An off-ramp intent route answers 410: the intent's `deadline` has passed                                                  | Live                           |
+| `settlement.status_changed`    | An anchor transaction changes status                                                                                      | Subscribable; producer pending |
+| `dispute.opened`               | `POST /api/reputation/dispute` returns 201                                                                                | Live                           |
+| `dispute.resolved`             | `POST /api/admin/disputes` accepts or rejects a dispute (200)                                                             | Live                           |
+| `oracle.published`             | The publisher tick writes outcomes, rates, metrics or probe signals on chain                                              | Live                           |
+| `intent.slippage_breach`       | `POST /api/reputation/append` records an outcome below the intent's `minReceive`                                          | Live                           |
+
+Every payload is built field by field. None carries a sender, recipient, public key,
+signature, dispute reason or JWT.
+
+### intent.created
+
+An intent was accepted and routed. `quoteId` is `null` for an on-ramp, which has no quote:
+
+```json
+{
+  "intentHash": "0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef",
+  "direction": "offramp",
+  "corridorId": "usdc-ngn",
+  "anchorId": "cowrie",
+  "quoteId": "0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef",
+  "amount": "100",
+  "sourceAsset": "USDC",
+  "destinationAsset": "NGN"
+}
+```
+
+### intent.settled
+
+A signed outcome reports the intent completed:
+
+```json
+{
+  "intentHash": "0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef",
+  "anchorId": "cowrie",
+  "corridor": "usdc-ngn",
+  "quotedAmount": "100",
+  "stellarTransactionId": "0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef"
+}
+```
+
+### intent.failed
+
+A signed outcome reports the intent ended in `error`, `expired` or `refunded`:
+
+```json
+{
+  "intentHash": "0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef",
+  "anchorId": "cowrie",
+  "corridor": "usdc-ngn",
+  "outcome": "error"
+}
+```
+
+### reputation.event_written
+
+A new outcome row was appended to the reputation log:
+
+```json
+{
+  "intentHash": "0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef",
+  "anchorId": "cowrie",
+  "corridor": "usdc-ngn",
+  "outcome": "completed",
+  "createdAt": "2026-11-20T10:00:00.000Z"
+}
+```
+
+### anchor.health_status_changed
 
 Emitted by the publisher tick (every five minutes) when an anchor's `degraded` flag in
 the nightly health ledger (`constants/anchor-health.json`) differs from the last
@@ -3592,29 +4191,170 @@ it. One event per anchor, in anchor-id order:
 emits nothing, and without a database there is no baseline to keep, so nothing is
 emitted. `lastCheckedAt` and `lastError` are `null` when the ledger has none.
 
+### intent.rejected
+
+An off-ramp intent route refused a signed intent. `reason` is one of `invalid_signature`, `missing_replay_fields`, `replay_detected` or `no_route`, never free text:
+
+```json
+{
+  "intentHash": "0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef",
+  "direction": "offramp",
+  "reason": "replay_detected",
+  "sourceAsset": "USDC",
+  "destinationAsset": "NGN",
+  "amount": "100"
+}
+```
+
+### intent.expired
+
+An off-ramp intent arrived after its signed `deadline`:
+
+```json
+{
+  "intentHash": "0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef",
+  "direction": "offramp",
+  "deadline": "2026-11-20T10:05:00.000Z",
+  "sourceAsset": "USDC",
+  "destinationAsset": "NGN",
+  "amount": "100"
+}
+```
+
+### settlement.status_changed
+
+An anchor transaction moved from one status to another. `from` is `null` for the first status seen, and `intentHash` is `null` when the transaction has no intent. Subscribable; the producer is pending:
+
+```json
+{
+  "anchorId": "cowrie",
+  "transactionId": "82fhs729f63dh0v4",
+  "protocol": "sep24",
+  "direction": "withdraw",
+  "from": "pending_anchor",
+  "to": "completed",
+  "terminal": true,
+  "intentHash": "0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef",
+  "observedAt": "2026-11-20T10:10:00.000Z"
+}
+```
+
+### dispute.opened
+
+A signed dispute was filed. Who filed it and what they wrote are not part of the event:
+
+```json
+{
+  "disputeId": "5b0e2f5e-6c1d-4a0e-9b1f-2d3c4e5f6a7b",
+  "intentHash": "0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef",
+  "anchorId": "cowrie",
+  "createdAt": "2026-11-20T11:00:00.000Z"
+}
+```
+
+### dispute.resolved
+
+An admin accepted or rejected a dispute:
+
+```json
+{
+  "disputeId": "5b0e2f5e-6c1d-4a0e-9b1f-2d3c4e5f6a7b",
+  "intentHash": "0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef",
+  "anchorId": "cowrie",
+  "status": "accepted",
+  "resolvedAt": "2026-11-21T09:00:00.000Z"
+}
+```
+
+### oracle.published
+
+The publisher tick wrote something on chain. It is not sent when the gate is closed or nothing was written:
+
+```json
+{
+  "network": "testnet",
+  "contractId": "CDLZFC3SYJYDZT7K67VZ75HPJVIEUVNIXF47ZG2FB2RMQQVU2HHGCYSC",
+  "txHash": "0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef",
+  "outcomesPublished": 2,
+  "corridorRatesPublished": 3,
+  "corridorMetricsPublished": 3,
+  "probeSignalsPublished": 0,
+  "publishedAt": "2026-11-20T12:00:00.000Z"
+}
+```
+
+### intent.slippage_breach
+
+Emitted when an outcome is appended to the reputation log and the amount it reports as
+delivered is below the `minReceive` the intent was signed with. It is sent after the
+other events of the same outcome (`reputation.event_written`, then `intent.settled`):
+
+```json
+{
+  "intentHash": "3f6a0c1d9b2e47f58a6c0d1e2f3a4b5c6d7e8f90a1b2c3d4e5f60718293a4b5c",
+  "anchorId": "cowrie",
+  "corridor": "ngnt-ngn",
+  "minReceive": "1400",
+  "amountOut": "1350",
+  "shortfall": "50",
+  "shortfallBps": 357,
+  "evidenceHash": "9c1e7a44d0b25f6831c7e9a2b4d6f8013a5c7e9b1d3f507294b6d8fa1c3e5072",
+  "status": "detected",
+  "detectedAt": "2026-11-20T12:00:00.000Z"
+}
+```
+
+`minReceive`, `amountOut` and `shortfall` are decimal strings, and `shortfallBps` is the
+shortfall in basis points of `minReceive`, rounded down. `status` is always `detected`:
+the breach has been recorded and has not yet been checked against the Stellar payment.
+`evidenceHash` identifies the evidence kept with the breach. The evidence itself, the
+signer's account and the anchor's transaction id are not sent.
+
 ## Payload envelope
 
 Every delivery is a `POST` request with `Content-Type: application/json` and a body of the form:
 
 ```json
 {
-  "id": "3f2a1b4c-...",
+  "id": "3f2a1b4c-9f8e-4a6d-b2a1-0e1f2a3b4c5d",
   "kind": "intent.created",
   "createdAt": "2026-07-28T12:00:00.000Z",
+  "idempotencyKey": "intent.created:<quoteId>",
   "payload": { ... }
 }
 ```
 
-`id` is unique per event and can be used for idempotent processing.
+De-duplicate on `idempotencyKey`, not on `id`. The key is derived from the fact the event
+reports, so the same fact always has the same key, even when a producer emits it again
+(for example after a failed snapshot write) or an operator resends it. The formats are:
+
+| Kind                           | `idempotencyKey`                                                                      |
+| ------------------------------ | ------------------------------------------------------------------------------------- |
+| `intent.created`               | `intent.created:<quoteId>` (off-ramp), `intent.created:onramp:<intentHash>` (on-ramp) |
+| `intent.settled`               | `intent.settled:<intentHash>`                                                         |
+| `intent.failed`                | `intent.failed:<intentHash>`                                                          |
+| `reputation.event_written`     | `reputation.event_written:<intentHash>`                                               |
+| `anchor.health_status_changed` | `anchor.health_status_changed:<anchorId>:<to>:<lastCheckedAt or none>`                |
+| `intent.rejected`              | `intent.rejected:<reason>:<intentHash>`                                               |
+| `intent.expired`               | `intent.expired:<intentHash>`                                                         |
+| `dispute.opened`               | `dispute.opened:<disputeId>`                                                          |
+| `dispute.resolved`             | `dispute.resolved:<disputeId>`                                                        |
+| `oracle.published`             | `oracle.published:<txHash>`, or `oracle.published:<publishedAt>` without one          |
+| `intent.slippage_breach`       | `intent.slippage_breach:<intentHash>`                                                 |
 
 ## Signature verification
 
-Each delivery includes two headers:
+Each delivery includes four headers:
 
-| Header                | Value                                                                 |
-| --------------------- | --------------------------------------------------------------------- |
-| `x-webhook-signature` | `t={unix_timestamp_sec},v1={hex_hmac}`                                |
-| `x-webhook-timestamp` | Unix timestamp in seconds (same value as `t` in the signature header) |
+| Header                      | Value                                                                 |
+| --------------------------- | --------------------------------------------------------------------- |
+| `x-webhook-signature`       | `t={unix_timestamp_sec},v1={hex_hmac}`                                |
+| `x-webhook-timestamp`       | Unix timestamp in seconds (same value as `t` in the signature header) |
+| `x-webhook-id`              | The event's `id`                                                      |
+| `x-webhook-idempotency-key` | The event's `idempotencyKey`                                          |
+
+A runnable consumer that verifies signatures and de-duplicates on the idempotency key is
+in [`examples/webhook-consumer/`](../examples/webhook-consumer/).
 
 ### How to verify
 
@@ -3720,6 +4460,49 @@ x-admin-key: <admin_key>
 
 Returns all delivery records that exhausted retries without a successful response.
 
+### List deliveries
+
+```http
+GET /api/webhooks/deliveries?status=dead_letter&subscriptionId=...&eventId=...&limit=100
+x-admin-key: <admin_key>
+```
+
+Returns logged delivery records, newest first. Every filter is optional: `status` is
+`success`, `failed` or `dead_letter`, `subscriptionId` and `eventId` narrow to one
+subscription or event, and `limit` is 1 to 500 (default 100).
+
+### Redeliver a logged delivery
+
+```http
+POST /api/webhooks/deliveries/{id}/redeliver
+x-admin-key: <admin_key>
+```
+
+Sends one logged delivery to its subscription again, for use once a subscriber has fixed an outage. `{id}` is the `id` of a delivery record, as listed by `GET /api/webhooks/failures` or `GET /api/webhooks/deliveries`. Any logged delivery can be resent, not only a dead-lettered one.
+
+The stored event goes out unchanged: the same `id`, `createdAt`, `idempotencyKey` and `payload`, and so the same `x-webhook-id` and `x-webhook-idempotency-key` headers. Only the timestamp and the signature are new. A consumer that de-duplicates on the event `id` or on the idempotency key processes a resent event once.
+
+Response `202`:
+
+```json
+{
+  "redelivered": true,
+  "eventId": "3f2a1b4c-...",
+  "subscriptionId": "9e8d7c6b-..."
+}
+```
+
+`202` means the delivery was attempted, with the usual retries, before the response was sent. It does not mean the subscriber accepted it. The attempt is logged as a new delivery record and the original record is left as it was, so read the new record's `status` to see how it went.
+
+| Status | `code`                    | Meaning                                                     |
+| ------ | ------------------------- | ----------------------------------------------------------- |
+| `403`  | `FORBIDDEN`               | Missing or invalid admin key                                |
+| `404`  | `NOT_FOUND`               | No delivery record has this id                              |
+| `410`  | `EVENT_NOT_RETAINED`      | The event is not in the event store, so it cannot be resent |
+| `410`  | `SUBSCRIPTION_DELETED`    | The subscription the delivery went to was deleted           |
+| `409`  | `EVENT_KIND_UNSUBSCRIBED` | The subscription no longer lists the event's kind           |
+| `429`  | `RATE_LIMITED`            | More than 10 requests in a minute                           |
+
 ==============================================================================
 SECTION: DATA AND METHODOLOGY
 ==============================================================================
@@ -3728,7 +4511,7 @@ SECTION: DATA AND METHODOLOGY
 
 # Anchor Reputation
 
-**Last reviewed:** 2026-08-26
+**Last reviewed:** 2026-11-21
 
 Every quote, fill, failure, and settlement latency an anchor produces is recorded
 as an **outcome**. Outcomes aggregate into a public, user-verifiable score. The
@@ -3956,9 +4739,9 @@ roadmap gate (see [`docs/MAINNET_LAUNCH.md`](MAINNET_LAUNCH.md), the 90-day prob
 
 ## Disputes
 
-Terminal-state rows expose a "flag incorrect outcome" path. A dispute records the
-contesting party and the disputed outcome id; because every outcome carries the
-user's signature and is replayable from the ledger, adjudication is evidence-based.
+The account that attested an outcome can dispute it, and a maintainer accepts or
+rejects the dispute. See [`DISPUTES.md`](DISPUTES.md) for who can file, how
+resolution works and which routes are involved.
 
 ---
 
@@ -4039,7 +4822,7 @@ An anchor graduates to **live** status when it has accumulated at least
 scorecard window. At that point:
 
 - The scorecard `state` becomes `"ok"` and exposes full metrics: `fillRate`,
-  `settleMs` (p50 / p95), and `slippage` (p50 / p95)
+  `settleMs` (p50 / p95), and `slippage` (p50 / p95). (Note: Scorecard `settleMs` percentiles are computed via weighted interpolation with MAD outlier trimming for scoring; for public execution SLA benchmarks and breach evaluations without trimming, see [Execution SLA in SETTLEMENT_SLA.md](SETTLEMENT_SLA.md#execution-sla-public-settle-time-percentiles).)
 - A composite score is computed and mapped to a
   [score band](../lib/reputation/bands.ts):
 
@@ -4074,7 +4857,7 @@ UI, as the built-in
 
 # Settlement SLA ($100-capped)
 
-**Last reviewed:** 2026-08-26
+**Last reviewed:** 2026-11-22
 
 Primitive III of the execution layer ([`docs/ROADMAP.md`](ROADMAP.md), issue
 #814): a settlement-guarantee product. For a **covered** off-ramp, Stellar Intel promises
@@ -4121,9 +4904,32 @@ Breach claims reuse the **existing reputation dispute surface** — no second
 dispute path is introduced:
 
 - `POST /api/reputation/dispute` (intentHash, publicKey, signature, anchorId,
-  reason) marks the outcome row `disputed` with `disputedReason`.
-- The disputed outcome is adjudicated through the same reputation flow; a
-  confirmed breach on a covered intent is what authorizes the capped payout.
+  reason) records an `open` dispute. Filing does not change the outcome row; it
+  is not flagged `disputed` and keeps counting in scoring while the dispute is
+  open.
+- A maintainer accepts or rejects the dispute through `POST /api/admin/disputes`,
+  which sets the dispute's status to `accepted` or `rejected`. A confirmed
+  breach on a covered intent is what authorizes the capped payout.
+
+See [`docs/DISPUTES.md`](DISPUTES.md) for the full dispute flow.
+
+## Execution SLA (public settle-time percentiles)
+
+Stellar Intel publishes trailing 30-day settlement performance benchmarks and breach evaluations per anchor and corridor.
+
+- **Window:** Trailing 30 days ending now (`SLA_WINDOW_DAYS`), restricted strictly to off-ramp withdrawals (`direction: 'withdraw'`).
+- **What counts:** Attested, non-disputed outcome rows. Percentiles use `completed` rows with valid `settleSeconds`. The `terminalTxCount` counts all outcomes (completed, partial, refunded, expired, error) within the window.
+- **Method:** Nearest-rank percentile computation (`rank = ceil(p / 100 × n) - 1`) quoting actual observed settlement latencies without interpolation and without outlier trimming. Unlike reputation scorecard latencies (which use weighted interpolation with MAD trimming to resist noise in ranking), execution SLA measurements deliberately avoid outlier trimming because trimming hides long-tail settlement delays and SLA breaches.
+- **Minimum sample sizes:**
+  - `SLA_MIN_SAMPLES = 30`: below 30 completed samples, state is `insufficient_data` and percentiles are withheld.
+  - `SLA_P99_MIN_SAMPLES = 100`: 99th percentile (p99) is computed only when at least 100 completed samples exist (otherwise `null`).
+  - `SLA_DAILY_MIN_SAMPLES = 5`: daily p95 points in the 30-day trend series require at least 5 completed samples on that UTC day.
+- **Breach thresholds:** Declared in `constants/sla-thresholds.ts`. Default thresholds are 15 minutes for p95 (`DEFAULT_SLA_THRESHOLDS.p95Ms = 15 * 60 * 1000`, matching underwriting `maxP95SettlementMs`) and 60 minutes for p99 (`DEFAULT_SLA_THRESHOLDS.p99Ms = 60 * 60 * 1000`), with maintainer-tunable per-anchor overrides in `ANCHOR_SLA_THRESHOLDS`. An observed percentile strictly greater than the threshold triggers a `breach` status (`p95Ms > threshold.p95Ms` or `p99Ms > threshold.p99Ms`); values less than or equal to the threshold are `within`.
+- **Surfaces:**
+  - REST API: `GET /api/reputation/{anchor}/sla[?corridor=]`
+  - GraphQL API: `Query.anchorSla`
+  - MCP Tool: `intel.anchor.sla`
+  - Web UI: Anchor page Execution SLA card (`components/anchors/ExecutionSlaCard.tsx`) and off-ramp route settlement annotations, both gated behind feature flag `NEXT_PUBLIC_EXECUTION_SLA`.
 
 ## Activation checklist (maintainer)
 
@@ -4134,6 +4940,151 @@ dispute path is introduced:
 
 Until step 1 is signed off, the underwriting stays fail-closed and no SLA is
 offered.
+
+<!-- source: docs/REFUNDS.md -->
+
+# Refund Guarantees
+
+**Last reviewed:** 2026-11-22
+
+This document defines the refund guarantee architecture, tracking lifecycle, verification rules, release-gate metrics, and dispute escalation path for covered transfers and off-ramps on Stellar Intel.
+
+## 1. What a refund guarantee is (and is not)
+
+Stellar Intel is **non-custodial by construction** (see [`docs/NON_CUSTODY.md`](NON_CUSTODY.md)). Stellar Intel never holds user funds, anchor funds, or private keys, and does not custody fiat or crypto balances. Consequently, Stellar Intel cannot directly execute a monetary payout or take money from an anchor's reserve to refund a user.
+
+Instead, a **refund guarantee** is an architectural and cryptographic enforcement mechanism:
+
+- **What it is:** A tamper-evident tracking and verification system that monitors anchor settlement failures, enforces an on-chain proof of refund requirement, tracks user-signed acknowledgements, degrades delinquent anchor reputation scores, gates anchors from routing recommendations, and auto-escalates unresolved obligations into public disputes.
+- **What it is not:** A custodial escrow, an insurance pool, or a direct settlement intermediary.
+
+When an anchor accepts user funds on Stellar but fails to complete the corresponding fiat settlement or off-ramp payout, the anchor owes an unconditional refund to the user's originating Stellar account.
+
+## 2. When a refund case opens
+
+A refund case is automatically initiated by detection heuristics in `lib/refunds/detect.ts` whenever any of four conditions are met:
+
+1. `anchor_refunded`: The anchor's API or status callback explicitly signals that a refund was initiated or processed.
+2. `anchor_error_after_payment`: The anchor reports a terminal error, cancellation, or permanent failure after the user's on-chain Stellar payment transaction has been confirmed on the ledger.
+3. `expired_after_payment`: The off-ramp intent or quote window expired after the user's payment transaction was confirmed, but before the anchor completed fulfillment.
+4. `slippage_breach`: The final execution payout breached guaranteed price or minimum payout terms beyond allowable slippage limits, obligating a full return of principal.
+
+## 3. Case lifecycle (`owed → refunded → acknowledged`)
+
+Each refund case follows a deterministic, three-state lifecycle managed in `lib/refunds/store.ts`:
+
+```
+ [Detection]
+      │
+      ▼
+   ┌──────┐      Anchor executes on-chain refund      ┌──────────┐
+   │ owed │ ─────────────────────────────────────────► │ refunded │
+   └──────┘                                           └──────────┘
+      │                                                     │
+      │ Overdue (> 7 days)                                  │ User signs receipt
+      ▼                                                     ▼
+┌───────────┐                                        ┌──────────────┐
+│  Dispute  │                                        │ acknowledged │
+│ Escalation│                                        └──────────────┘
+└───────────┘
+```
+
+- **`owed`**: The case is opened immediately upon failure detection. The anchor owes the full transaction principal back to the user's Stellar account.
+- **`refunded`**: The anchor broadcasts an on-chain refund transaction returning the assets to the user's account, and Stellar Intel verifies the transaction on-chain.
+- **`acknowledged`**: The recipient user cryptographically signs an acknowledgement payload verifying that the refund was received.
+
+## 4. Signed acknowledgement
+
+To prevent disputes where an anchor claims a refund was made while the user claims non-receipt, the system supports user-signed acknowledgements via `RefundAckPayload` (`lib/refunds/store.ts`).
+
+### Schema
+
+```typescript
+export interface RefundAckPayload {
+  caseId: string; // UUID of the refund case
+  intentHash: string; // SHA-256 hash of original payment intent
+  userAddress: string; // Stellar G... address of recipient
+  amount: string; // Refunded amount as decimal string (e.g. "100.00")
+  asset: string; // Asset identifier (e.g. "USDC:GA5ZSEJY..." or "native")
+  txHash: string; // 64-character hex hash of on-chain refund tx
+  acknowledgedAt: string; // ISO 8601 UTC timestamp
+}
+```
+
+### Canonical digest and signing
+
+The payload is normalized and digested using canonical JSON via `hashRefundAck(payload)`:
+
+- Keys are sorted lexicographically.
+- Whitespace is stripped.
+- The string is hashed with SHA-256.
+
+The user signs this 32-byte digest using their Ed25519 key (e.g., via Freighter or client wallet).
+
+### Example acknowledgement submission
+
+```bash
+curl -X POST https://stellar-intel.vercel.app/api/refunds/ack \
+  -H "Content-Type: application/json" \
+  -d '{
+    "payload": {
+      "caseId": "550e8400-e29b-41d4-a716-446655440000",
+      "intentHash": "7f83b1657ff1fc53b92dc18148a1d65dfc2d4b1fa3d677284addd200126d9069",
+      "userAddress": "GBBD47IF6LWK7P7MDEVSCWR7DPUWV3NY3DTQEVFL4NAT4AQH3ZLLFLA5",
+      "amount": "50.0000000",
+      "asset": "USDC:GA5ZSEJYB37JRC5AVCIA5MOP4RHTM335X2KGX3IHOJAPP5RE34K4KZVN",
+      "txHash": "4a5e1e4baab89f3a32518a88c31bc87f618f76673e2cc77ab2127b7afdeda33b",
+      "acknowledgedAt": "2026-11-22T10:00:00.000Z"
+    },
+    "signature": "3b6a27bc...ed25519_hex_signature..."
+  }'
+```
+
+## 5. On-chain verification
+
+When an anchor or user submits a refund transaction hash, `lib/refunds/verify.ts` inspects the transaction directly on the Stellar ledger via RPC/Horizon:
+
+- **`verified`**: The transaction is confirmed on-chain with `tx_SUCCESS`, originated from or was authorized by the anchor's distribution account, paid the exact asset and amount, and targeted the user's destination account.
+- **`mismatch`**: The transaction exists on-chain, but the recipient, asset, or amount does not match the refund case obligation.
+- **`unverifiable`**: The transaction hash is not found on the ledger within the verification window, or ledger RPC queries fail repeatedly.
+
+Only cases whose refund transaction is `verified` transition from `owed` to `refunded`.
+
+## 6. Release-gate metric
+
+Anchor reliability is continually evaluated via `lib/refunds/metrics.ts` to gate routing recommendations:
+
+- `REFUND_GATE_WINDOW_DAYS = 30`: Rolling 30-day window used to evaluate anchor refund compliance.
+- `REFUND_ACK_GRACE_MS = 72 * 60 * 60 * 1000` (72 hours): Grace period allowed for user acknowledgement before an unacknowledged refund affects metrics.
+- `REFUND_OWED_OVERDUE_MS = 7 * 24 * 60 * 60 * 1000` (7 days): Maximum allowed window for an anchor to execute a refund once `owed`.
+
+An anchor with any overdue `owed` refund past 7 days fails the release gate, triggering immediate de-ranking and routing exclusion.
+
+Metrics are publicly queryable via `GET /api/v1/refunds/summary`.
+
+## 7. Escalation
+
+Handled by `lib/refunds/escalate.ts`:
+
+1. If a refund case remains in `owed` status for longer than `REFUND_OWED_OVERDUE_MS` (7 days), the system automatically files a formal dispute in the reputation system (`lib/reputation/disputes.ts`).
+2. The dispute is assigned category `refund_owed` and initialized at level `anchor`.
+3. If the anchor fails to resolve the refund during their response window (`LEVEL_WINDOW_MS.anchor = 72h`), the dispute automatically escalates to `review` (maintainer adjudication) and subsequently to `appeal`.
+4. While an overdue refund or dispute is active, the anchor's composite reputation score drops sharply (`lib/reputation/composite.ts`), and their corridor offers are suppressed in directory routing.
+
+## 8. API and webhooks
+
+### Endpoints
+
+- `POST /api/refunds/ack`: Submit user-signed acknowledgement for a verified refund.
+- `GET /api/refunds/{intentHash}`: Fetch refund case status, on-chain verification state, and acknowledgement receipt for a given intent.
+- `GET /api/v1/refunds/summary`: Retrieve global and per-anchor refund metrics, breach rates, and release-gate status.
+
+### Webhooks
+
+Integrators and anchors can subscribe to webhook notifications for refund events (see [`docs/WEBHOOKS.md`](WEBHOOKS.md)):
+
+- `refund.detected`: Emitted immediately when a payment failure opens a case (`owed`).
+- `refund.acknowledged`: Emitted when a user submits a valid signed acknowledgement (`acknowledged`).
 
 <!-- source: docs/ORACLE_SPEC.md -->
 
@@ -5795,6 +6746,66 @@ HSM key. This is documented in `docs/SECURITY.md`.
 - [`docs/SECURITY.md`](SECURITY.md) - key handling and custody boundary
 - [`docs/CONTRIBUTOR_LADDER.md`](CONTRIBUTOR_LADDER.md) - how contributors
   become maintainers and then signer candidates
+
+<!-- source: docs/DISPUTES.md -->
+
+# Disputes
+
+**Last reviewed:** 2026-11-21
+
+This document describes how a user contests a recorded outcome and how a maintainer resolves it. Every claim cites the source file that implements it.
+
+## Who can file and how
+
+A dispute is filed with `POST /api/reputation/dispute` ([`app/api/reputation/dispute/route.ts`](../app/api/reputation/dispute/route.ts)). The JSON body carries five fields.
+
+| Field        | Rule                                                                                  |
+| ------------ | ------------------------------------------------------------------------------------- |
+| `intentHash` | Lowercase hex SHA-256, 64 characters.                                                 |
+| `publicKey`  | A Stellar public key (`G...`, 56 characters).                                         |
+| `signature`  | Ed25519 signature over the raw `intentHash` bytes, made with the key for `publicKey`. |
+| `anchorId`   | The `id` of an anchor in `constants/anchors.ts`.                                      |
+| `reason`     | Free text, 1 to 1000 characters.                                                      |
+
+The route applies these checks in order.
+
+1. A per-IP limit of 10 requests (bucket `api.reputation.dispute.ip`).
+2. Body parsing and validation. Malformed JSON returns 400 `INVALID_JSON`; a body that fails the schema returns 422 `VALIDATION_ERROR`.
+3. Signature verification through `verifyIntentSignature` ([`lib/intent/verify.ts`](../lib/intent/verify.ts)). A failure returns 403.
+4. A durable reputation store must be configured. Without one the route returns the store-unavailable response from [`lib/api/store-guard.ts`](../lib/api/store-guard.ts).
+5. An outcome must exist for the `intentHash` (404 `NOT_FOUND` otherwise), and `publicKey` must equal the outcome's `signerAccount`. Only the account that attested the outcome can dispute it; any other signer gets 403.
+6. A per-signer quota of 10 disputes per 24 hours (429 `RATE_LIMITED` once exceeded).
+
+A successful request returns 201 with the dispute record (`id`, `intentHash`, `publicKey`, `anchorId`, `reason`, `disputed: true`, `createdAt`). The record is stored with status `open` by `getDisputeStore()` ([`lib/reputation/disputes.ts`](../lib/reputation/disputes.ts)).
+
+## What filing changes
+
+Filing creates the dispute record and nothing else. The outcome row is not flagged `disputed`, and it keeps counting toward the anchor's scores while the dispute is open. The `disputed` flag on an outcome row is set only by the reconcile job, when the Horizon payment source does not match the account that signed the intent hash ([`app/api/reputation/reconcile/route.ts`](../app/api/reputation/reconcile/route.ts)). Rows flagged `disputed` are excluded from the corridor aggregates ([`lib/reputation/aggregate.ts`](../lib/reputation/aggregate.ts)).
+
+## Resolution
+
+A dispute is `open` until a maintainer resolves it. The status values are `open`, `accepted` and `rejected` (`DisputeStatus` in [`lib/reputation/disputes.ts`](../lib/reputation/disputes.ts)).
+
+Maintainers use `/api/admin/disputes` ([`app/api/admin/disputes/route.ts`](../app/api/admin/disputes/route.ts)). Both methods require the `x-admin-key` header to match `ADMIN_SECRET_KEY` ([`lib/auth/admin.ts`](../lib/auth/admin.ts)); a missing or wrong key returns 401.
+
+- `GET` lists every dispute, newest first, limited to 60 requests per window.
+- `POST` takes `{ "id": "<dispute id>", "action": "accept" | "reject" }`, limited to 30 requests per window. It sets the status to `accepted` or `rejected`, records `resolvedAt`, and returns the updated dispute. An unknown id returns 404.
+
+Resolving a dispute updates the dispute record only. It does not modify the outcome row.
+
+## Storage
+
+Disputes live in an in-memory store by default and in Postgres when `DATABASE_URL` is set. The table definition is the `SCHEMA_SQL` constant in [`lib/reputation/disputes.ts`](../lib/reputation/disputes.ts), which runs once per process.
+
+## API summary
+
+| Route                     | Method | Auth          | Purpose                     |
+| ------------------------- | ------ | ------------- | --------------------------- |
+| `/api/reputation/dispute` | POST   | Signed body   | File a dispute.             |
+| `/api/admin/disputes`     | GET    | `x-admin-key` | List all disputes.          |
+| `/api/admin/disputes`     | POST   | `x-admin-key` | Accept or reject a dispute. |
+
+For how disputes relate to the settlement guarantee, see [`SETTLEMENT_SLA.md`](SETTLEMENT_SLA.md).
 
 <!-- source: docs/TERMS_OF_SERVICE.md -->
 

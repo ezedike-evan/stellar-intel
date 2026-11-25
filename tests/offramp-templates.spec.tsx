@@ -1,54 +1,99 @@
-import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
-import { render, screen, waitFor } from '@testing-library/react';
-import userEvent from '@testing-library/user-event';
-import { SWRConfig } from 'swr';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
+import { fireEvent, render, screen, waitFor } from '@testing-library/react';
 import { flags } from '@/lib/flags';
-import { saveTemplate } from '@/lib/templates/store';
-import OfframpPage from '@/app/offramp/page';
+import { listTemplates, saveTemplate } from '@/lib/templates/store';
+import { trackFunnelEvent } from '@/lib/analytics';
 import { useWallet } from '@/contexts/WalletContext';
-import { useAnchorRates } from '@/hooks/useAnchorRates';
-import { useWalletBalance } from '@/hooks/useWalletBalance';
-import { useWithdrawStatus } from '@/hooks/useWithdrawStatus';
-import { trackFunnelEvent, TEMPLATE_EVENTS } from '@/lib/analytics';
+import OfframpPage from '@/app/offramp/page';
 
 const mockReplace = vi.fn();
-let mockSearch = '';
+let mockWithdrawStatus: string | null = null;
+
+const RATE = {
+  anchorId: 'cowrie',
+  anchorName: 'Cowrie',
+  corridorId: 'usdc-ngn',
+  exchangeRate: null,
+  totalReceived: null,
+};
+
+// A row button and a drawer button stand in for RateTable and ExecuteDrawer,
+// which have their own specs.
+vi.mock('@/components/offramp/RateTable', () => ({
+  RateTable: ({ onSelectAnchor }: { onSelectAnchor: (rate: typeof RATE) => void }) => (
+    <button onClick={() => onSelectAnchor(RATE)}>Stub select</button>
+  ),
+}));
+
+vi.mock('@/components/offramp/ExecuteDrawer', () => ({
+  ExecuteDrawer: ({
+    rate,
+    onExecuteStarted,
+  }: {
+    rate: unknown;
+    onExecuteStarted: (id: string, server: string, jwt: string, domain: string) => void;
+  }) =>
+    rate ? (
+      <button
+        onClick={() =>
+          onExecuteStarted('tx-1', 'https://cowrie.example/sep24', 'jwt', 'cowrie.example')
+        }
+      >
+        Stub start
+      </button>
+    ) : null,
+}));
 
 vi.mock('next/navigation', () => ({
   useRouter: () => ({ replace: mockReplace }),
-  useSearchParams: () => new URLSearchParams(mockSearch),
+  useSearchParams: () => new URLSearchParams(''),
 }));
 
 vi.mock('next/dynamic', async () => {
   const React = await import('react');
   return {
-    default: (loader: () => Promise<React.ComponentType<any>>) => {
+    default: (loader: () => Promise<React.ComponentType<object>>) => {
       const Lazy = React.lazy(async () => ({ default: await loader() }));
       return (props: object) =>
-        React.createElement(
-          React.Suspense,
-          { fallback: null },
-          React.createElement(Lazy as React.ComponentType<object>, props)
-        );
+        React.createElement(React.Suspense, { fallback: null }, React.createElement(Lazy, props));
     },
   };
 });
 
-vi.mock('@/contexts/WalletContext', () => ({
-  useWallet: vi.fn(),
-}));
+vi.mock('@/contexts/WalletContext', () => ({ useWallet: vi.fn() }));
 
-vi.mock('@/hooks/useAnchorRates', () => ({
-  useAnchorRates: vi.fn(),
-  RATES_REFRESH_INTERVAL_MS: 30000,
+vi.mock('@/hooks/useAnchorRates', async (importOriginal) => ({
+  ...(await importOriginal<typeof import('@/hooks/useAnchorRates')>()),
+  useAnchorRates: () => ({
+    rates: null,
+    anchorErrors: [],
+    isLoading: false,
+    error: null,
+    mutate: vi.fn(),
+    refreshInflight: false,
+    lastFetchedAt: null,
+  }),
 }));
 
 vi.mock('@/hooks/useWalletBalance', () => ({
-  useWalletBalance: vi.fn(),
+  useWalletBalance: () => ({ balance: null, isLoading: false, error: undefined, refresh: vi.fn() }),
 }));
 
 vi.mock('@/hooks/useWithdrawStatus', () => ({
-  useWithdrawStatus: vi.fn(),
+  useWithdrawStatus: () => ({
+    status: mockWithdrawStatus,
+    amountIn: null,
+    amountInAsset: null,
+    amountOut: null,
+    amountOutAsset: null,
+    amountFee: null,
+    stellarTransactionId: null,
+    externalTransactionId: null,
+    refunds: null,
+    isLoading: false,
+    error: null,
+    attemptCount: 0,
+  }),
 }));
 
 vi.mock('@/lib/analytics', async (importOriginal) => ({
@@ -56,158 +101,113 @@ vi.mock('@/lib/analytics', async (importOriginal) => ({
   trackFunnelEvent: vi.fn(),
 }));
 
-const mockUseWallet = vi.mocked(useWallet);
-const mockUseAnchorRates = vi.mocked(useAnchorRates);
-const mockUseWalletBalance = vi.mocked(useWalletBalance);
-const mockUseWithdrawStatus = vi.mocked(useWithdrawStatus);
+const WALLET = 'GA5ZSEJYB37JRC5AVCIA5MOP4RHTM335X2KGX3IHOJAPP5RE34K4KZVN';
+const originalFlag = flags.intentTemplates;
 
-const PUBLIC_KEY = 'GA5ZSEJYB37JRC5AVCIA5MOP4RHTM335X2KGX3IHOJAPP5RE34K4KZVN';
-
-function connectedWallet() {
-  return {
-    isInstalled: true,
-    isConnected: true,
-    publicKey: PUBLIC_KEY,
-    network: 'PUBLIC' as const,
-    error: null,
-    connect: vi.fn(),
-    disconnect: vi.fn(),
-  };
+function connect(connected: boolean) {
+  vi.mocked(useWallet).mockReturnValue({
+    isConnected: connected,
+    publicKey: connected ? WALLET : null,
+    network: 'PUBLIC',
+  } as unknown as ReturnType<typeof useWallet>);
 }
 
-describe('/offramp templates (TPL006 & TPL010)', () => {
-  let prevFlag: boolean;
-
-  beforeEach(() => {
-    prevFlag = flags.intentTemplates;
-    flags.intentTemplates = true;
-    mockSearch = '';
-    mockReplace.mockReset();
-    localStorage.clear();
-
-    mockUseWallet.mockReturnValue(connectedWallet());
-    mockUseAnchorRates.mockReturnValue({
-      rates: undefined,
-      anchorErrors: [],
-      isLoading: false,
-      error: undefined,
-      mutate: vi.fn(),
-      refreshInflight: false,
-      lastFetchedAt: null,
-    } as any);
-    mockUseWalletBalance.mockReturnValue({
-      balance: 1000,
-      isLoading: false,
-      error: undefined,
-      refresh: vi.fn(),
-    });
-    mockUseWithdrawStatus.mockReturnValue({
-      status: undefined,
-      amountIn: undefined,
-      amountInAsset: undefined,
-      amountOut: undefined,
-      amountOutAsset: undefined,
-      amountFee: undefined,
-      instructions: undefined,
-      moreInfoUrl: undefined,
-      message: undefined,
-      claimableBalanceId: undefined,
-      stellarTransactionId: undefined,
-      isLoading: false,
-      error: undefined,
-    } as any);
+beforeEach(() => {
+  mockWithdrawStatus = null;
+  localStorage.clear();
+  mockReplace.mockClear();
+  vi.mocked(trackFunnelEvent).mockClear();
+  flags.intentTemplates = true;
+  saveTemplate(WALLET, {
+    direction: 'offramp',
+    label: 'Rent',
+    corridorId: 'usdc-ngn',
+    amount: '120',
   });
+});
 
-  afterEach(() => {
-    flags.intentTemplates = prevFlag;
-  });
+afterEach(() => {
+  flags.intentTemplates = originalFlag;
+});
 
-  function renderPage() {
-    return render(
-      <SWRConfig value={{ provider: () => new Map() }}>
-        <OfframpPage />
-      </SWRConfig>
+describe('/offramp templates (#2159)', () => {
+  it('applies a saved template to the corridor and amount', async () => {
+    connect(true);
+    render(<OfframpPage />);
+    const select = await screen.findByLabelText('Saved templates');
+    const option = screen.getByRole('option', { name: /^Rent — 120/ }) as HTMLOptionElement;
+    fireEvent.change(select, { target: { value: option.value } });
+
+    await waitFor(() =>
+      expect((document.getElementById('amount-input') as HTMLInputElement).value).toBe('120')
     );
+    await waitFor(() =>
+      expect(mockReplace).toHaveBeenCalledWith(
+        expect.stringMatching(/corridor=usdc-ngn.*amount=120|amount=120.*corridor=usdc-ngn/),
+        expect.anything()
+      )
+    );
+    expect(vi.mocked(trackFunnelEvent).mock.calls.map(([name]) => name)).toContain(
+      'template_applied'
+    );
+  });
+
+  it('shows no picker without a connected wallet', () => {
+    connect(false);
+    render(<OfframpPage />);
+    expect(screen.queryByLabelText('Saved templates')).not.toBeInTheDocument();
+  });
+
+  it('shows no picker when the flag is off', () => {
+    flags.intentTemplates = false;
+    connect(true);
+    render(<OfframpPage />);
+    expect(screen.queryByLabelText('Saved templates')).not.toBeInTheDocument();
+  });
+});
+
+describe('/offramp save as template (#2161)', () => {
+  async function startOfframp() {
+    render(<OfframpPage />);
+    fireEvent.click(await screen.findByRole('button', { name: 'Stub select' }));
+    fireEvent.click(await screen.findByRole('button', { name: 'Stub start' }));
   }
 
-  it('connected -> picker shown; choosing sets amount input and updates URL with corridor and amount', async () => {
-    const user = userEvent.setup();
+  it('offers to save a completed off-ramp and stores it with the anchor', async () => {
+    connect(true);
+    mockWithdrawStatus = 'completed';
+    await startOfframp();
 
-    saveTemplate(PUBLIC_KEY, {
-      direction: 'offramp',
-      label: 'Mum in Lagos',
-      corridorId: 'usdc-ngn',
-      amount: '250',
-    });
+    const name = await screen.findByLabelText('Template name');
+    fireEvent.change(name, { target: { value: 'Cowrie run' } });
+    fireEvent.click(screen.getByRole('button', { name: 'Save template' }));
 
-    renderPage();
+    expect(await screen.findByRole('status')).toHaveTextContent('Saved as "Cowrie run".');
+    const saved = listTemplates(WALLET, 'offramp').find((t) => t.label === 'Cowrie run');
+    expect(saved).toMatchObject({ corridorId: 'usdc-ngn', anchorId: 'cowrie' });
+  });
 
-    const select = await screen.findByLabelText('Saved templates');
-    expect(select).toBeDefined();
+  it('does not offer it before the off-ramp completes', async () => {
+    connect(true);
+    mockWithdrawStatus = 'pending_anchor';
+    await startOfframp();
+    await waitFor(() => expect(mockReplace).toHaveBeenCalled());
+    expect(screen.queryByLabelText('Template name')).not.toBeInTheDocument();
+  });
+});
 
-    await user.selectOptions(select, screen.getByText(/Mum in Lagos/));
+describe('/offramp template manager (#2163)', () => {
+  it('opens from the picker and returns focus to the button on close', async () => {
+    connect(true);
+    render(<OfframpPage />);
+    const manage = await screen.findByRole('button', { name: 'Manage templates' });
+    fireEvent.click(manage);
+    expect(await screen.findByRole('dialog', { name: 'Manage templates' })).toBeInTheDocument();
 
-    const amountInput = screen.getByLabelText(/Amount/i) as HTMLInputElement;
-    expect(amountInput.value).toBe('250');
-
-    await waitFor(() => {
-      expect(mockReplace).toHaveBeenCalledWith(
-        expect.stringContaining('corridor=usdc-ngn&amount=250'),
-        expect.anything()
-      );
-    });
-
-    expect(trackFunnelEvent).toHaveBeenCalledWith(
-      TEMPLATE_EVENTS.templateApplied,
-      expect.objectContaining({
-        direction: 'offramp',
-        corridor: 'usdc-ngn',
-      })
+    fireEvent.click(screen.getByRole('button', { name: 'Close' }));
+    await waitFor(() =>
+      expect(screen.queryByRole('dialog', { name: 'Manage templates' })).not.toBeInTheDocument()
     );
-  });
-
-  it('not connected -> no picker', () => {
-    mockUseWallet.mockReturnValue({
-      ...connectedWallet(),
-      isConnected: false,
-      publicKey: null,
-    });
-
-    renderPage();
-
-    expect(screen.queryByLabelText('Saved templates')).toBeNull();
-  });
-
-  it('flag off -> no picker', () => {
-    flags.intentTemplates = false;
-    mockUseWallet.mockReturnValue(connectedWallet());
-
-    renderPage();
-
-    expect(screen.queryByLabelText('Saved templates')).toBeNull();
-  });
-
-  it('clicking "Manage templates" opens the dialog and closing returns focus to that button', async () => {
-    const user = userEvent.setup();
-
-    saveTemplate(PUBLIC_KEY, {
-      direction: 'offramp',
-      label: 'Mum in Lagos',
-      corridorId: 'usdc-ngn',
-      amount: '250',
-    });
-
-    renderPage();
-
-    const manageBtn = await screen.findByRole('button', { name: 'Manage templates' });
-    await user.click(manageBtn);
-
-    expect(screen.getByRole('dialog', { name: 'Manage templates' })).toBeDefined();
-
-    // Close the dialog
-    await user.click(screen.getByRole('button', { name: 'Close' }));
-
-    expect(screen.queryByRole('dialog')).toBeNull();
-    expect(document.activeElement).toBe(manageBtn);
+    expect(document.activeElement).toBe(manage);
   });
 });
