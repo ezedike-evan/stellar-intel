@@ -61,7 +61,7 @@ export const EVENTS: { kind: string; description: string; emitted: boolean }[] =
   {
     kind: 'oracle.published',
     description: 'The oracle writes a batch of outcomes and rates on chain',
-    emitted: false,
+    emitted: true,
   },
   {
     kind: 'intent.slippage_breach',
