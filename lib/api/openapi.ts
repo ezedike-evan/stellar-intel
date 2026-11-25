@@ -2933,6 +2933,47 @@ registry.registerPath({
   },
 });
 
+// ─── Refund release gate (Issue #2121) ────────────────────────────────────────
+
+const RefundGateMetricsSchema = registry.register(
+  'RefundGateMetrics',
+  z.object({
+    windowDays: z.number().int().describe('Trailing window in days (30)'),
+    since: z.string().describe('ISO start of the window; cases opened at or after it count'),
+    generatedAt: z.string().describe('ISO instant the metric was computed'),
+    opened: z.number().int().describe('Refund cases opened in the window'),
+    owed: z.number().int().describe('Cases the anchor still owes'),
+    refunded: z.number().int().describe('Cases the anchor refunded, not yet acknowledged'),
+    acknowledged: z.number().int().describe('Cases the user acknowledged'),
+    awaitingAck: z
+      .number()
+      .int()
+      .describe('Refunded cases still within the 72-hour acknowledgement grace period'),
+    unsignaled: z
+      .number()
+      .int()
+      .describe('Refunded cases past the 72-hour grace period with no acknowledgement'),
+    overdueOwed: z.number().int().describe('Owed cases opened more than 7 days ago'),
+    gatePassing: z.boolean().describe('True when unsignaled is 0 (the v3 release gate)'),
+  })
+);
+
+registry.registerPath({
+  method: 'get',
+  path: '/api/v1/refunds/summary',
+  summary: 'Get the unsignaled-refund release-gate metric',
+  description:
+    'Counts of the refund cases opened in the trailing 30 days, classified by status. A refunded case counts as unsignaled once it is more than 72 hours past its refund (or opening) with no acknowledgement; the v3 release gate passes when that count is 0. Counts only: no accounts, intent hashes or amounts. Cached for 60 seconds.',
+  tags: ['Reputation'],
+  responses: {
+    200: {
+      description: 'Refund release-gate metric',
+      content: { 'application/json': { schema: RefundGateMetricsSchema } },
+    },
+    429: RATE_LIMITED_429,
+  },
+});
+
 // ─── Admin caller keys (AGS006) ──────────────────────────────────────────────
 
 const ApiKeyRecordSchema = registry.register(
