@@ -1,5 +1,5 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
-import type { DeliveryRecord, WebhookSubscription } from '@/lib/webhooks/types';
+import type { DeliveryRecord, WebhookEvent, WebhookSubscription } from '@/lib/webhooks/types';
 
 // Tests for the Postgres-backed webhook store (#1337).
 //
@@ -17,9 +17,36 @@ function resetEnv(): void {
 function makeFakeDb() {
   const subs = new Map<string, Record<string, unknown>>();
   const deliveries: Record<string, unknown>[] = [];
+  const events = new Map<string, Record<string, unknown>>();
 
   const query = vi.fn(async (sql: string, params: unknown[] = []) => {
     if (sql.includes('CREATE TABLE')) return { rows: [] };
+
+    if (sql.includes('INSERT INTO webhook_events')) {
+      // ON CONFLICT (idempotency_key) DO NOTHING RETURNING id
+      const [id, idempotencyKey, kind, body, createdAt] = params as [
+        string,
+        string,
+        string,
+        string,
+        string,
+      ];
+      const taken = [...events.values()].some((e) => e['idempotency_key'] === idempotencyKey);
+      if (taken || events.has(id)) return { rows: [] };
+      events.set(id, {
+        id,
+        idempotency_key: idempotencyKey,
+        kind,
+        body,
+        created_at: new Date(createdAt),
+      });
+      return { rows: [{ id }] };
+    }
+
+    if (sql.includes('FROM webhook_events WHERE id = $1')) {
+      const row = events.get((params as [string])[0]);
+      return { rows: row ? [row] : [] };
+    }
 
     if (sql.includes('INSERT INTO webhook_subscriptions')) {
       const [id, url, secret, events, createdAt] = params as [
@@ -90,6 +117,10 @@ function makeFakeDb() {
     }
 
     if (sql.includes('FROM webhook_delivery_log')) {
+      if (/WHERE id = \$1/.test(sql)) {
+        const row = deliveries.find((d) => d['id'] === (params as [string])[0]);
+        return { rows: row ? [row] : [] };
+      }
       if (sql.includes("status = 'dead_letter'")) {
         const rows = deliveries
           .filter((d) => d['status'] === 'dead_letter')
@@ -323,6 +354,89 @@ describe('PostgresWebhookStore (#1337)', () => {
       const results = await store.listDeliveries({ status: 'success' });
       expect(results.map((r) => r.id)).toEqual(['d-new', 'd-old']);
       expect(results[0]?.createdAt).toBe('2026-09-26T11:00:00.000Z');
+    });
+  });
+
+  describe('webhook events (WHK004)', () => {
+    const EVENT: WebhookEvent = {
+      id: '3f2a1b4c-0d5e-4f6a-8b7c-9d0e1f2a3b4c',
+      kind: 'intent.failed',
+      createdAt: '2026-11-20T12:00:00.000Z',
+      idempotencyKey: 'intent.failed:abc',
+      payload: { intentHash: 'a'.repeat(64), anchorId: 'cowrie', corridor: 'usdc-ngn' },
+    };
+
+    it('records an event once: true for a new key, then false for the same key', async () => {
+      const { store } = await loadWithFakeDb();
+
+      expect(await store.recordEvent(EVENT)).toBe(true);
+      expect(
+        await store.recordEvent({ ...EVENT, id: '9e8d7c6b-5a4f-4e3d-8c2b-1a0f9e8d7c6b' })
+      ).toBe(false);
+    });
+
+    it('inserts with ON CONFLICT on the idempotency key, parameterized', async () => {
+      const { store, db } = await loadWithFakeDb();
+      await store.recordEvent(EVENT);
+
+      const insert = db.query.mock.calls.find(([sql]) =>
+        String(sql).includes('INSERT INTO webhook_events')
+      ) as [string, unknown[]];
+      expect(insert[0]).toContain('ON CONFLICT (idempotency_key) DO NOTHING');
+      expect(insert[0]).toContain('RETURNING id');
+      expect(insert[1]).toEqual([
+        EVENT.id,
+        EVENT.idempotencyKey,
+        EVENT.kind,
+        JSON.stringify(EVENT),
+        EVENT.createdAt,
+      ]);
+    });
+
+    it('round-trips the envelope through getEvent, and returns null for an unknown id', async () => {
+      const { store } = await loadWithFakeDb();
+      await store.recordEvent(EVENT);
+
+      expect(await store.getEvent(EVENT.id)).toEqual(EVENT);
+      expect(await store.getEvent('missing')).toBeNull();
+    });
+  });
+
+  describe('getDelivery (WHK007)', () => {
+    it('returns one delivery by id with ISO timestamps, and null for an unknown id', async () => {
+      const { store } = await loadWithFakeDb();
+      const dead = delivery({ id: 'd-1' });
+      const delivered = delivery({
+        id: 'd-2',
+        status: 'success',
+        attempts: 1,
+        lastStatusCode: 200,
+        lastError: null,
+        deliveredAt: '2026-09-26T10:00:05.000Z',
+        createdAt: '2026-09-26T10:00:04.000Z',
+      });
+      await store.recordDelivery(dead);
+      await store.recordDelivery(delivered);
+
+      expect(await store.getDelivery('d-2')).toEqual(delivered);
+      expect(await store.getDelivery('d-1')).toEqual(dead);
+      expect(await store.getDelivery('missing')).toBeNull();
+    });
+
+    it('selects by a $1 parameter, never by an id written into the SQL', async () => {
+      const { store, db } = await loadWithFakeDb();
+      const hostile = "x' OR '1'='1";
+
+      expect(await store.getDelivery(hostile)).toBeNull();
+
+      const selects = db.query.mock.calls.filter(([sql]) =>
+        String(sql).includes('FROM webhook_delivery_log')
+      );
+      expect(selects).toHaveLength(1);
+      const [sql, params] = selects[0] as [string, unknown[]];
+      expect(sql).toContain('WHERE id = $1');
+      expect(params).toEqual([hostile]);
+      expect(sql).not.toContain(hostile);
     });
   });
 

@@ -310,6 +310,67 @@ const DisputeAdminSchema = registry.register(
   })
 );
 
+const AdjudicationEntrySchema = registry.register(
+  'AdjudicationEntry',
+  z.object({
+    seq: z.number().int().describe('1-based sequential entry number in the hash chain'),
+    disputeRef: z.string().describe('Public dispute reference identifier'),
+    anchorId: z.string().describe('Identifier of the anchor involved'),
+    category: z
+      .string()
+      .describe(
+        'Dispute category (e.g. wrong_amount, not_received, delayed, wrong_account, refund_missing, other)'
+      ),
+    level: z.string().describe('Dispute ladder level (e.g. anchor, review, appeal)'),
+    action: z
+      .string()
+      .describe('Adjudication action (filed, escalated, accepted, rejected, appealed)'),
+    rationale: z.string().describe('Public rationale for the decision'),
+    decidedAt: z.string().describe('ISO 8601 timestamp of when the action was decided'),
+    prevHash: z.string().describe('SHA-256 hash of previous entry or 64 zeros for genesis'),
+    entryHash: z.string().describe('SHA-256 hash of this entry canonical representation'),
+  })
+);
+
+const AdjudicationSummarySchema = registry.register(
+  'AdjudicationSummary',
+  z.object({
+    filed: z.number().int().describe('Total number of distinct disputes filed'),
+    resolved: z.number().int().describe('Total number of resolved disputes (accepted or rejected)'),
+    accepted: z.number().int().describe('Number of disputes accepted'),
+    rejected: z.number().int().describe('Number of disputes rejected'),
+    open: z.number().int().describe('Number of disputes currently open'),
+    appealed: z.number().int().describe('Number of disputes with at least one appeal action'),
+  })
+);
+
+const AdjudicationLogResponseSchema = registry.register(
+  'AdjudicationLogResponse',
+  z.object({
+    entries: z.array(AdjudicationEntrySchema).describe('Adjudication entries matching the query'),
+    head: z
+      .object({
+        seq: z.number().int(),
+        entryHash: z.string(),
+      })
+      .nullable()
+      .describe('Latest entry in the adjudication log, or null if empty'),
+    verification: z
+      .object({
+        ok: z.boolean(),
+        length: z.number().int().optional(),
+        head: z.string().optional(),
+        brokenAtSeq: z.number().int().optional(),
+        reason: z.string().optional(),
+      })
+      .describe('Hash chain verification result across all entries'),
+    summary: AdjudicationSummarySchema.describe('Summary statistics across all disputes'),
+    hashFormat: z
+      .string()
+      .describe('Canonical hash format descriptor, e.g. stellar-intel/adjudication/v1'),
+  })
+);
+
 const LeaderboardEntrySchema = registry.register(
   'LeaderboardEntry',
   z.object({
@@ -363,14 +424,77 @@ const MetricsSnapshotSchema = registry.register(
   })
 );
 
+const RefundAckPaymentSchema = registry.register(
+  'RefundAckPayment',
+  z.object({
+    id: z.string().min(1).max(128).describe('Payment identifier'),
+    idType: z.enum(['stellar', 'external']).describe('Type of payment identifier'),
+    amount: z.string().regex(AMOUNT_PATTERN).max(40).describe('Amount refunded in this payment'),
+  })
+);
+
+const RefundAckPayloadSchema = registry.register(
+  'RefundAckPayload',
+  z.object({
+    type: z.literal('refund-ack').describe('Payload type discriminator'),
+    version: z.literal(1).describe('Payload format version'),
+    intentHash: z
+      .string()
+      .regex(/^[0-9a-f]{64}$/)
+      .describe('64-hex SHA-256 intent hash'),
+    anchorId: z.string().min(1).max(64).describe('Anchor identifier'),
+    account: z
+      .string()
+      .regex(STELLAR_PUBKEY_PATTERN)
+      .describe('Stellar public key of acknowledging user'),
+    amountRefunded: z.string().regex(AMOUNT_PATTERN).max(40).describe('Total amount refunded'),
+    refundFee: z.string().regex(AMOUNT_PATTERN).max(40).describe('Total refund fee deducted'),
+    payments: z.array(RefundAckPaymentSchema).max(20).describe('Individual refund payments'),
+  })
+);
+
+const RefundAckRequestBodySchema = registry.register(
+  'RefundAckRequestBody',
+  z.object({
+    ack: RefundAckPayloadSchema,
+    signature: z
+      .string()
+      .min(1)
+      .max(256)
+      .describe('Cryptographic signature over the canonical refund-ack payload hash'),
+  })
+);
+
+const RefundAckResponseSchema = registry.register(
+  'RefundAckResponse',
+  z.object({
+    id: z.string().describe('Refund case identifier'),
+    intentHash: z
+      .string()
+      .regex(/^[0-9a-f]{64}$/)
+      .describe('Intent hash for the refund case'),
+    status: z.literal('acknowledged').describe('Status of the refund case'),
+    acknowledgedAt: z.string().describe('ISO 8601 timestamp when acknowledged'),
+    onChainCheck: z
+      .enum(['verified', 'mismatch', 'unverifiable'])
+      .nullable()
+      .describe('On-chain verification status'),
+  })
+);
+
 // Suppress unused-variable warnings
 void SignedIntentEnvelopeSchema;
 void AnchorRateSchema;
 void DisputeRecordSchema;
 void DisputeAdminSchema;
+void AdjudicationEntrySchema;
+void AdjudicationSummarySchema;
+void AdjudicationLogResponseSchema;
 void LeaderboardResponseSchema;
 void PublisherHealthSchema;
 void MetricsSnapshotSchema;
+void RefundAckRequestBodySchema;
+void RefundAckResponseSchema;
 
 // ─── Route registrations ─────────────────────────────────────────────────────
 
@@ -2023,6 +2147,49 @@ registry.registerPath({
 
 registry.registerPath({
   method: 'get',
+  path: '/api/v1/disputes/log',
+  summary: 'Get the public dispute adjudication log',
+  description:
+    'Serves the public, append-only, hash-chained dispute adjudication log, along with ' +
+    'verification status and summary counts. Required scope: quotes:read.',
+  tags: ['Reputation'],
+  security: [{}, { callerKey: [] }],
+  request: {
+    query: z.object({
+      afterSeq: z
+        .string()
+        .optional()
+        .openapi({
+          param: { name: 'afterSeq', in: 'query' },
+          example: '0',
+          description:
+            'Return entries strictly after this sequence number (integer >= 0, default 0)',
+        }),
+      limit: z
+        .string()
+        .optional()
+        .openapi({
+          param: { name: 'limit', in: 'query' },
+          example: '200',
+          description: 'Maximum number of entries to return (1-500, default 200)',
+        }),
+    }),
+  },
+  responses: {
+    200: {
+      description: 'The adjudication log entries and chain verification',
+      content: { 'application/json': { schema: AdjudicationLogResponseSchema } },
+    },
+    400: {
+      description: 'Invalid afterSeq or limit parameters',
+      content: { 'application/json': { schema: ApiErrorSchema } },
+    },
+    429: RATE_LIMITED_429,
+  },
+});
+
+registry.registerPath({
+  method: 'get',
   path: '/api/reputation/reconcile-volume-savings',
   summary: 'Reconcile volume and savings against the on-chain oracle',
   description:
@@ -2055,6 +2222,32 @@ registry.registerPath({
     200: {
       description: 'Reconciliation completed',
       content: { 'application/json': { schema: z.object({}).passthrough() } },
+    },
+    401: UNAUTHORIZED_401,
+  },
+});
+
+registry.registerPath({
+  method: 'post',
+  path: '/api/reputation/dispute-sweep',
+  summary: 'Escalate overdue disputes',
+  description:
+    'Cron-triggered. Moves every open dispute that sat at the anchor response rung past its ' +
+    '72-hour deadline to maintainer review and records the move in the public adjudication log. ' +
+    'Disputes already at review or appeal are left for a human to decide. Protected by CRON_SECRET.',
+  tags: ['System'],
+  security: [{ bearerAuth: [] }],
+  responses: {
+    200: {
+      description: 'Sweep completed',
+      content: {
+        'application/json': {
+          schema: z.object({
+            scanned: z.number(),
+            escalated: z.number(),
+          }),
+        },
+      },
     },
     401: UNAUTHORIZED_401,
   },
@@ -2148,6 +2341,249 @@ registry.registerPath({
       content: { 'application/json': { schema: z.array(z.object({}).passthrough()) } },
     },
     401: UNAUTHORIZED_401,
+    429: RATE_LIMITED_429,
+  },
+});
+
+registry.registerPath({
+  method: 'get',
+  path: '/api/webhooks/deliveries',
+  summary: 'List webhook delivery records',
+  description:
+    'Admin only. Returns webhook delivery records filtered by status, subscription, or event, newest first.',
+  tags: ['System'],
+  request: {
+    query: z.object({
+      status: z
+        .enum(['success', 'failed', 'dead_letter'])
+        .optional()
+        .openapi({
+          param: { name: 'status', in: 'query' },
+          example: 'dead_letter',
+          description: 'Filter by delivery status (success, failed, dead_letter)',
+        }),
+      subscriptionId: z
+        .string()
+        .min(1)
+        .max(100)
+        .optional()
+        .openapi({
+          param: { name: 'subscriptionId', in: 'query' },
+          example: 'sub-1',
+          description: 'Filter by subscription ID',
+        }),
+      eventId: z
+        .string()
+        .min(1)
+        .max(100)
+        .optional()
+        .openapi({
+          param: { name: 'eventId', in: 'query' },
+          example: 'evt-1',
+          description: 'Filter by event ID',
+        }),
+      limit: z.coerce
+        .number()
+        .int()
+        .min(1)
+        .max(500)
+        .optional()
+        .openapi({
+          param: { name: 'limit', in: 'query' },
+          example: 100,
+          description: 'Maximum number of deliveries to return (1-500, default 100)',
+        }),
+    }),
+  },
+  responses: {
+    200: {
+      description: 'Webhook delivery records',
+      content: { 'application/json': { schema: z.array(z.object({}).passthrough()) } },
+    },
+    400: {
+      description: 'Validation error',
+      content: { 'application/json': { schema: ApiErrorSchema } },
+    },
+    401: UNAUTHORIZED_401,
+    429: RATE_LIMITED_429,
+  },
+});
+
+registry.registerPath({
+  method: 'post',
+  path: '/api/webhooks/deliveries/{id}/redeliver',
+  summary: 'Resend a logged webhook delivery',
+  description:
+    'Admin only. Sends the stored event of one logged delivery to its subscription again, with the original event `id` and idempotency key, so a consumer that already processed it de-duplicates. The attempt is logged as a new delivery record. A 202 means the attempt was made, not that the subscriber accepted it. See docs/WEBHOOKS.md.',
+  tags: ['System'],
+  security: [{ adminKey: [] }],
+  request: {
+    params: z.object({
+      id: z
+        .string()
+        .min(1)
+        .describe('Delivery record id, as listed by GET /api/webhooks/deliveries'),
+    }),
+  },
+  responses: {
+    202: {
+      description: 'The delivery was attempted again and logged',
+      content: {
+        'application/json': {
+          schema: z.object({
+            redelivered: z.literal(true),
+            eventId: z.string().describe('Id of the event that was resent'),
+            subscriptionId: z.string().describe('Subscription it was sent to'),
+          }),
+        },
+      },
+    },
+    403: {
+      description: 'Missing or invalid admin key',
+      content: { 'application/json': { schema: ApiErrorSchema } },
+    },
+    404: {
+      description: 'Unknown delivery id (`NOT_FOUND`)',
+      content: { 'application/json': { schema: ApiErrorSchema } },
+    },
+    409: {
+      description:
+        'The subscription no longer subscribes to the event kind (`EVENT_KIND_UNSUBSCRIBED`)',
+      content: { 'application/json': { schema: ApiErrorSchema } },
+    },
+    410: {
+      description:
+        'The event is not in the event store (`EVENT_NOT_RETAINED`), or the subscription was deleted (`SUBSCRIPTION_DELETED`)',
+      content: { 'application/json': { schema: ApiErrorSchema } },
+    },
+    429: RATE_LIMITED_429,
+  },
+});
+
+registry.registerPath({
+  method: 'post',
+  path: '/api/refunds/ack',
+  summary: 'Record user-signed refund acknowledgement',
+  description:
+    'Secured write route to record a user-signed refund acknowledgement for an owed or refunded case. ' +
+    'The server validates that only the original transfer signer can acknowledge, verifies the cryptographic signature over the canonical payload hash, and confirms the refunded amount does not exceed the paid amount.',
+  tags: ['Refunds'],
+  request: {
+    body: {
+      content: {
+        'application/json': {
+          schema: RefundAckRequestBodySchema,
+        },
+      },
+    },
+  },
+  responses: {
+    200: {
+      description: 'Refund acknowledgement recorded',
+      content: {
+        'application/json': {
+          schema: RefundAckResponseSchema,
+        },
+      },
+    },
+    400: {
+      description: 'Invalid JSON',
+      content: { 'application/json': { schema: ApiErrorSchema } },
+    },
+    401: UNAUTHORIZED_401,
+    403: {
+      description: 'Signer mismatch',
+      content: { 'application/json': { schema: ApiErrorSchema } },
+    },
+    404: {
+      description: 'No refund case found',
+      content: { 'application/json': { schema: ApiErrorSchema } },
+    },
+    409: {
+      description: 'Case already acknowledged',
+      content: { 'application/json': { schema: ApiErrorSchema } },
+    },
+    422: {
+      description: 'Validation error',
+      content: { 'application/json': { schema: ApiErrorSchema } },
+    },
+    429: RATE_LIMITED_429,
+  },
+});
+
+// ─── Spec builder ────────────────────────────────────────────────────────────
+
+const PublicRefundCaseSchema = registry.register(
+  'PublicRefundCase',
+  z.object({
+    id: z.string(),
+    intentHash: z.string(),
+    reason: z.enum([
+      'anchor_refunded',
+      'anchor_error_after_payment',
+      'expired_after_payment',
+      'slippage_breach',
+    ]),
+    anchorId: z.string(),
+    corridor: z.string(),
+    direction: z.enum(['withdraw', 'deposit']),
+    amountPaid: z.string(),
+    status: z.enum(['owed', 'refunded', 'acknowledged']),
+    amountRefunded: z.string().nullable(),
+    refundFee: z.string().nullable(),
+    payments: z.array(
+      z.object({
+        id: z.string(),
+        idType: z.enum(['stellar', 'external']),
+        amount: z.string(),
+        fee: z.string(),
+      })
+    ),
+    openedAt: z.string(),
+    refundedAt: z.string().nullable(),
+    acknowledgedAt: z.string().nullable(),
+    onChainCheck: z
+      .string()
+      .nullable()
+      .describe('verified, mismatch or unverifiable; null when no on-chain check was made'),
+  })
+);
+
+const IntentHashPathParam = z.string().openapi({
+  param: { name: 'intentHash', in: 'path' },
+  example: 'a3f1c2d4e5b60718293a4b5c6d7e8f90a1b2c3d4e5f60718293a4b5c6d7e8f90',
+  description: 'Lowercase hex SHA-256 intent hash (64 characters)',
+});
+
+registry.registerPath({
+  method: 'get',
+  path: '/api/refunds/{intentHash}',
+  summary: 'Look up refund cases for an intent',
+  description:
+    'Read-only lookup of the refund cases tracked for one intent, oldest first. An intent with ' +
+    'no cases returns an empty list, not 404. Only non-sensitive fields are returned; the signer ' +
+    'account and the acknowledgement proof are never exposed, and there is no lookup by account. ' +
+    'Responses are sent with Cache-Control: no-store.',
+  tags: ['Refunds'],
+  request: {
+    params: z.object({ intentHash: IntentHashPathParam }),
+  },
+  responses: {
+    200: {
+      description: 'Refund cases for the intent',
+      content: {
+        'application/json': {
+          schema: z.object({
+            intentHash: z.string(),
+            cases: z.array(PublicRefundCaseSchema),
+          }),
+        },
+      },
+    },
+    400: {
+      description: 'intentHash is not a lowercase 64-character hex string',
+      content: { 'application/json': { schema: ApiErrorSchema } },
+    },
     429: RATE_LIMITED_429,
   },
 });
@@ -2282,71 +2718,9 @@ registry.registerPath({
       description: 'Unknown or already revoked key',
       content: { 'application/json': { schema: ApiErrorSchema } },
     },
-registry.registerPath({
-  method: 'get',
-  path: '/api/webhooks/deliveries',
-  summary: 'List webhook delivery records',
-  description:
-    'Admin only. Returns webhook delivery records filtered by status, subscription, or event, newest first.',
-  tags: ['System'],
-  request: {
-    query: z.object({
-      status: z
-        .enum(['success', 'failed', 'dead_letter'])
-        .optional()
-        .openapi({
-          param: { name: 'status', in: 'query' },
-          example: 'dead_letter',
-          description: 'Filter by delivery status (success, failed, dead_letter)',
-        }),
-      subscriptionId: z
-        .string()
-        .min(1)
-        .max(100)
-        .optional()
-        .openapi({
-          param: { name: 'subscriptionId', in: 'query' },
-          example: 'sub-1',
-          description: 'Filter by subscription ID',
-        }),
-      eventId: z
-        .string()
-        .min(1)
-        .max(100)
-        .optional()
-        .openapi({
-          param: { name: 'eventId', in: 'query' },
-          example: 'evt-1',
-          description: 'Filter by event ID',
-        }),
-      limit: z.coerce
-        .number()
-        .int()
-        .min(1)
-        .max(500)
-        .optional()
-        .openapi({
-          param: { name: 'limit', in: 'query' },
-          example: 100,
-          description: 'Maximum number of deliveries to return (1-500, default 100)',
-        }),
-    }),
-  },
-  responses: {
-    200: {
-      description: 'Webhook delivery records',
-      content: { 'application/json': { schema: z.array(z.object({}).passthrough()) } },
-    },
-    400: {
-      description: 'Validation error',
-      content: { 'application/json': { schema: ApiErrorSchema } },
-    },
-    401: UNAUTHORIZED_401,
     429: RATE_LIMITED_429,
   },
 });
-
-// ─── Spec builder ────────────────────────────────────────────────────────────
 
 export function buildOpenApiSpec() {
   const generator = new OpenApiGeneratorV31(registry.definitions);

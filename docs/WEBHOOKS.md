@@ -13,6 +13,7 @@ Stellar Intel can push real-time event notifications to your HTTPS endpoint inst
 | `intent.failed`                | An intent reaches a terminal `failed` state                          |
 | `reputation.event_written`     | A new outcome row is appended to the reputation log                  |
 | `anchor.health_status_changed` | An anchor's health status transitions (e.g. `healthy` to `degraded`) |
+| `intent.slippage_breach`       | A recorded outcome delivered less than the intent's `minReceive`     |
 
 ### `anchor.health_status_changed`
 
@@ -34,6 +35,33 @@ it. One event per anchor, in anchor-id order:
 `from` and `to` are `healthy` or `degraded`. The first run only records a baseline and
 emits nothing, and without a database there is no baseline to keep, so nothing is
 emitted. `lastCheckedAt` and `lastError` are `null` when the ledger has none.
+
+### `intent.slippage_breach`
+
+Emitted when an outcome is appended to the reputation log and the amount it reports as
+delivered is below the `minReceive` the intent was signed with. It is sent after the
+other events of the same outcome (`reputation.event_written`, then `intent.settled`):
+
+```json
+{
+  "intentHash": "3f6a0c1d9b2e47f58a6c0d1e2f3a4b5c6d7e8f90a1b2c3d4e5f60718293a4b5c",
+  "anchorId": "cowrie",
+  "corridor": "ngnt-ngn",
+  "minReceive": "1400",
+  "amountOut": "1350",
+  "shortfall": "50",
+  "shortfallBps": 357,
+  "evidenceHash": "9c1e7a44d0b25f6831c7e9a2b4d6f8013a5c7e9b1d3f507294b6d8fa1c3e5072",
+  "status": "detected",
+  "detectedAt": "2026-11-20T12:00:00.000Z"
+}
+```
+
+`minReceive`, `amountOut` and `shortfall` are decimal strings, and `shortfallBps` is the
+shortfall in basis points of `minReceive`, rounded down. `status` is always `detected`:
+the breach has been recorded and has not yet been checked against the Stellar payment.
+`evidenceHash` identifies the evidence kept with the breach. The evidence itself, the
+signer's account and the anchor's transaction id are not sent.
 
 ## Payload envelope
 
@@ -162,3 +190,35 @@ x-admin-key: <admin_key>
 ```
 
 Returns all delivery records that exhausted retries without a successful response.
+
+### Redeliver a logged delivery
+
+```http
+POST /api/webhooks/deliveries/{id}/redeliver
+x-admin-key: <admin_key>
+```
+
+Sends one logged delivery to its subscription again, for use once a subscriber has fixed an outage. `{id}` is the `id` of a delivery record, as listed by `GET /api/webhooks/failures` or `GET /api/webhooks/deliveries`. Any logged delivery can be resent, not only a dead-lettered one.
+
+The stored event goes out unchanged: the same `id`, `createdAt`, `idempotencyKey` and `payload`, and so the same `x-webhook-id` and `x-webhook-idempotency-key` headers. Only the timestamp and the signature are new. A consumer that de-duplicates on the event `id` or on the idempotency key processes a resent event once.
+
+Response `202`:
+
+```json
+{
+  "redelivered": true,
+  "eventId": "3f2a1b4c-...",
+  "subscriptionId": "9e8d7c6b-..."
+}
+```
+
+`202` means the delivery was attempted, with the usual retries, before the response was sent. It does not mean the subscriber accepted it. The attempt is logged as a new delivery record and the original record is left as it was, so read the new record's `status` to see how it went.
+
+| Status | `code`                    | Meaning                                                     |
+| ------ | ------------------------- | ----------------------------------------------------------- |
+| `403`  | `FORBIDDEN`               | Missing or invalid admin key                                |
+| `404`  | `NOT_FOUND`               | No delivery record has this id                              |
+| `410`  | `EVENT_NOT_RETAINED`      | The event is not in the event store, so it cannot be resent |
+| `410`  | `SUBSCRIPTION_DELETED`    | The subscription the delivery went to was deleted           |
+| `409`  | `EVENT_KIND_UNSUBSCRIBED` | The subscription no longer lists the event's kind           |
+| `429`  | `RATE_LIMITED`            | More than 10 requests in a minute                           |

@@ -1,5 +1,11 @@
 import { getSqlExecutor, hasDatabaseUrl } from '@/lib/reputation/pool';
-import { type DisputeCategory, type DisputeLevel, levelDeadline } from './dispute-ladder';
+import { publicDisputeRef } from './adjudication-log';
+import {
+  DISPUTE_CATEGORY_LABELS,
+  type DisputeCategory,
+  type DisputeLevel,
+  levelDeadline,
+} from './dispute-ladder';
 
 // ─── Dispute store ──────────────────────────────────────────────────────────────
 //
@@ -317,4 +323,36 @@ export function getDisputeStore(): DisputeStore {
 export function _setDisputeStore(store: DisputeStore | null): void {
   override = store;
   if (store === null) memoryStore = null;
+}
+
+// ─── Public view (DSP010) ───────────────────────────────────────────────────────
+
+/** A dispute as the public anchor profile shows it: no filer key, no free-text reason. */
+export interface PublicDisputeItem {
+  id: string;
+  createdAt: string;
+  reason: string;
+  status: 'open' | 'resolved';
+}
+
+/**
+ * The anchor's own disputes for its public profile, newest first, at most `limit`. The id is the
+ * public dispute reference, never the internal id, and the reason is the category label, never
+ * the filer's free text. Accepted and rejected disputes both show as resolved.
+ */
+export function toPublicDisputeItems(
+  disputes: readonly Dispute[],
+  anchorId: string,
+  limit = 10
+): PublicDisputeItem[] {
+  return disputes
+    .filter((d) => d.anchorId === anchorId)
+    .sort((a, b) => Date.parse(b.createdAt) - Date.parse(a.createdAt))
+    .slice(0, limit)
+    .map((d): PublicDisputeItem => ({
+      id: publicDisputeRef(d.id),
+      createdAt: d.createdAt,
+      reason: DISPUTE_CATEGORY_LABELS[d.category],
+      status: d.status === 'open' ? 'open' : 'resolved',
+    }));
 }

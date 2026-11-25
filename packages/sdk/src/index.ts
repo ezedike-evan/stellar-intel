@@ -27,4 +27,7 @@ export {
   type AnchorPricePoint,
   type AnchorHealthLedgerEntry,
   type CorridorVolumeSavings,
+  type AdjudicationEntry,
+  type AdjudicationSummary,
+  type AdjudicationLogResponse,
 } from './types.js';
