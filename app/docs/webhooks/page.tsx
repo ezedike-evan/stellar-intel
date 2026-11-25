@@ -36,12 +36,12 @@ export const EVENTS: { kind: string; description: string; emitted: boolean }[] =
   {
     kind: 'intent.rejected',
     description: 'An intent is refused before routing: a bad signature, a replay, or no route',
-    emitted: false,
+    emitted: true,
   },
   {
     kind: 'intent.expired',
     description: 'An intent passes its deadline without settling',
-    emitted: false,
+    emitted: true,
   },
   {
     kind: 'settlement.status_changed',
@@ -135,8 +135,9 @@ export default function WebhooksPage() {
         <CodeBlock
           language="json"
           code={`{
-  "id": "3f2a1b4c-...",
+  "id": "3f2a1b4c-9f8e-4a6d-b2a1-0e1f2a3b4c5d",
   "kind": "intent.settled",
+  "idempotencyKey": "intent.settled:0123456789abcdef...",
   "createdAt": "2026-07-28T12:00:00.000Z",
   "payload": { ... }
 }`}
@@ -165,11 +166,13 @@ export default function WebhooksPage() {
       <section className="space-y-4">
         <h2 className="text-xl font-semibold text-primary-text">Signature Verification</h2>
         <p className="text-secondary-text">
-          Each delivery carries two headers: <code>x-webhook-signature</code>, formatted as{' '}
-          <code>t=&lt;unix_seconds&gt;,v1=&lt;hex_hmac&gt;</code>, and{' '}
-          <code>x-webhook-timestamp</code>, the same timestamp. The HMAC-SHA256 is computed over{' '}
-          <code>{'`${t}.${rawBody}`'}</code> with your subscription secret. Use the raw body exactly
-          as received, compare in constant time, and reject timestamps more than 300 seconds old.
+          Each delivery carries four headers: <code>x-webhook-signature</code>, formatted as{' '}
+          <code>t=&lt;unix_seconds&gt;,v1=&lt;hex_hmac&gt;</code>; <code>x-webhook-timestamp</code>,
+          the same timestamp; <code>x-webhook-id</code>, the event id; and{' '}
+          <code>x-webhook-idempotency-key</code>, the event&apos;s deterministic key. The
+          HMAC-SHA256 is computed over <code>{'`${t}.${rawBody}`'}</code> with your subscription
+          secret. Use the raw body exactly as received, compare in constant time, and reject
+          timestamps more than 300 seconds old.
         </p>
         <CodeBlock
           language="typescript"
@@ -203,6 +206,16 @@ function verify(secret: string, header: string, rawBody: string): boolean {
       </section>
 
       <section className="space-y-4">
+        <h2 className="text-xl font-semibold text-primary-text">Delivery log and redelivery</h2>
+        <p className="text-secondary-text">
+          Operators can list deliveries with <code>GET /api/webhooks/deliveries</code>, filtered by
+          status, subscription or event, and resend one with{' '}
+          <code>POST /api/webhooks/deliveries/[id]/redeliver</code>. A resent event keeps its
+          original id and idempotency key. Both need the admin key.
+        </p>
+      </section>
+
+      <section className="space-y-4">
         <h2 className="text-xl font-semibold text-primary-text">Best Practices</h2>
         <ul className="space-y-2 text-sm text-secondary-text">
           <li>
@@ -218,7 +231,9 @@ function verify(secret: string, header: string, rawBody: string): boolean {
           </li>
           <li>• Store the raw payload and verify the signature before processing</li>
           <li>
-            • Idempotency: process by <code>id</code> to handle duplicate deliveries
+            • Idempotency: de-duplicate on <code>x-webhook-idempotency-key</code> (the
+            envelope&apos;s <code>idempotencyKey</code>), not on <code>id</code>: a re-sent event
+            keeps its key
           </li>
         </ul>
       </section>

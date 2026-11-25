@@ -3064,6 +3064,75 @@ registry.registerPath({
   },
 });
 
+registry.registerPath({
+  method: 'post',
+  path: '/api/intent/status',
+  summary: 'Observe anchor transaction status',
+  description:
+    'Observes the current settlement status of a SEP-24 or SEP-6 transaction server-side. Forwards the caller-provided SEP-10 JWT for a single read of the anchor transfer server without storing or logging it. Tracks status transitions to support webhook notifications.',
+  tags: ['Intent'],
+  request: {
+    headers: z.object({
+      authorization: z.string().describe('Bearer <jwt> containing SEP-10 authentication token'),
+    }),
+    body: {
+      required: true,
+      content: {
+        'application/json': {
+          schema: z.object({
+            anchorId: z.string().describe('Registered anchor ID'),
+            transferServer: z.string().describe('HTTPS URL of the anchor transfer server'),
+            transactionId: z.string().min(1).max(200).describe('Anchor transaction ID'),
+            protocol: z.enum(['sep24', 'sep6']).describe('Transfer protocol used'),
+            direction: z.enum(['withdraw', 'deposit']).describe('Transaction direction'),
+            intentHash: z
+              .string()
+              .regex(/^[0-9a-f]{64}$/)
+              .optional()
+              .describe('64-hex canonical intent hash'),
+          }),
+        },
+      },
+    },
+  },
+  responses: {
+    200: {
+      description: 'Status observation recorded',
+      content: {
+        'application/json': {
+          schema: z.object({
+            status: z.string().describe('Current status reported by the anchor'),
+            previous: z
+              .string()
+              .nullable()
+              .describe('Previous status observed by the server, or null if first observation'),
+            changed: z
+              .boolean()
+              .describe('Whether the status changed since the last server observation'),
+            terminal: z.boolean().describe('Whether the current status is terminal'),
+          }),
+        },
+      },
+    },
+    400: {
+      description: 'Validation error or transfer server not allowed',
+      content: { 'application/json': { schema: ApiErrorSchema } },
+    },
+    401: {
+      description: 'Bearer authorization token required',
+      content: { 'application/json': { schema: ApiErrorSchema } },
+    },
+    429: {
+      description: 'Rate limit exceeded',
+      content: { 'application/json': { schema: ApiErrorSchema } },
+    },
+    502: {
+      description: 'Upstream anchor returned an error',
+      content: { 'application/json': { schema: ApiErrorSchema } },
+    },
+  },
+});
+
 export function buildOpenApiSpec() {
   const generator = new OpenApiGeneratorV31(registry.definitions);
   return generator.generateDocument({

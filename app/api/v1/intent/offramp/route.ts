@@ -3,7 +3,7 @@ import { withV1 } from '@/lib/api/v1';
 import { IntentSchema, createOfframpIntent } from '@/lib/intent/offramp';
 import { verifyOptionalIntentAttestation } from '@/lib/intent/verify';
 import { registerIntentReplay } from '@/lib/intent/replay';
-import type { Intent } from '@/lib/intent/hash';
+import { hashIntent, type Intent } from '@/lib/intent/hash';
 import { emitWebhookEvent } from '@/lib/webhooks/emit';
 
 export const runtime = 'nodejs';
@@ -32,11 +32,26 @@ export async function POST(request: NextRequest): Promise<NextResponse> {
       }
 
       const intent = parsed.data as Intent;
+      const intentHash = await hashIntent(intent);
 
       // Optional signature attestation — verified over the canonical intent hash
       // when supplied, unsigned intents still accepted (lib/intent/verify.ts).
       const attestation = await verifyOptionalIntentAttestation(body, intent);
       if (!attestation.ok) {
+        if (attestation.status === 401) {
+          emitWebhookEvent(
+            'intent.rejected',
+            {
+              intentHash,
+              direction: 'offramp',
+              reason: 'invalid_signature',
+              sourceAsset: intent.sourceAsset,
+              destinationAsset: intent.destinationAsset,
+              amount: intent.amount,
+            },
+            { idempotencyKey: `intent.rejected:invalid_signature:${intentHash}` }
+          );
+        }
         return ctx.error(
           attestation.status === 401 ? 'unauthorized' : 'validation_error',
           attestation.message,
@@ -47,6 +62,18 @@ export async function POST(request: NextRequest): Promise<NextResponse> {
       if (attestation.attested) {
         const { nonce, deadline } = intent as { nonce?: string; deadline?: string };
         if (!nonce || !deadline) {
+          emitWebhookEvent(
+            'intent.rejected',
+            {
+              intentHash,
+              direction: 'offramp',
+              reason: 'missing_replay_fields',
+              sourceAsset: intent.sourceAsset,
+              destinationAsset: intent.destinationAsset,
+              amount: intent.amount,
+            },
+            { idempotencyKey: `intent.rejected:missing_replay_fields:${intentHash}` }
+          );
           return ctx.error('validation_error', 'signed intents require nonce and deadline', 400);
         }
 
@@ -56,12 +83,53 @@ export async function POST(request: NextRequest): Promise<NextResponse> {
           deadline,
         });
         if (!replay.ok) {
+          if (replay.code === 'replay_detected') {
+            emitWebhookEvent(
+              'intent.rejected',
+              {
+                intentHash,
+                direction: 'offramp',
+                reason: 'replay_detected',
+                sourceAsset: intent.sourceAsset,
+                destinationAsset: intent.destinationAsset,
+                amount: intent.amount,
+              },
+              { idempotencyKey: `intent.rejected:replay_detected:${intentHash}` }
+            );
+          } else if (replay.code === 'deadline_expired') {
+            emitWebhookEvent(
+              'intent.expired',
+              {
+                intentHash,
+                direction: 'offramp',
+                deadline: String(intent.deadline),
+                sourceAsset: intent.sourceAsset,
+                destinationAsset: intent.destinationAsset,
+                amount: intent.amount,
+              },
+              { idempotencyKey: `intent.expired:${intentHash}` }
+            );
+          }
           return ctx.error(replay.code, replay.message, replay.status);
         }
       }
 
       const result = await createOfframpIntent(intent);
       if (!result.ok) {
+        if (result.code === 'NO_ROUTE') {
+          emitWebhookEvent(
+            'intent.rejected',
+            {
+              intentHash,
+              direction: 'offramp',
+              reason: 'no_route',
+              sourceAsset: intent.sourceAsset,
+              destinationAsset: intent.destinationAsset,
+              amount: intent.amount,
+            },
+            { idempotencyKey: `intent.rejected:no_route:${intentHash}` }
+          );
+        }
         return ctx.error(result.code.toLowerCase(), result.message, result.status);
       }
 
@@ -72,6 +140,8 @@ export async function POST(request: NextRequest): Promise<NextResponse> {
       emitWebhookEvent(
         'intent.created',
         {
+          intentHash,
+          direction: 'offramp',
           corridorId: result.response.route.corridorId,
           anchorId: result.response.route.anchorId,
           quoteId: result.response.quoteId,
