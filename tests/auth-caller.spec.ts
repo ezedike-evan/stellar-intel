@@ -186,4 +186,14 @@ describe('lib/auth/caller.ts (AGS003)', () => {
     expect(res.ok).toBe(true);
     expect(store.touch).toHaveBeenCalledTimes(1);
   });
+
+  it('never downgrades an invalid credential to anonymous (#2196)', async () => {
+    const res = await resolveCaller(new Headers({ 'x-api-key': 'invalid-token-or-key' }));
+    expect(res.ok).toBe(false);
+    if (!res.ok) {
+      expect(res.status).toBe(401);
+      expect(res.code).toBe('invalid_api_key');
+      expect(res.message).toBe('API key is not valid');
+    }
+  });
 });

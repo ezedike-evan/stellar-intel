@@ -117,6 +117,10 @@ function makeFakeDb() {
     }
 
     if (sql.includes('FROM webhook_delivery_log')) {
+      if (/WHERE id = \$1/.test(sql)) {
+        const row = deliveries.find((d) => d['id'] === (params as [string])[0]);
+        return { rows: row ? [row] : [] };
+      }
       if (sql.includes("status = 'dead_letter'")) {
         const rows = deliveries
           .filter((d) => d['status'] === 'dead_letter')
@@ -395,6 +399,44 @@ describe('PostgresWebhookStore (#1337)', () => {
 
       expect(await store.getEvent(EVENT.id)).toEqual(EVENT);
       expect(await store.getEvent('missing')).toBeNull();
+    });
+  });
+
+  describe('getDelivery (WHK007)', () => {
+    it('returns one delivery by id with ISO timestamps, and null for an unknown id', async () => {
+      const { store } = await loadWithFakeDb();
+      const dead = delivery({ id: 'd-1' });
+      const delivered = delivery({
+        id: 'd-2',
+        status: 'success',
+        attempts: 1,
+        lastStatusCode: 200,
+        lastError: null,
+        deliveredAt: '2026-09-26T10:00:05.000Z',
+        createdAt: '2026-09-26T10:00:04.000Z',
+      });
+      await store.recordDelivery(dead);
+      await store.recordDelivery(delivered);
+
+      expect(await store.getDelivery('d-2')).toEqual(delivered);
+      expect(await store.getDelivery('d-1')).toEqual(dead);
+      expect(await store.getDelivery('missing')).toBeNull();
+    });
+
+    it('selects by a $1 parameter, never by an id written into the SQL', async () => {
+      const { store, db } = await loadWithFakeDb();
+      const hostile = "x' OR '1'='1";
+
+      expect(await store.getDelivery(hostile)).toBeNull();
+
+      const selects = db.query.mock.calls.filter(([sql]) =>
+        String(sql).includes('FROM webhook_delivery_log')
+      );
+      expect(selects).toHaveLength(1);
+      const [sql, params] = selects[0] as [string, unknown[]];
+      expect(sql).toContain('WHERE id = $1');
+      expect(params).toEqual([hostile]);
+      expect(sql).not.toContain(hostile);
     });
   });
 

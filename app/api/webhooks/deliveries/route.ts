@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { z } from 'zod';
 import { withRequestLogger } from '@/lib/logger';
-import { isAdminRequest } from '@/lib/auth/admin';
+import { isAdminRequest, throttleFailedAdminAuth } from '@/lib/auth/admin';
 import { getWebhookStore } from '@/lib/webhooks/store';
 import type { ApiError } from '@/types';
 import { enforceRateLimit } from '@/lib/api/response';
@@ -29,6 +29,8 @@ export async function GET(request: NextRequest): Promise<NextResponse> {
     if (limited) return limited;
 
     if (!isAdminRequest(request)) {
+      const throttled = await throttleFailedAdminAuth(request);
+      if (throttled) return throttled;
       return NextResponse.json<ApiError>(
         { code: 'FORBIDDEN', message: 'Admin key required' },
         { status: 403 }

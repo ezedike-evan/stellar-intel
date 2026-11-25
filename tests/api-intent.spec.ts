@@ -434,6 +434,20 @@ describe('POST /api/intent/offramp — intent.created webhook', () => {
     expect(emitted[0]?.payload).not.toHaveProperty('unsignedTx');
   });
 
+  it('keys intent.created on the quote id (WHK005)', async () => {
+    const keys: Array<{ kind: string; opts: unknown }> = [];
+    _setWebhookEmitter((kind, _payload, opts) => keys.push({ kind, opts }));
+
+    const res = await POST(makeRequest(VALID_INTENT));
+    expect(res.status).toBe(200);
+    const data = (await res.json()) as OfframpIntentResponse;
+
+    expect(data.quoteId).toEqual(expect.any(String));
+    expect(keys).toEqual([
+      { kind: 'intent.created', opts: { idempotencyKey: `intent.created:${data.quoteId}` } },
+    ]);
+  });
+
   it('emits nothing on a 400', async () => {
     const res = await POST(makeRequest({ ...VALID_INTENT, amount: '-1' }));
     expect(res.status).toBe(400);

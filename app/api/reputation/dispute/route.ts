@@ -22,6 +22,7 @@ import {
   publicDisputeRef,
   _setAdjudicationLog,
 } from '@/lib/reputation/adjudication-log';
+import { emitWebhookEvent } from '@/lib/webhooks/emit';
 
 const DisputeBodySchema = z.object({
   intentHash: z.string().regex(/^[0-9a-f]{64}$/, {
@@ -212,6 +213,14 @@ export async function POST(request: NextRequest): Promise<NextResponse> {
       subjectRef: intentHash,
       appealedAt: null,
     });
+
+    // Field by field: never publicKey or reason, which is free text that may
+    // carry personal data (WHK012).
+    emitWebhookEvent(
+      'dispute.opened',
+      { disputeId: id, intentHash, anchorId, createdAt },
+      { idempotencyKey: `dispute.opened:${id}` }
+    );
 
     try {
       await getAdjudicationLog().append({
