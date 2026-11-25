@@ -2386,6 +2386,190 @@
           "detectedAt",
           "verifiedAt"
         ]
+      },
+      "ApiKeyRecord": {
+        "type": "object",
+        "properties": {
+          "keyId": {
+            "type": "string",
+            "description": "16 lowercase hex characters"
+          },
+          "displayPrefix": {
+            "type": "string",
+            "description": "sik_<keyId>; safe to show instead of the key"
+          },
+          "name": {
+            "type": "string"
+          },
+          "scopes": {
+            "type": "array",
+            "items": {
+              "type": "string",
+              "enum": [
+                "quotes:read",
+                "intents:write",
+                "reputation:write",
+                "admin"
+              ]
+            }
+          },
+          "tier": {
+            "type": "string",
+            "enum": [
+              "standard",
+              "partner"
+            ]
+          },
+          "maxIntentAmount": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "description": "Per-key intent amount cap, or null"
+          },
+          "createdAt": {
+            "type": "string"
+          },
+          "expiresAt": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "revokedAt": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "lastUsedAt": {
+            "type": [
+              "string",
+              "null"
+            ]
+          }
+        },
+        "required": [
+          "keyId",
+          "displayPrefix",
+          "name",
+          "scopes",
+          "tier",
+          "maxIntentAmount",
+          "createdAt",
+          "expiresAt",
+          "revokedAt",
+          "lastUsedAt"
+        ]
+      },
+      "CreatedApiKey": {
+        "type": "object",
+        "properties": {
+          "key": {
+            "type": "string",
+            "description": "The raw caller key. Returned once, at creation, and never again."
+          },
+          "keyId": {
+            "type": "string"
+          },
+          "displayPrefix": {
+            "type": "string"
+          },
+          "name": {
+            "type": "string"
+          },
+          "scopes": {
+            "type": "array",
+            "items": {
+              "type": "string",
+              "enum": [
+                "quotes:read",
+                "intents:write",
+                "reputation:write",
+                "admin"
+              ]
+            }
+          },
+          "tier": {
+            "type": "string",
+            "enum": [
+              "standard",
+              "partner"
+            ]
+          },
+          "maxIntentAmount": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "createdAt": {
+            "type": "string"
+          },
+          "expiresAt": {
+            "type": [
+              "string",
+              "null"
+            ]
+          }
+        },
+        "required": [
+          "key",
+          "keyId",
+          "displayPrefix",
+          "name",
+          "scopes",
+          "tier",
+          "maxIntentAmount",
+          "createdAt",
+          "expiresAt"
+        ]
+      },
+      "CreateApiKeyRequest": {
+        "type": "object",
+        "properties": {
+          "name": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 80,
+            "description": "Human label for the key holder"
+          },
+          "scopes": {
+            "type": "array",
+            "items": {
+              "type": "string",
+              "enum": [
+                "quotes:read",
+                "intents:write",
+                "reputation:write",
+                "admin"
+              ]
+            },
+            "minItems": 1,
+            "description": "Non-empty, no duplicates"
+          },
+          "tier": {
+            "type": "string",
+            "enum": [
+              "standard",
+              "partner"
+            ],
+            "description": "Defaults to standard"
+          },
+          "expiresInDays": {
+            "type": "integer",
+            "minimum": 1,
+            "maximum": 365
+          },
+          "maxIntentAmount": {
+            "type": "string",
+            "pattern": "^\\d+(\\.\\d+)?$"
+          }
+        },
+        "required": [
+          "name",
+          "scopes"
+        ]
       }
     },
     "parameters": {}
@@ -6809,6 +6993,191 @@
           },
           "503": {
             "description": "Store unavailable",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/admin/keys": {
+      "post": {
+        "summary": "Issue a caller API key (admin)",
+        "description": "Issues a caller key and returns the raw key exactly once, at creation. Only the SHA-256 hash is stored. Authenticated by ADMIN_SECRET_KEY only — a caller key with the `admin` scope cannot mint keys.",
+        "tags": [
+          "Admin"
+        ],
+        "security": [
+          {
+            "adminKey": []
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/CreateApiKeyRequest"
+              }
+            }
+          }
+        },
+        "responses": {
+          "201": {
+            "description": "Caller key issued. The response is not cacheable.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/CreatedApiKey"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Validation error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiError"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Admin key required",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiError"
+                }
+              }
+            }
+          },
+          "429": {
+            "description": "Rate limited",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiError"
+                }
+              }
+            }
+          }
+        }
+      },
+      "get": {
+        "summary": "List caller API keys (admin)",
+        "description": "Lists issued caller keys newest first, without their hashes.",
+        "tags": [
+          "Admin"
+        ],
+        "security": [
+          {
+            "adminKey": []
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Caller keys, newest first",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "array",
+                  "items": {
+                    "$ref": "#/components/schemas/ApiKeyRecord"
+                  }
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Admin key required",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiError"
+                }
+              }
+            }
+          },
+          "429": {
+            "description": "Rate limited",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/admin/keys/{keyId}": {
+      "delete": {
+        "summary": "Revoke a caller API key (admin)",
+        "description": "Revokes a caller key immediately. Answers 404 for an unknown or already revoked key.",
+        "tags": [
+          "Admin"
+        ],
+        "security": [
+          {
+            "adminKey": []
+          }
+        ],
+        "parameters": [
+          {
+            "schema": {
+              "type": "string",
+              "pattern": "^[0-9a-f]{16}$",
+              "description": "16 lowercase hex characters"
+            },
+            "required": true,
+            "description": "16 lowercase hex characters",
+            "name": "keyId",
+            "in": "path"
+          }
+        ],
+        "responses": {
+          "204": {
+            "description": "Key revoked"
+          },
+          "400": {
+            "description": "Malformed keyId",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiError"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Admin key required",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiError"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Unknown or already revoked key",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiError"
+                }
+              }
+            }
+          },
+          "429": {
+            "description": "Rate limited",
             "content": {
               "application/json": {
                 "schema": {
