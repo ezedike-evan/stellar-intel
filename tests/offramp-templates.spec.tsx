@@ -1,12 +1,48 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { fireEvent, render, screen, waitFor } from '@testing-library/react';
 import { flags } from '@/lib/flags';
-import { saveTemplate } from '@/lib/templates/store';
+import { listTemplates, saveTemplate } from '@/lib/templates/store';
 import { trackFunnelEvent } from '@/lib/analytics';
 import { useWallet } from '@/contexts/WalletContext';
 import OfframpPage from '@/app/offramp/page';
 
 const mockReplace = vi.fn();
+let mockWithdrawStatus: string | null = null;
+
+const RATE = {
+  anchorId: 'cowrie',
+  anchorName: 'Cowrie',
+  corridorId: 'usdc-ngn',
+  exchangeRate: null,
+  totalReceived: null,
+};
+
+// A row button and a drawer button stand in for RateTable and ExecuteDrawer,
+// which have their own specs.
+vi.mock('@/components/offramp/RateTable', () => ({
+  RateTable: ({ onSelectAnchor }: { onSelectAnchor: (rate: typeof RATE) => void }) => (
+    <button onClick={() => onSelectAnchor(RATE)}>Stub select</button>
+  ),
+}));
+
+vi.mock('@/components/offramp/ExecuteDrawer', () => ({
+  ExecuteDrawer: ({
+    rate,
+    onExecuteStarted,
+  }: {
+    rate: unknown;
+    onExecuteStarted: (id: string, server: string, jwt: string, domain: string) => void;
+  }) =>
+    rate ? (
+      <button
+        onClick={() =>
+          onExecuteStarted('tx-1', 'https://cowrie.example/sep24', 'jwt', 'cowrie.example')
+        }
+      >
+        Stub start
+      </button>
+    ) : null,
+}));
 
 vi.mock('next/navigation', () => ({
   useRouter: () => ({ replace: mockReplace }),
@@ -45,7 +81,7 @@ vi.mock('@/hooks/useWalletBalance', () => ({
 
 vi.mock('@/hooks/useWithdrawStatus', () => ({
   useWithdrawStatus: () => ({
-    status: null,
+    status: mockWithdrawStatus,
     amountIn: null,
     amountInAsset: null,
     amountOut: null,
@@ -77,6 +113,7 @@ function connect(connected: boolean) {
 }
 
 beforeEach(() => {
+  mockWithdrawStatus = null;
   localStorage.clear();
   mockReplace.mockClear();
   vi.mocked(trackFunnelEvent).mockClear();
@@ -126,5 +163,35 @@ describe('/offramp templates (#2159)', () => {
     connect(true);
     render(<OfframpPage />);
     expect(screen.queryByLabelText('Saved templates')).not.toBeInTheDocument();
+  });
+});
+
+describe('/offramp save as template (#2161)', () => {
+  async function startOfframp() {
+    render(<OfframpPage />);
+    fireEvent.click(await screen.findByRole('button', { name: 'Stub select' }));
+    fireEvent.click(await screen.findByRole('button', { name: 'Stub start' }));
+  }
+
+  it('offers to save a completed off-ramp and stores it with the anchor', async () => {
+    connect(true);
+    mockWithdrawStatus = 'completed';
+    await startOfframp();
+
+    const name = await screen.findByLabelText('Template name');
+    fireEvent.change(name, { target: { value: 'Cowrie run' } });
+    fireEvent.click(screen.getByRole('button', { name: 'Save template' }));
+
+    expect(await screen.findByRole('status')).toHaveTextContent('Saved as "Cowrie run".');
+    const saved = listTemplates(WALLET, 'offramp').find((t) => t.label === 'Cowrie run');
+    expect(saved).toMatchObject({ corridorId: 'usdc-ngn', anchorId: 'cowrie' });
+  });
+
+  it('does not offer it before the off-ramp completes', async () => {
+    connect(true);
+    mockWithdrawStatus = 'pending_anchor';
+    await startOfframp();
+    await waitFor(() => expect(mockReplace).toHaveBeenCalled());
+    expect(screen.queryByLabelText('Template name')).not.toBeInTheDocument();
   });
 });

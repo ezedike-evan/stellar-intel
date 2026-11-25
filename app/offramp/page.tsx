@@ -29,7 +29,8 @@ import { useWalletBalance } from '@/hooks/useWalletBalance';
 import { amountBucket, FUNNEL_EVENTS, TEMPLATE_EVENTS, trackFunnelEvent } from '@/lib/analytics';
 import { TemplatePicker } from '@/components/templates/TemplatePicker';
 import { useIntentTemplates } from '@/hooks/useIntentTemplates';
-import type { IntentTemplate } from '@/lib/templates/schema';
+import type { IntentTemplate, IntentTemplateDraft } from '@/lib/templates/schema';
+import { SaveTemplateForm } from '@/components/templates/SaveTemplateForm';
 import { VISIBLE_CORRIDORS } from '@/constants/anchors';
 import { getCorridorAsset, getCorridorById } from '@/lib/stellar/anchors';
 import { signIntent } from '@/lib/intent/sign';
@@ -103,6 +104,9 @@ function OfframpContent() {
     flags.intentTemplates && isConnected ? publicKey : null,
     'offramp'
   );
+  // Offered after a completed off-ramp started in this page session (TPL008).
+  const [templateDraft, setTemplateDraft] = useState<IntentTemplateDraft | null>(null);
+
   const handleApplyTemplate = (template: IntentTemplate) => {
     if (template.direction !== 'offramp' || !VALID_CORRIDOR_IDS.has(template.corridorId)) return;
     setCorridorId(template.corridorId);
@@ -213,6 +217,14 @@ function OfframpContent() {
       setTrackingJwt(jwt);
       setTrackingNonce(nonce);
       setTrackingAnchorHomeDomain(anchorHomeDomain);
+      if (selectedRate) {
+        setTemplateDraft({
+          direction: 'offramp',
+          corridorId: selectedRate.corridorId,
+          amount,
+          anchorId: selectedRate.anchorId,
+        });
+      }
 
       // Capture the quote so the terminal outcome of this real transaction is
       // logged to the reputation store (#799). A null exchangeRate can't be
@@ -299,6 +311,7 @@ function OfframpContent() {
     setTrackingNonce(null);
     setTrackingAnchorHomeDomain(null);
     setOutcomeContext(null);
+    setTemplateDraft(null);
     rateTableRef.current?.scrollIntoView({ behavior: 'smooth', block: 'start' });
   }, []);
 
@@ -454,6 +467,16 @@ function OfframpContent() {
           {flags.disputeLadder && outcomeContext && (
             <DisputeStatusBadge intentHash={outcomeContext.intentHash} />
           )}
+          {flags.intentTemplates &&
+            publicKey &&
+            templateDraft &&
+            withdrawStatus.status === 'completed' && (
+              <SaveTemplateForm
+                draft={templateDraft}
+                onSave={templatesApi.save}
+                onDismiss={() => setTemplateDraft(null)}
+              />
+            )}
         </>
       )}
 
