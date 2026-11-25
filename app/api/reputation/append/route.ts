@@ -12,6 +12,7 @@ import type { ApiError } from '@/types';
 import { enforceRateLimit } from '@/lib/api/response';
 import { requireCallerScope } from '@/lib/auth/caller';
 import { emitWebhookEvent } from '@/lib/webhooks/emit';
+import { openRefundCaseForOutcome } from '@/lib/refunds/detect';
 import type { OutcomeLogRow, SlippageBreach } from '@/types/reputation';
 
 export const runtime = 'nodejs';
@@ -201,6 +202,23 @@ export async function POST(request: NextRequest): Promise<NextResponse> {
     // After the events of the outcome itself, so a subscriber learns of the outcome
     // before it learns that the outcome fell short.
     if (slippageResult.kind === 'breach') emitSlippageBreachEvent(slippageResult.breach);
+
+    // A refunded outcome, or a withdrawal that failed after the user paid,
+    // opens a refund case with no user action (RFD004). A failure here never
+    // changes the 201: the outcome itself is already recorded.
+    try {
+      const opened = await openRefundCaseForOutcome(row);
+      if (opened) {
+        logger.info({
+          event: 'refund_case_opened',
+          reason: opened.reason,
+          intentHash: row.intentHash,
+        });
+      }
+    } catch {
+      logger.error({ event: 'refund_case_open_failed', intentHash: row.intentHash });
+    }
+
     return NextResponse.json(
       { ok: true, intentHash: row.intentHash, attested: true, slippage },
       { status: 201 }
