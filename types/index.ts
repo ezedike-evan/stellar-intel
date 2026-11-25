@@ -484,7 +484,8 @@ export type WithdrawStatus =
 /** Payment breakdown for a refunded SEP-24 transaction. */
 export interface Sep24RefundPayment {
   id: string;
-  id_type: string;
+  /** SEP-24 defines exactly these two; `parseRefunds` drops a payment with any other. */
+  id_type: 'stellar' | 'external';
   amount: string;
   fee: string;
 }

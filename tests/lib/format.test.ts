@@ -42,27 +42,18 @@ describe('formatDeliveredAmount', () => {
 });
 
 describe('formatSettleDuration', () => {
-  it('formats seconds under 60', () => {
-    expect(formatSettleDuration(5000)).toBe('5s');
-    expect(formatSettleDuration(45000)).toBe('45s');
-    expect(formatSettleDuration(0)).toBe('0s');
+  it.each([
+    [0, '0s'],
+    [42_400, '42s'],
+    [59_600, '1m 00s'],
+    [245_000, '4m 05s'],
+    [3_600_000, '1h 00m'],
+    [5_430_000, '1h 30m'],
+  ])('formats %i ms as %s', (ms, expected) => {
+    expect(formatSettleDuration(ms)).toBe(expected);
   });
 
-  it('formats minutes under 60 with padded seconds', () => {
-    expect(formatSettleDuration(65000)).toBe('1m 05s');
-    expect(formatSettleDuration(120000)).toBe('2m 00s');
-    expect(formatSettleDuration(3599000)).toBe('59m 59s');
-  });
-
-  it('formats hours with padded minutes', () => {
-    expect(formatSettleDuration(3600000)).toBe('1h 00m');
-    expect(formatSettleDuration(3665000)).toBe('1h 01m');
-    expect(formatSettleDuration(7200000)).toBe('2h 00m');
-  });
-
-  it('handles invalid or negative durations with fallback', () => {
-    expect(formatSettleDuration(-100)).toBe('—');
-    expect(formatSettleDuration(NaN)).toBe('—');
-    expect(formatSettleDuration(Infinity)).toBe('—');
+  it.each([[-1], [NaN], [Infinity]])('returns an em dash for %s', (ms) => {
+    expect(formatSettleDuration(ms)).toBe('—');
   });
 });

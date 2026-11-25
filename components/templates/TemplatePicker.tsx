@@ -1,67 +1,65 @@
 'use client';
 
-import React, { useCallback } from 'react';
-import type { IntentTemplate } from '@/lib/templates/schema';
-import { templateCorridorLabel } from '@/lib/templates/schema';
+import type { Ref } from 'react';
 import { ANCHORS } from '@/constants/anchors';
+import { templateCorridorLabel, type IntentTemplate } from '@/lib/templates/schema';
 
 export interface TemplatePickerProps {
   templates: IntentTemplate[];
   visibleCorridorIds: ReadonlySet<string>;
   onApply: (template: IntentTemplate) => void;
   onManage?: () => void;
-  manageButtonRef?: React.Ref<HTMLButtonElement>;
+  manageButtonRef?: Ref<HTMLButtonElement>;
 }
 
-const ANCHOR_MAP = new Map(ANCHORS.map((a) => [a.id, a.name]));
+const CONTROL =
+  'border-border bg-bg-base text-primary-text focus-visible:ring-accent rounded-lg border px-3 py-2 text-sm transition-colors duration-150 focus-visible:ring-2 focus-visible:outline-none';
 
+function optionText(template: IntentTemplate, available: boolean): string {
+  const anchor = template.anchorId ? ANCHORS.find((a) => a.id === template.anchorId) : undefined;
+  return (
+    `${template.label} — ${template.amount} ${templateCorridorLabel(template.corridorId)}` +
+    (anchor ? ` · ${anchor.name}` : '') +
+    (available ? '' : ' (corridor unavailable)')
+  );
+}
+
+/**
+ * Saved intent templates as a native select (TPL006), so keyboard and screen
+ * reader support come with the control. Choosing one applies it and resets
+ * the select, so the same template can be applied again.
+ */
 export function TemplatePicker({
   templates,
   visibleCorridorIds,
   onApply,
   onManage,
   manageButtonRef,
-}: TemplatePickerProps): React.ReactElement | null {
-  const handleChange = useCallback(
-    (e: React.ChangeEvent<HTMLSelectElement>) => {
-      const selectedId = e.target.value;
-      if (!selectedId) return;
-      const t = templates.find((item) => item.id === selectedId);
-      if (t) {
-        onApply(t);
-      }
-      e.target.value = '';
-    },
-    [templates, onApply]
-  );
-
-  if (templates.length === 0 && !onManage) {
-    return null;
-  }
+}: TemplatePickerProps) {
+  if (templates.length === 0 && !onManage) return null;
 
   return (
-    <div className="border-border bg-bg-sunken flex flex-wrap items-center justify-between gap-3 rounded-xl border p-3">
-      <div className="flex min-w-[200px] flex-1 items-center gap-3">
-        <label htmlFor="template-select" className="text-fg-muted whitespace-nowrap text-xs font-medium">
+    <div className="flex flex-wrap items-end gap-3">
+      <div className="min-w-0 flex-1">
+        <label htmlFor="template-select" className="text-fg-muted mb-1 block text-xs font-medium">
           Saved templates
         </label>
         <select
           id="template-select"
-          defaultValue=""
-          onChange={handleChange}
-          className="border-border bg-bg-base text-primary-text focus-visible:ring-accent max-w-md flex-1 rounded-lg border px-3 py-1.5 text-sm focus-visible:ring-2 focus-visible:outline-none"
+          value=""
+          onChange={(event) => {
+            const template = templates.find((t) => t.id === event.target.value);
+            event.target.value = '';
+            if (template) onApply(template);
+          }}
+          className={`${CONTROL} w-full`}
         >
           <option value="">Choose a template…</option>
-          {templates.map((t) => {
-            const available = visibleCorridorIds.has(t.corridorId);
-            const anchorName = t.anchorId ? ANCHOR_MAP.get(t.anchorId) : undefined;
-            const anchorPart = anchorName ? ` · ${anchorName}` : '';
-            const suffix = available ? '' : ' (corridor unavailable)';
-            const optionText = `${t.label} — ${t.amount} ${templateCorridorLabel(t.corridorId)}${anchorPart}${suffix}`;
-
+          {templates.map((template) => {
+            const available = visibleCorridorIds.has(template.corridorId);
             return (
-              <option key={t.id} value={t.id} disabled={!available}>
-                {optionText}
+              <option key={template.id} value={template.id} disabled={!available}>
+                {optionText(template, available)}
               </option>
             );
           })}
@@ -72,7 +70,7 @@ export function TemplatePicker({
           type="button"
           ref={manageButtonRef}
           onClick={onManage}
-          className="text-primary-text hover:text-accent whitespace-nowrap text-xs font-medium underline-offset-4 hover:underline"
+          className={`${CONTROL} hover:bg-bg-subtle active:translate-y-px`}
         >
           Manage templates
         </button>

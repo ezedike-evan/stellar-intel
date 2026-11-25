@@ -1,9 +1,6 @@
 import type { McpServer } from '@modelcontextprotocol/sdk/server/mcp.js';
 import { z } from 'zod';
-import {
-  type ExecutionSlaReport,
-  ExecutionSlaReportSchema,
-} from '@/lib/reputation/execution-sla';
+import { type ExecutionSlaReport, ExecutionSlaReportSchema } from '@/lib/reputation/execution-sla';
 
 export const ANCHOR_SLA_TOOL_NAME = 'intel.anchor.sla';
 

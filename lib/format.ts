@@ -27,26 +27,14 @@ export function isValidStellarTxId(id: string): boolean {
 }
 
 function pad2(n: number): string {
-  return n < 10 ? `0${n}` : `${n}`;
+  return String(n).padStart(2, '0');
 }
 
-/**
- * Formats a settlement duration in milliseconds into a compact human-readable string.
- *
- * Examples:
- *   - < 60s: "45s"
- *   - < 60m: "12m 04s"
- *   - >= 60m: "2h 15m"
- *   - Invalid or negative: "—"
- */
+/** Formats a settlement duration in milliseconds as `42s`, `4m 05s` or `1h 30m`. */
 export function formatSettleDuration(ms: number): string {
   if (!Number.isFinite(ms) || ms < 0) return '—';
-  const totalSeconds = Math.round(ms / 1000);
-  if (totalSeconds < 60) return `${totalSeconds}s`;
-  const m = Math.floor(totalSeconds / 60);
-  const s = totalSeconds % 60;
-  if (m < 60) return `${m}m ${pad2(s)}s`;
-  const h = Math.floor(m / 60);
-  const remM = m % 60;
-  return `${h}h ${pad2(remM)}m`;
+  const s = Math.round(ms / 1000);
+  if (s < 60) return `${s}s`;
+  if (s < 3600) return `${Math.floor(s / 60)}m ${pad2(s % 60)}s`;
+  return `${Math.floor(s / 3600)}h ${pad2(Math.floor((s % 3600) / 60))}m`;
 }

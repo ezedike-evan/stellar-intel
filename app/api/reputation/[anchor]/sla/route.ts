@@ -5,10 +5,7 @@ import { ANCHORS } from '@/constants/anchors';
 import { withRequestLogger } from '@/lib/logger';
 import { enforceRateLimit } from '@/lib/api/response';
 import { getReputationStore, ReputationStoreUnavailableError } from '@/lib/reputation/store';
-import {
-  buildExecutionSlaReport,
-  ExecutionSlaReportSchema,
-} from '@/lib/reputation/execution-sla';
+import { buildExecutionSlaReport, ExecutionSlaReportSchema } from '@/lib/reputation/execution-sla';
 import type { ApiError } from '@/types';
 import type { OutcomeLogRow } from '@/types/reputation';
 
@@ -59,11 +56,7 @@ export async function GET(
     // Unattested rows are ignored
     rows = rows.filter((r) => r.attested);
 
-    const report = buildExecutionSlaReport(
-      rows,
-      anchorId,
-      corridor ? { corridor } : undefined
-    );
+    const report = buildExecutionSlaReport(rows, anchorId, corridor ? { corridor } : undefined);
 
     logger.info({
       event: 'execution_sla_report',

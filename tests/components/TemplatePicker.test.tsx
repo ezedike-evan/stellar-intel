@@ -1,108 +1,80 @@
-import { describe, it, expect, vi } from 'vitest';
-import { render, screen } from '@testing-library/react';
-import userEvent from '@testing-library/user-event';
+import { describe, expect, it, vi } from 'vitest';
+import { fireEvent, render, screen } from '@testing-library/react';
 import { TemplatePicker } from '@/components/templates/TemplatePicker';
 import type { IntentTemplate } from '@/lib/templates/schema';
 
-const MOCK_ONRAMP_TEMPLATE: IntentTemplate = {
-  schemaVersion: 1,
-  id: 'tpl-1',
-  direction: 'onramp',
-  label: 'NGN Savings',
-  corridorId: 'usdc-ngn',
-  amount: '100',
-  anchorId: 'moneygram',
-  assetId: 'stellar:native',
-  createdAt: '2026-11-20T10:00:00.000Z',
-  updatedAt: '2026-11-20T10:00:00.000Z',
-};
+function template(overrides: Partial<IntentTemplate> = {}): IntentTemplate {
+  return {
+    schemaVersion: 1,
+    id: 'tpl-1',
+    direction: 'offramp',
+    label: 'Rent',
+    corridorId: 'usdc-ngn',
+    amount: '120',
+    createdAt: '2026-11-20T10:00:00.000Z',
+    updatedAt: '2026-11-20T10:00:00.000Z',
+    ...overrides,
+  } as IntentTemplate;
+}
 
-const MOCK_OFFRAMP_TEMPLATE: IntentTemplate = {
-  schemaVersion: 1,
-  id: 'tpl-2',
-  direction: 'offramp',
-  label: 'Mum in Lagos',
-  corridorId: 'usdc-ngn',
-  amount: '200',
-  createdAt: '2026-11-20T10:00:00.000Z',
-  updatedAt: '2026-11-20T10:00:00.000Z',
-};
+const VISIBLE = new Set(['usdc-ngn']);
 
-describe('TemplatePicker', () => {
-  const visibleCorridors = new Set(['usdc-ngn']);
-
-  it('renders nothing when empty without onManage', () => {
+describe('TemplatePicker (#2159)', () => {
+  it('renders nothing with no templates and no manage action', () => {
     const { container } = render(
-      <TemplatePicker
-        templates={[]}
-        visibleCorridorIds={visibleCorridors}
-        onApply={vi.fn()}
-      />
+      <TemplatePicker templates={[]} visibleCorridorIds={VISIBLE} onApply={vi.fn()} />
     );
-    expect(container.firstChild).toBeNull();
+    expect(container).toBeEmptyDOMElement();
   });
 
-  it('renders the Manage button when onManage is set even if empty', () => {
-    const onManage = vi.fn();
+  it('renders the manage button when onManage is set, even with no templates', () => {
     render(
       <TemplatePicker
         templates={[]}
-        visibleCorridorIds={visibleCorridors}
+        visibleCorridorIds={VISIBLE}
         onApply={vi.fn()}
-        onManage={onManage}
+        onManage={vi.fn()}
       />
     );
-    expect(screen.getByRole('button', { name: 'Manage templates' })).toBeDefined();
+    expect(screen.getByRole('button', { name: 'Manage templates' })).toBeInTheDocument();
   });
 
-  it('formats option text with and without anchor name', () => {
+  it('formats each option, with the anchor name when it is known', () => {
     render(
       <TemplatePicker
-        templates={[MOCK_ONRAMP_TEMPLATE, MOCK_OFFRAMP_TEMPLATE]}
-        visibleCorridorIds={visibleCorridors}
+        templates={[template(), template({ id: 'tpl-2', label: 'Fees', anchorId: 'moneygram' })]}
+        visibleCorridorIds={VISIBLE}
         onApply={vi.fn()}
       />
     );
-    // With anchor: MoneyGram
+    expect(screen.getByRole('option', { name: 'Rent — 120 USDC → NGN' })).toBeInTheDocument();
     expect(
-      screen.getByText('NGN Savings — 100 USDC → NGN · MoneyGram')
-    ).toBeDefined();
-    // Without anchor
-    expect(
-      screen.getByText('Mum in Lagos — 200 USDC → NGN')
-    ).toBeDefined();
+      screen.getByRole('option', { name: 'Fees — 120 USDC → NGN · MoneyGram' })
+    ).toBeInTheDocument();
   });
 
-  it('disables option when corridor is not in visibleCorridorIds and adds suffix', () => {
+  it('disables a template whose corridor is not available', () => {
     render(
       <TemplatePicker
-        templates={[MOCK_ONRAMP_TEMPLATE]}
-        visibleCorridorIds={new Set(['usdc-brl'])}
+        templates={[template({ corridorId: 'usdc-zar' })]}
+        visibleCorridorIds={VISIBLE}
         onApply={vi.fn()}
       />
     );
-    const option = screen.getByText(
-      'NGN Savings — 100 USDC → NGN · MoneyGram (corridor unavailable)'
-    ) as HTMLOptionElement;
-    expect(option.disabled).toBe(true);
+    expect(
+      screen.getByRole('option', { name: 'Rent — 120 USDC → ZAR (corridor unavailable)' })
+    ).toBeDisabled();
   });
 
-  it('calls onApply once and resets select value when template is chosen', async () => {
-    const user = userEvent.setup();
+  it('applies the chosen template once and resets the select', () => {
     const onApply = vi.fn();
     render(
-      <TemplatePicker
-        templates={[MOCK_ONRAMP_TEMPLATE]}
-        visibleCorridorIds={visibleCorridors}
-        onApply={onApply}
-      />
+      <TemplatePicker templates={[template()]} visibleCorridorIds={VISIBLE} onApply={onApply} />
     );
     const select = screen.getByLabelText('Saved templates') as HTMLSelectElement;
-    expect(select.value).toBe('');
-
-    await user.selectOptions(select, 'tpl-1');
+    fireEvent.change(select, { target: { value: 'tpl-1' } });
     expect(onApply).toHaveBeenCalledTimes(1);
-    expect(onApply).toHaveBeenCalledWith(MOCK_ONRAMP_TEMPLATE);
+    expect(onApply).toHaveBeenCalledWith(expect.objectContaining({ id: 'tpl-1' }));
     expect(select.value).toBe('');
   });
 });

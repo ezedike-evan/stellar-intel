@@ -1,4 +1,6 @@
-import { describe, expect, it, vi } from 'vitest';
+import { NextRequest } from 'next/server';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
+import { GET as reconcileGET } from '@/app/api/reputation/reconcile/route';
 import {
   calculateDeliveredRate,
   fetchPaymentsForTransaction,
@@ -8,6 +10,14 @@ import {
   type ReconciledOutcomeUpdate,
   type ReputationOutcomeRow,
 } from '@/lib/reputation/reconcile';
+import {
+  InMemorySlippageBreachStore,
+  _setSlippageBreachStore,
+  type SlippageBreach,
+  type SlippageEvidence,
+} from '@/lib/reputation/slippage-breaches';
+import { hashSlippageEvidence } from '@/lib/reputation/slippage-evidence';
+import { InMemoryReputationStore, _setReputationStore } from '@/lib/reputation/store';
 
 describe('reputation reconciler', () => {
   const now = new Date('2026-06-02T12:00:00.000Z');
@@ -256,5 +266,196 @@ describe('reputation reconciler', () => {
     );
 
     fetchMock.mockRestore();
+  });
+});
+
+describe('GET /api/reputation/reconcile — slippage verification (#2105)', () => {
+  const SIGNER = 'GAAZI4TCR3TY5OJHCTJC2A4QSY6CJWJH5IAJTGKIN2ER7LBNVKOCCWN7';
+  const ANCHOR = 'GA5ZSEJYB37JRC5AVCIA5MOP4RHTM335X2KGX3IHOJAPP5RE34K4KZVN';
+  // The issuer of NGNT, the source asset of the `ngnt-ngn` corridor.
+  const NGNT_ISSUER = 'GAWODAROMJ33V5YDFY3NPYTHVYQG7MJXVJ2ND3AOGIHYRWINES6ACCPD';
+  const TX = 'b'.repeat(64);
+
+  let reputation: InMemoryReputationStore;
+  let breaches: InMemorySlippageBreachStore;
+
+  beforeEach(() => {
+    reputation = new InMemoryReputationStore();
+    breaches = new InMemorySlippageBreachStore();
+    _setReputationStore(reputation);
+    _setSlippageBreachStore(breaches);
+  });
+
+  afterEach(async () => {
+    _setSlippageBreachStore(null);
+    vi.unstubAllGlobals();
+    await reputation.close();
+    _setReputationStore(null);
+  });
+
+  const call = () =>
+    reconcileGET(
+      new NextRequest('http://localhost/api/reputation/reconcile', {
+        headers: { authorization: `Bearer ${process.env.CRON_SECRET}` },
+      })
+    );
+
+  async function detectedBreach(): Promise<SlippageBreach> {
+    const evidence: SlippageEvidence = {
+      v: 1,
+      networkPassphrase: 'Test SDF Network ; September 2015',
+      intentHash: 'a'.repeat(64),
+      anchorId: 'cowrie',
+      corridor: 'ngnt-ngn',
+      signerAccount: SIGNER,
+      minReceive: '1400',
+      anchorReported: {
+        anchorTransactionId: 'anchor-tx-1',
+        amountOut: '1350',
+        reportedBy: 'sender',
+      },
+      shortfall: '50',
+      shortfallBps: 357,
+      onChain: null,
+      detectedAt: '2026-11-22T10:00:00.000Z',
+    };
+    return {
+      intentHash: evidence.intentHash,
+      anchorId: 'cowrie',
+      corridor: 'ngnt-ngn',
+      signerAccount: SIGNER,
+      minReceive: '1400',
+      amountOut: '1350',
+      shortfall: '50',
+      shortfallBps: 357,
+      stellarTransactionId: TX,
+      anchorTransactionId: 'anchor-tx-1',
+      status: 'detected',
+      rejectionReason: null,
+      evidence,
+      evidenceHash: await hashSlippageEvidence(evidence),
+      detectedAt: evidence.detectedAt,
+      verifiedAt: null,
+    };
+  }
+
+  it('reports the verification pass next to the reconciliation, all zeros when there is no breach', async () => {
+    const res = await call();
+
+    expect(res.status).toBe(200);
+    const body = await res.json();
+    expect(body.slippage).toEqual({ scanned: 0, verified: 0, rejected: 0, failed: 0 });
+    // What the route reported before is still there.
+    expect(body).toMatchObject({ scanned: 0, updated: 0, sourceMismatch: 0, results: [] });
+  });
+
+  it('answers 200 with slippage: null when the verification pass itself fails', async () => {
+    _setSlippageBreachStore({
+      create: async () => true,
+      get: async () => null,
+      list: async () => {
+        throw new Error('db down');
+      },
+      resolveVerification: async () => null,
+    });
+
+    const res = await call();
+
+    expect(res.status).toBe(200);
+    const body = await res.json();
+    expect(body.slippage).toBeNull();
+    expect(body).toMatchObject({ scanned: 0, updated: 0, sourceMismatch: 0 });
+  });
+
+  it('verifies a detected breach against Horizon in the same run', async () => {
+    const breach = await detectedBreach();
+    await breaches.create(breach);
+    const asked: string[] = [];
+    vi.stubGlobal(
+      'fetch',
+      vi.fn(async (input: string | URL) => {
+        const url = String(input);
+        asked.push(url);
+        if (url.endsWith(`/transactions/${TX}/payments`)) {
+          return {
+            ok: true,
+            json: async () => ({
+              _embedded: {
+                records: [
+                  {
+                    type: 'payment',
+                    amount: '100.0000000',
+                    asset_type: 'credit_alphanum4',
+                    asset_code: 'NGNT',
+                    asset_issuer: NGNT_ISSUER,
+                    from: SIGNER,
+                    to: ANCHOR,
+                  },
+                ],
+              },
+            }),
+          };
+        }
+        if (url.endsWith(`/transactions/${TX}`)) {
+          return {
+            ok: true,
+            json: async () => ({
+              hash: TX,
+              successful: true,
+              ledger: 5_884_099,
+              created_at: '2026-11-22T09:59:30Z',
+              source_account: SIGNER,
+              memo_type: 'none',
+            }),
+          };
+        }
+        return { ok: false, status: 404, json: async () => ({}) };
+      })
+    );
+
+    const res = await call();
+
+    expect(res.status).toBe(200);
+    expect((await res.json()).slippage).toEqual({
+      scanned: 1,
+      verified: 1,
+      rejected: 0,
+      failed: 0,
+    });
+    expect(asked.filter((url) => url.endsWith(`/transactions/${TX}`))).toHaveLength(1);
+    expect(asked.filter((url) => url.endsWith(`/transactions/${TX}/payments`))).toHaveLength(1);
+    const verified = await breaches.get(breach.intentHash);
+    expect(verified?.status).toBe('verified');
+    expect(verified?.evidence.onChain).toMatchObject({
+      txHash: TX,
+      from: SIGNER,
+      to: ANCHOR,
+      assetCode: 'NGNT',
+      amount: '100.0000000',
+      memo: null,
+    });
+  });
+
+  it('rejects a breach whose transaction Horizon does not have, and still answers 200', async () => {
+    const breach = await detectedBreach();
+    await breaches.create(breach);
+    vi.stubGlobal(
+      'fetch',
+      vi.fn(async () => ({ ok: false, status: 404, json: async () => ({}) }))
+    );
+
+    const res = await call();
+
+    expect(res.status).toBe(200);
+    expect((await res.json()).slippage).toEqual({
+      scanned: 1,
+      verified: 0,
+      rejected: 1,
+      failed: 0,
+    });
+    const rejected = await breaches.get(breach.intentHash);
+    expect(rejected?.status).toBe('rejected');
+    expect(rejected?.rejectionReason).toBe('transaction_not_found');
+    expect(rejected?.evidenceHash).toBe(breach.evidenceHash);
   });
 });

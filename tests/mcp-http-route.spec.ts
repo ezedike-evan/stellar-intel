@@ -132,6 +132,23 @@ describe('POST /api/mcp', () => {
     const response = await POST(mcpRequest(INITIALIZE, { 'content-type': 'text/plain' }));
     expect(response.status).toBe(415);
   });
+
+  it('emits full X-RateLimit-* and IETF RateLimit headers on 429 after 60 requests', async () => {
+    clearRateLimitStore();
+    const ip = '198.51.100.42';
+    for (let i = 0; i < 60; i += 1) {
+      const res = await POST(mcpRequest(INITIALIZE, { 'x-forwarded-for': ip }));
+      expect(res.status).toBe(200);
+    }
+
+    const limited = await POST(mcpRequest(INITIALIZE, { 'x-forwarded-for': ip }));
+    expect(limited.status).toBe(429);
+    expect(limited.headers.get('Retry-After')).toBeTruthy();
+    expect(limited.headers.get('X-RateLimit-Limit')).toBe('60');
+    expect(limited.headers.get('X-RateLimit-Reset')).toBeTruthy();
+    expect(limited.headers.get('RateLimit')).toMatch(/^"api\.mcp";r=0;t=\d+$/);
+    expect(limited.headers.get('RateLimit-Policy')).toBe('"api.mcp";q=60;w=60');
+  });
 });
 
 describe('the endpoint is POST-only', () => {

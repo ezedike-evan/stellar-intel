@@ -1,25 +1,34 @@
+/**
+ * lib/templates/store.ts
+ *
+ * Intent templates kept in localStorage, one array per wallet (TPL002). Client
+ * safe: it imports only the template schema and the key pattern.
+ *
+ * Every storage call sits inside try/catch, as in lib/consent.ts: private mode,
+ * disabled storage or a full quota degrade to "no templates" or a typed error,
+ * and nothing in this module throws. Entries are re-validated on every read,
+ * so a hand-edited or stale entry is dropped instead of reaching the UI.
+ */
 import { STELLAR_PUBKEY_PATTERN } from '@/lib/patterns';
 import {
+  IntentTemplateInputSchema,
+  IntentTemplateSchema,
+  MAX_TEMPLATES_PER_WALLET,
+  TEMPLATE_SCHEMA_VERSION,
   type IntentTemplate,
   type IntentTemplateInput,
   type TemplateDirection,
-  IntentTemplateSchema,
-  IntentTemplateInputSchema,
-  MAX_TEMPLATES_PER_WALLET,
 } from './schema';
 
 export const TEMPLATE_STORAGE_PREFIX = 'intent-templates:v1';
+const PROBE_KEY = '__intent_templates_probe__';
 
 export function templateStorageKey(publicKey: string): string {
   return `${TEMPLATE_STORAGE_PREFIX}:${publicKey}`;
 }
 
 export type TemplateStoreError =
-  | 'invalid'
-  | 'limit'
-  | 'duplicate_label'
-  | 'not_found'
-  | 'storage_unavailable';
+  'invalid' | 'limit' | 'duplicate_label' | 'not_found' | 'storage_unavailable';
 
 export type SaveTemplateResult =
   | { ok: true; template: IntentTemplate }
@@ -30,210 +39,181 @@ export interface TemplatePatch {
   amount?: string;
 }
 
+function validKey(publicKey: string): boolean {
+  return STELLAR_PUBKEY_PATTERN.test(publicKey);
+}
+
+function fail(error: TemplateStoreError, message: string): SaveTemplateResult {
+  return { ok: false, error, message };
+}
+
+function sameLabel(a: string, b: string): boolean {
+  return a.trim().toLowerCase() === b.trim().toLowerCase();
+}
+
 export function isTemplateStorageAvailable(): boolean {
-  if (typeof window === 'undefined' || !window.localStorage) return false;
   try {
-    const probe = '__intent_templates_probe__';
-    window.localStorage.setItem(probe, '1');
-    window.localStorage.removeItem(probe);
+    localStorage.setItem(PROBE_KEY, '1');
+    localStorage.removeItem(PROBE_KEY);
     return true;
   } catch {
     return false;
   }
 }
 
+/** The wallet's stored templates, unsorted; invalid entries are dropped silently. */
 export function readTemplates(publicKey: string): IntentTemplate[] {
-  if (!STELLAR_PUBKEY_PATTERN.test(publicKey)) return [];
-  if (typeof window === 'undefined' || !window.localStorage) return [];
+  if (!validKey(publicKey)) return [];
+  let raw: string | null;
   try {
-    const raw = window.localStorage.getItem(templateStorageKey(publicKey));
-    if (!raw) return [];
-    const parsed = JSON.parse(raw);
-    if (!Array.isArray(parsed)) return [];
-    const valid: IntentTemplate[] = [];
-    for (const item of parsed) {
-      const res = IntentTemplateSchema.safeParse(item);
-      if (res.success) {
-        valid.push(res.data);
-      }
-    }
-    return valid;
+    raw = localStorage.getItem(templateStorageKey(publicKey));
   } catch {
     return [];
   }
+  if (raw === null) return [];
+
+  let parsed: unknown;
+  try {
+    parsed = JSON.parse(raw);
+  } catch {
+    return [];
+  }
+  if (!Array.isArray(parsed)) return [];
+
+  const templates: IntentTemplate[] = [];
+  for (const entry of parsed) {
+    const result = IntentTemplateSchema.safeParse(entry);
+    if (result.success) templates.push(result.data);
+  }
+  return templates;
 }
 
+/** Writes the wallet's templates; false on any storage failure (quota, disabled storage). */
 export function writeTemplates(publicKey: string, templates: IntentTemplate[]): boolean {
-  if (!STELLAR_PUBKEY_PATTERN.test(publicKey)) return false;
-  if (typeof window === 'undefined' || !window.localStorage) return false;
+  if (!validKey(publicKey)) return false;
   try {
-    window.localStorage.setItem(templateStorageKey(publicKey), JSON.stringify(templates));
+    localStorage.setItem(templateStorageKey(publicKey), JSON.stringify(templates));
     return true;
   } catch {
     return false;
   }
 }
 
+/** Most recently used (or updated) first; ties by label. */
 export function listTemplates(publicKey: string, direction?: TemplateDirection): IntentTemplate[] {
-  const all = readTemplates(publicKey);
-  const filtered = direction ? all.filter((t) => t.direction === direction) : all;
-  return filtered.sort((a, b) => {
-    const timeA = new Date(a.lastUsedAt ?? a.updatedAt).getTime();
-    const timeB = new Date(b.lastUsedAt ?? b.updatedAt).getTime();
-    if (timeB !== timeA) return timeB - timeA;
-    return a.label.localeCompare(b.label);
-  });
+  return readTemplates(publicKey)
+    .filter((t) => direction === undefined || t.direction === direction)
+    .sort((a, b) => {
+      const byTime = (b.lastUsedAt ?? b.updatedAt).localeCompare(a.lastUsedAt ?? a.updatedAt);
+      return byTime !== 0 ? byTime : a.label.localeCompare(b.label);
+    });
 }
 
 export function saveTemplate(
   publicKey: string,
   input: IntentTemplateInput,
-  now = new Date()
+  now: Date = new Date()
 ): SaveTemplateResult {
-  if (!STELLAR_PUBKEY_PATTERN.test(publicKey)) {
-    return { ok: false, error: 'invalid', message: 'Invalid Stellar public key.' };
+  if (!validKey(publicKey)) return fail('invalid', 'Connect a valid Stellar wallet first');
+
+  const parsed = IntentTemplateInputSchema.safeParse(input);
+  if (!parsed.success) {
+    return fail('invalid', parsed.error.issues[0]?.message ?? 'Template is not valid');
   }
-  const parseRes = IntentTemplateInputSchema.safeParse(input);
-  if (!parseRes.success) {
-    return {
-      ok: false,
-      error: 'invalid',
-      message: parseRes.error.issues[0]?.message ?? 'Invalid template input.',
-    };
-  }
-  const cleanInput = parseRes.data;
+
   const existing = readTemplates(publicKey);
   if (existing.length >= MAX_TEMPLATES_PER_WALLET) {
-    return {
-      ok: false,
-      error: 'limit',
-      message: `Maximum ${MAX_TEMPLATES_PER_WALLET} templates reached.`,
-    };
+    return fail('limit', `You can keep up to ${MAX_TEMPLATES_PER_WALLET} templates`);
   }
-  const cleanTrimmedLabel = cleanInput.label.trim().toLowerCase();
-  const duplicate = existing.some(
-    (t) => t.direction === cleanInput.direction && t.label.trim().toLowerCase() === cleanTrimmedLabel
-  );
-  if (duplicate) {
-    return {
-      ok: false,
-      error: 'duplicate_label',
-      message: 'A template with this name already exists for this direction.',
-    };
+  if (
+    existing.some(
+      (t) => t.direction === parsed.data.direction && sameLabel(t.label, parsed.data.label)
+    )
+  ) {
+    return fail('duplicate_label', 'You already have a template with that name');
   }
-  const isoNow = now.toISOString();
-  const id =
-    typeof crypto !== 'undefined' && crypto.randomUUID
-      ? crypto.randomUUID()
-      : `tpl-${Date.now()}-${Math.random().toString(36).slice(2, 9)}`;
 
-  const template: IntentTemplate = {
-    ...cleanInput,
-    schemaVersion: 1,
-    id,
-    createdAt: isoNow,
-    updatedAt: isoNow,
-  } as IntentTemplate;
-
-  const ok = writeTemplates(publicKey, [...existing, template]);
-  if (!ok) {
-    return {
-      ok: false,
-      error: 'storage_unavailable',
-      message: 'Storage unavailable or quota exceeded.',
-    };
+  const stamp = now.toISOString();
+  const candidate = IntentTemplateSchema.safeParse({
+    ...parsed.data,
+    schemaVersion: TEMPLATE_SCHEMA_VERSION,
+    id: globalThis.crypto.randomUUID(),
+    createdAt: stamp,
+    updatedAt: stamp,
+  });
+  if (!candidate.success) {
+    return fail('invalid', candidate.error.issues[0]?.message ?? 'Template is not valid');
   }
-  return { ok: true, template };
+
+  if (!writeTemplates(publicKey, [...existing, candidate.data])) {
+    return fail('storage_unavailable', 'Templates could not be saved in this browser');
+  }
+  return { ok: true, template: candidate.data };
 }
 
 export function updateTemplate(
   publicKey: string,
   id: string,
   patch: TemplatePatch,
-  now = new Date()
+  now: Date = new Date()
 ): SaveTemplateResult {
-  if (!STELLAR_PUBKEY_PATTERN.test(publicKey)) {
-    return { ok: false, error: 'invalid', message: 'Invalid Stellar public key.' };
-  }
+  if (!validKey(publicKey)) return fail('invalid', 'Connect a valid Stellar wallet first');
+
   const existing = readTemplates(publicKey);
   const index = existing.findIndex((t) => t.id === id);
-  if (index === -1) {
-    return { ok: false, error: 'not_found', message: 'Template not found.' };
-  }
-  const current = existing[index];
-  const updatedCandidate = {
+  const current = index === -1 ? undefined : existing[index];
+  if (!current) return fail('not_found', 'That template no longer exists');
+
+  const next = IntentTemplateSchema.safeParse({
     ...current,
-    ...patch,
+    ...(patch.label !== undefined ? { label: patch.label } : {}),
+    ...(patch.amount !== undefined ? { amount: patch.amount } : {}),
     updatedAt: now.toISOString(),
-  };
-
-  const parseRes = IntentTemplateSchema.safeParse(updatedCandidate);
-  if (!parseRes.success) {
-    return {
-      ok: false,
-      error: 'invalid',
-      message: parseRes.error.issues[0]?.message ?? 'Invalid template patch.',
-    };
+  });
+  if (!next.success) {
+    return fail('invalid', next.error.issues[0]?.message ?? 'Template is not valid');
   }
-  const validUpdated = parseRes.data;
-
-  // Duplicate label check excluding itself
-  const cleanTrimmedLabel = validUpdated.label.trim().toLowerCase();
-  const duplicate = existing.some(
-    (t) =>
-      t.id !== id &&
-      t.direction === validUpdated.direction &&
-      t.label.trim().toLowerCase() === cleanTrimmedLabel
-  );
-  if (duplicate) {
-    return {
-      ok: false,
-      error: 'duplicate_label',
-      message: 'A template with this name already exists for this direction.',
-    };
+  if (
+    existing.some(
+      (t) =>
+        t.id !== id && t.direction === next.data.direction && sameLabel(t.label, next.data.label)
+    )
+  ) {
+    return fail('duplicate_label', 'You already have a template with that name');
   }
 
-  const updatedList = [...existing];
-  updatedList[index] = validUpdated;
-  const ok = writeTemplates(publicKey, updatedList);
-  if (!ok) {
-    return {
-      ok: false,
-      error: 'storage_unavailable',
-      message: 'Storage unavailable or quota exceeded.',
-    };
+  const updated = [...existing];
+  updated[index] = next.data;
+  if (!writeTemplates(publicKey, updated)) {
+    return fail('storage_unavailable', 'Templates could not be saved in this browser');
   }
-  return { ok: true, template: validUpdated };
+  return { ok: true, template: next.data };
 }
 
+/** True only when a template was removed and the result written. */
 export function deleteTemplate(publicKey: string, id: string): boolean {
-  if (!STELLAR_PUBKEY_PATTERN.test(publicKey)) return false;
   const existing = readTemplates(publicKey);
-  const filtered = existing.filter((t) => t.id !== id);
-  if (filtered.length === existing.length) return false;
-  return writeTemplates(publicKey, filtered);
+  const remaining = existing.filter((t) => t.id !== id);
+  if (remaining.length === existing.length) return false;
+  return writeTemplates(publicKey, remaining);
 }
 
-export function markTemplateUsed(publicKey: string, id: string, now = new Date()): void {
-  if (!STELLAR_PUBKEY_PATTERN.test(publicKey)) return;
+/** Records that a template was just applied. Silent on any failure. */
+export function markTemplateUsed(publicKey: string, id: string, now: Date = new Date()): void {
   const existing = readTemplates(publicKey);
   const index = existing.findIndex((t) => t.id === id);
-  if (index === -1) return;
-  const item = existing[index];
-  if (!item) return;
-  existing[index] = {
-    ...item,
-    lastUsedAt: now.toISOString(),
-  };
-  writeTemplates(publicKey, existing);
+  const current = index === -1 ? undefined : existing[index];
+  if (!current) return;
+  const updated = [...existing];
+  updated[index] = { ...current, lastUsedAt: now.toISOString() };
+  writeTemplates(publicKey, updated);
 }
 
 export function clearTemplates(publicKey: string): void {
-  if (!STELLAR_PUBKEY_PATTERN.test(publicKey)) return;
-  if (typeof window === 'undefined' || !window.localStorage) return;
+  if (!validKey(publicKey)) return;
   try {
-    window.localStorage.removeItem(templateStorageKey(publicKey));
+    localStorage.removeItem(templateStorageKey(publicKey));
   } catch {
-    // silent
+    // Storage unavailable: nothing to clear.
   }
 }

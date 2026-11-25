@@ -47,9 +47,14 @@ Breach claims reuse the **existing reputation dispute surface** — no second
 dispute path is introduced:
 
 - `POST /api/reputation/dispute` (intentHash, publicKey, signature, anchorId,
-  reason) marks the outcome row `disputed` with `disputedReason`.
-- The disputed outcome is adjudicated through the same reputation flow; a
-  confirmed breach on a covered intent is what authorizes the capped payout.
+  reason) records an `open` dispute. Filing does not change the outcome row; it
+  is not flagged `disputed` and keeps counting in scoring while the dispute is
+  open.
+- A maintainer accepts or rejects the dispute through `POST /api/admin/disputes`,
+  which sets the dispute's status to `accepted` or `rejected`. A confirmed
+  breach on a covered intent is what authorizes the capped payout.
+
+See [`docs/DISPUTES.md`](DISPUTES.md) for the full dispute flow.
 
 ## Execution SLA (public settle-time percentiles)
 

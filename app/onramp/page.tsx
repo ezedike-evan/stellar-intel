@@ -14,8 +14,12 @@ import { useIntentTemplates } from '@/hooks/useIntentTemplates';
 import { useTransferStatus, type OutcomeAppendContext } from '@/hooks/useWithdrawStatus';
 import { VISIBLE_CORRIDORS } from '@/constants/anchors';
 import { getCorridorById } from '@/lib/stellar/anchors';
-import { ONRAMP_FUNNEL_EVENTS, TEMPLATE_EVENTS, amountBucket, trackFunnelEvent } from '@/lib/analytics';
-import { flags } from '@/lib/flags';
+import {
+  ONRAMP_FUNNEL_EVENTS,
+  TEMPLATE_EVENTS,
+  amountBucket,
+  trackFunnelEvent,
+} from '@/lib/analytics';
 import { signIntent } from '@/lib/intent/sign';
 import type { IntentTemplate } from '@/lib/templates/schema';
 import {
@@ -29,6 +33,8 @@ import {
 import { TERMINAL_STATES } from '@/lib/stellar/sep24';
 import type { OnrampIntent } from '@/types/intent';
 import type { DepositRate } from '@/types';
+import { flags } from '@/lib/flags';
+import { RefundAckCard } from '@/components/refunds/RefundAckCard';
 
 // Only needed once the user picks a row, so it stays out of the initial bundle.
 const DepositDrawer = dynamic(
@@ -401,6 +407,19 @@ function OnrampContent() {
           onStartAnother={handleStartAnother}
         />
       )}
+
+      {flags.refundGuarantees &&
+        outcomeContext &&
+        trackingTransactionId &&
+        depositStatus.status === 'refunded' && (
+          <RefundAckCard
+            intentHash={outcomeContext.intentHash}
+            anchorId={outcomeContext.anchorId}
+            account={outcomeContext.publicKey}
+            refunds={depositStatus.refunds}
+            assetLabel={corridor.to}
+          />
+        )}
 
       <DepositDrawer
         rate={selectedRate}

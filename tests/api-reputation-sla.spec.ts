@@ -2,7 +2,11 @@ import { beforeEach, afterEach, describe, expect, it } from 'vitest';
 import { NextRequest } from 'next/server';
 import { GET } from '@/app/api/reputation/[anchor]/sla/route';
 import { clearRateLimitStore } from '@/lib/api/rate-limit';
-import { createReputationStore, _setReputationStore, type ReputationStore } from '@/lib/reputation/store';
+import {
+  createReputationStore,
+  _setReputationStore,
+  type ReputationStore,
+} from '@/lib/reputation/store';
 import { ExecutionSlaReportSchema } from '@/lib/reputation/execution-sla';
 import { makeOutcomeRow } from './fixtures/outcome-rows';
 
@@ -119,5 +123,13 @@ describe('GET /api/reputation/[anchor]/sla (#2144)', () => {
     const parsed = ExecutionSlaReportSchema.parse(body);
     expect(parsed.overall.sla.state).toBe('insufficient_data');
     expect(parsed.overall.sla.sampleSize).toBe(0);
+  });
+
+  it('the 200 body has history with 30 entries (#2145)', async () => {
+    const res = await GET(slaRequest('moneygram'), { params: { anchor: 'moneygram' } });
+    expect(res.status).toBe(200);
+    const body = await res.json();
+    expect(Array.isArray(body.history)).toBe(true);
+    expect(body.history).toHaveLength(30);
   });
 });

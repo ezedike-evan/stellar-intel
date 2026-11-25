@@ -43,7 +43,10 @@ export const OnrampTemplateSchema = z.strictObject({
   corridorId: z.string().min(1),
   amount: OnrampIntentSchema.shape.amount,
   anchorId: z.string().min(1).optional(),
-  assetId: z.string().regex(/^stellar:(native|[A-Za-z0-9]{1,12}:G[A-Z2-7]{55})$/).optional(),
+  assetId: z
+    .string()
+    .regex(/^stellar:(native|[A-Za-z0-9]{1,12}:G[A-Z2-7]{55})$/)
+    .optional(),
   depositMethod: OnrampDepositMethodSchema.optional(),
   createdAt: z.string().datetime(),
   updatedAt: z.string().datetime(),
@@ -83,8 +86,7 @@ export type OnrampTemplateInput = z.infer<typeof OnrampTemplateInputSchema>;
 
 /** A template awaiting a name (used by the "save as template" form). */
 export type IntentTemplateDraft =
-  | Omit<OfframpTemplateInput, 'label'>
-  | Omit<OnrampTemplateInput, 'label'>;
+  Omit<OfframpTemplateInput, 'label'> | Omit<OnrampTemplateInput, 'label'>;
 
 export const TEMPLATE_EXPORT_FORMAT = 'stellar-intel/intent-templates';
 

@@ -1,6 +1,10 @@
 import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest';
 import { fetchCorridorSettleSummaries } from '@/lib/reputation/execution-sla-server';
-import { createReputationStore, _setReputationStore, type ReputationStore } from '@/lib/reputation/store';
+import {
+  createReputationStore,
+  _setReputationStore,
+  type ReputationStore,
+} from '@/lib/reputation/store';
 import { makeOutcomeRow } from './fixtures/outcome-rows';
 
 const NOW = Date.parse('2026-06-04T12:00:00.000Z');

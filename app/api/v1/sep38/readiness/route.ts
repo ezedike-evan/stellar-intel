@@ -10,9 +10,13 @@ export const runtime = 'nodejs';
  * asset listed. The page, the SDKs and outside readers share this one source.
  */
 export async function GET(request: NextRequest): Promise<NextResponse> {
-  return withV1(request, { bucket: 'v1.sep38.readiness', maxRequests: 30 }, async () => ({
-    status: 200,
-    body: await getCachedSep38Readiness(),
-    headers: { 'Cache-Control': 'public, max-age=600' },
-  }));
+  return withV1(
+    request,
+    { bucket: 'v1.sep38.readiness', maxRequests: 30, scope: 'quotes:read' },
+    async () => ({
+      status: 200,
+      body: await getCachedSep38Readiness(),
+      headers: { 'Cache-Control': 'public, max-age=600' },
+    })
+  );
 }

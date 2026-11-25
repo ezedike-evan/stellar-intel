@@ -71,9 +71,7 @@ describe('fetchCorridorRates — SLA settle time annotation (#2150)', () => {
   it('annotates matching rates with settleP95Ms and settleSampleSize when flag is on', async () => {
     flags.executionSla = true;
     vi.mocked(fetchCorridorSettleSummaries).mockResolvedValue(
-      new Map([
-        ['anchor-1', { p95Ms: 120_000, sampleSize: 45 }],
-      ])
+      new Map([['anchor-1', { p95Ms: 120_000, sampleSize: 45 }]])
     );
 
     const result = await fetchCorridorRates('usdc-ngn', '100');

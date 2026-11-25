@@ -1,6 +1,6 @@
 # Anchor Reputation
 
-**Last reviewed:** 2026-08-26
+**Last reviewed:** 2026-11-21
 
 Every quote, fill, failure, and settlement latency an anchor produces is recorded
 as an **outcome**. Outcomes aggregate into a public, user-verifiable score. The
@@ -228,9 +228,9 @@ roadmap gate (see [`docs/MAINNET_LAUNCH.md`](MAINNET_LAUNCH.md), the 90-day prob
 
 ## Disputes
 
-Terminal-state rows expose a "flag incorrect outcome" path. A dispute records the
-contesting party and the disputed outcome id; because every outcome carries the
-user's signature and is replayable from the ledger, adjudication is evidence-based.
+The account that attested an outcome can dispute it, and a maintainer accepts or
+rejects the dispute. See [`DISPUTES.md`](DISPUTES.md) for who can file, how
+resolution works and which routes are involved.
 
 ---
 
