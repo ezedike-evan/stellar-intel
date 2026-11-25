@@ -1,6 +1,13 @@
 import { hasDatabaseUrl } from '@/lib/reputation/pool';
 import { PostgresWebhookStore } from './postgres';
-import type { WebhookSubscription, DeliveryRecord } from './types';
+import type { WebhookEvent, WebhookSubscription, DeliveryRecord, DeliveryStatus } from './types';
+
+export interface DeliveryQuery {
+  status?: DeliveryStatus | undefined;
+  subscriptionId?: string | undefined;
+  eventId?: string | undefined;
+  limit?: number | undefined;
+}
 
 export interface WebhookStore {
   saveSubscription(sub: WebhookSubscription): Promise<void>;
@@ -9,11 +16,33 @@ export interface WebhookStore {
   deleteSubscription(id: string): Promise<boolean>;
   recordDelivery(record: DeliveryRecord): Promise<void>;
   listDeadLetters(): Promise<DeliveryRecord[]>;
+  listDeliveries(query: DeliveryQuery): Promise<DeliveryRecord[]>;
+  /**
+   * Stores the event envelope once. Returns `false`, storing nothing, when an event with the
+   * same `idempotencyKey` was already recorded, so the caller does not deliver it again.
+   */
+  recordEvent(event: WebhookEvent): Promise<boolean>;
+  /** The stored envelope for a dispatched event, for replaying a dead-lettered delivery. */
+  getEvent(id: string): Promise<WebhookEvent | null>;
 }
 
 export class InMemoryWebhookStore implements WebhookStore {
   private readonly subs = new Map<string, WebhookSubscription>();
   private readonly deliveries: DeliveryRecord[] = [];
+  private readonly events = new Map<string, WebhookEvent>();
+  private readonly eventKeys = new Set<string>();
+
+  async recordEvent(event: WebhookEvent): Promise<boolean> {
+    if (this.eventKeys.has(event.idempotencyKey)) return false;
+    this.eventKeys.add(event.idempotencyKey);
+    this.events.set(event.id, structuredClone(event));
+    return true;
+  }
+
+  async getEvent(id: string): Promise<WebhookEvent | null> {
+    const event = this.events.get(id);
+    return event ? structuredClone(event) : null;
+  }
 
   async saveSubscription(sub: WebhookSubscription): Promise<void> {
     this.subs.set(sub.id, { ...sub });
@@ -37,6 +66,24 @@ export class InMemoryWebhookStore implements WebhookStore {
 
   async listDeadLetters(): Promise<DeliveryRecord[]> {
     return this.deliveries.filter((r) => r.status === 'dead_letter').map((r) => ({ ...r }));
+  }
+
+  async listDeliveries(query: DeliveryQuery): Promise<DeliveryRecord[]> {
+    const rawLimit = query.limit ?? 100;
+    const limit = Math.max(1, Math.min(500, rawLimit));
+
+    let results = this.deliveries.slice();
+    if (query.status !== undefined) {
+      results = results.filter((r) => r.status === query.status);
+    }
+    if (query.subscriptionId !== undefined) {
+      results = results.filter((r) => r.subscriptionId === query.subscriptionId);
+    }
+    if (query.eventId !== undefined) {
+      results = results.filter((r) => r.eventId === query.eventId);
+    }
+    results.sort((a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime());
+    return results.slice(0, limit).map((r) => ({ ...r }));
   }
 }
 

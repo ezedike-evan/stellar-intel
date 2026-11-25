@@ -36,37 +36,44 @@ const DISCLAIMER = 'Estimate only. The anchor sets the final rate in its deposit
  * `fetchDepositRates`, with dates serialised as ISO strings.
  */
 export async function GET(request: NextRequest): Promise<NextResponse> {
-  return withV1(request, { bucket: 'v1.onramp.quote', maxRequests: 60 }, async (ctx) => {
-    const query = new URL(request.url).searchParams;
-    const parsed = QuerySchema.safeParse({
-      corridor: query.get('corridor') ?? undefined,
-      amount: query.get('amount') ?? undefined,
-      asset: query.get('asset') ?? undefined,
-      type: query.get('type') ?? undefined,
-    });
-    if (!parsed.success) {
-      const issue = parsed.error.issues[0];
-      const field = issue?.path[0] ? `${String(issue.path[0])}: ` : '';
-      return ctx.error('validation_error', `${field}${issue?.message ?? 'Invalid query'}`, 400);
-    }
-    const { corridor, amount, asset, type } = parsed.data;
+  return withV1(
+    request,
+    { bucket: 'v1.onramp.quote', maxRequests: 60, scope: 'quotes:read' },
+    async (ctx) => {
+      const query = new URL(request.url).searchParams;
+      const parsed = QuerySchema.safeParse({
+        corridor: query.get('corridor') ?? undefined,
+        amount: query.get('amount') ?? undefined,
+        asset: query.get('asset') ?? undefined,
+        type: query.get('type') ?? undefined,
+      });
+      if (!parsed.success) {
+        const issue = parsed.error.issues[0];
+        const field = issue?.path[0] ? `${String(issue.path[0])}: ` : '';
+        return ctx.error('validation_error', `${field}${issue?.message ?? 'Invalid query'}`, 400);
+      }
+      const { corridor, amount, asset, type } = parsed.data;
 
-    let comparison;
-    try {
-      comparison = await fetchDepositRates(corridor, amount, { type, ...(asset ? { asset } : {}) });
-    } catch {
-      return ctx.error('upstream_unavailable', 'Could not fetch deposit rates', 502);
-    }
+      let comparison;
+      try {
+        comparison = await fetchDepositRates(corridor, amount, {
+          type,
+          ...(asset ? { asset } : {}),
+        });
+      } catch {
+        return ctx.error('upstream_unavailable', 'Could not fetch deposit rates', 502);
+      }
 
-    return {
-      status: 200,
-      body: {
-        ...comparison,
-        rates: comparison.rates.map((r) => ({ ...r, updatedAt: r.updatedAt.toISOString() })),
-        indicative: true,
-        disclaimer: DISCLAIMER,
-      },
-      headers: { 'Cache-Control': 'public, max-age=15, stale-while-revalidate=30' },
-    };
-  });
+      return {
+        status: 200,
+        body: {
+          ...comparison,
+          rates: comparison.rates.map((r) => ({ ...r, updatedAt: r.updatedAt.toISOString() })),
+          indicative: true,
+          disclaimer: DISCLAIMER,
+        },
+        headers: { 'Cache-Control': 'public, max-age=15, stale-while-revalidate=30' },
+      };
+    }
+  );
 }

@@ -51,12 +51,15 @@ the hardening contract (see `lib/api/v1.ts`):
 - **Reputation**
   - [`GET /api/reputation/actuarial`](#get-apireputationactuarial)
   - [`POST /api/reputation/append`](#post-apireputationappend)
+  - [`GET /api/reputation/dispute`](#get-apireputationdispute)
   - [`POST /api/reputation/dispute`](#post-apireputationdispute)
+  - [`POST /api/reputation/dispute/appeal`](#post-apireputationdisputeappeal)
   - [`GET /api/reputation/leaderboard`](#get-apireputationleaderboard)
   - [`GET /api/reputation/probe-coverage`](#get-apireputationprobe-coverage)
   - [`GET /api/reputation/sdf-export`](#get-apireputationsdf-export)
   - [`GET /api/reputation/{anchor}`](#get-apireputationanchor)
   - [`GET /api/reputation/{anchor}/history`](#get-apireputationanchorhistory)
+  - [`GET /api/v1/disputes/log`](#get-apiv1disputeslog)
   - [`GET /v1/public/scores`](#get-v1publicscores)
 - **SEP-10**
   - [`POST /api/sep10/client-domain`](#post-apisep10client-domain)
@@ -70,11 +73,13 @@ the hardening contract (see `lib/api/v1.ts`):
   - [`GET /api/metrics`](#get-apimetrics)
   - [`GET /api/publisher/health`](#get-apipublisherhealth)
   - [`GET /api/publisher/tick`](#get-apipublishertick)
+  - [`POST /api/reputation/dispute-sweep`](#post-apireputationdispute-sweep)
   - [`GET /api/reputation/reconcile`](#get-apireputationreconcile)
   - [`GET /api/reputation/reconcile-volume-savings`](#get-apireputationreconcile-volume-savings)
   - [`POST /api/reputation/refresh`](#post-apireputationrefresh)
   - [`GET /api/status`](#get-apistatus)
   - [`GET /api/v1/health`](#get-apiv1health)
+  - [`GET /api/webhooks/deliveries`](#get-apiwebhooksdeliveries)
   - [`GET /api/webhooks/failures`](#get-apiwebhooksfailures)
   - [`GET /api/webhooks/subscriptions`](#get-apiwebhookssubscriptions)
   - [`POST /api/webhooks/subscriptions`](#post-apiwebhookssubscriptions)
@@ -110,7 +115,8 @@ Accepts or rejects a dispute. Requires admin authentication.
 | Field | Type | Required | Description |
 | :--- | :--- | :--- | :--- |
 | `id` | `string` | **Yes** | - |
-| `action` | `"accept" | "reject"` | **Yes** | - |
+| `action` | `"accept" | "reject" | "escalate"` | **Yes** | - |
+| `rationale` | `string` | No | - |
 
 #### Responses
 
@@ -120,6 +126,7 @@ Accepts or rejects a dispute. Requires admin authentication.
 | `400` | Invalid request | `application/json` | `ApiError` |
 | `401` | Admin access required | `application/json` | `ApiError` |
 | `404` | Dispute not found | `application/json` | `ApiError` |
+| `409` | Conflict: dispute not open or cannot escalate | `application/json` | `ApiError` |
 
 ---
 
@@ -129,7 +136,7 @@ Accepts or rejects a dispute. Requires admin authentication.
 
 **Summary:** Get the anchor health ledger for a date  
 
-Publishes the nightly anchor health ledger as a dated artifact. Without `date`, returns the ledger this deployment was built with. With `date` (YYYY-MM-DD), returns the ledger as it stood on that date, resolved from the git history of `constants/anchor-health.json` — so the series is fetchable without cloning the repository. The committed file remains the source of truth; nothing is mirrored server-side. A dated response is immutable and cached as such.
+Publishes the nightly anchor health ledger as a dated artifact. Without `date`, returns the ledger this deployment was built with. With `date` (YYYY-MM-DD), returns the ledger as it stood on that date, resolved from the git history of `constants/anchor-health.json` — so the series is fetchable without cloning the repository. The committed file remains the source of truth; nothing is mirrored server-side. A dated response is immutable and cached as such. Required scope: quotes:read.
 
 #### Parameters
 
@@ -153,7 +160,7 @@ Publishes the nightly anchor health ledger as a dated artifact. Without `date`, 
 
 **Summary:** Get the anchor census  
 
-Serves the committed anchor census (constants/anchor-census-rows.json), covering every surveyed anchor — routable, health-only, or merely listed — not only the anchors registered for routing. Optionally filtered to a single tier.
+Serves the committed anchor census (constants/anchor-census-rows.json), covering every surveyed anchor — routable, health-only, or merely listed — not only the anchors registered for routing. Optionally filtered to a single tier. Required scope: quotes:read.
 
 #### Parameters
 
@@ -175,7 +182,7 @@ Serves the committed anchor census (constants/anchor-census-rows.json), covering
 
 **Summary:** Get anchor health status  
 
-Returns the anchor's current health status, last-probe timestamp, and score breakdown. Returns 'unknown' or 'stale' when probes haven't run recently — honest degradation rather than fabricated data.
+Returns the anchor's current health status, last-probe timestamp, and score breakdown. Returns 'unknown' or 'stale' when probes haven't run recently — honest degradation rather than fabricated data. Required scope: quotes:read.
 
 #### Parameters
 
@@ -198,7 +205,7 @@ Returns the anchor's current health status, last-probe timestamp, and score brea
 
 **Summary:** Get anchor SEP-38 price history  
 
-Returns recorded SEP-38 price observations for an anchor corridor, downsampled to at most 500 points (evenly spaced; first and last retained).
+Returns recorded SEP-38 price observations for an anchor corridor, downsampled to at most 500 points (evenly spaced; first and last retained). Required scope: quotes:read.
 
 #### Parameters
 
@@ -224,7 +231,7 @@ Returns recorded SEP-38 price observations for an anchor corridor, downsampled t
 
 **Summary:** Get how far an anchor lands from the rate it quoted  
 
-Signed gap between the rate shown before execution and the rate that landed, over completed, undisputed withdrawals in the window. Negative means users received less than quoted. Stands in for SEP-38 firm quotes, which most anchors do not offer. Null statistics mean no samples.
+Signed gap between the rate shown before execution and the rate that landed, over completed, undisputed withdrawals in the window. Negative means users received less than quoted. Stands in for SEP-38 firm quotes, which most anchors do not offer. Null statistics mean no samples. Required scope: quotes:read.
 
 #### Parameters
 
@@ -249,7 +256,7 @@ Signed gap between the rate shown before execution and the rate that landed, ove
 
 **Summary:** Get SEP-38 firm-quote readiness per anchor  
 
-For each registered anchor: whether the operator declares SEP-38, whether its stellar.toml advertises a quote server, whether that server’s /info answers, and whether it lists the anchor’s registered asset. Checked live and cached for ten minutes.
+For each registered anchor: whether the operator declares SEP-38, whether its stellar.toml advertises a quote server, whether that server’s /info answers, and whether it lists the anchor’s registered asset. Checked live and cached for ten minutes. Required scope: quotes:read.
 
 #### Responses
 
@@ -320,7 +327,7 @@ Resolves an anchor route for the given asset corridor, builds an unsigned Stella
 
 **Summary:** Submit an off-ramp intent (v1)  
 
-The public v1 intent endpoint. Honours `Idempotency-Key`: a retried request replays the original response with `Idempotency-Replayed: true` rather than creating a second intent.
+The public v1 intent endpoint. Honours `Idempotency-Key`: a retried request replays the original response with `Idempotency-Replayed: true` rather than creating a second intent. Required scope: intents:write.
 
 #### Responses
 
@@ -328,6 +335,7 @@ The public v1 intent endpoint. Honours `Idempotency-Key`: a retried request repl
 | :--- | :--- | :--- | :--- |
 | `200` | Intent accepted | `application/json` | `OfframpIntentResponse` |
 | `400` | Validation error | `application/json` | `ApiError` |
+| `403` | Forbidden: insufficient scope | `application/json` | `ApiError` |
 | `429` | Rate limited | `application/json` | `ApiError` |
 
 ---
@@ -336,7 +344,7 @@ The public v1 intent endpoint. Honours `Idempotency-Key`: a retried request repl
 
 **Summary:** Submit an on-ramp intent (v1)  
 
-Routes a deposit intent to the best indicative anchor and returns the /onramp handoff URL, plus an unsigned changeTrust XDR when the destination account has no trustline. No anchor session is opened: KYC and the interactive deposit run in the browser. Honours `Idempotency-Key` like the off-ramp endpoint.
+Routes a deposit intent to the best indicative anchor and returns the /onramp handoff URL, plus an unsigned changeTrust XDR when the destination account has no trustline. No anchor session is opened: KYC and the interactive deposit run in the browser. Honours `Idempotency-Key` like the off-ramp endpoint. Required scope: intents:write.
 
 #### Parameters
 
@@ -369,6 +377,7 @@ Routes a deposit intent to the best indicative anchor and returns the /onramp ha
 | `200` | Route resolved | `application/json` | `OnrampIntentResponse` |
 | `400` | Validation error | `application/json` | `ApiError` |
 | `401` | Attestation signature did not verify | `application/json` | `ApiError` |
+| `403` | Forbidden: insufficient scope | `application/json` | `ApiError` |
 | `404` | No anchor serves this corridor | `application/json` | `ApiError` |
 | `422` | The destination account does not exist on Stellar | `application/json` | `ApiError` |
 | `429` | Rate limited | `application/json` | `ApiError` |
@@ -382,7 +391,7 @@ Routes a deposit intent to the best indicative anchor and returns the /onramp ha
 
 **Summary:** Get indicative deposit (on-ramp) quotes  
 
-Returns an indicative estimate per anchor for depositing a fiat amount into a Stellar asset. SEP-24 publishes deposit fees but the anchor sets the final conversion inside its interactive deposit window, so every figure is an estimate.
+Returns an indicative estimate per anchor for depositing a fiat amount into a Stellar asset. SEP-24 publishes deposit fees but the anchor sets the final conversion inside its interactive deposit window, so every figure is an estimate. Required scope: quotes:read.
 
 #### Parameters
 
@@ -480,7 +489,7 @@ Returns the best anchor per corridor for a given USDC amount. Used for the landi
 
 **Summary:** Get cumulative volume and fees saved for a corridor  
 
-Reads the on-chain volume/savings oracle for one corridor: cumulative USDC routed, USDC saved against the baseline rate, and the settlement count behind both. Amounts are microUSDC. Served from the contract, so the aggregate is checkable without trusting this app's own database. Zeroes are returned when the corridor has no on-chain entry yet.
+Reads the on-chain volume/savings oracle for one corridor: cumulative USDC routed, USDC saved against the baseline rate, and the settlement count behind both. Amounts are microUSDC. Served from the contract, so the aggregate is checkable without trusting this app's own database. Zeroes are returned when the corridor has no on-chain entry yet. Required scope: quotes:read.
 
 #### Parameters
 
@@ -540,6 +549,8 @@ The single server-side write path for reputation outcome rows. The body must car
 | `stellarTransactionId` | `object` | No | - |
 | `publicKey` | `string` | **Yes** | The sender account that signed intentHash |
 | `signature` | `string` | **Yes** | Base64 Ed25519 signature by publicKey over intentHash |
+| `minReceive` | `object` | No | Minimum receive floor amount signed in the outcome intent |
+| `outcomeIntent` | `object` | No | The exact outcome intent signed by sender |
 
 #### Responses
 
@@ -549,6 +560,28 @@ The single server-side write path for reputation outcome rows. The body must car
 | `400` | Validation error | `application/json` | `ApiError` |
 | `401` | Missing signature, or the signature does not verify for publicKey | `application/json` | `ApiError` |
 | `409` | An outcome for this intentHash is already recorded | `application/json` | `ApiError` |
+| `429` | Rate limited | `application/json` | `ApiError` |
+
+---
+
+### `GET /api/reputation/dispute`
+
+**Summary:** Look up disputes for an intent  
+
+Retrieves public dispute summaries for a given off-ramp intent hash. Returns newest first. Never includes personal data.
+
+#### Parameters
+
+| Name | In | Type | Required | Description |
+| :--- | :--- | :--- | :--- | :--- |
+| `intentHash` | `query` | `string` | **Yes** | Lowercase hex-encoded SHA-256 intent hash (64 chars) |
+
+#### Responses
+
+| Status | Description | Content-Type | Schema |
+| :--- | :--- | :--- | :--- |
+| `200` | List of disputes for the intent | `application/json` | `object` |
+| `422` | Invalid intentHash format | `application/json` | `ApiError` |
 | `429` | Rate limited | `application/json` | `ApiError` |
 
 ---
@@ -570,6 +603,7 @@ Submits a dispute against an intent outcome. The request must be Ed25519-signed 
 | `signature` | `string` | **Yes** | - |
 | `anchorId` | `string` | **Yes** | - |
 | `reason` | `string` | **Yes** | - |
+| `category` | `string` | No | - |
 
 #### Responses
 
@@ -578,8 +612,41 @@ Submits a dispute against an intent outcome. The request must be Ed25519-signed 
 | `201` | Dispute created | `application/json` | `DisputeRecord` |
 | `400` | Invalid request | `application/json` | `ApiError` |
 | `403` | Signature verification failed | `application/json` | `ApiError` |
+| `409` | Conflict: open dispute already exists | `application/json` | `ApiError` |
 | `422` | Validation error | `application/json` | `ApiError` |
 | `429` | Rate limited (10/24h) | `application/json` | `ApiError` |
+
+---
+
+### `POST /api/reputation/dispute/appeal`
+
+**Summary:** Appeal a resolved dispute  
+
+Appeals a resolved dispute (accepted or rejected) within the 14-day window. Must be signed by the original filer.
+
+#### Request Body
+
+**Content-Type:** `application/json`
+
+| Field | Type | Required | Description |
+| :--- | :--- | :--- | :--- |
+| `intentHash` | `string` | **Yes** | - |
+| `publicKey` | `string` | **Yes** | - |
+| `signature` | `string` | **Yes** | - |
+| `ref` | `string` | **Yes** | - |
+
+#### Responses
+
+| Status | Description | Content-Type | Schema |
+| :--- | :--- | :--- | :--- |
+| `200` | Appeal accepted and dispute reopened at appeal level | `application/json` | `object` |
+| `400` | Invalid request body | `application/json` | `ApiError` |
+| `403` | Invalid signature or caller is not original filer | `application/json` | `ApiError` |
+| `404` | Dispute not found | `application/json` | `ApiError` |
+| `409` | Dispute not resolved or already appealed | `application/json` | `ApiError` |
+| `410` | Appeal window closed (past 14 days) | `application/json` | `ApiError` |
+| `422` | Validation error | `application/json` | `ApiError` |
+| `429` | Rate limited | `application/json` | `ApiError` |
 
 ---
 
@@ -676,6 +743,29 @@ Returns bucketed outcome history for a specific anchor over a configurable time 
 | `200` | Bucketed history data | `application/json` | `object` |
 | `400` | Validation error | `application/json` | `ApiError` |
 | `404` | Unknown anchor | `application/json` | `ApiError` |
+
+---
+
+### `GET /api/v1/disputes/log`
+
+**Summary:** Get the public dispute adjudication log  
+
+Serves the public, append-only, hash-chained dispute adjudication log, along with verification status and summary counts. Required scope: quotes:read.
+
+#### Parameters
+
+| Name | In | Type | Required | Description |
+| :--- | :--- | :--- | :--- | :--- |
+| `afterSeq` | `query` | `string` | No | Return entries strictly after this sequence number (integer >= 0, default 0) |
+| `limit` | `query` | `string` | No | Maximum number of entries to return (1-500, default 200) |
+
+#### Responses
+
+| Status | Description | Content-Type | Schema |
+| :--- | :--- | :--- | :--- |
+| `200` | The adjudication log entries and chain verification | `application/json` | `AdjudicationLogResponse` |
+| `400` | Invalid afterSeq or limit parameters | `application/json` | `ApiError` |
+| `429` | Rate limited | `application/json` | `ApiError` |
 
 ---
 
@@ -873,6 +963,21 @@ Triggers a batch of reputation outcome submissions to the Soroban oracle contrac
 
 ---
 
+### `POST /api/reputation/dispute-sweep`
+
+**Summary:** Escalate overdue disputes  
+
+Cron-triggered. Moves every open dispute that sat at the anchor response rung past its 72-hour deadline to maintainer review and records the move in the public adjudication log. Disputes already at review or appeal are left for a human to decide. Protected by CRON_SECRET.
+
+#### Responses
+
+| Status | Description | Content-Type | Schema |
+| :--- | :--- | :--- | :--- |
+| `200` | Sweep completed | `application/json` | `object` |
+| `401` | Missing or invalid credentials | `application/json` | `ApiError` |
+
+---
+
 ### `GET /api/reputation/reconcile`
 
 **Summary:** Reconcile settled outcomes against Horizon  
@@ -940,13 +1045,39 @@ Current API version, the supported version window, and any announced deprecation
 
 **Summary:** Service health (v1)  
 
-Liveness and dependency status for the public v1 surface.
+Liveness and dependency status for the public v1 surface. Required scope: quotes:read.
 
 #### Responses
 
 | Status | Description | Content-Type | Schema |
 | :--- | :--- | :--- | :--- |
 | `200` | Health snapshot | `application/json` | `object` |
+| `429` | Rate limited | `application/json` | `ApiError` |
+
+---
+
+### `GET /api/webhooks/deliveries`
+
+**Summary:** List webhook delivery records  
+
+Admin only. Returns webhook delivery records filtered by status, subscription, or event, newest first.
+
+#### Parameters
+
+| Name | In | Type | Required | Description |
+| :--- | :--- | :--- | :--- | :--- |
+| `status` | `query` | `"success" | "failed" | "dead_letter"` | No | Filter by delivery status (success, failed, dead_letter) |
+| `subscriptionId` | `query` | `string` | No | Filter by subscription ID |
+| `eventId` | `query` | `string` | No | Filter by event ID |
+| `limit` | `query` | `integer` | No | Maximum number of deliveries to return (1-500, default 100) |
+
+#### Responses
+
+| Status | Description | Content-Type | Schema |
+| :--- | :--- | :--- | :--- |
+| `200` | Webhook delivery records | `application/json` | `object[]` |
+| `400` | Validation error | `application/json` | `ApiError` |
+| `401` | Missing or invalid credentials | `application/json` | `ApiError` |
 | `429` | Rate limited | `application/json` | `ApiError` |
 
 ---

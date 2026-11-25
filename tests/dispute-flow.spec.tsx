@@ -3,12 +3,12 @@ import { describe, it, expect, vi } from 'vitest';
 import { DisputeModal } from '@/components/offramp/DisputeModal';
 import type { WithdrawStatusValue } from '@/types';
 
-describe('DisputeModal', () => {
+describe('DisputeModal (#2135)', () => {
   const defaultProps = {
     transactionId: 'tx-abc-123',
     status: 'completed' as const,
     onClose: vi.fn(),
-    onSubmit: vi.fn().mockResolvedValue(undefined),
+    onSubmit: vi.fn().mockResolvedValue({ ref: 'disp-ref-1234' }),
   };
 
   it('renders modal for completed status', () => {
@@ -24,14 +24,14 @@ describe('DisputeModal', () => {
     expect(container.firstChild).toBeNull();
   });
 
-  it('submit button is disabled without reason', () => {
+  it('submit button is disabled without category', () => {
     render(<DisputeModal {...defaultProps} />);
     const btn = screen.getByRole('button', { name: /submit dispute/i });
     expect((btn as HTMLButtonElement).disabled).toBe(true);
   });
 
   it('calls onSubmit with correct data', async () => {
-    const onSubmit = vi.fn().mockResolvedValue(undefined);
+    const onSubmit = vi.fn().mockResolvedValue({ ref: 'disp-ref-5678' });
     render(<DisputeModal {...defaultProps} onSubmit={onSubmit} />);
 
     fireEvent.change(screen.getByRole('combobox'), {
@@ -45,20 +45,26 @@ describe('DisputeModal', () => {
     await waitFor(() => {
       expect(onSubmit).toHaveBeenCalledWith({
         transactionId: 'tx-abc-123',
-        reason: 'wrong_amount',
+        category: 'wrong_amount',
         notes: 'I received 500 instead of 1000',
       });
     });
   });
 
-  it('shows acknowledgement after successful submission', async () => {
+  it('shows acknowledgement with reference and link to /disputes after successful submission', async () => {
     render(<DisputeModal {...defaultProps} />);
     fireEvent.change(screen.getByRole('combobox'), {
-      target: { value: 'not_received' },
+      target: { value: 'delayed' },
     });
     fireEvent.click(screen.getByRole('button', { name: /submit dispute/i }));
+
     await waitFor(() => {
       expect(screen.getByText('Dispute submitted')).toBeDefined();
+      expect(screen.getByText(/Dispute filed\. Reference: disp-ref-1234/)).toBeDefined();
+      const link = screen.getByRole('link', { name: /track it on the public dispute log/i });
+      expect(link.getAttribute('href')).toBe('/disputes');
+      // Ensure false contact follow-up promise is NOT present
+      expect(screen.queryByText(/registered contact/i)).toBeNull();
     });
   });
 
