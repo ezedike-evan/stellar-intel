@@ -48,6 +48,8 @@ the hardening contract (see `lib/api/v1.ts`):
   - [`GET /api/rates/{corridor}`](#get-apiratescorridor)
   - [`GET /api/snapshot`](#get-apisnapshot)
   - [`GET /api/v1/corridors/{corridor}/volume-savings`](#get-apiv1corridorscorridorvolume-savings)
+- **Refunds**
+  - [`GET /api/refunds/{intentHash}`](#get-apirefundsintenthash)
 - **Reputation**
   - [`GET /api/reputation/actuarial`](#get-apireputationactuarial)
   - [`POST /api/reputation/append`](#post-apireputationappend)
@@ -505,6 +507,30 @@ Reads the on-chain volume/savings oracle for one corridor: cumulative USDC route
 | `400` | Invalid corridor ID | `application/json` | `ApiError` |
 | `429` | Rate limited | `application/json` | `ApiError` |
 | `500` | Oracle read failed | `application/json` | `ApiError` |
+
+---
+
+## Refunds
+
+### `GET /api/refunds/{intentHash}`
+
+**Summary:** Look up refund cases for an intent  
+
+Read-only lookup of the refund cases tracked for one intent, oldest first. An intent with no cases returns an empty list, not 404. Only non-sensitive fields are returned; the signer account and the acknowledgement proof are never exposed, and there is no lookup by account. Responses are sent with Cache-Control: no-store.
+
+#### Parameters
+
+| Name | In | Type | Required | Description |
+| :--- | :--- | :--- | :--- | :--- |
+| `intentHash` | `path` | `string` | **Yes** | Lowercase hex SHA-256 intent hash (64 characters) |
+
+#### Responses
+
+| Status | Description | Content-Type | Schema |
+| :--- | :--- | :--- | :--- |
+| `200` | Refund cases for the intent | `application/json` | `object` |
+| `400` | intentHash is not a lowercase 64-character hex string | `application/json` | `ApiError` |
+| `429` | Rate limited | `application/json` | `ApiError` |
 
 ---
 

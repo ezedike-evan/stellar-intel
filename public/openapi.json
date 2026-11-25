@@ -1389,6 +1389,131 @@
           "counts",
           "rows"
         ]
+      },
+      "PublicRefundCase": {
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "string"
+          },
+          "intentHash": {
+            "type": "string"
+          },
+          "reason": {
+            "type": "string",
+            "enum": [
+              "anchor_refunded",
+              "anchor_error_after_payment",
+              "expired_after_payment",
+              "slippage_breach"
+            ]
+          },
+          "anchorId": {
+            "type": "string"
+          },
+          "corridor": {
+            "type": "string"
+          },
+          "direction": {
+            "type": "string",
+            "enum": [
+              "withdraw",
+              "deposit"
+            ]
+          },
+          "amountPaid": {
+            "type": "string"
+          },
+          "status": {
+            "type": "string",
+            "enum": [
+              "owed",
+              "refunded",
+              "acknowledged"
+            ]
+          },
+          "amountRefunded": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "refundFee": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "payments": {
+            "type": "array",
+            "items": {
+              "type": "object",
+              "properties": {
+                "id": {
+                  "type": "string"
+                },
+                "idType": {
+                  "type": "string",
+                  "enum": [
+                    "stellar",
+                    "external"
+                  ]
+                },
+                "amount": {
+                  "type": "string"
+                },
+                "fee": {
+                  "type": "string"
+                }
+              },
+              "required": [
+                "id",
+                "idType",
+                "amount",
+                "fee"
+              ]
+            }
+          },
+          "openedAt": {
+            "type": "string"
+          },
+          "refundedAt": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "acknowledgedAt": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "onChainCheck": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "description": "verified, mismatch or unverifiable; null when no on-chain check was made"
+          }
+        },
+        "required": [
+          "id",
+          "intentHash",
+          "reason",
+          "anchorId",
+          "corridor",
+          "direction",
+          "amountPaid",
+          "status",
+          "amountRefunded",
+          "refundFee",
+          "payments",
+          "openedAt",
+          "refundedAt",
+          "acknowledgedAt",
+          "onChainCheck"
+        ]
       }
     },
     "parameters": {}
@@ -5182,6 +5307,75 @@
           },
           "401": {
             "description": "Missing or invalid credentials",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiError"
+                }
+              }
+            }
+          },
+          "429": {
+            "description": "Rate limited",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/refunds/{intentHash}": {
+      "get": {
+        "summary": "Look up refund cases for an intent",
+        "description": "Read-only lookup of the refund cases tracked for one intent, oldest first. An intent with no cases returns an empty list, not 404. Only non-sensitive fields are returned; the signer account and the acknowledgement proof are never exposed, and there is no lookup by account. Responses are sent with Cache-Control: no-store.",
+        "tags": [
+          "Refunds"
+        ],
+        "parameters": [
+          {
+            "schema": {
+              "type": "string",
+              "example": "a3f1c2d4e5b60718293a4b5c6d7e8f90a1b2c3d4e5f60718293a4b5c6d7e8f90",
+              "description": "Lowercase hex SHA-256 intent hash (64 characters)"
+            },
+            "required": true,
+            "description": "Lowercase hex SHA-256 intent hash (64 characters)",
+            "name": "intentHash",
+            "in": "path"
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Refund cases for the intent",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "intentHash": {
+                      "type": "string"
+                    },
+                    "cases": {
+                      "type": "array",
+                      "items": {
+                        "$ref": "#/components/schemas/PublicRefundCase"
+                      }
+                    }
+                  },
+                  "required": [
+                    "intentHash",
+                    "cases"
+                  ]
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "intentHash is not a lowercase 64-character hex string",
             "content": {
               "application/json": {
                 "schema": {
