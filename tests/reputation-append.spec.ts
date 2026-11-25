@@ -18,6 +18,7 @@ import {
   type SlippageBreachStore,
 } from '@/lib/reputation/slippage-breaches';
 import { hashIntent } from '@/lib/intent/hash';
+import { InMemoryRefundStore, _setRefundStore, type RefundStore } from '@/lib/refunds/store';
 
 let store: ReputationStore;
 let emitted: Array<{ kind: string; payload: Record<string, unknown> }>;
@@ -34,6 +35,7 @@ beforeEach(() => {
 afterEach(async () => {
   _setWebhookEmitter(null);
   _setSlippageBreachStore(null);
+  _setRefundStore(null);
   vi.restoreAllMocks();
   vi.unstubAllGlobals();
   await store.close();
@@ -532,5 +534,64 @@ describe('POST /api/reputation/append — slippage detection (SLP008)', () => {
     expect(res.status).toBe(201);
     const data = await res.json();
     expect(data.slippage).toBe('unrecorded');
+  });
+});
+
+describe('POST /api/reputation/append — auto-open refund cases (RFD004)', () => {
+  let refundStore: InMemoryRefundStore;
+
+  beforeEach(() => {
+    refundStore = new InMemoryRefundStore();
+    _setRefundStore(refundStore);
+  });
+
+  afterEach(() => {
+    _setRefundStore(null);
+  });
+
+  it('opens a refunded case for a signed refunded append', async () => {
+    expect((await appendPOST(req(signed({ outcome: 'refunded' })))).status).toBe(201);
+    const cases = await refundStore.list();
+    expect(cases).toHaveLength(1);
+    expect(cases[0]).toMatchObject({
+      intentHash: HASH,
+      reason: 'anchor_refunded',
+      status: 'refunded',
+      amountPaid: '100',
+    });
+    expect(cases[0]?.refundedAt).not.toBeNull();
+  });
+
+  it('opens an owed case for a signed withdraw error after payment', async () => {
+    expect((await appendPOST(req(signed({ outcome: 'error' })))).status).toBe(201);
+    const cases = await refundStore.list();
+    expect(cases).toHaveLength(1);
+    expect(cases[0]).toMatchObject({ reason: 'anchor_error_after_payment', status: 'owed' });
+    expect(cases[0]?.refundedAt).toBeNull();
+  });
+
+  it('opens nothing for a completed append', async () => {
+    expect((await appendPOST(req(signed()))).status).toBe(201);
+    expect(await refundStore.list()).toHaveLength(0);
+  });
+
+  it('still answers 201 when the refund store throws', async () => {
+    const throwing: RefundStore = {
+      open: async () => {
+        throw new Error('refund store down');
+      },
+      get: async () => null,
+      getByIntentHash: async () => [],
+      list: async () => [],
+      acknowledge: async () => null,
+    };
+    _setRefundStore(throwing);
+    expect((await appendPOST(req(signed({ outcome: 'refunded' })))).status).toBe(201);
+  });
+
+  it('does not open a second case for a duplicate append', async () => {
+    expect((await appendPOST(req(signed({ outcome: 'refunded' })))).status).toBe(201);
+    expect((await appendPOST(req(signed({ outcome: 'refunded' })))).status).toBe(409);
+    expect(await refundStore.list()).toHaveLength(1);
   });
 });
