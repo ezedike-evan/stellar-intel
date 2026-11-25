@@ -7,6 +7,9 @@ import {
   SLA_MIN_SAMPLES,
   SLA_WINDOW_DAYS,
   settleSamplesMs,
+  evaluateSlaBreach,
+  buildExecutionSlaReport,
+  ExecutionSlaReportSchema,
 } from '@/lib/reputation/execution-sla';
 import { makeOutcomeRow } from './fixtures/outcome-rows';
 
@@ -327,5 +330,138 @@ describe('ExecutionSlaSchema', () => {
   it('rejects an ok object without p95Ms', () => {
     const { p95Ms: _p95Ms, ...withoutP95 } = ok as Extract<typeof ok, { state: 'ok' }>;
     expect(ExecutionSlaSchema.safeParse(withoutP95).success).toBe(false);
+  });
+});
+
+// ─── SLA003: breach thresholds and the report ───
+
+const K_NOW = Date.parse('2026-06-04T12:00:00.000Z');
+const hoursAgo = (h: number) => new Date(K_NOW - h * 3_600_000).toISOString();
+
+const slaBase = {
+  windowDays: 30,
+  windowStart: new Date(K_NOW - 30 * 86_400_000).toISOString(),
+  windowEnd: new Date(K_NOW).toISOString(),
+  terminalCount: 100,
+  minSamples: 30,
+  computedAt: new Date(K_NOW).toISOString(),
+};
+const insufficientSla = (): ExecutionSla => ({
+  ...slaBase,
+  state: 'insufficient_data',
+  sampleSize: 10,
+});
+const okSla = (p95Ms: number, p99Ms: number | null): ExecutionSla => ({
+  ...slaBase,
+  state: 'ok',
+  sampleSize: 100,
+  p50Ms: 60_000,
+  p95Ms,
+  p99Ms,
+});
+
+describe('evaluateSlaBreach', () => {
+  const thresholds = { p95Ms: 15 * 60 * 1000, p99Ms: 60 * 60 * 1000 };
+
+  it('evaluates unknown for insufficient_data', () => {
+    const sla = insufficientSla();
+    const assessment = evaluateSlaBreach(sla, thresholds);
+    expect(assessment.status).toBe('unknown');
+    expect(assessment.breaches).toHaveLength(0);
+  });
+
+  it('evaluates within when both percentiles are below or equal to thresholds', () => {
+    const sla = okSla(thresholds.p95Ms, thresholds.p99Ms);
+    const assessment = evaluateSlaBreach(sla, thresholds);
+    expect(assessment.status).toBe('within');
+    expect(assessment.breaches).toHaveLength(0);
+  });
+
+  it('evaluates breach when p95 exceeds threshold', () => {
+    const sla = okSla(thresholds.p95Ms + 1000, thresholds.p99Ms - 1000);
+    const assessment = evaluateSlaBreach(sla, thresholds);
+    expect(assessment.status).toBe('breach');
+    expect(assessment.breaches).toEqual([
+      {
+        metric: 'p95',
+        observedMs: thresholds.p95Ms + 1000,
+        thresholdMs: thresholds.p95Ms,
+      },
+    ]);
+  });
+
+  it('evaluates breach when p99 exceeds threshold', () => {
+    const sla = okSla(thresholds.p95Ms - 1000, thresholds.p99Ms + 5000);
+    const assessment = evaluateSlaBreach(sla, thresholds);
+    expect(assessment.status).toBe('breach');
+    expect(assessment.breaches).toEqual([
+      {
+        metric: 'p99',
+        observedMs: thresholds.p99Ms + 5000,
+        thresholdMs: thresholds.p99Ms,
+      },
+    ]);
+  });
+
+  it('p99Ms: null never yields a p99 breach', () => {
+    const sla = okSla(thresholds.p95Ms - 1000, null);
+    const assessment = evaluateSlaBreach(sla, thresholds);
+    expect(assessment.status).toBe('within');
+    expect(assessment.breaches).toHaveLength(0);
+  });
+});
+
+describe('buildExecutionSlaReport', () => {
+  it('builds a report with 30 rows on usdc-ngn for moneygram', () => {
+    const rows = Array.from({ length: 30 }, (_, i) =>
+      makeOutcomeRow({
+        intentHash: `hash-${i}`.padStart(64, '0'),
+        anchorId: 'moneygram',
+        corridor: 'usdc-ngn',
+        settleSeconds: 60 + i,
+        createdAt: hoursAgo(10),
+      })
+    );
+
+    const report = buildExecutionSlaReport(rows, 'moneygram', { nowMs: K_NOW });
+
+    expect(report.anchorId).toBe('moneygram');
+    expect(report.windowDays).toBe(30);
+    expect(report.overall.sla.state).toBe('ok');
+    expect(report.overall.sla.sampleSize).toBe(30);
+
+    // Moneygram serves 5 registered corridors
+    expect(report.corridors.length).toBe(5);
+    const ngnEntry = report.corridors.find((c) => c.corridor === 'usdc-ngn');
+    expect(ngnEntry?.sla.state).toBe('ok');
+
+    const otherEntries = report.corridors.filter((c) => c.corridor !== 'usdc-ngn');
+    for (const entry of otherEntries) {
+      expect(entry.sla.state).toBe('insufficient_data');
+    }
+
+    // Schema validation
+    expect(() => ExecutionSlaReportSchema.parse(report)).not.toThrow();
+  });
+
+  it('restricts corridors to a single requested corridor when option is set', () => {
+    const rows = Array.from({ length: 30 }, (_, i) =>
+      makeOutcomeRow({
+        intentHash: `hash-${i}`.padStart(64, '0'),
+        anchorId: 'moneygram',
+        corridor: 'usdc-ngn',
+        settleSeconds: 60 + i,
+        createdAt: hoursAgo(10),
+      })
+    );
+
+    const report = buildExecutionSlaReport(rows, 'moneygram', {
+      nowMs: K_NOW,
+      corridor: 'usdc-ngn',
+    });
+
+    expect(report.corridors).toHaveLength(1);
+    expect(report.corridors[0]?.corridor).toBe('usdc-ngn');
+    expect(report.corridors[0]?.sla.state).toBe('ok');
   });
 });

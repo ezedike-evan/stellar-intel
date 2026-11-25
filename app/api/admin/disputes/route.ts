@@ -13,6 +13,7 @@ import {
   PublicTextError,
 } from '@/lib/reputation/adjudication-log';
 import { nextLevel, levelDeadline } from '@/lib/reputation/dispute-ladder';
+import { emitWebhookEvent } from '@/lib/webhooks/emit';
 
 const ResolveBodySchema = z.object({
   id: z.string().min(1).max(200),
@@ -202,6 +203,18 @@ export async function POST(request: NextRequest): Promise<NextResponse> {
       }
     }
 
+    // Field by field: never publicKey or reason (WHK012).
+    emitWebhookEvent(
+      'dispute.resolved',
+      {
+        disputeId: updated.id,
+        intentHash: updated.intentHash,
+        anchorId: updated.anchorId,
+        status: nextStatus,
+        resolvedAt: updated.resolvedAt ?? nowIso,
+      },
+      { idempotencyKey: `dispute.resolved:${updated.id}` }
+    );
     logger.info({ event: 'dispute_resolved', disputeId: id, action });
     return NextResponse.json(updated);
   });

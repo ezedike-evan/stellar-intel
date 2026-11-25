@@ -20,6 +20,7 @@ import {
   getReputationStore,
 } from '@/lib/reputation/store';
 import { toOutcomeLogRow } from '@/lib/reputation/schema';
+import { _setWebhookEmitter } from '@/lib/webhooks/emit';
 
 const ADMIN_KEY = 'test-admin-secret';
 
@@ -249,5 +250,52 @@ describe('POST /api/admin/disputes — lifecycle, logging and reputation flag (#
       expect(verification.length).toBe(2);
       expect(verification.head).toBe(log[1]?.entryHash);
     }
+  });
+});
+
+describe('dispute.resolved webhooks (#2190)', () => {
+  let emitted: Array<{ kind: string; payload: Record<string, unknown> }>;
+
+  beforeEach(() => {
+    emitted = [];
+    _setWebhookEmitter((kind, payload) => {
+      emitted.push({ kind, payload });
+    });
+  });
+
+  afterEach(() => {
+    _setWebhookEmitter(null);
+  });
+
+  it('accept emits dispute.resolved with status accepted without publicKey or reason', async () => {
+    const dispute = makeDispute({ reason: 'sensitive personal issue' });
+    await getDisputeStore().create(dispute);
+
+    const res = await POST(post({ id: dispute.id, action: 'accept' }));
+    expect(res.status).toBe(200);
+    expect(emitted).toHaveLength(1);
+    const event = emitted[0]!;
+    expect(event.kind).toBe('dispute.resolved');
+    expect(event.payload).toMatchObject({
+      disputeId: dispute.id,
+      intentHash: dispute.intentHash,
+      anchorId: 'moneygram',
+      status: 'accepted',
+    });
+    expect(event.payload['resolvedAt']).toBeDefined();
+    expect(event.payload).not.toHaveProperty('publicKey');
+    expect(event.payload).not.toHaveProperty('reason');
+  });
+
+  it('an unknown id (404) emits nothing', async () => {
+    const res = await POST(post({ id: 'unknown-disp', action: 'reject' }));
+    expect(res.status).toBe(404);
+    expect(emitted).toHaveLength(0);
+  });
+
+  it('an unauthorized request emits nothing', async () => {
+    const res = await POST(post({ id: 'disp-1', action: 'accept' }, null));
+    expect(res.status).toBe(401);
+    expect(emitted).toHaveLength(0);
   });
 });
