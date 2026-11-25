@@ -5,6 +5,7 @@ import {
 } from '@asteasolutions/zod-to-openapi';
 import { z } from 'zod';
 import { STELLAR_PUBKEY_PATTERN, AMOUNT_PATTERN, AMOUNT_7DP_PATTERN } from '@/lib/patterns';
+import { ExecutionSlaReportSchema } from '@/lib/reputation/execution-sla';
 
 extendZodWithOpenApi(z);
 
@@ -403,6 +404,31 @@ const PublisherHealthSchema = registry.register(
   })
 );
 
+const SlippageComplianceSchema = registry.register(
+  'SlippageCompliance',
+  z.object({
+    window: z
+      .union([z.literal(30), z.literal(90), z.literal('all')])
+      .describe('Evaluation window in days or "all"'),
+    eligibleIntents: z.number().int().describe('Total withdraw intents settled in the window'),
+    breaches: z.number().int().describe('Total slippage breaches detected in the window'),
+    verifiedBreaches: z.number().int().describe('Total verified breaches in the window'),
+    compliancePct: z
+      .number()
+      .nullable()
+      .describe(
+        'Percentage of withdraws meeting slippage floor (0-100), null if eligibleIntents is 0'
+      ),
+    gate: z
+      .object({
+        targetPct: z.number().describe('Target compliance percentage required to pass gate (99.0)'),
+        minIntents: z.number().int().describe('Minimum number of eligible intents required (100)'),
+        met: z.boolean().describe('Whether the release gate criteria are met'),
+      })
+      .describe('V3 release gate compliance criteria'),
+  })
+);
+
 const MetricsSnapshotSchema = registry.register(
   'MetricsSnapshot',
   z.object({
@@ -421,6 +447,9 @@ const MetricsSnapshotSchema = registry.register(
     ),
     ratesCache: z.object({ hits: z.number(), misses: z.number() }),
     publisherHealth: PublisherHealthSchema,
+    slippageCompliance: SlippageComplianceSchema.nullable().describe(
+      'Slippage compliance metrics for 30-day window, or null if store is unavailable'
+    ),
   })
 );
 
@@ -1658,6 +1687,38 @@ const UNAUTHORIZED_401 = {
 } as const;
 
 registry.registerPath({
+  method: 'get',
+  path: '/api/reputation/{anchor}/sla',
+  summary: 'Get anchor execution SLA',
+  description:
+    'Returns trailing 30-day settlement SLA percentiles (nearest-rank, no trimming) for an anchor, requiring at least 30 completed samples (and 100 for p99), evaluated against breach thresholds.',
+  tags: ['Reputation'],
+  request: {
+    params: z.object({ anchor: AnchorPathParam }),
+    query: z.object({ corridor: CorridorQueryParam }),
+  },
+  responses: {
+    200: {
+      description: 'Execution SLA report',
+      content: {
+        'application/json': {
+          schema: registry.register('ExecutionSlaReport', ExecutionSlaReportSchema),
+        },
+      },
+    },
+    400: {
+      description: 'Validation error',
+      content: { 'application/json': { schema: ApiErrorSchema } },
+    },
+    404: {
+      description: 'Unknown anchor',
+      content: { 'application/json': { schema: ApiErrorSchema } },
+    },
+    429: RATE_LIMITED_429,
+  },
+});
+
+registry.registerPath({
   method: 'post',
   path: '/api/graphql',
   summary: 'GraphQL endpoint',
@@ -2745,6 +2806,50 @@ registry.registerPath({
     },
     404: {
       description: 'Breach not found',
+      content: { 'application/json': { schema: ApiErrorSchema } },
+    },
+    429: RATE_LIMITED_429,
+    503: {
+      description: 'Store unavailable',
+      content: { 'application/json': { schema: ApiErrorSchema } },
+    },
+  },
+});
+
+void SlippageComplianceSchema;
+
+// ─── Slippage compliance (Issue #2108) ────────────────────────────────────────
+
+registry.registerPath({
+  method: 'get',
+  path: '/api/v1/slippage-compliance',
+  summary: 'Get slippage compliance metrics',
+  description:
+    'Returns slippage compliance metrics and release gate status for the specified rolling window (30, 90 days, or all).',
+  tags: ['Reputation'],
+  request: {
+    query: z.object({
+      window: z
+        .enum(['30', '90', 'all'])
+        .optional()
+        .openapi({
+          param: { name: 'window', in: 'query' },
+          description: 'Evaluation window: 30, 90, or all (default 30)',
+          example: '30',
+        }),
+    }),
+  },
+  responses: {
+    200: {
+      description: 'Slippage compliance metrics and release gate status',
+      content: {
+        'application/json': {
+          schema: SlippageComplianceSchema,
+        },
+      },
+    },
+    400: {
+      description: 'Validation error',
       content: { 'application/json': { schema: ApiErrorSchema } },
     },
     429: RATE_LIMITED_429,

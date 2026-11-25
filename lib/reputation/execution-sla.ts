@@ -17,8 +17,15 @@
  */
 
 import { z } from 'zod';
+import { extendZodWithOpenApi } from '@asteasolutions/zod-to-openapi';
 import type { OutcomeLogRow } from '@/types/reputation';
 import { nearestRankPercentile } from './percentile';
+import { ANCHORS } from '@/constants/anchors';
+import { getSlaThresholds, type SlaThresholds } from '@/constants/sla-thresholds';
+
+// The report schema is registered in lib/api/openapi.ts. Zod builds each schema's
+// methods when it is created, so `.openapi()` must exist before the schemas below are.
+extendZodWithOpenApi(z);
 
 /** Trailing window an SLA is computed over. */
 export const SLA_WINDOW_DAYS = 30;
@@ -194,3 +201,138 @@ export const ExecutionSlaSchema = z.discriminatedUnion('state', [
   }),
   executionSlaBaseSchema.extend({ state: z.literal('insufficient_data') }),
 ]);
+
+// ─── Breach thresholds and the SLA report (SLA003) ────────────────────────────
+
+export const SlaThresholdsSchema = z.object({
+  p95Ms: z.number(),
+  p99Ms: z.number(),
+});
+
+export type SlaBreachStatus = 'within' | 'breach' | 'unknown';
+
+export interface SlaBreach {
+  metric: 'p95' | 'p99';
+  observedMs: number;
+  thresholdMs: number;
+}
+
+export const SlaBreachSchema = z.object({
+  metric: z.enum(['p95', 'p99']),
+  observedMs: z.number(),
+  thresholdMs: z.number(),
+});
+
+export interface SlaBreachAssessment {
+  status: SlaBreachStatus;
+  breaches: SlaBreach[];
+}
+
+export const SlaBreachAssessmentSchema = z.object({
+  status: z.enum(['within', 'breach', 'unknown']),
+  breaches: z.array(SlaBreachSchema),
+});
+
+export interface ExecutionSlaEntry {
+  sla: ExecutionSla;
+  breach: SlaBreachAssessment;
+}
+
+export const ExecutionSlaEntrySchema = z.object({
+  sla: ExecutionSlaSchema,
+  breach: SlaBreachAssessmentSchema,
+});
+
+export interface ExecutionSlaReport {
+  anchorId: string;
+  windowDays: number;
+  computedAt: string;
+  thresholds: SlaThresholds;
+  overall: ExecutionSlaEntry;
+  corridors: Array<ExecutionSlaEntry & { corridor: string }>;
+}
+
+export const ExecutionSlaReportSchema = z.object({
+  anchorId: z.string(),
+  windowDays: z.number().int().positive(),
+  computedAt: z.string(),
+  thresholds: SlaThresholdsSchema,
+  overall: ExecutionSlaEntrySchema,
+  corridors: z.array(ExecutionSlaEntrySchema.extend({ corridor: z.string() })),
+});
+
+export interface ExecutionSlaReportOptions extends ExecutionSlaOptions {
+  /** Defaults to getSlaThresholds(anchorId). */
+  thresholds?: SlaThresholds;
+  /** Restricts `corridors` to exactly this one corridor, even with zero rows. */
+  corridor?: string;
+}
+
+/**
+ * Compares an SLA with its thresholds. Equal is within; insufficient data is
+ * unknown, never a breach; a p99 that is not reported (too few samples) never
+ * breaches.
+ */
+export function evaluateSlaBreach(
+  sla: ExecutionSla,
+  thresholds: SlaThresholds
+): SlaBreachAssessment {
+  if (sla.state === 'insufficient_data') {
+    return { status: 'unknown', breaches: [] };
+  }
+
+  const breaches: SlaBreach[] = [];
+  if (sla.p95Ms > thresholds.p95Ms) {
+    breaches.push({ metric: 'p95', observedMs: sla.p95Ms, thresholdMs: thresholds.p95Ms });
+  }
+  if (sla.p99Ms !== null && sla.p99Ms > thresholds.p99Ms) {
+    breaches.push({ metric: 'p99', observedMs: sla.p99Ms, thresholdMs: thresholds.p99Ms });
+  }
+
+  return { status: breaches.length > 0 ? 'breach' : 'within', breaches };
+}
+
+/**
+ * The anchor's SLA report: overall and per corridor, each with its breach
+ * assessment. `nowMs` is resolved once so every figure shares one window.
+ */
+export function buildExecutionSlaReport(
+  rows: readonly OutcomeLogRow[],
+  anchorId: string,
+  options?: ExecutionSlaReportOptions
+): ExecutionSlaReport {
+  const nowMs = options?.nowMs ?? Date.now();
+  const shared: ExecutionSlaOptions = {
+    nowMs,
+    ...(options?.windowDays !== undefined ? { windowDays: options.windowDays } : {}),
+    ...(options?.minSamples !== undefined ? { minSamples: options.minSamples } : {}),
+  };
+  const thresholds = options?.thresholds ?? getSlaThresholds(anchorId);
+
+  const overallSla = computeExecutionSla(rows, { anchorId }, shared);
+  const byCorridor = new Map(
+    computeExecutionSlaByCorridor(rows, anchorId, shared).map((entry) => [
+      entry.corridor,
+      entry.sla,
+    ])
+  );
+  const slaFor = (corridor: string): ExecutionSla =>
+    byCorridor.get(corridor) ?? computeExecutionSla(rows, { anchorId, corridor }, shared);
+
+  const registered = ANCHORS.find((a) => a.id === anchorId)?.corridors ?? [];
+  const corridorIds = options?.corridor
+    ? [options.corridor]
+    : [...new Set([...registered, ...byCorridor.keys()])].sort();
+
+  return {
+    anchorId,
+    windowDays: overallSla.windowDays,
+    computedAt: overallSla.computedAt,
+    thresholds,
+    overall: { sla: overallSla, breach: evaluateSlaBreach(overallSla, thresholds) },
+    corridors: corridorIds.map((corridor) => {
+      const sla = slaFor(corridor);
+      return { corridor, sla, breach: evaluateSlaBreach(sla, thresholds) };
+    }),
+  };
+}
