@@ -12,7 +12,7 @@ import type { ApiError } from '@/types';
 import { enforceRateLimit } from '@/lib/api/response';
 import { requireCallerScope } from '@/lib/auth/caller';
 import { emitWebhookEvent } from '@/lib/webhooks/emit';
-import { openRefundCaseForOutcome } from '@/lib/refunds/detect';
+import { openRefundCaseForBreach, openRefundCaseForOutcome } from '@/lib/refunds/detect';
 import type { OutcomeLogRow, SlippageBreach } from '@/types/reputation';
 
 export const runtime = 'nodejs';
@@ -197,6 +197,14 @@ export async function POST(request: NextRequest): Promise<NextResponse> {
         intentHash: row.intentHash,
         shortfallBps: slippageResult.breach.shortfallBps,
       });
+      try {
+        await openRefundCaseForBreach(slippageResult.breach);
+      } catch (err) {
+        logger.warn({
+          event: 'refund_case_open_failed',
+          message: err instanceof Error ? err.message : String(err),
+        });
+      }
     } else if (slippageResult.kind === 'error') {
       slippage = 'unrecorded';
       logger.warn({

@@ -18,7 +18,12 @@ import {
   type SlippageBreachStore,
 } from '@/lib/reputation/slippage-breaches';
 import { hashIntent } from '@/lib/intent/hash';
-import { InMemoryRefundStore, _setRefundStore, type RefundStore } from '@/lib/refunds/store';
+import {
+  _setRefundStore,
+  getRefundStore,
+  InMemoryRefundStore,
+  type RefundStore,
+} from '@/lib/refunds/store';
 
 let store: ReputationStore;
 let emitted: Array<{ kind: string; payload: Record<string, unknown> }>;
@@ -28,6 +33,7 @@ beforeEach(() => {
   store = new InMemoryReputationStore();
   _setReputationStore(store);
   _setSlippageBreachStore(new InMemorySlippageBreachStore());
+  _setRefundStore(new InMemoryRefundStore());
   emitted = [];
   _setWebhookEmitter((kind, payload) => emitted.push({ kind, payload }));
 });
@@ -709,6 +715,49 @@ describe('POST /api/reputation/append — slippage detection (SLP008)', () => {
     expect(res.status).toBe(201);
     const data = await res.json();
     expect(data.slippage).toBe('unrecorded');
+  });
+
+  it('a recorded slippage breach also opens an owed refund case (RFD014)', async () => {
+    const outcomeIntent = {
+      type: 'offramp-outcome' as const,
+      sourceAsset: 'USDC',
+      destinationAsset: 'NGN',
+      amount: '100',
+      sender: sender.publicKey(),
+      recipient: 'user@example.com',
+      anchorId: 'cowrie',
+      corridor: 'ngnt-ngn',
+      transactionId: 'anchor-tx-refund-breach',
+      minReceive: '1400',
+    };
+    const intentHash = await hashIntent(outcomeIntent);
+    const body = {
+      intentHash,
+      anchorId: 'cowrie',
+      corridor: 'ngnt-ngn',
+      direction: 'withdraw',
+      quotedRate: '1500.0',
+      quotedAmount: '100',
+      deliveredAmount: '1350',
+      outcome: 'completed',
+      minReceive: '1400',
+      outcomeIntent,
+      publicKey: sender.publicKey(),
+      signature: signRaw(intentHash, sender),
+    };
+
+    const res = await appendPOST(req(body));
+    expect(res.status).toBe(201);
+    expect((await res.json()).slippage).toBe('breach');
+
+    const refundCases = await getRefundStore().getByIntentHash(intentHash);
+    expect(refundCases).toHaveLength(1);
+    expect(refundCases[0]).toMatchObject({
+      reason: 'slippage_breach',
+      status: 'owed',
+      refundedAt: null,
+      amountPaid: '100',
+    });
   });
 });
 
