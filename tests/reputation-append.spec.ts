@@ -308,6 +308,11 @@ describe('POST /api/reputation/append — webhooks (#1341)', () => {
         opts: { idempotencyKey: `reputation.event_written:${HASH}` },
       },
       { kind: 'intent.failed', opts: { idempotencyKey: `intent.failed:${HASH}` } },
+      // A refunded outcome opens a refund case (#2124), keyed on the new case's id.
+      {
+        kind: 'refund.opened',
+        opts: { idempotencyKey: expect.stringMatching(/^refund\.opened:[0-9a-f-]{36}$/) },
+      },
     ]);
   });
 
@@ -336,7 +341,12 @@ describe('POST /api/reputation/append — webhooks (#1341)', () => {
     async (outcome) => {
       expect((await appendPOST(req(signed({ outcome })))).status).toBe(201);
 
-      expect(emitted.map((e) => e.kind)).toEqual(['reputation.event_written', 'intent.failed']);
+      // Each of these, sent with a Stellar transaction id, also opens a refund case (#2124).
+      expect(emitted.map((e) => e.kind)).toEqual([
+        'reputation.event_written',
+        'intent.failed',
+        'refund.opened',
+      ]);
       expect(emitted[1]?.payload).toEqual({
         intentHash: HASH,
         anchorId: 'cowrie',
@@ -427,6 +437,8 @@ describe('POST /api/reputation/append — intent.slippage_breach (SLP014)', () =
       'reputation.event_written',
       'intent.settled',
       'intent.slippage_breach',
+      // The breach opens a refund case (RFD014), announced last (#2124).
+      'refund.opened',
     ]);
     expect(emitted[2]?.payload).toEqual({
       intentHash,

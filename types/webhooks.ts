@@ -166,6 +166,40 @@ export const IntentSlippageBreachPayloadSchema = z
   })
   .strict();
 
+/**
+ * Stellar Intel started tracking a refund for an intent. Built from the refund case
+ * field by field: its `signerAccount`, `ackHash`, `ackSignature` and amounts stay on
+ * the platform.
+ */
+export const RefundOpenedPayloadSchema = z
+  .object({
+    caseId: z.string(),
+    intentHash: IntentHashSchema,
+    anchorId: z.string(),
+    corridor: z.string(),
+    direction: z.enum(['withdraw', 'deposit']),
+    reason: z.enum([
+      'anchor_refunded',
+      'anchor_error_after_payment',
+      'expired_after_payment',
+      'slippage_breach',
+    ]),
+    status: z.enum(['owed', 'refunded']),
+    openedAt: z.iso.datetime(),
+  })
+  .strict();
+
+/** The user who signed the transfer confirmed they received the refund. */
+export const RefundAcknowledgedPayloadSchema = z
+  .object({
+    caseId: z.string(),
+    intentHash: IntentHashSchema,
+    anchorId: z.string(),
+    acknowledgedAt: z.iso.datetime(),
+    onChainCheck: z.enum(['verified', 'mismatch', 'unverifiable']).nullable(),
+  })
+  .strict();
+
 export const WEBHOOK_PAYLOAD_SCHEMAS = {
   'intent.created': IntentCreatedPayloadSchema,
   'intent.settled': IntentSettledPayloadSchema,
@@ -179,6 +213,8 @@ export const WEBHOOK_PAYLOAD_SCHEMAS = {
   'dispute.resolved': DisputeResolvedPayloadSchema,
   'oracle.published': OraclePublishedPayloadSchema,
   'intent.slippage_breach': IntentSlippageBreachPayloadSchema,
+  'refund.opened': RefundOpenedPayloadSchema,
+  'refund.acknowledged': RefundAcknowledgedPayloadSchema,
 } as const;
 
 export type WebhookEventKind = keyof typeof WEBHOOK_PAYLOAD_SCHEMAS;
@@ -271,5 +307,19 @@ export const WebhookEventEnvelopeSchema = z.discriminatedUnion('kind', [
     createdAt: z.iso.datetime(),
     idempotencyKey: z.string().min(1).max(200),
     payload: IntentSlippageBreachPayloadSchema,
+  }),
+  z.object({
+    id: z.string().uuid(),
+    kind: z.literal('refund.opened'),
+    createdAt: z.iso.datetime(),
+    idempotencyKey: z.string().min(1).max(200),
+    payload: RefundOpenedPayloadSchema,
+  }),
+  z.object({
+    id: z.string().uuid(),
+    kind: z.literal('refund.acknowledged'),
+    createdAt: z.iso.datetime(),
+    idempotencyKey: z.string().min(1).max(200),
+    payload: RefundAcknowledgedPayloadSchema,
   }),
 ]);

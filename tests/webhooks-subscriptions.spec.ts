@@ -123,6 +123,13 @@ describe('POST /api/webhooks/subscriptions', () => {
     expect(body.events).toEqual(['intent.slippage_breach']);
   });
 
+  it('accepts a subscription to refund.opened (#2124)', async () => {
+    const res = await POST(postReq({ url: 'https://example.com/hook', events: ['refund.opened'] }));
+    expect(res.status).toBe(201);
+    const body = (await res.json()) as { events: string[] };
+    expect(body.events).toEqual(['refund.opened']);
+  });
+
   it('accepts the kinds added by WHK003, before any producer emits them', async () => {
     const res = await POST(
       postReq({
@@ -139,7 +146,7 @@ describe('POST /api/webhooks/subscriptions', () => {
       postReq({ url: 'https://example.com/all', events: [...WEBHOOK_EVENT_KINDS] })
     );
     expect(all.status).toBe(201);
-    expect(((await all.json()) as { events: string[] }).events).toHaveLength(12);
+    expect(((await all.json()) as { events: string[] }).events).toHaveLength(14);
     // The strings an older design used are still not kinds.
     for (const stale of ['dispute.created', 'publisher.tick']) {
       const refused = await POST(postReq({ url: 'https://example.com/hook', events: [stale] }));

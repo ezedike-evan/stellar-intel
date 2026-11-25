@@ -6,7 +6,7 @@ Stellar Intel can push real-time event notifications to your HTTPS endpoint inst
 
 ## Event types
 
-Twelve kinds can be subscribed to. "Live" kinds have a producer; the others are accepted
+Fourteen kinds can be subscribed to. "Live" kinds have a producer; the others are accepted
 by `POST /api/webhooks/subscriptions` and start arriving once their producer ships.
 
 | Kind                           | Fires when                                                                                                                | Status                         |
@@ -23,6 +23,8 @@ by `POST /api/webhooks/subscriptions` and start arriving once their producer shi
 | `dispute.resolved`             | `POST /api/admin/disputes` accepts or rejects a dispute (200)                                                             | Live                           |
 | `oracle.published`             | The publisher tick writes outcomes, rates, metrics or probe signals on chain                                              | Live                           |
 | `intent.slippage_breach`       | `POST /api/reputation/append` records an outcome below the intent's `minReceive`                                          | Live                           |
+| `refund.opened`                | `POST /api/reputation/append` opens a new refund case (refunded, failed after payment, or a slippage breach)              | Live                           |
+| `refund.acknowledged`          | `POST /api/refunds/ack` records the signer's acknowledgement of a refund (200)                                            | Live                           |
 
 Every payload is built field by field. None carries a sender, recipient, public key,
 signature, dispute reason or JWT.
@@ -225,6 +227,45 @@ the breach has been recorded and has not yet been checked against the Stellar pa
 `evidenceHash` identifies the evidence kept with the breach. The evidence itself, the
 signer's account and the anchor's transaction id are not sent.
 
+### refund.opened
+
+Stellar Intel started tracking a refund: a signed outcome says the anchor refunded, a
+withdrawal failed or expired after the user paid, or the delivered amount breached
+`minReceive`. It fires once per case; a duplicate of an existing case sends nothing:
+
+```json
+{
+  "caseId": "7d0e8a3c-1b2f-4c5d-9e6f-0a1b2c3d4e5f",
+  "intentHash": "0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef",
+  "anchorId": "cowrie",
+  "corridor": "usdc-ngn",
+  "direction": "withdraw",
+  "reason": "anchor_error_after_payment",
+  "status": "owed",
+  "openedAt": "2026-11-20T12:00:00.000Z"
+}
+```
+
+`status` is `refunded` when the anchor already reported the refund, otherwise `owed`.
+The signer's account and the amounts are not sent.
+
+### refund.acknowledged
+
+The account that signed the transfer confirmed it received the refund:
+
+```json
+{
+  "caseId": "7d0e8a3c-1b2f-4c5d-9e6f-0a1b2c3d4e5f",
+  "intentHash": "0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef",
+  "anchorId": "cowrie",
+  "acknowledgedAt": "2026-11-22T12:00:00.000Z",
+  "onChainCheck": null
+}
+```
+
+`onChainCheck` is `verified`, `mismatch`, `unverifiable`, or `null` when no check ran.
+The acknowledgement signature, its hash and the refunded amounts are not sent.
+
 ## Payload envelope
 
 Every delivery is a `POST` request with `Content-Type: application/json` and a body of the form:
@@ -256,6 +297,8 @@ reports, so the same fact always has the same key, even when a producer emits it
 | `dispute.resolved`             | `dispute.resolved:<disputeId>`                                                        |
 | `oracle.published`             | `oracle.published:<txHash>`, or `oracle.published:<publishedAt>` without one          |
 | `intent.slippage_breach`       | `intent.slippage_breach:<intentHash>`                                                 |
+| `refund.opened`                | `refund.opened:<caseId>`                                                              |
+| `refund.acknowledged`          | `refund.acknowledged:<caseId>`                                                        |
 
 ## Signature verification
 
