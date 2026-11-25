@@ -77,7 +77,11 @@ describe('SaveTemplateForm (#2161 / TPL008)', () => {
         expected: 'A template with this name already exists.',
       },
       {
-        result: { ok: false as const, error: 'storage_unavailable' as const, message: 'No storage' },
+        result: {
+          ok: false as const,
+          error: 'storage_unavailable' as const,
+          message: 'No storage',
+        },
         expected: "This browser is blocking storage, so templates can't be saved here.",
       },
       {

@@ -4,6 +4,7 @@ import { Keypair } from '@stellar/stellar-sdk';
 import { verifyOptionalIntentAttestation } from '@/lib/intent/verify';
 import { hashIntent, type Intent } from '@/lib/intent/hash';
 import { POST as offrampPOST } from '@/app/api/intent/offramp/route';
+import { _setWebhookEmitter } from '@/lib/webhooks/emit';
 
 const intent: Intent = {
   type: 'offramp',
@@ -55,7 +56,10 @@ describe('verifyOptionalIntentAttestation', () => {
 });
 
 describe('POST /api/intent/offramp — attestation wiring', () => {
-  it('returns 401 when a supplied signature does not verify', async () => {
+  it('returns 401 and emits intent.rejected when a supplied signature does not verify', async () => {
+    const emitted: Array<{ kind: string; payload: Record<string, unknown> }> = [];
+    _setWebhookEmitter((kind, payload) => emitted.push({ kind, payload }));
+
     const claimed = Keypair.random();
     const forged = await signIntent(Keypair.random());
     const req = new NextRequest('http://localhost/api/intent/offramp', {
@@ -65,5 +69,20 @@ describe('POST /api/intent/offramp — attestation wiring', () => {
     });
     const res = await offrampPOST(req);
     expect(res.status).toBe(401);
+    expect(emitted).toEqual([
+      {
+        kind: 'intent.rejected',
+        payload: {
+          intentHash: expect.stringMatching(/^[0-9a-f]{64}$/),
+          direction: 'offramp',
+          reason: 'invalid_signature',
+          sourceAsset: 'USDC',
+          destinationAsset: 'NGN',
+          amount: '100',
+        },
+      },
+    ]);
+
+    _setWebhookEmitter(null);
   });
 });

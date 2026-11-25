@@ -41,8 +41,7 @@ export function templateErrorMessage(
           return result.message || 'You have 50 templates. Delete one to save another.';
         case 'storage_unavailable':
           return (
-            result.message ||
-            "This browser is blocking storage, so templates can't be saved here."
+            result.message || "This browser is blocking storage, so templates can't be saved here."
           );
         case 'not_found':
         case 'invalid':
@@ -58,7 +57,11 @@ export function templateErrorMessage(
   return 'Invalid template input.';
 }
 
-export function SaveTemplateForm({ draft, onSave, onDismiss }: SaveTemplateFormProps): React.ReactElement {
+export function SaveTemplateForm({
+  draft,
+  onSave,
+  onDismiss,
+}: SaveTemplateFormProps): React.ReactElement {
   const defaultLabel = `${templateCorridorLabel(draft.corridorId)} ${draft.amount}`;
   const [label, setLabel] = useState<string>(defaultLabel);
   const [savedLabel, setSavedLabel] = useState<string | null>(null);

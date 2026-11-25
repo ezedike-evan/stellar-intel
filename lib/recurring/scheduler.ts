@@ -41,7 +41,7 @@ export const FALLBACK_REFERENCE_RATE = '0';
  * Returns: -1 if a < b, 0 if a === b, 1 if a > b
  */
 
-function parseDecimal(value: string): bigint {
+export function parseDecimal(value: string): bigint {
   let str = value.trim();
   let sign = 1n;
   if (str.startsWith('-')) {

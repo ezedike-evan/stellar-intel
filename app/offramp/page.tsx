@@ -19,22 +19,23 @@ import { RateTable } from '@/components/offramp/RateTable';
 import { RateTableHeader } from '@/components/offramp/RateTableHeader';
 import { StatusTracker } from '@/components/offramp/StatusTracker';
 import { DisclaimerBanner } from '@/components/offramp/DisclaimerBanner';
-import { SaveTemplateForm } from '@/components/templates/SaveTemplateForm';
 import { TrustBar } from '@/components/offramp/TrustBar';
 import { ErrorBoundary } from '@/components/ui/ErrorBoundary';
 import { useAnchorRates, RATES_REFRESH_INTERVAL_MS } from '@/hooks/useAnchorRates';
 import { useCountdown } from '@/hooks/useCountdown';
 import { useWallet } from '@/contexts/WalletContext';
-import { useIntentTemplates } from '@/hooks/useIntentTemplates';
 import { useWithdrawStatus, type OutcomeAppendContext } from '@/hooks/useWithdrawStatus';
 import { useWalletBalance } from '@/hooks/useWalletBalance';
-import { amountBucket, FUNNEL_EVENTS, trackFunnelEvent } from '@/lib/analytics';
+import { amountBucket, FUNNEL_EVENTS, TEMPLATE_EVENTS, trackFunnelEvent } from '@/lib/analytics';
+import { TemplatePicker } from '@/components/templates/TemplatePicker';
+import { useIntentTemplates } from '@/hooks/useIntentTemplates';
+import type { IntentTemplate, IntentTemplateDraft } from '@/lib/templates/schema';
+import { SaveTemplateForm } from '@/components/templates/SaveTemplateForm';
 import { VISIBLE_CORRIDORS } from '@/constants/anchors';
 import { getCorridorAsset, getCorridorById } from '@/lib/stellar/anchors';
 import { signIntent } from '@/lib/intent/sign';
 import { quotedAllInRate } from '@/lib/stellar/realized-rate';
 import type { Intent } from '@/lib/intent/hash';
-import type { IntentTemplateDraft } from '@/lib/templates/schema';
 import type { AnchorRate } from '@/types';
 import { MIN_RECEIVE_TOLERANCE } from '@/lib/rate-ranking';
 import type { OutcomeIntent } from '@/lib/reputation/schema';
@@ -42,6 +43,7 @@ import { flags } from '@/lib/flags';
 import { submitDispute } from '@/lib/reputation/dispute-client';
 import { DisputeModal } from '@/components/offramp/DisputeModal';
 import { DisputeStatusBadge } from '@/components/offramp/DisputeStatusBadge';
+import { RefundAckCard } from '@/components/refunds/RefundAckCard';
 
 // Not needed until the user picks a rate to execute — split into its own
 // chunk so it doesn't pad the initial /offramp bundle.
@@ -92,11 +94,30 @@ function OfframpContent() {
   const [outcomeContext, setOutcomeContext] = useState<OutcomeAppendContext | null>(null);
 
   const { isConnected, publicKey, network } = useWallet();
+
+  // Saved intent templates (TPL006), behind the intentTemplates flag. Applying
+  // one fills the corridor and amount only: it never selects an anchor or
+  // opens the drawer.
+  const templatesEnabled =
+    flags.intentTemplates && isConnected && !!publicKey && !trackingTransactionId;
   const templatesApi = useIntentTemplates(
     flags.intentTemplates && isConnected ? publicKey : null,
     'offramp'
   );
+  // Offered after a completed off-ramp started in this page session (TPL008).
   const [templateDraft, setTemplateDraft] = useState<IntentTemplateDraft | null>(null);
+
+  const handleApplyTemplate = (template: IntentTemplate) => {
+    if (template.direction !== 'offramp' || !VALID_CORRIDOR_IDS.has(template.corridorId)) return;
+    setCorridorId(template.corridorId);
+    setAmount(template.amount);
+    templatesApi.markUsed(template.id);
+    trackFunnelEvent(TEMPLATE_EVENTS.templateApplied, {
+      direction: 'offramp',
+      corridor: template.corridorId,
+      amount_bucket: amountBucket(template.amount),
+    });
+  };
   const { rates, anchorErrors, isLoading, error, mutate, refreshInflight, lastFetchedAt } =
     useAnchorRates(corridorId, amount);
   const { secondsRemaining, elapsedSeconds, prefersReducedMotion, progress, totalSeconds } =
@@ -196,7 +217,6 @@ function OfframpContent() {
       setTrackingJwt(jwt);
       setTrackingNonce(nonce);
       setTrackingAnchorHomeDomain(anchorHomeDomain);
-
       if (selectedRate) {
         setTemplateDraft({
           direction: 'offramp',
@@ -342,6 +362,14 @@ function OfframpContent() {
 
       <DisclaimerBanner />
 
+      {templatesEnabled && (
+        <TemplatePicker
+          templates={templatesApi.templates}
+          visibleCorridorIds={VALID_CORRIDOR_IDS}
+          onApply={handleApplyTemplate}
+        />
+      )}
+
       <div className="grid grid-cols-1 gap-4 rounded-xl border border-border bg-bg-sunken p-4 /50 sm:grid-cols-3">
         <AssetSelector
           value={selectedAsset}
@@ -439,17 +467,31 @@ function OfframpContent() {
           {flags.disputeLadder && outcomeContext && (
             <DisputeStatusBadge intentHash={outcomeContext.intentHash} />
           )}
+          {flags.intentTemplates &&
+            publicKey &&
+            templateDraft &&
+            withdrawStatus.status === 'completed' && (
+              <SaveTemplateForm
+                draft={templateDraft}
+                onSave={templatesApi.save}
+                onDismiss={() => setTemplateDraft(null)}
+              />
+            )}
         </>
       )}
 
-      {flags.intentTemplates &&
-        publicKey &&
-        templateDraft &&
-        withdrawStatus.status === 'completed' && (
-          <SaveTemplateForm
-            draft={templateDraft}
-            onSave={templatesApi.save}
-            onDismiss={() => setTemplateDraft(null)}
+      {flags.refundGuarantees &&
+        outcomeContext &&
+        trackingTransactionId &&
+        (withdrawStatus.status === 'refunded' ||
+          withdrawStatus.status === 'error' ||
+          withdrawStatus.status === 'expired') && (
+          <RefundAckCard
+            intentHash={outcomeContext.intentHash}
+            anchorId={outcomeContext.anchorId}
+            account={outcomeContext.publicKey}
+            refunds={withdrawStatus.refunds}
+            assetLabel="USDC"
           />
         )}
 

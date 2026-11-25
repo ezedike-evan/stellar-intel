@@ -6,6 +6,7 @@ import { GET as ADMIN_GET, POST as ADMIN_POST } from '@/app/api/admin/disputes/r
 import { NextRequest } from 'next/server';
 import { InMemoryReputationStore, _setReputationStore } from '@/lib/reputation/store';
 import { toOutcomeLogRow } from '@/lib/reputation/schema';
+import { _setWebhookEmitter } from '@/lib/webhooks/emit';
 import {
   getAdjudicationLog,
   _setAdjudicationLog,
@@ -397,6 +398,99 @@ describe('disputes filed via the public route reach the admin queue (#1356)', ()
   it('answers 404 when resolving an id that was never filed', async () => {
     const res = await ADMIN_POST(adminRequest('POST', { id: 'nope', action: 'reject' }));
     expect(res.status).toBe(404);
+  });
+});
+
+describe('dispute.opened webhooks (#2190)', () => {
+  let emitted: Array<{ kind: string; payload: Record<string, unknown> }>;
+
+  beforeEach(() => {
+    emitted = [];
+    _setWebhookEmitter((kind, payload) => {
+      emitted.push({ kind, payload });
+    });
+  });
+
+  afterEach(() => {
+    _setWebhookEmitter(null);
+  });
+
+  it('emits dispute.opened on 201 without publicKey or reason', async () => {
+    const signer = Keypair.random();
+    const intentHash = hashFor(signer);
+    await seedOutcome(signer, intentHash);
+
+    const res = await POST(
+      makeRequest({
+        intentHash,
+        publicKey: signer.publicKey(),
+        signature: signHash(signer, intentHash),
+        anchorId: 'moneygram',
+        reason: 'funds never arrived',
+      })
+    );
+    expect(res.status).toBe(201);
+    expect(emitted).toHaveLength(1);
+    const event = emitted[0]!;
+    expect(event.kind).toBe('dispute.opened');
+    expect(event.payload).toMatchObject({
+      intentHash,
+      anchorId: 'moneygram',
+    });
+    expect(event.payload['disputeId']).toBeDefined();
+    expect(event.payload['createdAt']).toBeDefined();
+    expect(event.payload).not.toHaveProperty('publicKey');
+    expect(event.payload).not.toHaveProperty('reason');
+  });
+
+  it('emits nothing on 403 signature failure', async () => {
+    const signer = Keypair.random();
+    const other = Keypair.random();
+    const intentHash = hashFor(signer);
+    await seedOutcome(signer, intentHash);
+
+    const res = await POST(
+      makeRequest({
+        intentHash,
+        publicKey: signer.publicKey(),
+        signature: signHash(other, intentHash),
+        anchorId: 'moneygram',
+        reason: 'fraud',
+      })
+    );
+    expect(res.status).toBe(403);
+    expect(emitted).toHaveLength(0);
+  });
+
+  it('emits nothing on 404 unknown outcome', async () => {
+    const signer = Keypair.random();
+    const intentHash = hashFor(signer);
+
+    const res = await POST(
+      makeRequest({
+        intentHash,
+        publicKey: signer.publicKey(),
+        signature: signHash(signer, intentHash),
+        anchorId: 'moneygram',
+        reason: 'not found',
+      })
+    );
+    expect(res.status).toBe(404);
+    expect(emitted).toHaveLength(0);
+  });
+
+  it('emits nothing on 422 validation failure', async () => {
+    const res = await POST(
+      makeRequest({
+        intentHash: 'invalid-hash',
+        publicKey: 'invalid-key',
+        signature: 'invalid-sig',
+        anchorId: 'invalid-anchor',
+        reason: 'bad',
+      })
+    );
+    expect(res.status).toBe(422);
+    expect(emitted).toHaveLength(0);
   });
 });
 

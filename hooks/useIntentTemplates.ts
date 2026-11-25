@@ -1,28 +1,30 @@
 import { useCallback, useEffect, useState } from 'react';
-import { trackFunnelEvent, amountBucket, TEMPLATE_EVENTS } from '@/lib/analytics';
+import { TEMPLATE_EVENTS, amountBucket, trackFunnelEvent } from '@/lib/analytics';
 import type {
   IntentTemplate,
   IntentTemplateInput,
   TemplateDirection,
 } from '@/lib/templates/schema';
 import {
-  type ImportMode,
-  type ImportSummary,
-  buildTemplateExport,
-  importTemplates,
-  parseTemplateImport,
-  serializeTemplateExport,
-} from '@/lib/templates/transfer';
-import {
-  type SaveTemplateResult,
   deleteTemplate,
   isTemplateStorageAvailable,
   listTemplates,
   markTemplateUsed,
+  readTemplates,
   saveTemplate,
   templateStorageKey,
   updateTemplate,
+  type SaveTemplateResult,
+  type TemplateStoreError,
 } from '@/lib/templates/store';
+import {
+  buildTemplateExport,
+  importTemplates,
+  parseTemplateImport,
+  serializeTemplateExport,
+  type ImportMode,
+  type ImportSummary,
+} from '@/lib/templates/transfer';
 
 export interface UseIntentTemplatesResult {
   templates: IntentTemplate[];
@@ -39,115 +41,105 @@ export interface UseIntentTemplatesResult {
   ): { ok: true; summary: ImportSummary } | { ok: false; error: string };
 }
 
+const NO_WALLET: SaveTemplateResult = {
+  ok: false,
+  error: 'invalid',
+  message: 'Connect a wallet to use templates.',
+};
+
+const STORE_ERROR_MESSAGES: Record<TemplateStoreError, string> = {
+  invalid: 'Connect a wallet to use templates.',
+  limit: 'You already have the maximum number of templates.',
+  duplicate_label: 'You already have a template with that name.',
+  not_found: 'That template no longer exists.',
+  storage_unavailable: 'Templates could not be saved in this browser.',
+};
+
+/** Single-template analytics props: never the label, id or raw amount. */
+function templateProps(template: IntentTemplate) {
+  return {
+    direction: template.direction,
+    corridor: template.corridorId,
+    amount_bucket: amountBucket(template.amount),
+  };
+}
+
+/**
+ * The connected wallet's intent templates for one direction (TPL005), so pages
+ * never touch lib/templates/store directly. Reads happen in an effect, so the
+ * server render (and the first client render) sees no templates.
+ */
 export function useIntentTemplates(
   publicKey: string | null,
   direction: TemplateDirection
 ): UseIntentTemplatesResult {
   const [templates, setTemplates] = useState<IntentTemplate[]>([]);
-  const [storageAvailable, setStorageAvailable] = useState<boolean>(false);
+  const [storageAvailable, setStorageAvailable] = useState(true);
 
   const refresh = useCallback(() => {
-    if (!publicKey) {
-      setTemplates([]);
-      return;
-    }
-    setTemplates(listTemplates(publicKey, direction));
+    setTemplates(publicKey ? listTemplates(publicKey, direction) : []);
   }, [publicKey, direction]);
 
   useEffect(() => {
     setStorageAvailable(isTemplateStorageAvailable());
     refresh();
-  }, [publicKey, direction, refresh]);
+  }, [refresh]);
 
+  // Another tab saving or deleting a template updates this one too.
   useEffect(() => {
-    if (!publicKey || typeof window === 'undefined') return;
-    const targetKey = templateStorageKey(publicKey);
-    const handleStorage = (event: StorageEvent) => {
-      if (event.key === targetKey || event.key === null) {
-        refresh();
-      }
+    if (!publicKey) return;
+    const key = templateStorageKey(publicKey);
+    const onStorage = (event: StorageEvent) => {
+      if (event.key === key || event.key === null) refresh();
     };
-    window.addEventListener('storage', handleStorage);
-    return () => {
-      window.removeEventListener('storage', handleStorage);
-    };
+    window.addEventListener('storage', onStorage);
+    return () => window.removeEventListener('storage', onStorage);
   }, [publicKey, refresh]);
 
   const save = useCallback(
     (input: IntentTemplateInput): SaveTemplateResult => {
-      if (!publicKey) {
-        return { ok: false, error: 'invalid', message: 'Connect a wallet to use templates.' };
-      }
-      const res = saveTemplate(publicKey, input);
-      if (res.ok) {
+      if (!publicKey) return NO_WALLET;
+      const result = saveTemplate(publicKey, input);
+      if (result.ok) {
         refresh();
-        trackFunnelEvent(TEMPLATE_EVENTS.templateSaved, {
-          direction: res.template.direction,
-          corridor: res.template.corridorId,
-          amount_bucket: amountBucket(res.template.amount),
-        });
+        trackFunnelEvent(TEMPLATE_EVENTS.templateSaved, templateProps(result.template));
       }
-      return res;
+      return result;
     },
     [publicKey, refresh]
   );
 
-  const rename = useCallback(
-    (id: string, label: string): SaveTemplateResult => {
-      if (!publicKey) {
-        return { ok: false, error: 'invalid', message: 'Connect a wallet to use templates.' };
-      }
-      const res = updateTemplate(publicKey, id, { label });
-      if (res.ok) {
+  const update = useCallback(
+    (id: string, patch: { label?: string; amount?: string }): SaveTemplateResult => {
+      if (!publicKey) return NO_WALLET;
+      const result = updateTemplate(publicKey, id, patch);
+      if (result.ok) {
         refresh();
-        trackFunnelEvent(TEMPLATE_EVENTS.templateUpdated, {
-          direction: res.template.direction,
-          corridor: res.template.corridorId,
-          amount_bucket: amountBucket(res.template.amount),
-        });
+        trackFunnelEvent(TEMPLATE_EVENTS.templateUpdated, templateProps(result.template));
       }
-      return res;
+      return result;
     },
     [publicKey, refresh]
   );
 
+  const rename = useCallback((id: string, label: string) => update(id, { label }), [update]);
   const updateAmount = useCallback(
-    (id: string, amount: string): SaveTemplateResult => {
-      if (!publicKey) {
-        return { ok: false, error: 'invalid', message: 'Connect a wallet to use templates.' };
-      }
-      const res = updateTemplate(publicKey, id, { amount });
-      if (res.ok) {
-        refresh();
-        trackFunnelEvent(TEMPLATE_EVENTS.templateUpdated, {
-          direction: res.template.direction,
-          corridor: res.template.corridorId,
-          amount_bucket: amountBucket(res.template.amount),
-        });
-      }
-      return res;
-    },
-    [publicKey, refresh]
+    (id: string, amount: string) => update(id, { amount }),
+    [update]
   );
 
   const remove = useCallback(
     (id: string): boolean => {
       if (!publicKey) return false;
-      const target = templates.find((t) => t.id === id);
-      const ok = deleteTemplate(publicKey, id);
-      if (ok) {
+      const template = readTemplates(publicKey).find((t) => t.id === id);
+      const removed = deleteTemplate(publicKey, id);
+      if (removed) {
         refresh();
-        if (target) {
-          trackFunnelEvent(TEMPLATE_EVENTS.templateDeleted, {
-            direction: target.direction,
-            corridor: target.corridorId,
-            amount_bucket: amountBucket(target.amount),
-          });
-        }
+        if (template) trackFunnelEvent(TEMPLATE_EVENTS.templateDeleted, templateProps(template));
       }
-      return ok;
+      return removed;
     },
-    [publicKey, templates, refresh]
+    [publicKey, refresh]
   );
 
   const markUsed = useCallback(
@@ -160,39 +152,21 @@ export function useIntentTemplates(
   );
 
   const exportJson = useCallback((): string => {
-    if (!publicKey) return '';
-    const all = listTemplates(publicKey);
-    trackFunnelEvent(TEMPLATE_EVENTS.templatesExported, {
-      direction,
-    });
+    const all = publicKey ? readTemplates(publicKey) : [];
+    trackFunnelEvent(TEMPLATE_EVENTS.templatesExported, { direction });
     return serializeTemplateExport(buildTemplateExport(all));
   }, [publicKey, direction]);
 
   const importJson = useCallback(
-    (
-      text: string,
-      mode: ImportMode
-    ): { ok: true; summary: ImportSummary } | { ok: false; error: string } => {
-      if (!publicKey) {
-        return { ok: false, error: 'Connect a wallet to use templates.' };
-      }
+    (text: string, mode: ImportMode) => {
+      if (!publicKey) return { ok: false as const, error: STORE_ERROR_MESSAGES.invalid };
       const parsed = parseTemplateImport(text);
-      if (!parsed.ok) {
-        return { ok: false, error: parsed.error };
-      }
-      const res = importTemplates(publicKey, parsed.templates, mode);
-      if (!res.ok) {
-        const errorMessages: Record<string, string> = {
-          invalid: 'Invalid Stellar public key.',
-          storage_unavailable: 'Storage unavailable or quota exceeded.',
-        };
-        return { ok: false, error: errorMessages[res.error] ?? 'Import failed.' };
-      }
+      if (!parsed.ok) return parsed;
+      const result = importTemplates(publicKey, parsed.templates, mode);
+      if (!result.ok) return { ok: false as const, error: STORE_ERROR_MESSAGES[result.error] };
       refresh();
-      trackFunnelEvent(TEMPLATE_EVENTS.templatesImported, {
-        direction,
-      });
-      return { ok: true, summary: res.summary };
+      trackFunnelEvent(TEMPLATE_EVENTS.templatesImported, { direction });
+      return result;
     },
     [publicKey, direction, refresh]
   );
