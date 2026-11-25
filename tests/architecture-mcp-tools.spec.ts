@@ -3,6 +3,7 @@ import fs from 'node:fs';
 import path from 'node:path';
 import { ANCHOR_HEALTH_TOOL_NAME } from '../packages/mcp/src/tools/anchor-health';
 import { ANCHOR_REPUTATION_TOOL_NAME } from '../packages/mcp/src/tools/anchor-reputation';
+import { ANCHOR_SLA_TOOL_NAME } from '../packages/mcp/src/tools/anchor-sla';
 import { CORRIDORS_TOOL_NAME } from '../packages/mcp/src/tools/corridors';
 import { EXECUTE_TOOL_NAME } from '../packages/mcp/src/tools/execute';
 import { LEADERBOARD_TOOL_NAME } from '../packages/mcp/src/tools/leaderboard';
@@ -13,6 +14,7 @@ import { QUOTE_TOOL_NAME } from '../packages/mcp/src/tools/quote';
 const KNOWN_TOOL_NAMES = new Set([
   ANCHOR_HEALTH_TOOL_NAME,
   ANCHOR_REPUTATION_TOOL_NAME,
+  ANCHOR_SLA_TOOL_NAME,
   CORRIDORS_TOOL_NAME,
   EXECUTE_TOOL_NAME,
   LEADERBOARD_TOOL_NAME,
@@ -40,7 +42,7 @@ describe('ARCHITECTURE.md §8 MCP tools documentation', () => {
     }
   });
 
-  it('documents all 8 real MCP tools', () => {
+  it('documents all 9 real MCP tools', () => {
     const archDocPath = path.resolve(process.cwd(), 'docs/ARCHITECTURE.md');
     const content = fs.readFileSync(archDocPath, 'utf8');
 

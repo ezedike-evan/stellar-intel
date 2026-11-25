@@ -17,6 +17,7 @@ The entry points expose the full tool set:
 | `intel.offramp.prepare`   | ✓                   | ✓              | ✓                             |
 | `intel.execute`           | ✓                   | ✓              | ✓                             |
 | `intel.anchor.reputation` | ✓                   | ✓              | ✓                             |
+| `intel.anchor.sla`        | ✓                   | ✓              | ✓                             |
 | `intel.anchor.health`     | ✓                   | ✓              | ✓                             |
 | `intel.probe.coverage`    | ✓                   | ✓              | ✓                             |
 | `intel.leaderboard`       | ✓                   | ✓              | ✓                             |
@@ -287,6 +288,36 @@ the Stellar Intel API (`/api/reputation/{anchor}`).
     },
     "30": { "state": "insufficient_data", "window": 30, "sampleSize": 3, "computedAt": "2026-…Z", "lastPublisherTxTimestamp": null }
   }
+}
+```
+
+### `intel.anchor.sla`
+
+Returns 30-day trailing p50/p95/p99 settle latency for an anchor, overall and per corridor, with breach status and a daily p95 series. Fetched from the Stellar Intel API (`/api/reputation/{anchor}/sla`).
+`state` is `insufficient_data` until 30 completed withdrawals exist, and `p99Ms`
+is `null` below 100.
+
+- **Input:** `{ anchor: string, corridor?: string }`: anchor identifier (e.g.
+  `moneygram`) and an optional corridor to restrict the per-corridor entries to
+- **Output:** the `ExecutionSlaReport`: `{ anchorId, windowDays, computedAt,
+thresholds: { p95Ms, p99Ms }, overall: { sla, breach }, corridors: [{ corridor,
+sla, breach }], history: [{ day, p95Ms, sampleSize }] }`, where `breach.status`
+  is `within`, `breach` or `unknown`
+
+```jsonc
+// input
+{ "anchor": "moneygram", "corridor": "usdc-ngn" }
+// output (abridged)
+{
+  "anchorId": "moneygram",
+  "windowDays": 30,
+  "thresholds": { "p95Ms": 900000, "p99Ms": 3600000 },
+  "overall": {
+    "sla": { "state": "ok", "sampleSize": 120, "p50Ms": 60000, "p95Ms": 240000, "p99Ms": 610000 },
+    "breach": { "status": "within", "breaches": [] }
+  },
+  "corridors": [{ "corridor": "usdc-ngn", "sla": { "state": "ok", "…": "…" }, "breach": { "status": "within", "breaches": [] } }],
+  "history": [{ "day": "2026-11-01", "p95Ms": 230000, "sampleSize": 6 }]
 }
 ```
 
