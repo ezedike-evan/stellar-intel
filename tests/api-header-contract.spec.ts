@@ -1,7 +1,7 @@
 import { describe, it, expect, beforeEach, vi } from 'vitest';
 import { NextRequest, NextResponse } from 'next/server';
 import { withRequestLogger } from '@/lib/logger';
-import { API_VERSION, withRateLimitHeaders } from '@/lib/api/response';
+import { API_VERSION, standardRateLimitHeaders, withRateLimitHeaders } from '@/lib/api/response';
 import { rateLimitHeaders } from '@/lib/api/v1';
 import type { RateLimitResult } from '@/lib/api/rate-limit';
 import { clearIdempotencyStore } from '@/lib/api/idempotency';
@@ -17,6 +17,7 @@ function makeResult(overrides: Partial<RateLimitResult> = {}): RateLimitResult {
     retryAfter: 0,
     limit: 60,
     resetAt: 1_800_000_000_000,
+    windowMs: 60_000,
     shared: true,
     ...overrides,
   };
@@ -51,6 +52,33 @@ describe('X-RateLimit-Reset has one meaning (#914)', () => {
 
   it('v1 responses also carry API-Version', () => {
     expect(rateLimitHeaders(60, makeResult())['API-Version']).toBe(API_VERSION);
+  });
+
+  it('emits IETF RateLimit and RateLimit-Policy headers with non-negative t', () => {
+    vi.useFakeTimers();
+    try {
+      vi.setSystemTime(1_799_999_975_500); // 24.5s before resetAt -> ceil = 25
+      const rl = makeResult();
+
+      const direct = standardRateLimitHeaders('api.quotes', rl);
+      expect(direct['RateLimit-Policy']).toBe('"api.quotes";q=60;w=60');
+      expect(direct['RateLimit']).toBe('"api.quotes";r=42;t=25');
+
+      const viaResponse = withRateLimitHeaders(NextResponse.json({}), rl, 'api.quotes');
+      expect(viaResponse.headers.get('RateLimit-Policy')).toBe('"api.quotes";q=60;w=60');
+      expect(viaResponse.headers.get('RateLimit')).toBe('"api.quotes";r=42;t=25');
+
+      const viaV1 = rateLimitHeaders(60, rl, 'api.quotes');
+      expect(viaV1['RateLimit-Policy']).toBe('"api.quotes";q=60;w=60');
+      expect(viaV1['RateLimit']).toBe('"api.quotes";r=42;t=25');
+
+      // When now is past resetAt, t must clamp to 0 (never negative).
+      vi.setSystemTime(1_800_000_050_000);
+      const past = standardRateLimitHeaders('api.quotes', rl);
+      expect(past['RateLimit']).toBe('"api.quotes";r=42;t=0');
+    } finally {
+      vi.useRealTimers();
+    }
   });
 });
 
