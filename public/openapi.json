@@ -361,6 +361,12 @@
           },
           "unverifiedPayout": {
             "type": "boolean"
+          },
+          "settleP95Ms": {
+            "type": "number"
+          },
+          "settleSampleSize": {
+            "type": "integer"
           }
         },
         "required": [

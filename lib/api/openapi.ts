@@ -230,6 +230,8 @@ const AnchorRateSchema = registry.register(
     expiresAt: z.string().optional(),
     quoteId: z.string().optional(),
     unverifiedPayout: z.boolean().optional(),
+    settleP95Ms: z.number().optional(),
+    settleSampleSize: z.number().int().optional(),
   })
 );
 
