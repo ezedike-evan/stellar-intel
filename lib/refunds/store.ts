@@ -82,6 +82,38 @@ export interface RefundStore {
   acknowledge(id: string, update: RefundAckUpdate): Promise<RefundCase | null>;
 }
 
+/** What the public lookup may expose: never the signer account or the acknowledgement proof. */
+export type PublicRefundCase = Omit<RefundCase, 'signerAccount' | 'ackSignature' | 'ackHash'>;
+
+/**
+ * Builds the public view field by field, never by spreading, so a field added to
+ * `RefundCase` later stays private until it is listed here on purpose.
+ */
+export function toPublicRefundCase(c: RefundCase): PublicRefundCase {
+  return {
+    id: c.id,
+    intentHash: c.intentHash,
+    reason: c.reason,
+    anchorId: c.anchorId,
+    corridor: c.corridor,
+    direction: c.direction,
+    amountPaid: c.amountPaid,
+    status: c.status,
+    amountRefunded: c.amountRefunded,
+    refundFee: c.refundFee,
+    payments: c.payments.map((p) => ({
+      id: p.id,
+      idType: p.idType,
+      amount: p.amount,
+      fee: p.fee,
+    })),
+    openedAt: c.openedAt,
+    refundedAt: c.refundedAt,
+    acknowledgedAt: c.acknowledgedAt,
+    onChainCheck: c.onChainCheck,
+  };
+}
+
 /** A deep copy, so callers never hold a reference into a store. */
 function copy(record: RefundCase): RefundCase {
   return { ...record, payments: record.payments.map((p) => ({ ...p })) };
