@@ -2632,6 +2632,66 @@ const CreateApiKeyRequestSchema = registry.register(
     tier: z.enum(['standard', 'partner']).optional().describe('Defaults to standard'),
     expiresInDays: z.number().int().min(1).max(365).optional(),
     maxIntentAmount: z.string().regex(AMOUNT_PATTERN).optional(),
+// ─── Slippage breaches (Issue #2106) ──────────────────────────────────────────
+
+const SlippageOnChainEvidenceSchema = registry.register(
+  'SlippageOnChainEvidence',
+  z.object({
+    txHash: z.string().describe('Stellar transaction hash'),
+    ledger: z.number().int().describe('Ledger sequence number'),
+    closedAt: z.string().describe('Ledger close time (ISO 8601)'),
+    successful: z.boolean().describe('Whether transaction succeeded'),
+    from: z.string().describe('Source account public key'),
+    to: z.string().describe('Destination account public key'),
+    assetCode: z.string().describe('Asset code transferred'),
+    assetIssuer: z.string().nullable().describe('Asset issuer public key'),
+    amount: z.string().describe('Amount transferred'),
+    memoType: z.string().describe('Memo type'),
+    memo: z.string().nullable().describe('Memo text or hash'),
+  })
+);
+
+const SlippageEvidenceSchema = registry.register(
+  'SlippageEvidence',
+  z.object({
+    v: z.literal(1).describe('Evidence schema version'),
+    networkPassphrase: z.string().describe('Stellar network passphrase'),
+    intentHash: z.string().describe('SHA-256 hash of the canonical intent'),
+    anchorId: z.string().describe('Anchor identifier'),
+    corridor: z.string().describe('Corridor identifier'),
+    signerAccount: z.string().describe('Signer Stellar account public key'),
+    minReceive: z.string().describe('Floor amount signed by user'),
+    anchorReported: z.object({
+      anchorTransactionId: z.string().nullable(),
+      amountOut: z.string(),
+      reportedBy: z.literal('sender'),
+    }),
+    shortfall: z.string().describe('Shortfall amount'),
+    shortfallBps: z.number().int().describe('Shortfall in basis points'),
+    onChain: SlippageOnChainEvidenceSchema.nullable(),
+    detectedAt: z.string().describe('ISO 8601 timestamp when breach was detected'),
+  })
+);
+
+const PublicSlippageBreachSummarySchema = registry.register(
+  'PublicSlippageBreachSummary',
+  z.object({
+    intentHash: z.string().describe('SHA-256 hash of the canonical intent'),
+    anchorId: z.string().describe('Anchor identifier'),
+    corridor: z.string().describe('Corridor identifier'),
+    minReceive: z.string().describe('Minimum receive amount signed in intent'),
+    amountOut: z.string().describe('Delivered amount reported by anchor'),
+    shortfall: z.string().describe('Amount by which delivery fell short of floor'),
+    shortfallBps: z.number().int().describe('Shortfall in basis points (1/100th of 1%)'),
+    status: z.enum(['detected', 'verified', 'rejected']).describe('Breach status'),
+    rejectionReason: z.string().nullable().describe('Reason for rejection if status is rejected'),
+    stellarTransactionId: z.string().nullable().describe('Stellar transaction hash'),
+    evidenceHash: z.string().describe('SHA-256 hash of the canonical evidence JSON'),
+    detectedAt: z.string().describe('ISO 8601 timestamp when breach was detected'),
+    verifiedAt: z
+      .string()
+      .nullable()
+      .describe('ISO 8601 timestamp when breach was verified/rejected'),
   })
 );
 
@@ -2655,6 +2715,48 @@ registry.registerPath({
     201: {
       description: 'Caller key issued. The response is not cacheable.',
       content: { 'application/json': { schema: CreatedApiKeySchema } },
+  method: 'get',
+  path: '/api/v1/slippage-breaches',
+  summary: 'List slippage breaches',
+  description:
+    'Returns a list of detected slippage breaches, newest first. Excludes sensitive signerAccount, recipient and raw evidence.',
+  tags: ['Reputation'],
+  request: {
+    query: z.object({
+      anchorId: z
+        .string()
+        .optional()
+        .openapi({
+          param: { name: 'anchorId', in: 'query' },
+          description: 'Filter by anchor identifier',
+        }),
+      status: z
+        .enum(['detected', 'verified', 'rejected'])
+        .optional()
+        .openapi({
+          param: { name: 'status', in: 'query' },
+          description: 'Filter by breach status',
+        }),
+      limit: z.coerce
+        .number()
+        .optional()
+        .openapi({
+          param: { name: 'limit', in: 'query' },
+          description: 'Maximum number of breaches to return (1-500, default 100)',
+          example: 100,
+        }),
+    }),
+  },
+  responses: {
+    200: {
+      description: 'List of slippage breaches',
+      content: {
+        'application/json': {
+          schema: z.object({
+            breaches: z.array(PublicSlippageBreachSummarySchema),
+          }),
+        },
+      },
     },
     400: {
       description: 'Validation error',
@@ -2685,6 +2787,11 @@ registry.registerPath({
       content: { 'application/json': { schema: ApiErrorSchema } },
     },
     429: RATE_LIMITED_429,
+    429: RATE_LIMITED_429,
+    503: {
+      description: 'Store unavailable',
+      content: { 'application/json': { schema: ApiErrorSchema } },
+    },
   },
 });
 
@@ -2719,6 +2826,50 @@ registry.registerPath({
       content: { 'application/json': { schema: ApiErrorSchema } },
     },
     429: RATE_LIMITED_429,
+  method: 'get',
+  path: '/api/v1/slippage-breaches/{intentHash}',
+  summary: 'Get slippage breach detail',
+  description:
+    'Returns detailed information about a slippage breach, including full evidence and canonical evidence JSON string for independent SHA-256 verification.',
+  tags: ['Reputation'],
+  request: {
+    params: z.object({
+      intentHash: z
+        .string()
+        .regex(/^[0-9a-f]{64}$/)
+        .openapi({
+          param: { name: 'intentHash', in: 'path' },
+          description: '64-character lowercase hex SHA-256 intent hash',
+        }),
+    }),
+  },
+  responses: {
+    200: {
+      description: 'Slippage breach detail with evidence',
+      content: {
+        'application/json': {
+          schema: PublicSlippageBreachSummarySchema.extend({
+            evidence: SlippageEvidenceSchema,
+            canonicalEvidence: z
+              .string()
+              .describe('Canonical JSON representation of evidence for SHA-256 verification'),
+          }),
+        },
+      },
+    },
+    400: {
+      description: 'Invalid intentHash format',
+      content: { 'application/json': { schema: ApiErrorSchema } },
+    },
+    404: {
+      description: 'Breach not found',
+      content: { 'application/json': { schema: ApiErrorSchema } },
+    },
+    429: RATE_LIMITED_429,
+    503: {
+      description: 'Store unavailable',
+      content: { 'application/json': { schema: ApiErrorSchema } },
+    },
   },
 });
 
