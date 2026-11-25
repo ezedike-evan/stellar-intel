@@ -49,6 +49,7 @@ describe('rateLimitHeaders (#805)', () => {
         limit: 20,
         resetAt: 1_800_000_000_000,
         shared: false,
+        windowMs: 60_000,
       })
     ).toMatchObject({
       'API-Version': API_VERSION,
@@ -62,6 +63,7 @@ describe('rateLimitHeaders (#805)', () => {
       limit: 20,
       resetAt: 1_800_000_000_000,
       shared: false,
+      windowMs: 60_000,
     });
     // Retry-After carries the delta.
     expect(throttled['Retry-After']).toBe('42');
