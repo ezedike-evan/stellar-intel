@@ -1672,6 +1672,260 @@
           "acknowledgedAt",
           "onChainCheck"
         ]
+      },
+      "SlippageOnChainEvidence": {
+        "type": "object",
+        "properties": {
+          "txHash": {
+            "type": "string",
+            "description": "Stellar transaction hash"
+          },
+          "ledger": {
+            "type": "integer",
+            "description": "Ledger sequence number"
+          },
+          "closedAt": {
+            "type": "string",
+            "description": "Ledger close time (ISO 8601)"
+          },
+          "successful": {
+            "type": "boolean",
+            "description": "Whether transaction succeeded"
+          },
+          "from": {
+            "type": "string",
+            "description": "Source account public key"
+          },
+          "to": {
+            "type": "string",
+            "description": "Destination account public key"
+          },
+          "assetCode": {
+            "type": "string",
+            "description": "Asset code transferred"
+          },
+          "assetIssuer": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "description": "Asset issuer public key"
+          },
+          "amount": {
+            "type": "string",
+            "description": "Amount transferred"
+          },
+          "memoType": {
+            "type": "string",
+            "description": "Memo type"
+          },
+          "memo": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "description": "Memo text or hash"
+          }
+        },
+        "required": [
+          "txHash",
+          "ledger",
+          "closedAt",
+          "successful",
+          "from",
+          "to",
+          "assetCode",
+          "assetIssuer",
+          "amount",
+          "memoType",
+          "memo"
+        ]
+      },
+      "SlippageEvidence": {
+        "type": "object",
+        "properties": {
+          "v": {
+            "type": "number",
+            "enum": [
+              1
+            ],
+            "description": "Evidence schema version"
+          },
+          "networkPassphrase": {
+            "type": "string",
+            "description": "Stellar network passphrase"
+          },
+          "intentHash": {
+            "type": "string",
+            "description": "SHA-256 hash of the canonical intent"
+          },
+          "anchorId": {
+            "type": "string",
+            "description": "Anchor identifier"
+          },
+          "corridor": {
+            "type": "string",
+            "description": "Corridor identifier"
+          },
+          "signerAccount": {
+            "type": "string",
+            "description": "Signer Stellar account public key"
+          },
+          "minReceive": {
+            "type": "string",
+            "description": "Floor amount signed by user"
+          },
+          "anchorReported": {
+            "type": "object",
+            "properties": {
+              "anchorTransactionId": {
+                "type": [
+                  "string",
+                  "null"
+                ]
+              },
+              "amountOut": {
+                "type": "string"
+              },
+              "reportedBy": {
+                "type": "string",
+                "enum": [
+                  "sender"
+                ]
+              }
+            },
+            "required": [
+              "anchorTransactionId",
+              "amountOut",
+              "reportedBy"
+            ]
+          },
+          "shortfall": {
+            "type": "string",
+            "description": "Shortfall amount"
+          },
+          "shortfallBps": {
+            "type": "integer",
+            "description": "Shortfall in basis points"
+          },
+          "onChain": {
+            "allOf": [
+              {
+                "$ref": "#/components/schemas/SlippageOnChainEvidence"
+              },
+              {
+                "type": [
+                  "object",
+                  "null"
+                ]
+              }
+            ]
+          },
+          "detectedAt": {
+            "type": "string",
+            "description": "ISO 8601 timestamp when breach was detected"
+          }
+        },
+        "required": [
+          "v",
+          "networkPassphrase",
+          "intentHash",
+          "anchorId",
+          "corridor",
+          "signerAccount",
+          "minReceive",
+          "anchorReported",
+          "shortfall",
+          "shortfallBps",
+          "onChain",
+          "detectedAt"
+        ]
+      },
+      "PublicSlippageBreachSummary": {
+        "type": "object",
+        "properties": {
+          "intentHash": {
+            "type": "string",
+            "description": "SHA-256 hash of the canonical intent"
+          },
+          "anchorId": {
+            "type": "string",
+            "description": "Anchor identifier"
+          },
+          "corridor": {
+            "type": "string",
+            "description": "Corridor identifier"
+          },
+          "minReceive": {
+            "type": "string",
+            "description": "Minimum receive amount signed in intent"
+          },
+          "amountOut": {
+            "type": "string",
+            "description": "Delivered amount reported by anchor"
+          },
+          "shortfall": {
+            "type": "string",
+            "description": "Amount by which delivery fell short of floor"
+          },
+          "shortfallBps": {
+            "type": "integer",
+            "description": "Shortfall in basis points (1/100th of 1%)"
+          },
+          "status": {
+            "type": "string",
+            "enum": [
+              "detected",
+              "verified",
+              "rejected"
+            ],
+            "description": "Breach status"
+          },
+          "rejectionReason": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "description": "Reason for rejection if status is rejected"
+          },
+          "stellarTransactionId": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "description": "Stellar transaction hash"
+          },
+          "evidenceHash": {
+            "type": "string",
+            "description": "SHA-256 hash of the canonical evidence JSON"
+          },
+          "detectedAt": {
+            "type": "string",
+            "description": "ISO 8601 timestamp when breach was detected"
+          },
+          "verifiedAt": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "description": "ISO 8601 timestamp when breach was verified/rejected"
+          }
+        },
+        "required": [
+          "intentHash",
+          "anchorId",
+          "corridor",
+          "minReceive",
+          "amountOut",
+          "shortfall",
+          "shortfallBps",
+          "status",
+          "rejectionReason",
+          "stellarTransactionId",
+          "evidenceHash",
+          "detectedAt",
+          "verifiedAt"
+        ]
       }
     },
     "parameters": {}
@@ -5754,6 +6008,203 @@
           },
           "429": {
             "description": "Rate limited",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/slippage-breaches": {
+      "get": {
+        "summary": "List slippage breaches",
+        "description": "Returns a list of detected slippage breaches, newest first. Excludes sensitive signerAccount, recipient and raw evidence.",
+        "tags": [
+          "Reputation"
+        ],
+        "parameters": [
+          {
+            "schema": {
+              "type": "string",
+              "description": "Filter by anchor identifier"
+            },
+            "required": false,
+            "description": "Filter by anchor identifier",
+            "name": "anchorId",
+            "in": "query"
+          },
+          {
+            "schema": {
+              "type": "string",
+              "enum": [
+                "detected",
+                "verified",
+                "rejected"
+              ],
+              "description": "Filter by breach status"
+            },
+            "required": false,
+            "description": "Filter by breach status",
+            "name": "status",
+            "in": "query"
+          },
+          {
+            "schema": {
+              "type": [
+                "number",
+                "null"
+              ],
+              "description": "Maximum number of breaches to return (1-500, default 100)",
+              "example": 100
+            },
+            "required": false,
+            "description": "Maximum number of breaches to return (1-500, default 100)",
+            "name": "limit",
+            "in": "query"
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "List of slippage breaches",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "breaches": {
+                      "type": "array",
+                      "items": {
+                        "$ref": "#/components/schemas/PublicSlippageBreachSummary"
+                      }
+                    }
+                  },
+                  "required": [
+                    "breaches"
+                  ]
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Validation error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiError"
+                }
+              }
+            }
+          },
+          "429": {
+            "description": "Rate limited",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiError"
+                }
+              }
+            }
+          },
+          "503": {
+            "description": "Store unavailable",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/slippage-breaches/{intentHash}": {
+      "get": {
+        "summary": "Get slippage breach detail",
+        "description": "Returns detailed information about a slippage breach, including full evidence and canonical evidence JSON string for independent SHA-256 verification.",
+        "tags": [
+          "Reputation"
+        ],
+        "parameters": [
+          {
+            "schema": {
+              "type": "string",
+              "pattern": "^[0-9a-f]{64}$",
+              "description": "64-character lowercase hex SHA-256 intent hash"
+            },
+            "required": true,
+            "description": "64-character lowercase hex SHA-256 intent hash",
+            "name": "intentHash",
+            "in": "path"
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Slippage breach detail with evidence",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "allOf": [
+                    {
+                      "$ref": "#/components/schemas/PublicSlippageBreachSummary"
+                    },
+                    {
+                      "type": "object",
+                      "properties": {
+                        "evidence": {
+                          "$ref": "#/components/schemas/SlippageEvidence"
+                        },
+                        "canonicalEvidence": {
+                          "type": "string",
+                          "description": "Canonical JSON representation of evidence for SHA-256 verification"
+                        }
+                      },
+                      "required": [
+                        "evidence",
+                        "canonicalEvidence"
+                      ]
+                    }
+                  ]
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Invalid intentHash format",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiError"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Breach not found",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiError"
+                }
+              }
+            }
+          },
+          "429": {
+            "description": "Rate limited",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiError"
+                }
+              }
+            }
+          },
+          "503": {
+            "description": "Store unavailable",
             "content": {
               "application/json": {
                 "schema": {
