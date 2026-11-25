@@ -60,9 +60,9 @@ async function prepareAndSign(kp: Keypair, senderSeq = '0') {
     loadAccount
   );
 
-  const signature = Buffer.from(
-    kp.sign(Buffer.from(unsignedEnvelope.intentHash, 'utf8'))
-  ).toString('base64');
+  const signature = Buffer.from(kp.sign(Buffer.from(unsignedEnvelope.intentHash, 'utf8'))).toString(
+    'base64'
+  );
 
   const tx = TransactionBuilder.fromXDR(unsignedTx, Networks.PUBLIC);
   tx.sign(kp);

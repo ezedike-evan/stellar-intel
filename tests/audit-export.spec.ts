@@ -5,11 +5,7 @@
  */
 
 import { describe, it, expect } from 'vitest';
-import {
-  AUDIT_CSV_COLUMNS,
-  toNdjson,
-  toCsv,
-} from '@/lib/audit/export';
+import { AUDIT_CSV_COLUMNS, toNdjson, toCsv } from '@/lib/audit/export';
 import type { AuditEvent } from '@/lib/audit/types';
 
 describe('audit export unit tests (#2216)', () => {
@@ -71,7 +67,7 @@ describe('audit export unit tests (#2216)', () => {
     expect(csv).toContain('"action,with""quote\nand\rnewline"');
   });
 
-  it('=cmd() becomes \'=\'cmd() due to formula injection guard', () => {
+  it("=cmd() becomes '='cmd() due to formula injection guard", () => {
     const formulaEvent: AuditEvent = {
       ...sampleEvent,
       action: '=cmd()',

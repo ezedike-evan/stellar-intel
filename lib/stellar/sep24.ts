@@ -5,6 +5,7 @@ import { fetchWithTimeout } from './http';
 import { computeTotalReceived } from '@/lib/utils';
 import { AMOUNT_PATTERN } from '@/lib/patterns';
 import { normalizeStatus } from './sep24-status-map';
+import { parseRefunds } from './refunds';
 import type {
   Sep24FeeParams,
   AnchorRate,
@@ -59,6 +60,8 @@ async function fetchSep24TransactionOnce(
 
   const data = (await res.json()) as { transaction?: Record<string, unknown> };
   const tx = data.transaction ?? {};
+  // Validated, never cast: the anchor's `refunds` is rendered and recorded as it is.
+  const refunds = parseRefunds(tx['refunds']);
 
   return {
     id: String(tx['id'] ?? transactionId),
@@ -81,9 +84,7 @@ async function fetchSep24TransactionOnce(
       externalTransactionId: (tx['external_transaction_id'] ??
         tx['externalTransactionId']) as string,
     }),
-    ...(tx['refunds'] !== undefined && {
-      refunds: tx['refunds'] as Sep24Transaction['refunds'],
-    }),
+    ...(refunds !== undefined && { refunds }),
     ...(parseInstructions(tx['instructions']) !== undefined && {
       instructions: parseInstructions(tx['instructions']),
     }),

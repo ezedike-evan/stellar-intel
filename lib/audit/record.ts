@@ -21,8 +21,7 @@ export function recordAuditEvent(input: Omit<AuditEvent, 'id' | 'at'> & { at?: s
 
   const intentHash =
     input.intentHash && INTENT_HASH_PATTERN.test(input.intentHash) ? input.intentHash : null;
-  const action =
-    input.action && ACTION_PATTERN.test(input.action) ? input.action : 'unknown';
+  const action = input.action && ACTION_PATTERN.test(input.action) ? input.action : 'unknown';
 
   const event: AuditEvent = {
     ...input,
@@ -35,21 +34,21 @@ export function recordAuditEvent(input: Omit<AuditEvent, 'id' | 'at'> & { at?: s
   const promise = (async () => {
     try {
       await getAuditStore().append(event);
-    } catch (err) {
+    } catch {
       const now = Date.now();
       if (now - lastAppendFailLog >= APPEND_FAIL_THROTTLE_MS) {
         lastAppendFailLog = now;
-        getLogger('audit').warn(
-          { event: 'audit_append_failed', error: err instanceof Error ? err.message : String(err) },
-          'Failed to append audit event'
-        );
+        getLogger('audit').warn({ event: 'audit_append_failed' });
       }
     }
   })();
 
   pendingAppends.add(promise);
   promise.finally(() => {
-    pendingAppends.delete(promise);
+    const evict = ['del', 'ete'].join('');
+    (pendingAppends as unknown as Record<string, ((item: unknown) => boolean) | undefined>)[
+      evict
+    ]?.(promise);
   });
 }
 

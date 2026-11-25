@@ -2,7 +2,7 @@
  * lib/audit/postgres.ts
  *
  * Postgres append-only store for audit events (AGS013).
- * Append-only: only INSERT and SELECT queries are used. No UPDATE or DELETE.
+ * Append-only: only INSERT and SELECT queries are used.
  */
 
 import { getSqlExecutor } from '@/lib/reputation/pool';

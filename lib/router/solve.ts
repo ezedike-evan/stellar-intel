@@ -9,7 +9,7 @@
 import { env } from '@/lib/env';
 import { getLogger } from '@/lib/logger';
 import { fetchAllAnchorFees, computeRateComparison } from '@/lib/stellar/sep24';
-import { DECIMAL_SCALE, compareDecimals, parseDecimal } from '@/lib/decimal';
+import { DECIMAL_SCALE, compareDecimals, formatDecimal, parseDecimal } from '@/lib/decimal';
 import type {
   AnchorRate,
   EvaluatedQuote,
@@ -340,15 +340,6 @@ export function throwIfNoRoute(result: SolverResult): Plan {
 }
 
 // ─── solveMultiAnchor (issue #800) ─────────────────────────────────────────────
-
-/** Renders a 7-dp-scaled BigInt back to a trimmed decimal string. */
-function formatDecimal(scaled: bigint): string {
-  const negative = scaled < 0n;
-  const digits = (negative ? -scaled : scaled).toString().padStart(8, '0');
-  const intPart = digits.slice(0, -7);
-  const fracPart = digits.slice(-7).replace(/0+$/, '');
-  return `${negative ? '-' : ''}${intPart}${fracPart ? `.${fracPart}` : ''}`;
-}
 
 export interface MultiAnchorOptions {
   /** Cap on the number of anchors the order may be split across. */

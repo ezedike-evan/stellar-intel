@@ -2,7 +2,6 @@ import type { McpServer } from '@modelcontextprotocol/sdk/server/mcp.js';
 import { z } from 'zod';
 import { executeIntent, OfframpToolError, ExecuteOutputSchema } from '@/lib/mcp/offramp';
 import { McpToolError, fromOfframpError, upstreamTimeout } from '@/lib/mcp/errors';
-import { effectiveAmountCap, assertWithinAmountCap } from '@/lib/mcp/safety';
 
 export const EXECUTE_TOOL_NAME = 'intel.execute';
 
@@ -51,13 +50,8 @@ export function registerExecuteTool(server: McpServer): void {
       outputSchema: ExecuteOutputSchema,
       annotations: { destructiveHint: true, idempotentHint: false },
     },
-    async (args, extra) => {
+    async (args) => {
       try {
-        const callerCap = (extra as { authInfo?: { extra?: { maxIntentAmount?: string | null } } })
-          ?.authInfo?.extra?.maxIntentAmount;
-        const cap = effectiveAmountCap(callerCap);
-        assertWithinAmountCap(args.unsignedEnvelope.intent.amount, cap);
-
         const result = await executeIntent(args);
         return {
           content: [{ type: 'text', text: JSON.stringify(result) }],

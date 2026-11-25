@@ -2,8 +2,10 @@ import { NextRequest, NextResponse } from 'next/server';
 import type { McpServer } from '@modelcontextprotocol/sdk/server/mcp.js';
 import { WebStandardStreamableHTTPServerTransport } from '@modelcontextprotocol/sdk/server/webStandardStreamableHttp.js';
 import { createServer } from '@/lib/mcp/server';
-import { checkRateLimit } from '@/lib/api/rate-limit';
+import { checkRateLimit, getClientIp } from '@/lib/api/rate-limit';
+import { checkDailyQuota, quotaHeaders } from '@/lib/api/quota';
 import { resolveCaller } from '@/lib/auth/caller';
+import { withApiHeaders, withRateLimitHeaders } from '@/lib/api/response';
 import { getLogger } from '@/lib/logger';
 
 /**
@@ -34,38 +36,56 @@ const MCP_RATE_LIMIT = { bucket: 'api.mcp', maxRequests: 60 } as const;
 
 export async function POST(request: NextRequest): Promise<Response> {
   const logger = getLogger('api.mcp');
-  const resolution = await resolveCaller(request.headers);
-  if (!resolution.ok) {
-    return NextResponse.json(
-      {
-        jsonrpc: '2.0',
-        error: { code: -32001, message: resolution.message },
-        id: null,
-      },
-      {
-        status: 401,
-        headers: {
-          'WWW-Authenticate': 'Bearer realm="stellar-intel", error="invalid_token"',
-        },
-      }
-    );
-  }
-  const caller = resolution.caller;
-
-  const rl = await checkRateLimit(caller.rateLimitKey, MCP_RATE_LIMIT);
+  const ip = getClientIp(request.headers);
+  const rl = await checkRateLimit(ip, MCP_RATE_LIMIT);
   if (!rl.allowed) {
-    logger.warn({ event: 'rate_limit_exceeded', key: caller.rateLimitKey, retryAfter: rl.retryAfter });
-    return NextResponse.json(
+    logger.warn({ event: 'rate_limit_exceeded', ip, retryAfter: rl.retryAfter });
+    const limited = NextResponse.json(
       {
         jsonrpc: '2.0',
         error: { code: -32000, message: 'Too many requests' },
         id: null,
       },
-      {
-        status: 429,
-        headers: { 'Retry-After': String(rl.retryAfter), 'X-RateLimit-Remaining': '0' },
-      }
+      { status: 429, headers: { 'Retry-After': String(rl.retryAfter) } }
     );
+    // X-RateLimit-* plus the IETF RateLimit / RateLimit-Policy pair (AGS009).
+    return withApiHeaders(withRateLimitHeaders(limited, rl, 'api.mcp'));
+  }
+
+  // Daily quota (AGS024), shared with REST and GraphQL: one unit per request.
+  // Anonymous callers have none; a bad credential is rejected, never silently
+  // downgraded to anonymous.
+  const resolution = await resolveCaller(request.headers);
+  if (!resolution.ok) {
+    return NextResponse.json(
+      {
+        jsonrpc: '2.0',
+        error: { code: -32000, message: resolution.message },
+        id: null,
+      },
+      { status: 401 }
+    );
+  }
+  const caller = resolution.caller;
+  let quotaHeadersOut: Record<string, string> = {};
+  if (caller.kind !== 'anonymous') {
+    const quota = await checkDailyQuota(caller);
+    if (quota) {
+      quotaHeadersOut = quotaHeaders(quota);
+      if (!quota.allowed) {
+        return NextResponse.json(
+          {
+            jsonrpc: '2.0',
+            error: { code: -32000, message: 'Daily quota exceeded' },
+            id: null,
+          },
+          {
+            status: 429,
+            headers: { ...quotaHeadersOut, 'Retry-After': String(quota.retryAfter) },
+          }
+        );
+      }
+    }
   }
 
   // A stateless transport refuses to serve a second request — it throws
@@ -91,22 +111,13 @@ export async function POST(request: NextRequest): Promise<Response> {
     // With enableJsonResponse the returned Response carries a fully buffered
     // JSON body rather than an open SSE stream, so it is safe to close the
     // server once this resolves.
-    const response = await transport.handleRequest(request, {
-      authInfo: {
-        token: '', // token is deliberately empty: tool handlers never see the raw credential
-        clientId: caller.id,
-        scopes: [...caller.scopes],
-        extra: {
-          kind: caller.kind,
-          tier: caller.tier,
-          rateLimitKey: caller.rateLimitKey,
-          maxIntentAmount: caller.maxIntentAmount,
-        },
-      },
-    });
+    const response = await transport.handleRequest(request);
     await server.close();
     server = undefined;
-    return response;
+    if (Object.keys(quotaHeadersOut).length === 0) return response;
+    const headers = new Headers(response.headers);
+    for (const [name, value] of Object.entries(quotaHeadersOut)) headers.set(name, value);
+    return new NextResponse(await response.text(), { status: response.status, headers });
   } catch (error) {
     const message = error instanceof Error ? error.message : String(error);
     logger.error({

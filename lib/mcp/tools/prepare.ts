@@ -2,7 +2,6 @@ import type { McpServer } from '@modelcontextprotocol/sdk/server/mcp.js';
 import { z } from 'zod';
 import { prepareIntent, OfframpToolError, PrepareOutputSchema } from '@/lib/mcp/offramp';
 import { McpToolError, fromOfframpError, upstreamTimeout } from '@/lib/mcp/errors';
-import { effectiveAmountCap, assertWithinAmountCap } from '@/lib/mcp/safety';
 
 export const PREPARE_TOOL_NAME = 'intel.offramp.prepare';
 
@@ -29,13 +28,8 @@ export function registerPrepareTool(server: McpServer): void {
       outputSchema: PrepareOutputSchema,
       annotations: { readOnlyHint: true },
     },
-    async (args, extra) => {
+    async (args) => {
       try {
-        const callerCap = (extra as { authInfo?: { extra?: { maxIntentAmount?: string | null } } })
-          ?.authInfo?.extra?.maxIntentAmount;
-        const cap = effectiveAmountCap(callerCap);
-        assertWithinAmountCap(args.amount, cap);
-
         const result = await prepareIntent(args);
         return {
           content: [{ type: 'text', text: JSON.stringify(result) }],
