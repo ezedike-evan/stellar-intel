@@ -285,6 +285,30 @@ export interface AdjudicationSummary {
 }
 
 /** Response shape for `GET /api/v1/disputes/log`. */
+/**
+ * The v3 release-gate metric served at `GET /api/v1/refunds/summary`: counts of
+ * the refund cases opened in the trailing window. Counts only, no accounts.
+ */
+export interface RefundGateMetrics {
+  windowDays: number;
+  /** ISO start of the window. */
+  since: string;
+  /** ISO instant the metric was computed at. */
+  generatedAt: string;
+  opened: number;
+  owed: number;
+  refunded: number;
+  acknowledged: number;
+  /** Refunded, not yet acknowledged, still within the 72h grace period. */
+  awaitingAck: number;
+  /** Refunded, not acknowledged, past the grace period. The gate counts these. */
+  unsignaled: number;
+  /** Owed for longer than seven days. Reported, not part of the gate. */
+  overdueOwed: number;
+  /** True when `unsignaled` is 0. */
+  gatePassing: boolean;
+}
+
 export interface AdjudicationLogResponse {
   entries: AdjudicationEntry[];
   head: { seq: number; entryHash: string } | null;
@@ -319,6 +343,7 @@ export const OPERATIONS = {
   getSlippageCompliance: 'GET /api/v1/slippage-compliance',
   getDisputeLog: 'GET /api/v1/disputes/log',
   exchangeToken: 'POST /api/v1/auth/token',
+  getRefundsSummary: 'GET /api/v1/refunds/summary',
 } as const;
 
 export type OperationName = keyof typeof OPERATIONS;
