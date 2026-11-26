@@ -3,6 +3,12 @@ import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { discoverAnchorsForCorridor } from '@/lib/stellar/anchors';
 import { _clearTomlCache } from '@/lib/stellar/sep1';
 
+// These specs pin registry behaviour, not tonight's outages: the nightly ledger
+// can flag any anchor degraded, which hides it from its corridors.
+vi.mock('@/constants/anchor-health.json', () => ({
+  default: { thresholdNights: 3, updatedAt: '2026-01-01T00:00:00.000Z', anchors: {} },
+}));
+
 const tomlFor = (domain: string) => ({
   TRANSFER_SERVER_SEP0024: `https://${domain}/sep24`,
   WEB_AUTH_ENDPOINT: `https://${domain}/auth`,

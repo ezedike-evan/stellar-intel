@@ -2,6 +2,7 @@ import type { McpServer } from '@modelcontextprotocol/sdk/server/mcp.js';
 import { z } from 'zod';
 import { prepareOnrampIntent, OnrampPrepareOutputSchema, OnrampToolError } from '@/lib/mcp/onramp';
 import { fromOnrampError, McpToolError, upstreamTimeout } from '@/lib/mcp/errors';
+import { assertWithinAmountCap, callerAmountCap, effectiveAmountCap } from '@/lib/mcp/safety';
 import { OnrampDepositMethodSchema, OnrampMemoTypeSchema } from '@/lib/intent/onramp-schema';
 
 export const ONRAMP_PREPARE_TOOL_NAME = 'intel.onramp.prepare';
@@ -32,8 +33,10 @@ export function registerOnrampPrepareTool(server: McpServer): void {
       outputSchema: OnrampPrepareOutputSchema,
       annotations: { readOnlyHint: true },
     },
-    async (args) => {
+    async (args, extra) => {
       try {
+        // Before any work: an intent above the caller's cap is never built (AGS019).
+        assertWithinAmountCap(args.amount, effectiveAmountCap(callerAmountCap(extra)));
         const result = await prepareOnrampIntent(args);
         return {
           content: [{ type: 'text', text: JSON.stringify(result) }],

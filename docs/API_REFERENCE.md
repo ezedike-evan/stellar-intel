@@ -27,8 +27,12 @@ the hardening contract (see `lib/api/v1.ts`):
 ## Table of Contents
 
 - **Admin**
+  - [`GET /api/admin/audit/export`](#get-apiadminauditexport)
   - [`GET /api/admin/disputes`](#get-apiadmindisputes)
   - [`POST /api/admin/disputes`](#post-apiadmindisputes)
+  - [`GET /api/admin/keys`](#get-apiadminkeys)
+  - [`POST /api/admin/keys`](#post-apiadminkeys)
+  - [`DELETE /api/admin/keys/{keyId}`](#delete-apiadminkeyskeyid)
 - **Anchors**
   - [`GET /api/v1/anchor-health/ledger`](#get-apiv1anchor-healthledger)
   - [`GET /api/v1/anchors/census`](#get-apiv1anchorscensus)
@@ -41,6 +45,10 @@ the hardening contract (see `lib/api/v1.ts`):
 - **Intent**
   - [`POST /api/intent`](#post-apiintent)
   - [`POST /api/intent/offramp`](#post-apiintentofframp)
+  - [`POST /api/intent/status`](#post-apiintentstatus)
+  - [`POST /api/recurring`](#post-apirecurring)
+  - [`GET /api/recurring/due`](#get-apirecurringdue)
+  - [`GET /api/recurring/{id}`](#get-apirecurringid)
   - [`POST /api/v1/intent/offramp`](#post-apiv1intentofframp)
   - [`POST /api/v1/intent/onramp`](#post-apiv1intentonramp)
 - **On-ramp**
@@ -50,15 +58,26 @@ the hardening contract (see `lib/api/v1.ts`):
   - [`GET /api/rates/{corridor}`](#get-apiratescorridor)
   - [`GET /api/snapshot`](#get-apisnapshot)
   - [`GET /api/v1/corridors/{corridor}/volume-savings`](#get-apiv1corridorscorridorvolume-savings)
+- **Refunds**
+  - [`POST /api/refunds/ack`](#post-apirefundsack)
+  - [`GET /api/refunds/{intentHash}`](#get-apirefundsintenthash)
 - **Reputation**
   - [`GET /api/reputation/actuarial`](#get-apireputationactuarial)
   - [`POST /api/reputation/append`](#post-apireputationappend)
+  - [`GET /api/reputation/dispute`](#get-apireputationdispute)
   - [`POST /api/reputation/dispute`](#post-apireputationdispute)
+  - [`POST /api/reputation/dispute/appeal`](#post-apireputationdisputeappeal)
   - [`GET /api/reputation/leaderboard`](#get-apireputationleaderboard)
   - [`GET /api/reputation/probe-coverage`](#get-apireputationprobe-coverage)
   - [`GET /api/reputation/sdf-export`](#get-apireputationsdf-export)
   - [`GET /api/reputation/{anchor}`](#get-apireputationanchor)
   - [`GET /api/reputation/{anchor}/history`](#get-apireputationanchorhistory)
+  - [`GET /api/reputation/{anchor}/sla`](#get-apireputationanchorsla)
+  - [`GET /api/v1/disputes/log`](#get-apiv1disputeslog)
+  - [`GET /api/v1/refunds/summary`](#get-apiv1refundssummary)
+  - [`GET /api/v1/slippage-breaches`](#get-apiv1slippage-breaches)
+  - [`GET /api/v1/slippage-breaches/{intentHash}`](#get-apiv1slippage-breachesintenthash)
+  - [`GET /api/v1/slippage-compliance`](#get-apiv1slippage-compliance)
   - [`GET /v1/public/scores`](#get-v1publicscores)
 - **SEP-10**
   - [`POST /api/sep10/client-domain`](#post-apisep10client-domain)
@@ -72,19 +91,49 @@ the hardening contract (see `lib/api/v1.ts`):
   - [`GET /api/metrics`](#get-apimetrics)
   - [`GET /api/publisher/health`](#get-apipublisherhealth)
   - [`GET /api/publisher/tick`](#get-apipublishertick)
+  - [`POST /api/reputation/dispute-sweep`](#post-apireputationdispute-sweep)
   - [`GET /api/reputation/reconcile`](#get-apireputationreconcile)
   - [`GET /api/reputation/reconcile-volume-savings`](#get-apireputationreconcile-volume-savings)
   - [`POST /api/reputation/refresh`](#post-apireputationrefresh)
   - [`GET /api/status`](#get-apistatus)
   - [`GET /api/v1/health`](#get-apiv1health)
+  - [`GET /api/v1/usage`](#get-apiv1usage)
+  - [`GET /api/webhooks/deliveries`](#get-apiwebhooksdeliveries)
+  - [`POST /api/webhooks/deliveries/{id}/redeliver`](#post-apiwebhooksdeliveriesidredeliver)
   - [`GET /api/webhooks/failures`](#get-apiwebhooksfailures)
   - [`GET /api/webhooks/subscriptions`](#get-apiwebhookssubscriptions)
   - [`POST /api/webhooks/subscriptions`](#post-apiwebhookssubscriptions)
   - [`DELETE /api/webhooks/subscriptions/{id}`](#delete-apiwebhookssubscriptionsid)
-- **Usage**
-  - [`GET /api/v1/usage`](#get-apiv1usage)
 
 ## Admin
+
+### `GET /api/admin/audit/export`
+
+**Summary:** Export audit log (admin)  
+
+Export audit log events over a date range as NDJSON or CSV. Requires adminKey or callerKey with admin scope.
+
+#### Parameters
+
+| Name | In | Type | Required | Description |
+| :--- | :--- | :--- | :--- | :--- |
+| `from` | `query` | `string` | **Yes** | Start of ISO 8601 date range (inclusive) |
+| `to` | `query` | `string` | **Yes** | End of ISO 8601 date range (exclusive) |
+| `format` | `query` | `"ndjson" | "csv"` | No | Export format ("ndjson" or "csv", default "ndjson") |
+| `callerId` | `query` | `string` | No | Filter by caller id (e.g. "anonymous" or "key:<16-hex>") |
+
+#### Responses
+
+| Status | Description | Content-Type | Schema |
+| :--- | :--- | :--- | :--- |
+| `200` | Audit log export stream | `application/x-ndjson` | `string` |
+| `200` | Audit log export stream | `text/csv` | `string` |
+| `400` | Validation error | `application/json` | `ApiError` |
+| `401` | Authentication required | `application/json` | `ApiError` |
+| `403` | Forbidden | `application/json` | `ApiError` |
+| `429` | Rate limited | `application/json` | `ApiError` |
+
+---
 
 ### `GET /api/admin/disputes`
 
@@ -114,7 +163,8 @@ Accepts or rejects a dispute. Requires admin authentication.
 | Field | Type | Required | Description |
 | :--- | :--- | :--- | :--- |
 | `id` | `string` | **Yes** | - |
-| `action` | `"accept" | "reject"` | **Yes** | - |
+| `action` | `"accept" | "reject" | "escalate"` | **Yes** | - |
+| `rationale` | `string` | No | - |
 
 #### Responses
 
@@ -124,6 +174,76 @@ Accepts or rejects a dispute. Requires admin authentication.
 | `400` | Invalid request | `application/json` | `ApiError` |
 | `401` | Admin access required | `application/json` | `ApiError` |
 | `404` | Dispute not found | `application/json` | `ApiError` |
+| `409` | Conflict: dispute not open or cannot escalate | `application/json` | `ApiError` |
+
+---
+
+### `GET /api/admin/keys`
+
+**Summary:** List caller API keys (admin)  
+
+Lists issued caller keys newest first, without their hashes.
+
+#### Responses
+
+| Status | Description | Content-Type | Schema |
+| :--- | :--- | :--- | :--- |
+| `200` | Caller keys, newest first | `application/json` | `ApiKeyRecord[]` |
+| `403` | Admin key required | `application/json` | `ApiError` |
+| `429` | Rate limited | `application/json` | `ApiError` |
+
+---
+
+### `POST /api/admin/keys`
+
+**Summary:** Issue a caller API key (admin)  
+
+Issues a caller key and returns the raw key exactly once, at creation. Only the SHA-256 hash is stored. Authenticated by ADMIN_SECRET_KEY only — a caller key with the `admin` scope cannot mint keys.
+
+#### Request Body
+
+**Content-Type:** `application/json`
+
+| Field | Type | Required | Description |
+| :--- | :--- | :--- | :--- |
+| `name` | `string` | **Yes** | Human label for the key holder |
+| `scopes` | `"quotes:read" | "intents:write" | "reputation:write" | "admin"[]` | **Yes** | Non-empty, no duplicates |
+| `tier` | `"standard" | "partner"` | No | Defaults to standard |
+| `expiresInDays` | `integer` | No | - |
+| `maxIntentAmount` | `string` | No | - |
+
+#### Responses
+
+| Status | Description | Content-Type | Schema |
+| :--- | :--- | :--- | :--- |
+| `201` | Caller key issued. The response is not cacheable. | `application/json` | `CreatedApiKey` |
+| `400` | Validation error | `application/json` | `ApiError` |
+| `403` | Admin key required | `application/json` | `ApiError` |
+| `429` | Rate limited | `application/json` | `ApiError` |
+
+---
+
+### `DELETE /api/admin/keys/{keyId}`
+
+**Summary:** Revoke a caller API key (admin)  
+
+Revokes a caller key immediately. Answers 404 for an unknown or already revoked key.
+
+#### Parameters
+
+| Name | In | Type | Required | Description |
+| :--- | :--- | :--- | :--- | :--- |
+| `keyId` | `path` | `string` | **Yes** | 16 lowercase hex characters |
+
+#### Responses
+
+| Status | Description | Content-Type | Schema |
+| :--- | :--- | :--- | :--- |
+| `204` | Key revoked | - | - |
+| `400` | Malformed keyId | `application/json` | `ApiError` |
+| `403` | Admin key required | `application/json` | `ApiError` |
+| `404` | Unknown or already revoked key | `application/json` | `ApiError` |
+| `429` | Rate limited | `application/json` | `ApiError` |
 
 ---
 
@@ -133,7 +253,7 @@ Accepts or rejects a dispute. Requires admin authentication.
 
 **Summary:** Get the anchor health ledger for a date  
 
-Publishes the nightly anchor health ledger as a dated artifact. Without `date`, returns the ledger this deployment was built with. With `date` (YYYY-MM-DD), returns the ledger as it stood on that date, resolved from the git history of `constants/anchor-health.json` — so the series is fetchable without cloning the repository. The committed file remains the source of truth; nothing is mirrored server-side. A dated response is immutable and cached as such.
+Publishes the nightly anchor health ledger as a dated artifact. Without `date`, returns the ledger this deployment was built with. With `date` (YYYY-MM-DD), returns the ledger as it stood on that date, resolved from the git history of `constants/anchor-health.json` — so the series is fetchable without cloning the repository. The committed file remains the source of truth; nothing is mirrored server-side. A dated response is immutable and cached as such. Required scope: quotes:read.
 
 #### Parameters
 
@@ -157,7 +277,7 @@ Publishes the nightly anchor health ledger as a dated artifact. Without `date`, 
 
 **Summary:** Get the anchor census  
 
-Serves the committed anchor census (constants/anchor-census-rows.json), covering every surveyed anchor — routable, health-only, or merely listed — not only the anchors registered for routing. Optionally filtered to a single tier.
+Serves the committed anchor census (constants/anchor-census-rows.json), covering every surveyed anchor — routable, health-only, or merely listed — not only the anchors registered for routing. Optionally filtered to a single tier. Required scope: quotes:read.
 
 #### Parameters
 
@@ -179,7 +299,7 @@ Serves the committed anchor census (constants/anchor-census-rows.json), covering
 
 **Summary:** Get anchor health status  
 
-Returns the anchor's current health status, last-probe timestamp, and score breakdown. Returns 'unknown' or 'stale' when probes haven't run recently — honest degradation rather than fabricated data.
+Returns the anchor's current health status, last-probe timestamp, and score breakdown. Returns 'unknown' or 'stale' when probes haven't run recently — honest degradation rather than fabricated data. Required scope: quotes:read.
 
 #### Parameters
 
@@ -202,7 +322,7 @@ Returns the anchor's current health status, last-probe timestamp, and score brea
 
 **Summary:** Get anchor SEP-38 price history  
 
-Returns recorded SEP-38 price observations for an anchor corridor, downsampled to at most 500 points (evenly spaced; first and last retained).
+Returns recorded SEP-38 price observations for an anchor corridor, downsampled to at most 500 points (evenly spaced; first and last retained). Required scope: quotes:read.
 
 #### Parameters
 
@@ -228,7 +348,7 @@ Returns recorded SEP-38 price observations for an anchor corridor, downsampled t
 
 **Summary:** Get how far an anchor lands from the rate it quoted  
 
-Signed gap between the rate shown before execution and the rate that landed, over completed, undisputed withdrawals in the window. Negative means users received less than quoted. Stands in for SEP-38 firm quotes, which most anchors do not offer. Null statistics mean no samples.
+Signed gap between the rate shown before execution and the rate that landed, over completed, undisputed withdrawals in the window. Negative means users received less than quoted. Stands in for SEP-38 firm quotes, which most anchors do not offer. Null statistics mean no samples. Required scope: quotes:read.
 
 #### Parameters
 
@@ -253,7 +373,7 @@ Signed gap between the rate shown before execution and the rate that landed, ove
 
 **Summary:** Get SEP-38 firm-quote readiness per anchor  
 
-For each registered anchor: whether the operator declares SEP-38, whether its stellar.toml advertises a quote server, whether that server’s /info answers, and whether it lists the anchor’s registered asset. Checked live and cached for ten minutes.
+For each registered anchor: whether the operator declares SEP-38, whether its stellar.toml advertises a quote server, whether that server’s /info answers, and whether it lists the anchor’s registered asset. Checked live and cached for ten minutes. Required scope: quotes:read.
 
 #### Responses
 
@@ -350,11 +470,124 @@ Resolves an anchor route for the given asset corridor, builds an unsigned Stella
 
 ---
 
+### `POST /api/intent/status`
+
+**Summary:** Observe anchor transaction status  
+
+Observes the current settlement status of a SEP-24 or SEP-6 transaction server-side. Forwards the caller-provided SEP-10 JWT for a single read of the anchor transfer server without storing or logging it. Tracks status transitions to support webhook notifications.
+
+#### Parameters
+
+| Name | In | Type | Required | Description |
+| :--- | :--- | :--- | :--- | :--- |
+| `authorization` | `header` | `string` | **Yes** | Bearer <jwt> containing SEP-10 authentication token |
+
+#### Request Body
+
+**Content-Type:** `application/json`
+
+| Field | Type | Required | Description |
+| :--- | :--- | :--- | :--- |
+| `anchorId` | `string` | **Yes** | Registered anchor ID |
+| `transferServer` | `string` | **Yes** | HTTPS URL of the anchor transfer server |
+| `transactionId` | `string` | **Yes** | Anchor transaction ID |
+| `protocol` | `"sep24" | "sep6"` | **Yes** | Transfer protocol used |
+| `direction` | `"withdraw" | "deposit"` | **Yes** | Transaction direction |
+| `intentHash` | `string` | No | 64-hex canonical intent hash |
+
+#### Responses
+
+| Status | Description | Content-Type | Schema |
+| :--- | :--- | :--- | :--- |
+| `200` | Status observation recorded | `application/json` | `object` |
+| `400` | Validation error or transfer server not allowed | `application/json` | `ApiError` |
+| `401` | Bearer authorization token required | `application/json` | `ApiError` |
+| `429` | Rate limit exceeded | `application/json` | `ApiError` |
+| `502` | Upstream anchor returned an error | `application/json` | `ApiError` |
+
+---
+
+### `POST /api/recurring`
+
+**Summary:** Create a standing authorization  
+
+Stores a signed standing authorization after verifying the signature over its terms and checking policy: a real corridor, allowlisted anchors that serve it, an amount within the per-period cap and a bounded window. The returned id is a random UUID that only the creator learns; it is the read capability for `GET /api/recurring/{id}`. Behind the `NEXT_PUBLIC_RECURRING_INTENTS` flag: with it off the route returns 404 `NOT_FOUND`.
+
+#### Request Body
+
+**Content-Type:** `application/json`
+
+| Field | Type | Required | Description |
+| :--- | :--- | :--- | :--- |
+| `terms` | `StandingAuthorizationTerms` | **Yes** | - |
+| `termsHash` | `string` | **Yes** | SHA-256 of the canonical JSON of terms |
+| `signature` | `string` | **Yes** | Base64 Ed25519 signature over the hash bytes, or a SEP-53 signMessage envelope |
+| `publicKey` | `string` | **Yes** | Must equal terms.sender |
+
+#### Responses
+
+| Status | Description | Content-Type | Schema |
+| :--- | :--- | :--- | :--- |
+| `201` | Standing authorization created | `application/json` | `object` |
+| `400` | Body is not JSON (`INVALID_JSON`) or fails validation (`VALIDATION_ERROR`) | `application/json` | `ApiError` |
+| `401` | termsHash does not match the terms, or the signature does not verify (`UNAUTHORIZED`) | `application/json` | `ApiError` |
+| `404` | Not found, or the recurring-intents flag is off (`NOT_FOUND`) | `application/json` | `ApiError` |
+| `409` | The same document was already submitted (`DUPLICATE_AUTHORIZATION`) | `application/json` | `ApiError` |
+| `422` | Terms outside policy: `UNKNOWN_CORRIDOR`, `ANCHOR_NOT_IN_CORRIDOR`, `AMOUNT_EXCEEDS_CAP`, `STOP_IN_PAST`, `START_TOO_OLD` or `WINDOW_TOO_LONG` | `application/json` | `ApiError` |
+| `429` | Rate limited | `application/json` | `ApiError` |
+
+---
+
+### `GET /api/recurring/due`
+
+**Summary:** List due reminders for standing authorizations  
+
+Returns a reminder for each listed authorization whose current period is due. Unknown ids are skipped silently; there is no way to list authorizations by key. Behind the `NEXT_PUBLIC_RECURRING_INTENTS` flag: with it off the route returns 404 `NOT_FOUND`.
+
+#### Parameters
+
+| Name | In | Type | Required | Description |
+| :--- | :--- | :--- | :--- | :--- |
+| `ids` | `query` | `string` | **Yes** | Comma-separated authorization ids (UUIDs), at most 20 |
+
+#### Responses
+
+| Status | Description | Content-Type | Schema |
+| :--- | :--- | :--- | :--- |
+| `200` | Due reminders | `application/json` | `object` |
+| `400` | ids missing, more than 20, or not all UUIDs (`VALIDATION_ERROR`) | `application/json` | `ApiError` |
+| `404` | Not found, or the recurring-intents flag is off (`NOT_FOUND`) | `application/json` | `ApiError` |
+| `429` | Rate limited | `application/json` | `ApiError` |
+
+---
+
+### `GET /api/recurring/{id}`
+
+**Summary:** Read a standing authorization  
+
+Returns the terms, status, computed state and execution history of one standing authorization. The signature is not returned. Behind the `NEXT_PUBLIC_RECURRING_INTENTS` flag: with it off the route returns 404 `NOT_FOUND`.
+
+#### Parameters
+
+| Name | In | Type | Required | Description |
+| :--- | :--- | :--- | :--- | :--- |
+| `id` | `path` | `string` | **Yes** | Authorization id (UUID) returned by POST /api/recurring |
+
+#### Responses
+
+| Status | Description | Content-Type | Schema |
+| :--- | :--- | :--- | :--- |
+| `200` | Standing authorization | `application/json` | `object` |
+| `404` | Not found, or the recurring-intents flag is off (`NOT_FOUND`) | `application/json` | `ApiError` |
+| `429` | Rate limited | `application/json` | `ApiError` |
+
+---
+
 ### `POST /api/v1/intent/offramp`
 
 **Summary:** Submit an off-ramp intent (v1)  
 
-The public v1 intent endpoint. Honours `Idempotency-Key`: a retried request replays the original response with `Idempotency-Replayed: true` rather than creating a second intent.
+The public v1 intent endpoint. Honours `Idempotency-Key`: a retried request replays the original response with `Idempotency-Replayed: true` rather than creating a second intent. Required scope: intents:write.
 
 #### Responses
 
@@ -362,6 +595,7 @@ The public v1 intent endpoint. Honours `Idempotency-Key`: a retried request repl
 | :--- | :--- | :--- | :--- |
 | `200` | Intent accepted | `application/json` | `OfframpIntentResponse` |
 | `400` | Validation error | `application/json` | `ApiError` |
+| `403` | Forbidden: insufficient scope | `application/json` | `ApiError` |
 | `429` | Rate limited | `application/json` | `ApiError` |
 
 ---
@@ -370,7 +604,7 @@ The public v1 intent endpoint. Honours `Idempotency-Key`: a retried request repl
 
 **Summary:** Submit an on-ramp intent (v1)  
 
-Routes a deposit intent to the best indicative anchor and returns the /onramp handoff URL, plus an unsigned changeTrust XDR when the destination account has no trustline. No anchor session is opened: KYC and the interactive deposit run in the browser. Honours `Idempotency-Key` like the off-ramp endpoint.
+Routes a deposit intent to the best indicative anchor and returns the /onramp handoff URL, plus an unsigned changeTrust XDR when the destination account has no trustline. No anchor session is opened: KYC and the interactive deposit run in the browser. Honours `Idempotency-Key` like the off-ramp endpoint. Required scope: intents:write.
 
 #### Parameters
 
@@ -403,6 +637,7 @@ Routes a deposit intent to the best indicative anchor and returns the /onramp ha
 | `200` | Route resolved | `application/json` | `OnrampIntentResponse` |
 | `400` | Validation error | `application/json` | `ApiError` |
 | `401` | Attestation signature did not verify | `application/json` | `ApiError` |
+| `403` | Forbidden: insufficient scope | `application/json` | `ApiError` |
 | `404` | No anchor serves this corridor | `application/json` | `ApiError` |
 | `422` | The destination account does not exist on Stellar | `application/json` | `ApiError` |
 | `429` | Rate limited | `application/json` | `ApiError` |
@@ -416,7 +651,7 @@ Routes a deposit intent to the best indicative anchor and returns the /onramp ha
 
 **Summary:** Get indicative deposit (on-ramp) quotes  
 
-Returns an indicative estimate per anchor for depositing a fiat amount into a Stellar asset. SEP-24 publishes deposit fees but the anchor sets the final conversion inside its interactive deposit window, so every figure is an estimate.
+Returns an indicative estimate per anchor for depositing a fiat amount into a Stellar asset. SEP-24 publishes deposit fees but the anchor sets the final conversion inside its interactive deposit window, so every figure is an estimate. Required scope: quotes:read.
 
 #### Parameters
 
@@ -514,7 +749,7 @@ Returns the best anchor per corridor for a given USDC amount. Used for the landi
 
 **Summary:** Get cumulative volume and fees saved for a corridor  
 
-Reads the on-chain volume/savings oracle for one corridor: cumulative USDC routed, USDC saved against the baseline rate, and the settlement count behind both. Amounts are microUSDC. Served from the contract, so the aggregate is checkable without trusting this app's own database. Zeroes are returned when the corridor has no on-chain entry yet.
+Reads the on-chain volume/savings oracle for one corridor: cumulative USDC routed, USDC saved against the baseline rate, and the settlement count behind both. Amounts are microUSDC. Served from the contract, so the aggregate is checkable without trusting this app's own database. Zeroes are returned when the corridor has no on-chain entry yet. Required scope: quotes:read.
 
 #### Parameters
 
@@ -530,6 +765,60 @@ Reads the on-chain volume/savings oracle for one corridor: cumulative USDC route
 | `400` | Invalid corridor ID | `application/json` | `ApiError` |
 | `429` | Rate limited | `application/json` | `ApiError` |
 | `500` | Oracle read failed | `application/json` | `ApiError` |
+
+---
+
+## Refunds
+
+### `POST /api/refunds/ack`
+
+**Summary:** Record user-signed refund acknowledgement  
+
+Secured write route to record a user-signed refund acknowledgement for an owed or refunded case. The server validates that only the original transfer signer can acknowledge, verifies the cryptographic signature over the canonical payload hash, and confirms the refunded amount does not exceed the paid amount.
+
+#### Request Body
+
+**Content-Type:** `application/json`
+
+| Field | Type | Required | Description |
+| :--- | :--- | :--- | :--- |
+| `ack` | `RefundAckPayload` | **Yes** | - |
+| `signature` | `string` | **Yes** | Cryptographic signature over the canonical refund-ack payload hash |
+
+#### Responses
+
+| Status | Description | Content-Type | Schema |
+| :--- | :--- | :--- | :--- |
+| `200` | Refund acknowledgement recorded | `application/json` | `RefundAckResponse` |
+| `400` | Invalid JSON | `application/json` | `ApiError` |
+| `401` | Missing or invalid credentials | `application/json` | `ApiError` |
+| `403` | Signer mismatch | `application/json` | `ApiError` |
+| `404` | No refund case found | `application/json` | `ApiError` |
+| `409` | Case already acknowledged | `application/json` | `ApiError` |
+| `422` | Validation error | `application/json` | `ApiError` |
+| `429` | Rate limited | `application/json` | `ApiError` |
+
+---
+
+### `GET /api/refunds/{intentHash}`
+
+**Summary:** Look up refund cases for an intent  
+
+Read-only lookup of the refund cases tracked for one intent, oldest first. An intent with no cases returns an empty list, not 404. Only non-sensitive fields are returned; the signer account and the acknowledgement proof are never exposed, and there is no lookup by account. Responses are sent with Cache-Control: no-store.
+
+#### Parameters
+
+| Name | In | Type | Required | Description |
+| :--- | :--- | :--- | :--- | :--- |
+| `intentHash` | `path` | `string` | **Yes** | Lowercase hex SHA-256 intent hash (64 characters) |
+
+#### Responses
+
+| Status | Description | Content-Type | Schema |
+| :--- | :--- | :--- | :--- |
+| `200` | Refund cases for the intent | `application/json` | `object` |
+| `400` | intentHash is not a lowercase 64-character hex string | `application/json` | `ApiError` |
+| `429` | Rate limited | `application/json` | `ApiError` |
 
 ---
 
@@ -574,6 +863,8 @@ The single server-side write path for reputation outcome rows. The body must car
 | `stellarTransactionId` | `object` | No | - |
 | `publicKey` | `string` | **Yes** | The sender account that signed intentHash |
 | `signature` | `string` | **Yes** | Base64 Ed25519 signature by publicKey over intentHash |
+| `minReceive` | `object` | No | Minimum receive floor amount signed in the outcome intent |
+| `outcomeIntent` | `object` | No | The exact outcome intent signed by sender |
 
 #### Responses
 
@@ -583,6 +874,28 @@ The single server-side write path for reputation outcome rows. The body must car
 | `400` | Validation error | `application/json` | `ApiError` |
 | `401` | Missing signature, or the signature does not verify for publicKey | `application/json` | `ApiError` |
 | `409` | An outcome for this intentHash is already recorded | `application/json` | `ApiError` |
+| `429` | Rate limited | `application/json` | `ApiError` |
+
+---
+
+### `GET /api/reputation/dispute`
+
+**Summary:** Look up disputes for an intent  
+
+Retrieves public dispute summaries for a given off-ramp intent hash. Returns newest first. Never includes personal data.
+
+#### Parameters
+
+| Name | In | Type | Required | Description |
+| :--- | :--- | :--- | :--- | :--- |
+| `intentHash` | `query` | `string` | **Yes** | Lowercase hex-encoded SHA-256 intent hash (64 chars) |
+
+#### Responses
+
+| Status | Description | Content-Type | Schema |
+| :--- | :--- | :--- | :--- |
+| `200` | List of disputes for the intent | `application/json` | `object` |
+| `422` | Invalid intentHash format | `application/json` | `ApiError` |
 | `429` | Rate limited | `application/json` | `ApiError` |
 
 ---
@@ -604,6 +917,7 @@ Submits a dispute against an intent outcome. The request must be Ed25519-signed 
 | `signature` | `string` | **Yes** | - |
 | `anchorId` | `string` | **Yes** | - |
 | `reason` | `string` | **Yes** | - |
+| `category` | `string` | No | - |
 
 #### Responses
 
@@ -612,8 +926,41 @@ Submits a dispute against an intent outcome. The request must be Ed25519-signed 
 | `201` | Dispute created | `application/json` | `DisputeRecord` |
 | `400` | Invalid request | `application/json` | `ApiError` |
 | `403` | Signature verification failed | `application/json` | `ApiError` |
+| `409` | Conflict: open dispute already exists | `application/json` | `ApiError` |
 | `422` | Validation error | `application/json` | `ApiError` |
 | `429` | Rate limited (10/24h) | `application/json` | `ApiError` |
+
+---
+
+### `POST /api/reputation/dispute/appeal`
+
+**Summary:** Appeal a resolved dispute  
+
+Appeals a resolved dispute (accepted or rejected) within the 14-day window. Must be signed by the original filer.
+
+#### Request Body
+
+**Content-Type:** `application/json`
+
+| Field | Type | Required | Description |
+| :--- | :--- | :--- | :--- |
+| `intentHash` | `string` | **Yes** | - |
+| `publicKey` | `string` | **Yes** | - |
+| `signature` | `string` | **Yes** | - |
+| `ref` | `string` | **Yes** | - |
+
+#### Responses
+
+| Status | Description | Content-Type | Schema |
+| :--- | :--- | :--- | :--- |
+| `200` | Appeal accepted and dispute reopened at appeal level | `application/json` | `object` |
+| `400` | Invalid request body | `application/json` | `ApiError` |
+| `403` | Invalid signature or caller is not original filer | `application/json` | `ApiError` |
+| `404` | Dispute not found | `application/json` | `ApiError` |
+| `409` | Dispute not resolved or already appealed | `application/json` | `ApiError` |
+| `410` | Appeal window closed (past 14 days) | `application/json` | `ApiError` |
+| `422` | Validation error | `application/json` | `ApiError` |
+| `429` | Rate limited | `application/json` | `ApiError` |
 
 ---
 
@@ -710,6 +1057,140 @@ Returns bucketed outcome history for a specific anchor over a configurable time 
 | `200` | Bucketed history data | `application/json` | `object` |
 | `400` | Validation error | `application/json` | `ApiError` |
 | `404` | Unknown anchor | `application/json` | `ApiError` |
+
+---
+
+### `GET /api/reputation/{anchor}/sla`
+
+**Summary:** Get anchor execution SLA  
+
+Returns trailing 30-day settlement SLA percentiles (nearest-rank, no trimming) for an anchor, requiring at least 30 completed samples (and 100 for p99), evaluated against breach thresholds.
+
+#### Parameters
+
+| Name | In | Type | Required | Description |
+| :--- | :--- | :--- | :--- | :--- |
+| `anchor` | `path` | `string` | **Yes** | Anchor ID from the registry |
+| `corridor` | `query` | `string` | No | Filter by corridor ID |
+
+#### Responses
+
+| Status | Description | Content-Type | Schema |
+| :--- | :--- | :--- | :--- |
+| `200` | Execution SLA report | `application/json` | `ExecutionSlaReport` |
+| `400` | Validation error | `application/json` | `ApiError` |
+| `404` | Unknown anchor | `application/json` | `ApiError` |
+| `429` | Rate limited | `application/json` | `ApiError` |
+
+---
+
+### `GET /api/v1/disputes/log`
+
+**Summary:** Get the public dispute adjudication log  
+
+Serves the public, append-only, hash-chained dispute adjudication log, along with verification status and summary counts. Required scope: quotes:read.
+
+#### Parameters
+
+| Name | In | Type | Required | Description |
+| :--- | :--- | :--- | :--- | :--- |
+| `afterSeq` | `query` | `string` | No | Return entries strictly after this sequence number (integer >= 0, default 0) |
+| `limit` | `query` | `string` | No | Maximum number of entries to return (1-500, default 200) |
+
+#### Responses
+
+| Status | Description | Content-Type | Schema |
+| :--- | :--- | :--- | :--- |
+| `200` | The adjudication log entries and chain verification | `application/json` | `AdjudicationLogResponse` |
+| `400` | Invalid afterSeq or limit parameters | `application/json` | `ApiError` |
+| `429` | Rate limited | `application/json` | `ApiError` |
+
+---
+
+### `GET /api/v1/refunds/summary`
+
+**Summary:** Get the unsignaled-refund release-gate metric  
+
+Counts of the refund cases opened in the trailing 30 days, classified by status. A refunded case counts as unsignaled once it is more than 72 hours past its refund (or opening) with no acknowledgement; the v3 release gate passes when that count is 0. Counts only: no accounts, intent hashes or amounts. Cached for 60 seconds.
+
+#### Responses
+
+| Status | Description | Content-Type | Schema |
+| :--- | :--- | :--- | :--- |
+| `200` | Refund release-gate metric | `application/json` | `RefundGateMetrics` |
+| `429` | Rate limited | `application/json` | `ApiError` |
+
+---
+
+### `GET /api/v1/slippage-breaches`
+
+**Summary:** List slippage breaches  
+
+Returns a list of detected slippage breaches, newest first. Excludes sensitive signerAccount, recipient and raw evidence.
+
+#### Parameters
+
+| Name | In | Type | Required | Description |
+| :--- | :--- | :--- | :--- | :--- |
+| `anchorId` | `query` | `string` | No | Filter by anchor identifier |
+| `status` | `query` | `"detected" | "verified" | "rejected"` | No | Filter by breach status |
+| `limit` | `query` | `object` | No | Maximum number of breaches to return (1-500, default 100) |
+
+#### Responses
+
+| Status | Description | Content-Type | Schema |
+| :--- | :--- | :--- | :--- |
+| `200` | List of slippage breaches | `application/json` | `object` |
+| `400` | Validation error | `application/json` | `ApiError` |
+| `429` | Rate limited | `application/json` | `ApiError` |
+| `503` | Store unavailable | `application/json` | `ApiError` |
+
+---
+
+### `GET /api/v1/slippage-breaches/{intentHash}`
+
+**Summary:** Get slippage breach detail  
+
+Returns detailed information about a slippage breach, including full evidence and canonical evidence JSON string for independent SHA-256 verification.
+
+#### Parameters
+
+| Name | In | Type | Required | Description |
+| :--- | :--- | :--- | :--- | :--- |
+| `intentHash` | `path` | `string` | **Yes** | 64-character lowercase hex SHA-256 intent hash |
+
+#### Responses
+
+| Status | Description | Content-Type | Schema |
+| :--- | :--- | :--- | :--- |
+| `200` | Slippage breach detail with evidence | `application/json` | `object` |
+| `400` | Invalid intentHash format | `application/json` | `ApiError` |
+| `404` | Breach not found | `application/json` | `ApiError` |
+| `429` | Rate limited | `application/json` | `ApiError` |
+| `503` | Store unavailable | `application/json` | `ApiError` |
+
+---
+
+### `GET /api/v1/slippage-compliance`
+
+**Summary:** Get slippage compliance metrics  
+
+Returns slippage compliance metrics and release gate status for the specified rolling window (30, 90 days, or all).
+
+#### Parameters
+
+| Name | In | Type | Required | Description |
+| :--- | :--- | :--- | :--- | :--- |
+| `window` | `query` | `"30" | "90" | "all"` | No | Evaluation window: 30, 90, or all (default 30) |
+
+#### Responses
+
+| Status | Description | Content-Type | Schema |
+| :--- | :--- | :--- | :--- |
+| `200` | Slippage compliance metrics and release gate status | `application/json` | `SlippageCompliance` |
+| `400` | Validation error | `application/json` | `ApiError` |
+| `429` | Rate limited | `application/json` | `ApiError` |
+| `503` | Store unavailable | `application/json` | `ApiError` |
 
 ---
 
@@ -907,6 +1388,21 @@ Triggers a batch of reputation outcome submissions to the Soroban oracle contrac
 
 ---
 
+### `POST /api/reputation/dispute-sweep`
+
+**Summary:** Escalate overdue disputes  
+
+Cron-triggered. Moves every open dispute that sat at the anchor response rung past its 72-hour deadline to maintainer review and records the move in the public adjudication log. Disputes already at review or appeal are left for a human to decide. Protected by CRON_SECRET.
+
+#### Responses
+
+| Status | Description | Content-Type | Schema |
+| :--- | :--- | :--- | :--- |
+| `200` | Sweep completed | `application/json` | `object` |
+| `401` | Missing or invalid credentials | `application/json` | `ApiError` |
+
+---
+
 ### `GET /api/reputation/reconcile`
 
 **Summary:** Reconcile settled outcomes against Horizon  
@@ -974,13 +1470,80 @@ Current API version, the supported version window, and any announced deprecation
 
 **Summary:** Service health (v1)  
 
-Liveness and dependency status for the public v1 surface.
+Liveness and dependency status for the public v1 surface. Required scope: quotes:read.
 
 #### Responses
 
 | Status | Description | Content-Type | Schema |
 | :--- | :--- | :--- | :--- |
 | `200` | Health snapshot | `application/json` | `object` |
+| `429` | Rate limited | `application/json` | `ApiError` |
+
+---
+
+### `GET /api/v1/usage`
+
+**Summary:** Caller usage (v1)  
+
+The caller's own tier, scopes, daily quota and current per-minute windows, read without spending quota on the counted buckets. Any caller may read its own usage.
+
+#### Responses
+
+| Status | Description | Content-Type | Schema |
+| :--- | :--- | :--- | :--- |
+| `200` | Usage snapshot | `application/json` | `object` |
+| `401` | Missing or invalid credentials | `application/json` | `ApiError` |
+| `429` | Rate limited | `application/json` | `ApiError` |
+
+---
+
+### `GET /api/webhooks/deliveries`
+
+**Summary:** List webhook delivery records  
+
+Admin only. Returns webhook delivery records filtered by status, subscription, or event, newest first.
+
+#### Parameters
+
+| Name | In | Type | Required | Description |
+| :--- | :--- | :--- | :--- | :--- |
+| `status` | `query` | `"success" | "failed" | "dead_letter"` | No | Filter by delivery status (success, failed, dead_letter) |
+| `subscriptionId` | `query` | `string` | No | Filter by subscription ID |
+| `eventId` | `query` | `string` | No | Filter by event ID |
+| `limit` | `query` | `integer` | No | Maximum number of deliveries to return (1-500, default 100) |
+
+#### Responses
+
+| Status | Description | Content-Type | Schema |
+| :--- | :--- | :--- | :--- |
+| `200` | Webhook delivery records | `application/json` | `object[]` |
+| `400` | Validation error | `application/json` | `ApiError` |
+| `401` | Missing or invalid credentials | `application/json` | `ApiError` |
+| `429` | Rate limited | `application/json` | `ApiError` |
+
+---
+
+### `POST /api/webhooks/deliveries/{id}/redeliver`
+
+**Summary:** Resend a logged webhook delivery  
+
+Admin only. Sends the stored event of one logged delivery to its subscription again, with the original event `id` and idempotency key, so a consumer that already processed it de-duplicates. The attempt is logged as a new delivery record. A 202 means the attempt was made, not that the subscriber accepted it. See docs/WEBHOOKS.md.
+
+#### Parameters
+
+| Name | In | Type | Required | Description |
+| :--- | :--- | :--- | :--- | :--- |
+| `id` | `path` | `string` | **Yes** | Delivery record id, as listed by GET /api/webhooks/deliveries |
+
+#### Responses
+
+| Status | Description | Content-Type | Schema |
+| :--- | :--- | :--- | :--- |
+| `202` | The delivery was attempted again and logged | `application/json` | `object` |
+| `403` | Missing or invalid admin key | `application/json` | `ApiError` |
+| `404` | Unknown delivery id (`NOT_FOUND`) | `application/json` | `ApiError` |
+| `409` | The subscription no longer subscribes to the event kind (`EVENT_KIND_UNSUBSCRIBED`) | `application/json` | `ApiError` |
+| `410` | The event is not in the event store (`EVENT_NOT_RETAINED`), or the subscription was deleted (`SUBSCRIPTION_DELETED`) | `application/json` | `ApiError` |
 | `429` | Rate limited | `application/json` | `ApiError` |
 
 ---
@@ -1047,23 +1610,6 @@ Admin only.
 | `204` | Deleted | - | - |
 | `401` | Missing or invalid credentials | `application/json` | `ApiError` |
 | `404` | Unknown subscription | `application/json` | `ApiError` |
-| `429` | Rate limited | `application/json` | `ApiError` |
-
----
-
-## Usage
-
-### `GET /api/v1/usage`
-
-**Summary:** Get caller usage, quota, and rate-limit windows (v1)  
-
-Returns the caller identity, tier, scopes, daily quota status, and active rate-limit windows.
-
-#### Responses
-
-| Status | Description | Content-Type | Schema |
-| :--- | :--- | :--- | :--- |
-| `200` | Usage retrieved | `application/json` | `UsageResponse` |
 | `429` | Rate limited | `application/json` | `ApiError` |
 
 ---

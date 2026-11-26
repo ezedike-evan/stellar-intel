@@ -5,6 +5,8 @@ import {
   isApiErrorBody,
 } from './errors.js';
 import type {
+  AdjudicationLogResponse,
+  RefundGateMetrics,
   AnchorCensusResponse,
   AnchorHealth,
   AnchorHealthLedgerArtifact,
@@ -329,6 +331,31 @@ export class StellarIntelClient {
     return this.request<UsageResponse>({
       method: 'GET',
       path: '/api/v1/usage',
+    });
+  }
+
+  /**
+   * The unsignaled-refund release gate: counts of refund cases opened in the
+   * trailing 30 days, and whether the gate passes.
+   */
+  async getRefundsSummary(): Promise<RefundGateMetrics> {
+    return this.request<RefundGateMetrics>({ method: 'GET', path: '/api/v1/refunds/summary' });
+  }
+
+  /**
+   * Serves the public, append-only dispute adjudication log.
+   */
+  async getDisputeLog(options?: {
+    afterSeq?: number;
+    limit?: number;
+  }): Promise<AdjudicationLogResponse> {
+    const params = new URLSearchParams();
+    if (options?.afterSeq !== undefined) params.set('afterSeq', String(options.afterSeq));
+    if (options?.limit !== undefined) params.set('limit', String(options.limit));
+    const qs = params.toString() ? `?${params.toString()}` : '';
+    return this.request<AdjudicationLogResponse>({
+      method: 'GET',
+      path: `/api/v1/disputes/log${qs}`,
     });
   }
 

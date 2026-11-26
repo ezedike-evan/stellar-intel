@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import { canonicalJson, hashIntent } from '@/lib/intent/hash';
+import { canonicalize, canonicalJson, hashIntent, sha256Hex } from '@/lib/intent/hash';
 import type { Intent } from '@/lib/intent/hash';
 
 // ─── Fixtures ─────────────────────────────────────────────────────────────────
@@ -126,5 +126,37 @@ describe('hashIntent', () => {
     const h1 = await hashIntent(extended);
     const h2 = await hashIntent({ urgent: false, slippage: 0.005, ...BASE_INTENT });
     expect(h1).toBe(h2);
+  });
+});
+
+// ─── canonicalize ─────────────────────────────────────────────────────────────
+
+describe('canonicalize', () => {
+  it('delegates canonicalJson output to canonicalize', () => {
+    expect(canonicalJson(BASE_INTENT)).toBe(canonicalize(BASE_INTENT));
+  });
+
+  it('serializes arbitrary objects with recursive key sorting', () => {
+    const value = { z: 1, a: { y: 2, b: 3 } };
+    expect(canonicalize(value)).toBe('{"a":{"b":3,"y":2},"z":1}');
+  });
+
+  it('handles arrays and primitives recursively', () => {
+    const value = [{ b: 2, a: 1 }, 'string', 123];
+    expect(canonicalize(value)).toBe('[{"a":1,"b":2},"string",123]');
+  });
+});
+
+// ─── sha256Hex ────────────────────────────────────────────────────────────────
+
+describe('sha256Hex', () => {
+  it('returns lowercase 64-char hex string', async () => {
+    const hex = await sha256Hex(CANONICAL);
+    expect(hex).toMatch(/^[0-9a-f]{64}$/);
+    expect(hex).toBe(await computeKnownHash());
+  });
+
+  it('is used by hashIntent', async () => {
+    expect(await hashIntent(BASE_INTENT)).toBe(await sha256Hex(canonicalJson(BASE_INTENT)));
   });
 });

@@ -55,9 +55,25 @@ export const ONRAMP_FUNNEL_EVENTS = {
   onrampDepositFailed: 'onramp_deposit_failed',
 } as const;
 
+/**
+ * Event names for intent templates (the `intentTemplates` flag). They take no props
+ * of their own: a caller sends `direction`, `corridor` and `amount_bucket` only.
+ * A template's label, its id and its raw amount never leave the browser, and
+ * `trackFunnelEvent` has no prop that could carry them.
+ */
+export const TEMPLATE_EVENTS = {
+  templateSaved: 'template_saved',
+  templateApplied: 'template_applied',
+  templateUpdated: 'template_updated',
+  templateDeleted: 'template_deleted',
+  templatesExported: 'templates_exported',
+  templatesImported: 'templates_imported',
+} as const;
+
 export type FunnelEventName =
   | (typeof FUNNEL_EVENTS)[keyof typeof FUNNEL_EVENTS]
-  | (typeof ONRAMP_FUNNEL_EVENTS)[keyof typeof ONRAMP_FUNNEL_EVENTS];
+  | (typeof ONRAMP_FUNNEL_EVENTS)[keyof typeof ONRAMP_FUNNEL_EVENTS]
+  | (typeof TEMPLATE_EVENTS)[keyof typeof TEMPLATE_EVENTS];
 
 export type FunnelEventProps = {
   /** Which flow the event belongs to; on-ramp events always set it. */

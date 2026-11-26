@@ -118,13 +118,18 @@ describe('emitHealthChanges (#1342)', () => {
 
     expect(count).toBe(1);
     expect(emit).toHaveBeenCalledTimes(1);
-    expect(emit).toHaveBeenCalledWith('anchor.health_status_changed', {
-      anchorId: 'a',
-      from: 'healthy',
-      to: 'degraded',
-      lastCheckedAt: '2026-10-25T00:00:00.000Z',
-      lastError: 'toml 503',
-    });
+    expect(emit).toHaveBeenCalledWith(
+      'anchor.health_status_changed',
+      {
+        anchorId: 'a',
+        from: 'healthy',
+        to: 'degraded',
+        lastCheckedAt: '2026-10-25T00:00:00.000Z',
+        lastError: 'toml 503',
+      },
+      // The anchor, where it moved to, and the check that found it (WHK005).
+      { idempotencyKey: 'anchor.health_status_changed:a:degraded:2026-10-25T00:00:00.000Z' }
+    );
     expect(JSON.parse(store.read()!)).toEqual({ a: true, b: false });
   });
 
@@ -150,7 +155,8 @@ describe('emitHealthChanges (#1342)', () => {
 
     expect(emit).toHaveBeenCalledWith(
       'anchor.health_status_changed',
-      expect.objectContaining({ anchorId: 'a', from: 'degraded', to: 'healthy' })
+      expect.objectContaining({ anchorId: 'a', from: 'degraded', to: 'healthy' }),
+      { idempotencyKey: 'anchor.health_status_changed:a:healthy:2026-10-25T00:00:00.000Z' }
     );
   });
 
@@ -197,6 +203,67 @@ describe('emitHealthChanges (#1342)', () => {
     ).rejects.toThrow('dispatch exploded');
 
     expect(JSON.parse(store.read()!)).toEqual({ a: false });
+  });
+
+  it('emits the same key again when the snapshot write failed and the next run re-sends (WHK005)', async () => {
+    let value: string | null = JSON.stringify({ a: false });
+    const getSnapshot = vi.fn(async () => value);
+    const setSnapshot = vi
+      .fn(async (json: string) => {
+        value = json;
+      })
+      .mockRejectedValueOnce(new Error('db down'));
+    const emit = vi.fn();
+    const run = () =>
+      emitHealthChanges({
+        ledger: () => ledger({ a: { degraded: true } }),
+        getSnapshot,
+        setSnapshot,
+        emit,
+      });
+
+    // The event goes out, then the snapshot cannot be stored.
+    await expect(run()).rejects.toThrow('db down');
+    // So the next run sees the same change and sends it again.
+    await expect(run()).resolves.toBe(1);
+
+    expect(emit).toHaveBeenCalledTimes(2);
+    const keys = emit.mock.calls.map(
+      ([, , opts]) => (opts as { idempotencyKey: string }).idempotencyKey
+    );
+    expect(keys[0]).toBe('anchor.health_status_changed:a:degraded:2026-10-25T00:00:00.000Z');
+    expect(keys[1]).toBe(keys[0]);
+  });
+
+  it('gives each anchor and each direction its own key', async () => {
+    const store = fakeStore(JSON.stringify({ a: false, b: true }));
+    const emit = vi.fn();
+
+    await emitHealthChanges({
+      ledger: () => ledger({ a: { degraded: true }, b: { degraded: false } }),
+      ...store,
+      emit,
+    });
+
+    expect(emit.mock.calls.map(([, , opts]) => opts)).toEqual([
+      { idempotencyKey: 'anchor.health_status_changed:a:degraded:2026-10-25T00:00:00.000Z' },
+      { idempotencyKey: 'anchor.health_status_changed:b:healthy:2026-10-25T00:00:00.000Z' },
+    ]);
+  });
+
+  it('writes "none" into the key when the ledger has no check time for the anchor', async () => {
+    const store = fakeStore(JSON.stringify({ a: false }));
+    const emit = vi.fn();
+    const noTime = ledger({ a: { degraded: true } });
+    noTime.anchors.a!.lastCheckedAt = null;
+
+    await emitHealthChanges({ ledger: () => noTime, ...store, emit });
+
+    expect(emit).toHaveBeenCalledWith(
+      'anchor.health_status_changed',
+      expect.objectContaining({ anchorId: 'a', lastCheckedAt: null }),
+      { idempotencyKey: 'anchor.health_status_changed:a:degraded:none' }
+    );
   });
 
   it('uses the committed ledger by default and emits nothing without a database', async () => {
