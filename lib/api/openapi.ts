@@ -3610,6 +3610,107 @@ registry.registerPath({
   },
 });
 
+// ─── Standing-order executions (REC009) ───────────────────────────────────────
+
+const RecurringExecutionIntentDoc = registry.register(
+  'RecurringExecutionIntent',
+  z.object({
+    type: z.literal('offramp-outcome'),
+    sourceAsset: z.string(),
+    destinationAsset: z.string(),
+    amount: z.string().regex(AMOUNT_PATTERN),
+    sender: z.string().regex(STELLAR_PUBKEY_PATTERN).describe('Must equal terms.sender'),
+    recipient: z.string(),
+    anchorId: z.string().describe('Must be on the standing order allowlist'),
+    corridor: z.string(),
+    transactionId: z.string().max(200).describe('SEP-24 transaction id of the payment'),
+    recurringAuthorizationId: z.string().uuid().describe('Must equal the path id'),
+    cycleNumber: z.number().int().min(1).describe('The cycle that is due now'),
+    minReceive: z.string().regex(AMOUNT_PATTERN).optional(),
+  })
+);
+
+registry.registerPath({
+  method: 'post',
+  path: '/api/recurring/{id}/executions',
+  summary: 'Confirm a due standing-order payment',
+  description:
+    'Confirms the due cycle of a standing authorization with one signature over an ' +
+    '`offramp-outcome` intent that names the authorization and the cycle. The payment is ' +
+    'checked against the signed terms (cap, stop date, allowlist, corridor); a breach is ' +
+    'recorded as a rejected execution and answered with 422. Resending a body that was ' +
+    'already recorded returns that record with 200. ' +
+    RECURRING_FLAG_NOTE,
+  tags: ['Intent'],
+  request: {
+    params: z.object({
+      id: z.string().describe('Authorization id (UUID) returned by POST /api/recurring'),
+    }),
+    body: {
+      required: true,
+      content: {
+        'application/json': {
+          schema: z.object({
+            intent: RecurringExecutionIntentDoc,
+            signature: z
+              .string()
+              .describe(
+                'Base64 Ed25519 signature over the intent hash bytes, or a SEP-53 signMessage envelope'
+              ),
+            publicKey: z.string().regex(STELLAR_PUBKEY_PATTERN),
+          }),
+        },
+      },
+    },
+  },
+  responses: {
+    200: {
+      description: 'This intent was already recorded; the existing record is returned',
+      content: {
+        'application/json': {
+          schema: z.object({ execution: StandingExecutionDoc, state: AuthorizationStateDoc }),
+        },
+      },
+    },
+    201: {
+      description: 'Execution confirmed',
+      content: {
+        'application/json': {
+          schema: z.object({ execution: StandingExecutionDoc, state: AuthorizationStateDoc }),
+        },
+      },
+    },
+    400: {
+      description: 'Body is not JSON or fails validation (`VALIDATION_ERROR`)',
+      content: { 'application/json': { schema: ApiErrorSchema } },
+    },
+    401: {
+      description: 'The signature does not verify (`UNAUTHORIZED`)',
+      content: { 'application/json': { schema: ApiErrorSchema } },
+    },
+    403: {
+      description:
+        'The intent names another authorization, or the signer is not the sender (`FORBIDDEN`)',
+      content: { 'application/json': { schema: ApiErrorSchema } },
+    },
+    404: RECURRING_NOT_FOUND_404,
+    409: {
+      description:
+        'No payment is due (`NOT_DUE`, the phase is in the message), the cycle is not the due ' +
+        'one (`CYCLE_MISMATCH`), or the cycle is already confirmed (`DUPLICATE_CYCLE`)',
+      content: { 'application/json': { schema: ApiErrorSchema } },
+    },
+    422: {
+      description:
+        'Outside the signed terms and recorded as rejected: `ANCHOR_NOT_ALLOWED`, ' +
+        '`PERIOD_CAP_EXCEEDED`, `CORRIDOR_MISMATCH`, `ASSET_MISMATCH`, `NOT_STARTED`, ' +
+        '`STOP_DATE_PASSED` or `AUTHORIZATION_INACTIVE`',
+      content: { 'application/json': { schema: ApiErrorSchema } },
+    },
+    429: RATE_LIMITED_429,
+  },
+});
+
 export function buildOpenApiSpec() {
   const generator = new OpenApiGeneratorV31(registry.definitions);
   return generator.generateDocument({

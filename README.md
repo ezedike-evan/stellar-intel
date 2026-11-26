@@ -163,6 +163,7 @@ the stack that needs the variable.
 | `NEXT_PUBLIC_INTENT_FLOW`            | No                  | Feature flag: the signed-intent off-ramp path is off unless set to `true`.                                                                |
 | `NEXT_PUBLIC_REQUIRE_KEY_FOR_WRITES` | No                  | Feature flag: require a caller key with write scope for intents, reputation appends, and disputes.                                        |
 | `MCP_MAX_INTENT_AMOUNT`              | No                  | Largest source amount an agent may prepare or execute in one MCP call. A per-key `maxIntentAmount` can only lower it. Unset means no cap. |
+| `CALLER_TOKEN_SECRET`                | No                  | HMAC-SHA256 secret (32+ random characters) for signed short-lived caller tokens. Caller tokens are disabled while it is unset.            |
 | `ROUTING_STRATEGY`                   | No                  | Router selection strategy: `first-match` (default) or `scored` (multi-factor solver).                                                     |
 | `FEE_BUDGET_PCT`                     | No                  | Router fee budget as a percentage of the amount, e.g. `1` for 1%. `lib/env.ts` uses `100` when unset.                                     |
 | `SOROSWAP_API_KEY`                   | Swap hops           | Soroswap aggregator API key for the swap hop connector, which throws `SoroswapConfigError` when it is unset.                              |

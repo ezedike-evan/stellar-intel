@@ -3125,6 +3125,74 @@
           "rejectCode",
           "createdAt"
         ]
+      },
+      "RecurringExecutionIntent": {
+        "type": "object",
+        "properties": {
+          "type": {
+            "type": "string",
+            "enum": [
+              "offramp-outcome"
+            ]
+          },
+          "sourceAsset": {
+            "type": "string"
+          },
+          "destinationAsset": {
+            "type": "string"
+          },
+          "amount": {
+            "type": "string",
+            "pattern": "^\\d+(\\.\\d+)?$"
+          },
+          "sender": {
+            "type": "string",
+            "pattern": "^G[A-Z2-7]{55}$",
+            "description": "Must equal terms.sender"
+          },
+          "recipient": {
+            "type": "string"
+          },
+          "anchorId": {
+            "type": "string",
+            "description": "Must be on the standing order allowlist"
+          },
+          "corridor": {
+            "type": "string"
+          },
+          "transactionId": {
+            "type": "string",
+            "maxLength": 200,
+            "description": "SEP-24 transaction id of the payment"
+          },
+          "recurringAuthorizationId": {
+            "type": "string",
+            "format": "uuid",
+            "description": "Must equal the path id"
+          },
+          "cycleNumber": {
+            "type": "integer",
+            "minimum": 1,
+            "description": "The cycle that is due now"
+          },
+          "minReceive": {
+            "type": "string",
+            "pattern": "^\\d+(\\.\\d+)?$"
+          }
+        },
+        "required": [
+          "type",
+          "sourceAsset",
+          "destinationAsset",
+          "amount",
+          "sender",
+          "recipient",
+          "anchorId",
+          "corridor",
+          "transactionId",
+          "recurringAuthorizationId",
+          "cycleNumber"
+        ]
       }
     },
     "parameters": {}
@@ -8620,6 +8688,171 @@
           },
           "404": {
             "description": "Not found, or the recurring-intents flag is off (`NOT_FOUND`)",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiError"
+                }
+              }
+            }
+          },
+          "429": {
+            "description": "Rate limited",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/recurring/{id}/executions": {
+      "post": {
+        "summary": "Confirm a due standing-order payment",
+        "description": "Confirms the due cycle of a standing authorization with one signature over an `offramp-outcome` intent that names the authorization and the cycle. The payment is checked against the signed terms (cap, stop date, allowlist, corridor); a breach is recorded as a rejected execution and answered with 422. Resending a body that was already recorded returns that record with 200. Behind the `NEXT_PUBLIC_RECURRING_INTENTS` flag: with it off the route returns 404 `NOT_FOUND`.",
+        "tags": [
+          "Intent"
+        ],
+        "parameters": [
+          {
+            "schema": {
+              "type": "string",
+              "description": "Authorization id (UUID) returned by POST /api/recurring"
+            },
+            "required": true,
+            "description": "Authorization id (UUID) returned by POST /api/recurring",
+            "name": "id",
+            "in": "path"
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "properties": {
+                  "intent": {
+                    "$ref": "#/components/schemas/RecurringExecutionIntent"
+                  },
+                  "signature": {
+                    "type": "string",
+                    "description": "Base64 Ed25519 signature over the intent hash bytes, or a SEP-53 signMessage envelope"
+                  },
+                  "publicKey": {
+                    "type": "string",
+                    "pattern": "^G[A-Z2-7]{55}$"
+                  }
+                },
+                "required": [
+                  "intent",
+                  "signature",
+                  "publicKey"
+                ]
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "This intent was already recorded; the existing record is returned",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "execution": {
+                      "$ref": "#/components/schemas/StandingExecution"
+                    },
+                    "state": {
+                      "$ref": "#/components/schemas/StandingAuthorizationState"
+                    }
+                  },
+                  "required": [
+                    "execution",
+                    "state"
+                  ]
+                }
+              }
+            }
+          },
+          "201": {
+            "description": "Execution confirmed",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "execution": {
+                      "$ref": "#/components/schemas/StandingExecution"
+                    },
+                    "state": {
+                      "$ref": "#/components/schemas/StandingAuthorizationState"
+                    }
+                  },
+                  "required": [
+                    "execution",
+                    "state"
+                  ]
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Body is not JSON or fails validation (`VALIDATION_ERROR`)",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiError"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "The signature does not verify (`UNAUTHORIZED`)",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiError"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "The intent names another authorization, or the signer is not the sender (`FORBIDDEN`)",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiError"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Not found, or the recurring-intents flag is off (`NOT_FOUND`)",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiError"
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "No payment is due (`NOT_DUE`, the phase is in the message), the cycle is not the due one (`CYCLE_MISMATCH`), or the cycle is already confirmed (`DUPLICATE_CYCLE`)",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiError"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Outside the signed terms and recorded as rejected: `ANCHOR_NOT_ALLOWED`, `PERIOD_CAP_EXCEEDED`, `CORRIDOR_MISMATCH`, `ASSET_MISMATCH`, `NOT_STARTED`, `STOP_DATE_PASSED` or `AUTHORIZATION_INACTIVE`",
             "content": {
               "application/json": {
                 "schema": {

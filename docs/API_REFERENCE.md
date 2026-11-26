@@ -50,6 +50,7 @@ the hardening contract (see `lib/api/v1.ts`):
   - [`GET /api/recurring/due`](#get-apirecurringdue)
   - [`GET /api/recurring/{id}`](#get-apirecurringid)
   - [`POST /api/recurring/{id}/control`](#post-apirecurringidcontrol)
+  - [`POST /api/recurring/{id}/executions`](#post-apirecurringidexecutions)
   - [`POST /api/v1/intent/offramp`](#post-apiv1intentofframp)
   - [`POST /api/v1/intent/onramp`](#post-apiv1intentonramp)
 - **On-ramp**
@@ -617,6 +618,44 @@ Applies a signed control message with replay protection to a standing authorizat
 | `404` | Not found or standing authorization not found | `application/json` | `ApiError` |
 | `409` | Invalid transition or replay detected | `application/json` | `ApiError` |
 | `410` | Deadline expired | `application/json` | `ApiError` |
+| `429` | Rate limited | `application/json` | `ApiError` |
+
+---
+
+### `POST /api/recurring/{id}/executions`
+
+**Summary:** Confirm a due standing-order payment  
+
+Confirms the due cycle of a standing authorization with one signature over an `offramp-outcome` intent that names the authorization and the cycle. The payment is checked against the signed terms (cap, stop date, allowlist, corridor); a breach is recorded as a rejected execution and answered with 422. Resending a body that was already recorded returns that record with 200. Behind the `NEXT_PUBLIC_RECURRING_INTENTS` flag: with it off the route returns 404 `NOT_FOUND`.
+
+#### Parameters
+
+| Name | In | Type | Required | Description |
+| :--- | :--- | :--- | :--- | :--- |
+| `id` | `path` | `string` | **Yes** | Authorization id (UUID) returned by POST /api/recurring |
+
+#### Request Body
+
+**Content-Type:** `application/json`
+
+| Field | Type | Required | Description |
+| :--- | :--- | :--- | :--- |
+| `intent` | `RecurringExecutionIntent` | **Yes** | - |
+| `signature` | `string` | **Yes** | Base64 Ed25519 signature over the intent hash bytes, or a SEP-53 signMessage envelope |
+| `publicKey` | `string` | **Yes** | - |
+
+#### Responses
+
+| Status | Description | Content-Type | Schema |
+| :--- | :--- | :--- | :--- |
+| `200` | This intent was already recorded; the existing record is returned | `application/json` | `object` |
+| `201` | Execution confirmed | `application/json` | `object` |
+| `400` | Body is not JSON or fails validation (`VALIDATION_ERROR`) | `application/json` | `ApiError` |
+| `401` | The signature does not verify (`UNAUTHORIZED`) | `application/json` | `ApiError` |
+| `403` | The intent names another authorization, or the signer is not the sender (`FORBIDDEN`) | `application/json` | `ApiError` |
+| `404` | Not found, or the recurring-intents flag is off (`NOT_FOUND`) | `application/json` | `ApiError` |
+| `409` | No payment is due (`NOT_DUE`, the phase is in the message), the cycle is not the due one (`CYCLE_MISMATCH`), or the cycle is already confirmed (`DUPLICATE_CYCLE`) | `application/json` | `ApiError` |
+| `422` | Outside the signed terms and recorded as rejected: `ANCHOR_NOT_ALLOWED`, `PERIOD_CAP_EXCEEDED`, `CORRIDOR_MISMATCH`, `ASSET_MISMATCH`, `NOT_STARTED`, `STOP_DATE_PASSED` or `AUTHORIZATION_INACTIVE` | `application/json` | `ApiError` |
 | `429` | Rate limited | `application/json` | `ApiError` |
 
 ---
