@@ -2,6 +2,12 @@ import { render, screen, fireEvent } from '@testing-library/react';
 import { describe, expect, it, vi } from 'vitest';
 import { VISIBLE_CORRIDORS } from '@/constants/anchors';
 
+// These specs pin registry behaviour, not tonight's outages: the nightly ledger
+// can flag any anchor degraded, which hides it from its corridors.
+vi.mock('@/constants/anchor-health.json', () => ({
+  default: { thresholdNights: 3, updatedAt: '2026-01-01T00:00:00.000Z', anchors: {} },
+}));
+
 describe('CorridorSelector', () => {
   it('only renders visible corridors as options', async () => {
     const { CorridorSelector } = await import('@/components/ui/CorridorSelector');
