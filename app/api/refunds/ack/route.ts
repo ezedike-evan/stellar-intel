@@ -6,6 +6,7 @@ import { RefundAckPayloadSchema, hashRefundAck } from '@/lib/refunds/ack';
 import { getRefundStore } from '@/lib/refunds/store';
 import { verifyIntentSignature } from '@/lib/intent/verify';
 import { compareDecimals } from '@/lib/decimal';
+import { emitWebhookEvent } from '@/lib/webhooks/emit';
 import { verifyRefundPayments } from '@/lib/refunds/verify-onchain';
 import type { RefundOnChainCheck } from '@/lib/refunds/store';
 
@@ -219,6 +220,20 @@ export async function POST(request: NextRequest): Promise<NextResponse> {
 
     // Step 10: Sanitized response (ZERO key/signature leakage)
     logger.info({ event: 'refund_acknowledged', intentHash: ack.intentHash });
+
+    // Built field by field (#2124): the signer account, ackHash, ackSignature and the
+    // refund amounts stay on the platform.
+    emitWebhookEvent(
+      'refund.acknowledged',
+      {
+        caseId: updated.id,
+        intentHash: updated.intentHash,
+        anchorId: updated.anchorId,
+        acknowledgedAt: updated.acknowledgedAt ?? new Date().toISOString(),
+        onChainCheck: updated.onChainCheck,
+      },
+      { idempotencyKey: `refund.acknowledged:${updated.id}` }
+    );
 
     return apiSuccessResponse({
       id: updated.id,
