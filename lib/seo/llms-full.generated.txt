@@ -955,6 +955,9 @@ the hardening contract (see `lib/api/v1.ts`):
   - [`POST /api/intent`](#post-apiintent)
   - [`POST /api/intent/offramp`](#post-apiintentofframp)
   - [`POST /api/intent/status`](#post-apiintentstatus)
+  - [`POST /api/recurring`](#post-apirecurring)
+  - [`GET /api/recurring/due`](#get-apirecurringdue)
+  - [`GET /api/recurring/{id}`](#get-apirecurringid)
   - [`POST /api/recurring/{id}/control`](#post-apirecurringidcontrol)
   - [`POST /api/v1/intent/offramp`](#post-apiv1intentofframp)
   - [`POST /api/v1/intent/onramp`](#post-apiv1intentonramp)
@@ -1411,6 +1414,82 @@ Observes the current settlement status of a SEP-24 or SEP-6 transaction server-s
 | `401` | Bearer authorization token required | `application/json` | `ApiError` |
 | `429` | Rate limit exceeded | `application/json` | `ApiError` |
 | `502` | Upstream anchor returned an error | `application/json` | `ApiError` |
+
+---
+
+### `POST /api/recurring`
+
+**Summary:** Create a standing authorization  
+
+Stores a signed standing authorization after verifying the signature over its terms and checking policy: a real corridor, allowlisted anchors that serve it, an amount within the per-period cap and a bounded window. The returned id is a random UUID that only the creator learns; it is the read capability for `GET /api/recurring/{id}`. Behind the `NEXT_PUBLIC_RECURRING_INTENTS` flag: with it off the route returns 404 `NOT_FOUND`.
+
+#### Request Body
+
+**Content-Type:** `application/json`
+
+| Field | Type | Required | Description |
+| :--- | :--- | :--- | :--- |
+| `terms` | `StandingAuthorizationTerms` | **Yes** | - |
+| `termsHash` | `string` | **Yes** | SHA-256 of the canonical JSON of terms |
+| `signature` | `string` | **Yes** | Base64 Ed25519 signature over the hash bytes, or a SEP-53 signMessage envelope |
+| `publicKey` | `string` | **Yes** | Must equal terms.sender |
+
+#### Responses
+
+| Status | Description | Content-Type | Schema |
+| :--- | :--- | :--- | :--- |
+| `201` | Standing authorization created | `application/json` | `object` |
+| `400` | Body is not JSON (`INVALID_JSON`) or fails validation (`VALIDATION_ERROR`) | `application/json` | `ApiError` |
+| `401` | termsHash does not match the terms, or the signature does not verify (`UNAUTHORIZED`) | `application/json` | `ApiError` |
+| `404` | Not found, or the recurring-intents flag is off (`NOT_FOUND`) | `application/json` | `ApiError` |
+| `409` | The same document was already submitted (`DUPLICATE_AUTHORIZATION`) | `application/json` | `ApiError` |
+| `422` | Terms outside policy: `UNKNOWN_CORRIDOR`, `ANCHOR_NOT_IN_CORRIDOR`, `AMOUNT_EXCEEDS_CAP`, `STOP_IN_PAST`, `START_TOO_OLD` or `WINDOW_TOO_LONG` | `application/json` | `ApiError` |
+| `429` | Rate limited | `application/json` | `ApiError` |
+
+---
+
+### `GET /api/recurring/due`
+
+**Summary:** List due reminders for standing authorizations  
+
+Returns a reminder for each listed authorization whose current period is due. Unknown ids are skipped silently; there is no way to list authorizations by key. Behind the `NEXT_PUBLIC_RECURRING_INTENTS` flag: with it off the route returns 404 `NOT_FOUND`.
+
+#### Parameters
+
+| Name | In | Type | Required | Description |
+| :--- | :--- | :--- | :--- | :--- |
+| `ids` | `query` | `string` | **Yes** | Comma-separated authorization ids (UUIDs), at most 20 |
+
+#### Responses
+
+| Status | Description | Content-Type | Schema |
+| :--- | :--- | :--- | :--- |
+| `200` | Due reminders | `application/json` | `object` |
+| `400` | ids missing, more than 20, or not all UUIDs (`VALIDATION_ERROR`) | `application/json` | `ApiError` |
+| `404` | Not found, or the recurring-intents flag is off (`NOT_FOUND`) | `application/json` | `ApiError` |
+| `429` | Rate limited | `application/json` | `ApiError` |
+
+---
+
+### `GET /api/recurring/{id}`
+
+**Summary:** Read a standing authorization  
+
+Returns the terms, status, computed state and execution history of one standing authorization. The signature is not returned. Behind the `NEXT_PUBLIC_RECURRING_INTENTS` flag: with it off the route returns 404 `NOT_FOUND`.
+
+#### Parameters
+
+| Name | In | Type | Required | Description |
+| :--- | :--- | :--- | :--- | :--- |
+| `id` | `path` | `string` | **Yes** | Authorization id (UUID) returned by POST /api/recurring |
+
+#### Responses
+
+| Status | Description | Content-Type | Schema |
+| :--- | :--- | :--- | :--- |
+| `200` | Standing authorization | `application/json` | `object` |
+| `404` | Not found, or the recurring-intents flag is off (`NOT_FOUND`) | `application/json` | `ApiError` |
+| `429` | Rate limited | `application/json` | `ApiError` |
 
 ---
 
