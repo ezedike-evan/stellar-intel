@@ -1,6 +1,7 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { NextRequest } from 'next/server';
 import { Keypair } from '@stellar/stellar-sdk';
+import type { OutcomeIntent } from '@/lib/reputation/schema';
 import { POST as appendPOST } from '@/app/api/reputation/append/route';
 import { GET as reconcileGET } from '@/app/api/reputation/reconcile/route';
 import { clearRateLimitStore } from '@/lib/api/rate-limit';
@@ -829,5 +830,203 @@ describe('POST /api/reputation/append — auto-open refund cases (RFD004)', () =
     expect((await appendPOST(req(signed({ outcome: 'refunded' })))).status).toBe(201);
     expect((await appendPOST(req(signed({ outcome: 'refunded' })))).status).toBe(409);
     expect(await refundStore.list()).toHaveLength(1);
+  });
+});
+
+describe('minReceive binding (SLP004)', () => {
+  function makeOutcomeIntent(overrides: Partial<OutcomeIntent> = {}): OutcomeIntent {
+    return {
+      type: 'offramp-outcome',
+      sourceAsset: 'USDC',
+      destinationAsset: 'NGN',
+      amount: '100',
+      sender: sender.publicKey(),
+      recipient: '0123456789',
+      anchorId: 'cowrie',
+      corridor: 'ngnt-ngn',
+      transactionId: 'tx-12345',
+      minReceive: '145000',
+      ...overrides,
+    };
+  }
+
+  it('valid -> 201, stored row has minReceive', async () => {
+    const kp = Keypair.random();
+    const intent = makeOutcomeIntent({ sender: kp.publicKey(), minReceive: '145000' });
+    const intentHash = await hashIntent(intent);
+    const body = {
+      ...outcome({
+        intentHash,
+        minReceive: '145000',
+        outcomeIntent: intent,
+      }),
+      publicKey: kp.publicKey(),
+      signature: signRaw(intentHash, kp),
+    };
+
+    const res = await appendPOST(req(body));
+    expect(res.status).toBe(201);
+    const [row] = await store.query({ includeUnattested: true });
+    expect(row?.minReceive).toBe('145000');
+  });
+
+  it('minReceive without outcomeIntent -> 400', async () => {
+    const kp = Keypair.random();
+    const intentHash = HASH;
+    const body = {
+      ...outcome({
+        intentHash,
+        minReceive: '145000',
+      }),
+      publicKey: kp.publicKey(),
+      signature: signRaw(intentHash, kp),
+    };
+
+    const res = await appendPOST(req(body));
+    expect(res.status).toBe(400);
+    const data = await res.json();
+    expect(data.message).toMatch(/minReceive must be covered by the signed outcomeIntent/i);
+  });
+
+  it('outcomeIntent.minReceive differs -> 400', async () => {
+    const kp = Keypair.random();
+    const intent = makeOutcomeIntent({ sender: kp.publicKey(), minReceive: '140000' });
+    const intentHash = await hashIntent(intent);
+    const body = {
+      ...outcome({
+        intentHash,
+        minReceive: '145000',
+        outcomeIntent: intent,
+      }),
+      publicKey: kp.publicKey(),
+      signature: signRaw(intentHash, kp),
+    };
+
+    const res = await appendPOST(req(body));
+    expect(res.status).toBe(400);
+  });
+
+  it('extra key in outcomeIntent -> 400 (strict)', async () => {
+    const kp = Keypair.random();
+    const intent = {
+      ...makeOutcomeIntent({ sender: kp.publicKey() }),
+      unexpectedExtra: 'forbidden',
+    };
+    const intentHash = await hashIntent(intent as OutcomeIntent);
+    const body = {
+      ...outcome({
+        intentHash,
+        minReceive: '145000',
+        outcomeIntent: intent,
+      }),
+      publicKey: kp.publicKey(),
+      signature: signRaw(intentHash, kp),
+    };
+
+    const res = await appendPOST(req(body));
+    expect(res.status).toBe(400);
+  });
+
+  it('outcomeIntent for a different hash (signature valid over intentHash) -> 400 and nothing stored', async () => {
+    const kp = Keypair.random();
+    const intent1 = makeOutcomeIntent({ sender: kp.publicKey(), transactionId: 'tx-1' });
+    const intent2 = makeOutcomeIntent({ sender: kp.publicKey(), transactionId: 'tx-2' });
+    const intentHash1 = await hashIntent(intent1);
+    // Body has intentHash1 and signature over intentHash1, but outcomeIntent is intent2
+    const body = {
+      ...outcome({
+        intentHash: intentHash1,
+        minReceive: '145000',
+        outcomeIntent: intent2,
+      }),
+      publicKey: kp.publicKey(),
+      signature: signRaw(intentHash1, kp),
+    };
+
+    const res = await appendPOST(req(body));
+    expect(res.status).toBe(400);
+    const data = await res.json();
+    expect(data.code).toBe('VALIDATION_ERROR');
+    expect(data.message).toBe('outcomeIntent does not hash to intentHash');
+
+    const rows = await store.query({ includeUnattested: true });
+    expect(rows).toHaveLength(0);
+  });
+
+  it('sender != publicKey -> 400', async () => {
+    const kp1 = Keypair.random();
+    const kp2 = Keypair.random();
+    const intent = makeOutcomeIntent({ sender: kp1.publicKey() });
+    const intentHash = await hashIntent(intent);
+    const body = {
+      ...outcome({
+        intentHash,
+        minReceive: '145000',
+        outcomeIntent: intent,
+      }),
+      publicKey: kp2.publicKey(),
+      signature: signRaw(intentHash, kp2),
+    };
+
+    const res = await appendPOST(req(body));
+    expect(res.status).toBe(400);
+  });
+
+  it('direction: deposit with minReceive -> 400', async () => {
+    const kp = Keypair.random();
+    const intent = makeOutcomeIntent({ sender: kp.publicKey() });
+    const intentHash = await hashIntent(intent);
+    const body = {
+      ...outcome({
+        intentHash,
+        direction: 'deposit',
+        minReceive: '145000',
+        outcomeIntent: intent,
+      }),
+      publicKey: kp.publicKey(),
+      signature: signRaw(intentHash, kp),
+    };
+
+    const res = await appendPOST(req(body));
+    expect(res.status).toBe(400);
+    const data = await res.json();
+    expect(data.message).toMatch(/minReceive is only supported for withdrawals/i);
+  });
+
+  it('neither field -> 201 with minReceive null (regression)', async () => {
+    const res = await appendPOST(req(signed()));
+    expect(res.status).toBe(201);
+    const [row] = await store.query({ includeUnattested: true });
+    expect(row?.minReceive).toBeNull();
+  });
+
+  it('the logger never receives recipient', async () => {
+    const kp = Keypair.random();
+    const recipientSecret = 'SECRET_RECIPIENT_XYZ_987654';
+    const intent = makeOutcomeIntent({
+      sender: kp.publicKey(),
+      recipient: recipientSecret,
+      minReceive: '145000',
+    });
+    const intentHash = await hashIntent(intent);
+    const body = {
+      ...outcome({
+        intentHash,
+        minReceive: '145000',
+        outcomeIntent: intent,
+      }),
+      publicKey: kp.publicKey(),
+      signature: signRaw(intentHash, kp),
+    };
+
+    const spy = vi.spyOn(console, 'info').mockImplementation(() => {});
+    const warnSpy = vi.spyOn(console, 'warn').mockImplementation(() => {});
+
+    await appendPOST(req(body));
+
+    for (const call of [...spy.mock.calls, ...warnSpy.mock.calls]) {
+      const serialized = JSON.stringify(call);
+      expect(serialized).not.toContain(recipientSecret);
+    }
   });
 });
