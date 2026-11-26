@@ -1,6 +1,7 @@
 import { getSqlExecutor, hasDatabaseUrl } from '@/lib/reputation/pool';
 import { TERMINAL_STATES, getSep24Transaction } from '@/lib/stellar/sep24';
 import { getSep6Transaction } from '@/lib/stellar/sep6';
+import { emitWebhookEvent } from './emit';
 
 export interface SettlementStatusKey {
   anchorId: string;
@@ -113,12 +114,23 @@ export interface ObservedSettlementStatus {
   terminal: boolean;
 }
 
+/** What `observeSettlementStatus` calls out to, injectable so tests need no network. */
+export interface ObserveSettlementStatusDeps {
+  /** Defaults to the real emitter. */
+  emit?: typeof emitWebhookEvent;
+}
+
 /**
  * Re-reads the anchor's own transaction record server-side using the forwarded SEP-10 JWT,
  * records the status observation atomically, and reports whether the status has changed.
+ *
+ * Every observed change is announced as one `settlement.status_changed` webhook (WHK011).
+ * A repeat of the status already recorded announces nothing. `intent.settled` and
+ * `intent.failed` are not emitted here: they come from `/api/reputation/append` only.
  */
 export async function observeSettlementStatus(
-  params: ObserveSettlementStatusParams
+  params: ObserveSettlementStatusParams,
+  deps: ObserveSettlementStatusDeps = {}
 ): Promise<ObservedSettlementStatus> {
   const { anchorId, transferServer, transactionId, protocol, jwt } = params;
 
@@ -131,11 +143,29 @@ export async function observeSettlementStatus(
   const observedAt = new Date().toISOString();
   const store = getSettlementStatusStore();
   const previous = await store.swap({ anchorId, transactionId }, status, observedAt);
+  const changed = previous !== status;
+  const terminal = (TERMINAL_STATES as ReadonlySet<string>).has(status);
 
-  return {
-    status,
-    previous,
-    changed: previous !== status,
-    terminal: (TERMINAL_STATES as ReadonlySet<string>).has(status),
-  };
+  if (changed) {
+    const emit = deps.emit ?? emitWebhookEvent;
+    emit(
+      'settlement.status_changed',
+      {
+        anchorId,
+        transactionId,
+        protocol,
+        direction: params.direction,
+        from: previous,
+        to: status,
+        terminal,
+        intentHash: params.intentHash ?? null,
+        observedAt,
+      },
+      // The transaction and the status it moved to. Two observers that both see the
+      // same change, on two instances, send the same key, and a subscriber sees one event.
+      { idempotencyKey: `settlement.status_changed:${anchorId}:${transactionId}:${status}` }
+    );
+  }
+
+  return { status, previous, changed, terminal };
 }

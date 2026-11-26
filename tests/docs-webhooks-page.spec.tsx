@@ -25,12 +25,10 @@ describe('Webhooks docs page (#1343)', () => {
 
   it('counts the live kinds in the banner instead of stating them (WHK003)', () => {
     const content = text();
-    // Thirteen kinds have a producer today (WHK009 added intent.rejected and intent.expired,
-    // #2124 the two refund kinds); settlement.status_changed can only be subscribed to.
+    // Every kind has a producer now: WHK011 added the last one, settlement.status_changed.
     expect(WEBHOOK_EVENT_KINDS).toHaveLength(14);
-    expect(content).toContain(
-      'Live for 13 of 14 kinds; the rest can be subscribed to and will start arriving as producers ship.'
-    );
+    expect(content).toContain('Status: Live — every listed event kind is delivered.');
+    expect(content).not.toContain('will start arriving as producers ship');
     expect(content).not.toContain('four of the five');
   });
 
@@ -44,9 +42,7 @@ describe('Webhooks docs page (#1343)', () => {
 
     // One row per kind, in the order subscriptions list them.
     expect(rows.map((row) => row.kind)).toEqual(WEBHOOK_EVENT_KINDS);
-    expect(rows.filter((row) => row.pending).map((row) => row.kind)).toEqual([
-      'settlement.status_changed',
-    ]);
+    expect(rows.filter((row) => row.pending).map((row) => row.kind)).toEqual([]);
   });
 
   it('keeps the metadata description in line with the event kinds', () => {
