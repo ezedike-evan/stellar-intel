@@ -2421,6 +2421,68 @@
           "verifiedAt"
         ]
       },
+      "RefundGateMetrics": {
+        "type": "object",
+        "properties": {
+          "windowDays": {
+            "type": "integer",
+            "description": "Trailing window in days (30)"
+          },
+          "since": {
+            "type": "string",
+            "description": "ISO start of the window; cases opened at or after it count"
+          },
+          "generatedAt": {
+            "type": "string",
+            "description": "ISO instant the metric was computed"
+          },
+          "opened": {
+            "type": "integer",
+            "description": "Refund cases opened in the window"
+          },
+          "owed": {
+            "type": "integer",
+            "description": "Cases the anchor still owes"
+          },
+          "refunded": {
+            "type": "integer",
+            "description": "Cases the anchor refunded, not yet acknowledged"
+          },
+          "acknowledged": {
+            "type": "integer",
+            "description": "Cases the user acknowledged"
+          },
+          "awaitingAck": {
+            "type": "integer",
+            "description": "Refunded cases still within the 72-hour acknowledgement grace period"
+          },
+          "unsignaled": {
+            "type": "integer",
+            "description": "Refunded cases past the 72-hour grace period with no acknowledgement"
+          },
+          "overdueOwed": {
+            "type": "integer",
+            "description": "Owed cases opened more than 7 days ago"
+          },
+          "gatePassing": {
+            "type": "boolean",
+            "description": "True when unsignaled is 0 (the v3 release gate)"
+          }
+        },
+        "required": [
+          "windowDays",
+          "since",
+          "generatedAt",
+          "opened",
+          "owed",
+          "refunded",
+          "acknowledged",
+          "awaitingAck",
+          "unsignaled",
+          "overdueOwed",
+          "gatePassing"
+        ]
+      },
       "ApiKeyRecord": {
         "type": "object",
         "properties": {
@@ -7342,6 +7404,37 @@
           },
           "503": {
             "description": "Store unavailable",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/refunds/summary": {
+      "get": {
+        "summary": "Get the unsignaled-refund release-gate metric",
+        "description": "Counts of the refund cases opened in the trailing 30 days, classified by status. A refunded case counts as unsignaled once it is more than 72 hours past its refund (or opening) with no acknowledgement; the v3 release gate passes when that count is 0. Counts only: no accounts, intent hashes or amounts. Cached for 60 seconds.",
+        "tags": [
+          "Reputation"
+        ],
+        "responses": {
+          "200": {
+            "description": "Refund release-gate metric",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/RefundGateMetrics"
+                }
+              }
+            }
+          },
+          "429": {
+            "description": "Rate limited",
             "content": {
               "application/json": {
                 "schema": {

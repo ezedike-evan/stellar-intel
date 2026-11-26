@@ -6,6 +6,7 @@ import {
 } from './errors.js';
 import type {
   AdjudicationLogResponse,
+  RefundGateMetrics,
   AnchorCensusResponse,
   AnchorHealth,
   AnchorHealthLedgerArtifact,
@@ -289,6 +290,14 @@ export class StellarIntelClient {
   /** Liveness of the API itself. */
   async getHealth(): Promise<{ ok: boolean }> {
     return this.request<{ ok: boolean }>({ method: 'GET', path: '/api/v1/health' });
+  }
+
+  /**
+   * The unsignaled-refund release gate: counts of refund cases opened in the
+   * trailing 30 days, and whether the gate passes.
+   */
+  async getRefundsSummary(): Promise<RefundGateMetrics> {
+    return this.request<RefundGateMetrics>({ method: 'GET', path: '/api/v1/refunds/summary' });
   }
 
   /**

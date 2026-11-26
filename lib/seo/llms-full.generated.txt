@@ -980,6 +980,7 @@ the hardening contract (see `lib/api/v1.ts`):
   - [`GET /api/reputation/{anchor}/history`](#get-apireputationanchorhistory)
   - [`GET /api/reputation/{anchor}/sla`](#get-apireputationanchorsla)
   - [`GET /api/v1/disputes/log`](#get-apiv1disputeslog)
+  - [`GET /api/v1/refunds/summary`](#get-apiv1refundssummary)
   - [`GET /api/v1/slippage-breaches`](#get-apiv1slippage-breaches)
   - [`GET /api/v1/slippage-breaches/{intentHash}`](#get-apiv1slippage-breachesintenthash)
   - [`GET /api/v1/slippage-compliance`](#get-apiv1slippage-compliance)
@@ -1932,6 +1933,21 @@ Serves the public, append-only, hash-chained dispute adjudication log, along wit
 | :--- | :--- | :--- | :--- |
 | `200` | The adjudication log entries and chain verification | `application/json` | `AdjudicationLogResponse` |
 | `400` | Invalid afterSeq or limit parameters | `application/json` | `ApiError` |
+| `429` | Rate limited | `application/json` | `ApiError` |
+
+---
+
+### `GET /api/v1/refunds/summary`
+
+**Summary:** Get the unsignaled-refund release-gate metric  
+
+Counts of the refund cases opened in the trailing 30 days, classified by status. A refunded case counts as unsignaled once it is more than 72 hours past its refund (or opening) with no acknowledgement; the v3 release gate passes when that count is 0. Counts only: no accounts, intent hashes or amounts. Cached for 60 seconds.
+
+#### Responses
+
+| Status | Description | Content-Type | Schema |
+| :--- | :--- | :--- | :--- |
+| `200` | Refund release-gate metric | `application/json` | `RefundGateMetrics` |
 | `429` | Rate limited | `application/json` | `ApiError` |
 
 ---
