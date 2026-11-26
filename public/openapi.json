@@ -2739,6 +2739,286 @@
           "scopes",
           "tier"
         ]
+      },
+      "StandingAuthorizationTerms": {
+        "type": "object",
+        "properties": {
+          "type": {
+            "type": "string",
+            "enum": [
+              "recurring-authorization"
+            ]
+          },
+          "version": {
+            "type": "number",
+            "enum": [
+              1
+            ]
+          },
+          "sender": {
+            "type": "string",
+            "pattern": "^G[A-Z2-7]{55}$",
+            "description": "Stellar public key of the sender"
+          },
+          "corridorId": {
+            "type": "string",
+            "description": "Corridor id, equal to `sourceAsset-destinationAsset` lowercased"
+          },
+          "sourceAsset": {
+            "type": "string"
+          },
+          "destinationAsset": {
+            "type": "string"
+          },
+          "amount": {
+            "type": "string",
+            "pattern": "^\\d+(\\.\\d+)?$",
+            "description": "Amount per execution"
+          },
+          "perPeriodCap": {
+            "type": "string",
+            "pattern": "^\\d+(\\.\\d+)?$",
+            "description": "Most that may be sent per period"
+          },
+          "period": {
+            "type": "string",
+            "enum": [
+              "daily",
+              "weekly",
+              "biweekly",
+              "monthly"
+            ]
+          },
+          "startAt": {
+            "type": "string",
+            "description": "ISO 8601 start; at most 24 hours in the past when submitted"
+          },
+          "stopAt": {
+            "type": "string",
+            "description": "ISO 8601 stop; in the future, at most 366 days after startAt"
+          },
+          "anchorAllowlist": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            },
+            "minItems": 1,
+            "maxItems": 10,
+            "description": "Registered anchors that serve the corridor"
+          },
+          "nonce": {
+            "type": "string",
+            "pattern": "^[0-9a-f]{32}$"
+          }
+        },
+        "required": [
+          "type",
+          "version",
+          "sender",
+          "corridorId",
+          "sourceAsset",
+          "destinationAsset",
+          "amount",
+          "perPeriodCap",
+          "period",
+          "startAt",
+          "stopAt",
+          "anchorAllowlist",
+          "nonce"
+        ]
+      },
+      "SignedStandingAuthorization": {
+        "type": "object",
+        "properties": {
+          "terms": {
+            "$ref": "#/components/schemas/StandingAuthorizationTerms"
+          },
+          "termsHash": {
+            "type": "string",
+            "pattern": "^[0-9a-f]{64}$",
+            "description": "SHA-256 of the canonical JSON of terms"
+          },
+          "signature": {
+            "type": "string",
+            "description": "Base64 Ed25519 signature over the hash bytes, or a SEP-53 signMessage envelope"
+          },
+          "publicKey": {
+            "type": "string",
+            "pattern": "^G[A-Z2-7]{55}$",
+            "description": "Must equal terms.sender"
+          }
+        },
+        "required": [
+          "terms",
+          "termsHash",
+          "signature",
+          "publicKey"
+        ]
+      },
+      "DueReminder": {
+        "type": "object",
+        "properties": {
+          "authorizationId": {
+            "type": "string"
+          },
+          "cycleNumber": {
+            "type": "integer"
+          },
+          "periodIndex": {
+            "type": "integer"
+          },
+          "periodStart": {
+            "type": "string"
+          },
+          "periodEnd": {
+            "type": "string"
+          },
+          "corridorId": {
+            "type": "string"
+          },
+          "sourceAsset": {
+            "type": "string"
+          },
+          "destinationAsset": {
+            "type": "string"
+          },
+          "amount": {
+            "type": "string",
+            "description": "Amount due this period, capped by what is left of the cap"
+          },
+          "remainingCap": {
+            "type": "string"
+          },
+          "anchorAllowlist": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            }
+          },
+          "termsHash": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "authorizationId",
+          "cycleNumber",
+          "periodIndex",
+          "periodStart",
+          "periodEnd",
+          "corridorId",
+          "sourceAsset",
+          "destinationAsset",
+          "amount",
+          "remainingCap",
+          "anchorAllowlist",
+          "termsHash"
+        ]
+      },
+      "StandingAuthorizationState": {
+        "type": "object",
+        "properties": {
+          "phase": {
+            "type": "string",
+            "enum": [
+              "scheduled",
+              "due",
+              "confirmed_this_period",
+              "cap_reached",
+              "paused",
+              "cancelled",
+              "completed"
+            ]
+          },
+          "due": {
+            "allOf": [
+              {
+                "$ref": "#/components/schemas/DueReminder"
+              },
+              {
+                "type": [
+                  "object",
+                  "null"
+                ]
+              }
+            ]
+          },
+          "nextDueAt": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "missedPeriods": {
+            "type": "integer"
+          }
+        },
+        "required": [
+          "phase",
+          "due",
+          "nextDueAt",
+          "missedPeriods"
+        ]
+      },
+      "StandingExecution": {
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "string"
+          },
+          "authorizationId": {
+            "type": "string"
+          },
+          "cycleNumber": {
+            "type": "integer"
+          },
+          "periodIndex": {
+            "type": "integer"
+          },
+          "amount": {
+            "type": "string"
+          },
+          "anchorId": {
+            "type": "string"
+          },
+          "intentHash": {
+            "type": "string"
+          },
+          "transactionId": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "status": {
+            "type": "string",
+            "enum": [
+              "confirmed",
+              "rejected"
+            ]
+          },
+          "rejectCode": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "createdAt": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "id",
+          "authorizationId",
+          "cycleNumber",
+          "periodIndex",
+          "amount",
+          "anchorId",
+          "intentHash",
+          "transactionId",
+          "status",
+          "rejectCode",
+          "createdAt"
+        ]
       }
     },
     "parameters": {}
@@ -7860,6 +8140,277 @@
           },
           "503": {
             "description": "Caller tokens are not enabled on this deployment (`tokens_unavailable`)",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/recurring": {
+      "post": {
+        "summary": "Create a standing authorization",
+        "description": "Stores a signed standing authorization after verifying the signature over its terms and checking policy: a real corridor, allowlisted anchors that serve it, an amount within the per-period cap and a bounded window. The returned id is a random UUID that only the creator learns; it is the read capability for `GET /api/recurring/{id}`. Behind the `NEXT_PUBLIC_RECURRING_INTENTS` flag: with it off the route returns 404 `NOT_FOUND`.",
+        "tags": [
+          "Intent"
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/SignedStandingAuthorization"
+              }
+            }
+          }
+        },
+        "responses": {
+          "201": {
+            "description": "Standing authorization created",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "id": {
+                      "type": "string",
+                      "description": "Authorization id (UUID)"
+                    },
+                    "termsHash": {
+                      "type": "string"
+                    },
+                    "state": {
+                      "$ref": "#/components/schemas/StandingAuthorizationState"
+                    }
+                  },
+                  "required": [
+                    "id",
+                    "termsHash",
+                    "state"
+                  ]
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Body is not JSON (`INVALID_JSON`) or fails validation (`VALIDATION_ERROR`)",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiError"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "termsHash does not match the terms, or the signature does not verify (`UNAUTHORIZED`)",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiError"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Not found, or the recurring-intents flag is off (`NOT_FOUND`)",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiError"
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "The same document was already submitted (`DUPLICATE_AUTHORIZATION`)",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiError"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Terms outside policy: `UNKNOWN_CORRIDOR`, `ANCHOR_NOT_IN_CORRIDOR`, `AMOUNT_EXCEEDS_CAP`, `STOP_IN_PAST`, `START_TOO_OLD` or `WINDOW_TOO_LONG`",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiError"
+                }
+              }
+            }
+          },
+          "429": {
+            "description": "Rate limited",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/recurring/{id}": {
+      "get": {
+        "summary": "Read a standing authorization",
+        "description": "Returns the terms, status, computed state and execution history of one standing authorization. The signature is not returned. Behind the `NEXT_PUBLIC_RECURRING_INTENTS` flag: with it off the route returns 404 `NOT_FOUND`.",
+        "tags": [
+          "Intent"
+        ],
+        "parameters": [
+          {
+            "schema": {
+              "type": "string",
+              "description": "Authorization id (UUID) returned by POST /api/recurring"
+            },
+            "required": true,
+            "description": "Authorization id (UUID) returned by POST /api/recurring",
+            "name": "id",
+            "in": "path"
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Standing authorization",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "id": {
+                      "type": "string"
+                    },
+                    "termsHash": {
+                      "type": "string"
+                    },
+                    "terms": {
+                      "$ref": "#/components/schemas/StandingAuthorizationTerms"
+                    },
+                    "status": {
+                      "type": "string",
+                      "enum": [
+                        "active",
+                        "paused",
+                        "cancelled"
+                      ]
+                    },
+                    "state": {
+                      "$ref": "#/components/schemas/StandingAuthorizationState"
+                    },
+                    "executions": {
+                      "type": "array",
+                      "items": {
+                        "$ref": "#/components/schemas/StandingExecution"
+                      }
+                    }
+                  },
+                  "required": [
+                    "id",
+                    "termsHash",
+                    "terms",
+                    "status",
+                    "state",
+                    "executions"
+                  ]
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Not found, or the recurring-intents flag is off (`NOT_FOUND`)",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiError"
+                }
+              }
+            }
+          },
+          "429": {
+            "description": "Rate limited",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/recurring/due": {
+      "get": {
+        "summary": "List due reminders for standing authorizations",
+        "description": "Returns a reminder for each listed authorization whose current period is due. Unknown ids are skipped silently; there is no way to list authorizations by key. Behind the `NEXT_PUBLIC_RECURRING_INTENTS` flag: with it off the route returns 404 `NOT_FOUND`.",
+        "tags": [
+          "Intent"
+        ],
+        "parameters": [
+          {
+            "schema": {
+              "type": "string",
+              "description": "Comma-separated authorization ids (UUIDs), at most 20"
+            },
+            "required": true,
+            "description": "Comma-separated authorization ids (UUIDs), at most 20",
+            "name": "ids",
+            "in": "query"
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Due reminders",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "reminders": {
+                      "type": "array",
+                      "items": {
+                        "$ref": "#/components/schemas/DueReminder"
+                      }
+                    }
+                  },
+                  "required": [
+                    "reminders"
+                  ]
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "ids missing, more than 20, or not all UUIDs (`VALIDATION_ERROR`)",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiError"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Not found, or the recurring-intents flag is off (`NOT_FOUND`)",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiError"
+                }
+              }
+            }
+          },
+          "429": {
+            "description": "Rate limited",
             "content": {
               "application/json": {
                 "schema": {

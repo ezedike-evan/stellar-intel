@@ -3290,6 +3290,234 @@ registry.registerPath({
   },
 });
 
+// ─── Standing authorizations (REC007) ─────────────────────────────────────────
+//
+// Behind NEXT_PUBLIC_RECURRING_INTENTS. With the flag off every route answers
+// 404 `NOT_FOUND`, the same as a route that does not exist.
+
+const RECURRING_FLAG_NOTE =
+  'Behind the `NEXT_PUBLIC_RECURRING_INTENTS` flag: with it off the route returns 404 `NOT_FOUND`.';
+
+const StandingAuthorizationTermsDoc = registry.register(
+  'StandingAuthorizationTerms',
+  z.object({
+    type: z.literal('recurring-authorization'),
+    version: z.literal(1),
+    sender: z.string().regex(STELLAR_PUBKEY_PATTERN).describe('Stellar public key of the sender'),
+    corridorId: z
+      .string()
+      .describe('Corridor id, equal to `sourceAsset-destinationAsset` lowercased'),
+    sourceAsset: z.string(),
+    destinationAsset: z.string(),
+    amount: z.string().regex(AMOUNT_PATTERN).describe('Amount per execution'),
+    perPeriodCap: z.string().regex(AMOUNT_PATTERN).describe('Most that may be sent per period'),
+    period: z.enum(['daily', 'weekly', 'biweekly', 'monthly']),
+    startAt: z.string().describe('ISO 8601 start; at most 24 hours in the past when submitted'),
+    stopAt: z.string().describe('ISO 8601 stop; in the future, at most 366 days after startAt'),
+    anchorAllowlist: z
+      .array(z.string())
+      .min(1)
+      .max(10)
+      .describe('Registered anchors that serve the corridor'),
+    nonce: z.string().regex(/^[0-9a-f]{32}$/),
+  })
+);
+
+const SignedStandingAuthorizationDoc = registry.register(
+  'SignedStandingAuthorization',
+  z.object({
+    terms: StandingAuthorizationTermsDoc,
+    termsHash: z
+      .string()
+      .regex(/^[0-9a-f]{64}$/)
+      .describe('SHA-256 of the canonical JSON of terms'),
+    signature: z
+      .string()
+      .describe('Base64 Ed25519 signature over the hash bytes, or a SEP-53 signMessage envelope'),
+    publicKey: z.string().regex(STELLAR_PUBKEY_PATTERN).describe('Must equal terms.sender'),
+  })
+);
+
+const DueReminderDoc = registry.register(
+  'DueReminder',
+  z.object({
+    authorizationId: z.string(),
+    cycleNumber: z.number().int(),
+    periodIndex: z.number().int(),
+    periodStart: z.string(),
+    periodEnd: z.string(),
+    corridorId: z.string(),
+    sourceAsset: z.string(),
+    destinationAsset: z.string(),
+    amount: z.string().describe('Amount due this period, capped by what is left of the cap'),
+    remainingCap: z.string(),
+    anchorAllowlist: z.array(z.string()),
+    termsHash: z.string(),
+  })
+);
+
+const AuthorizationStateDoc = registry.register(
+  'StandingAuthorizationState',
+  z.object({
+    phase: z.enum([
+      'scheduled',
+      'due',
+      'confirmed_this_period',
+      'cap_reached',
+      'paused',
+      'cancelled',
+      'completed',
+    ]),
+    due: DueReminderDoc.nullable(),
+    nextDueAt: z.string().nullable(),
+    missedPeriods: z.number().int(),
+  })
+);
+
+const StandingExecutionDoc = registry.register(
+  'StandingExecution',
+  z.object({
+    id: z.string(),
+    authorizationId: z.string(),
+    cycleNumber: z.number().int(),
+    periodIndex: z.number().int(),
+    amount: z.string(),
+    anchorId: z.string(),
+    intentHash: z.string(),
+    transactionId: z.string().nullable(),
+    status: z.enum(['confirmed', 'rejected']),
+    rejectCode: z.string().nullable(),
+    createdAt: z.string(),
+  })
+);
+
+const RECURRING_NOT_FOUND_404 = {
+  description: 'Not found, or the recurring-intents flag is off (`NOT_FOUND`)',
+  content: { 'application/json': { schema: ApiErrorSchema } },
+} as const;
+
+registry.registerPath({
+  method: 'post',
+  path: '/api/recurring',
+  summary: 'Create a standing authorization',
+  description:
+    'Stores a signed standing authorization after verifying the signature over its terms and ' +
+    'checking policy: a real corridor, allowlisted anchors that serve it, an amount within the ' +
+    'per-period cap and a bounded window. The returned id is a random UUID that only the ' +
+    'creator learns; it is the read capability for `GET /api/recurring/{id}`. ' +
+    RECURRING_FLAG_NOTE,
+  tags: ['Intent'],
+  request: {
+    body: {
+      required: true,
+      content: { 'application/json': { schema: SignedStandingAuthorizationDoc } },
+    },
+  },
+  responses: {
+    201: {
+      description: 'Standing authorization created',
+      content: {
+        'application/json': {
+          schema: z.object({
+            id: z.string().describe('Authorization id (UUID)'),
+            termsHash: z.string(),
+            state: AuthorizationStateDoc,
+          }),
+        },
+      },
+    },
+    400: {
+      description: 'Body is not JSON (`INVALID_JSON`) or fails validation (`VALIDATION_ERROR`)',
+      content: { 'application/json': { schema: ApiErrorSchema } },
+    },
+    401: {
+      description:
+        'termsHash does not match the terms, or the signature does not verify (`UNAUTHORIZED`)',
+      content: { 'application/json': { schema: ApiErrorSchema } },
+    },
+    404: RECURRING_NOT_FOUND_404,
+    409: {
+      description: 'The same document was already submitted (`DUPLICATE_AUTHORIZATION`)',
+      content: { 'application/json': { schema: ApiErrorSchema } },
+    },
+    422: {
+      description:
+        'Terms outside policy: `UNKNOWN_CORRIDOR`, `ANCHOR_NOT_IN_CORRIDOR`, `AMOUNT_EXCEEDS_CAP`, ' +
+        '`STOP_IN_PAST`, `START_TOO_OLD` or `WINDOW_TOO_LONG`',
+      content: { 'application/json': { schema: ApiErrorSchema } },
+    },
+    429: RATE_LIMITED_429,
+  },
+});
+
+registry.registerPath({
+  method: 'get',
+  path: '/api/recurring/{id}',
+  summary: 'Read a standing authorization',
+  description:
+    'Returns the terms, status, computed state and execution history of one standing ' +
+    'authorization. The signature is not returned. ' +
+    RECURRING_FLAG_NOTE,
+  tags: ['Intent'],
+  request: {
+    params: z.object({
+      id: z.string().describe('Authorization id (UUID) returned by POST /api/recurring'),
+    }),
+  },
+  responses: {
+    200: {
+      description: 'Standing authorization',
+      content: {
+        'application/json': {
+          schema: z.object({
+            id: z.string(),
+            termsHash: z.string(),
+            terms: StandingAuthorizationTermsDoc,
+            status: z.enum(['active', 'paused', 'cancelled']),
+            state: AuthorizationStateDoc,
+            executions: z.array(StandingExecutionDoc),
+          }),
+        },
+      },
+    },
+    404: RECURRING_NOT_FOUND_404,
+    429: RATE_LIMITED_429,
+  },
+});
+
+registry.registerPath({
+  method: 'get',
+  path: '/api/recurring/due',
+  summary: 'List due reminders for standing authorizations',
+  description:
+    'Returns a reminder for each listed authorization whose current period is due. Unknown ids ' +
+    'are skipped silently; there is no way to list authorizations by key. ' +
+    RECURRING_FLAG_NOTE,
+  tags: ['Intent'],
+  request: {
+    query: z.object({
+      ids: z.string().openapi({
+        param: { name: 'ids', in: 'query' },
+        description: 'Comma-separated authorization ids (UUIDs), at most 20',
+      }),
+    }),
+  },
+  responses: {
+    200: {
+      description: 'Due reminders',
+      content: {
+        'application/json': { schema: z.object({ reminders: z.array(DueReminderDoc) }) },
+      },
+    },
+    400: {
+      description: 'ids missing, more than 20, or not all UUIDs (`VALIDATION_ERROR`)',
+      content: { 'application/json': { schema: ApiErrorSchema } },
+    },
+    404: RECURRING_NOT_FOUND_404,
+    429: RATE_LIMITED_429,
+  },
+});
+
 export function buildOpenApiSpec() {
   const generator = new OpenApiGeneratorV31(registry.definitions);
   return generator.generateDocument({
