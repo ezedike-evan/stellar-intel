@@ -31,4 +31,6 @@ export {
   type AdjudicationSummary,
   type AdjudicationLogResponse,
   type RefundGateMetrics,
+  type CallerTokenResponse,
+  type UsageResponse,
 } from './types.js';

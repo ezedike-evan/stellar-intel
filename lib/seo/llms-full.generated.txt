@@ -3877,6 +3877,78 @@ rate-limited to 60 per minute per IP.
 on-ramp tools — alongside prompts and the anchor health ledger resource across
 all transports.
 
+## Authentication, scopes and limits
+
+### Client configuration
+
+Clients authenticate against the hosted endpoint by passing an `Authorization` header in their MCP client configuration:
+
+```json
+{
+  "mcpServers": {
+    "stellar-intel": {
+      "type": "http",
+      "url": "https://stellar-intel.vercel.app/api/mcp",
+      "headers": {
+        "Authorization": "Bearer sik_0123456789abcdef_..."
+      }
+    }
+  }
+}
+```
+
+While an API key (`sik_…`) can be passed directly, it is strongly recommended to use a short-lived caller token minted via `POST /api/v1/auth/token`. Tokens are capped at a 15-minute maximum lifetime, inherit a restricted subset of the minting key's scopes, and cannot mint further tokens. Passing short-lived tokens to autonomous agents bounds the blast radius if an agent is prompt-injected or compromised.
+
+### Tool scopes
+
+Every tool call on the hosted endpoint requires a specific scope. Keys and short-lived tokens are restricted to their granted permissions:
+
+| Tool                      | Scope           | Description                                                           |
+| ------------------------- | --------------- | --------------------------------------------------------------------- |
+| `intel.offramp.quote`     | `quotes:read`   | Read indicative and firm off-ramp quotes across registered anchors    |
+| `intel.offramp.prepare`   | `intents:write` | Build an unsigned off-ramp intent and payment transaction             |
+| `intel.execute`           | `intents:write` | Validate and broadcast a signed transaction (or dry run via `dryRun`) |
+| `intel.probe.coverage`    | `quotes:read`   | Inspect automated quote-probe coverage across anchors                 |
+| `intel.anchor.reputation` | `quotes:read`   | Fetch rolling fill rates, latencies, and scorecards                   |
+| `intel.anchor.sla`        | `quotes:read`   | 30-day settle-time percentiles and SLA breach status for an anchor    |
+| `intel.anchor.health`     | `quotes:read`   | Live health and probe outcomes for an anchor                          |
+| `intel.leaderboard`       | `quotes:read`   | Reputation leaderboard across anchors                                 |
+| `intel.corridors`         | `quotes:read`   | Supported corridors, assets, and active anchors                       |
+| `intel.onramp.quote`      | `quotes:read`   | Indicative quotes and fees for fiat-to-crypto deposits                |
+| `intel.onramp.prepare`    | `intents:write` | Build an unsigned on-ramp deposit intent                              |
+
+### Error codes and `_meta` payloads
+
+When a call cannot be completed due to authorization or policy constraints, the tool returns an error result (`isError: true`) with structured metadata under reserved `_meta` keys:
+
+- `INSUFFICIENT_SCOPE`: The caller key or token does not hold the scope required by the tool. Structured error details are provided under `_meta['stellarintel/auth']` (including `{ code: "INSUFFICIENT_SCOPE", tool, requiredScope }`).
+- `AMOUNT_OVER_CAP`: The intent amount exceeds the global spending cap (`MCP_MAX_INTENT_AMOUNT`) or the key's configured `maxIntentAmount`. The call is rejected before transaction construction or submission.
+- `RATE_LIMITED`: The request exceeds the per-minute rate limit for the caller's tier. Detailed reset timing is provided under `_meta['stellarintel/rateLimit']` (including `{ code: "RATE_LIMITED", tool, retryAfter, limit, resetAt }`).
+
+### Caller tiers and daily quotas
+
+Rate limits and capacity scale with caller identity tiers:
+
+- **Anonymous** (1× baseline): 60 requests per minute per IP. No daily quota.
+- **Standard** (5× baseline): 300 requests per minute, counted per key, and 50,000 requests per day.
+- **Partner** (20× baseline): 1,200 requests per minute, counted per key, and 500,000 requests per day.
+
+Daily quotas are shared across all API surfaces (REST v1, MCP, and GraphQL). Callers can check active counters and remaining quotas with `GET /api/v1/usage`.
+
+### Dry-run execution (`intel.execute`)
+
+`intel.execute` supports pre-flight transaction verification without submitting to Horizon:
+
+- Supplying `dryRun: true` runs all signature, account, fee, and timebound assertions without broadcasting to the network.
+- When valid, it returns `{ status: "verified", hash, ledger: null, corridorId, anchorId }` instead of status `"submitted"`.
+
+### Audit logging
+
+All hosted MCP tool invocations are recorded in the append-only audit log:
+
+- Fields recorded: tool name (`action`), caller ID (`callerId`), scope used (`scope`), intent hash (`intentHash`), and execution outcome (`ok`, `denied`, `rate_limited`, `error`).
+- Parameters and secrets: tool arguments, destination addresses, and payment payloads are **never** audited or persisted.
+
 ## Running it yourself
 
 > **Note:** `@stellarintel/mcp` is **not yet published to npm** —
@@ -6341,6 +6413,15 @@ for users — losing funds — is structurally out of scope because we never hol
 - **`ADMIN_SECRET_KEY`** gates `/admin/disputes` and admin reputation routes. Keep
   it server-side only; never expose it to the client (it is **not** a
   `NEXT_PUBLIC_*` var). See `lib/auth/admin.ts`.
+- **Caller API keys** authenticate agents and programmatic integrators. Keys follow the
+  format `sik_<keyId>_<secret>`, are SHA-256-hashed at rest, and are shown once upon issuance.
+  In the UI and admin logs, keys are identified only by their `sik_<keyId>` display prefix.
+  Revocation is immediate and also kills all short-lived tokens minted from that key.
+- **`CALLER_TOKEN_SECRET`** signs short-lived caller JWT tokens using HS256 with a
+  15-minute maximum lifetime and the algorithm pinned. Tokens inherit a scoped subset of
+  the minting key's permissions and cannot mint further tokens.
+- **Audit logging** — server-side actions, tool invocations, and admin events are recorded in
+  an append-only audit log. The audit log stores no IPs or intent contents.
 - **Publisher keys** (Soroban oracle) are server-held and never shipped to the
   browser. Rotation policy is a roadmap item ([`docs/ROADMAP.md`](ROADMAP.md)).
 - **Contract admin key** — on testnet the admin is a single key shared with the
@@ -6383,26 +6464,28 @@ for users — losing funds — is structurally out of scope because we never hol
 
 # Threat Model
 
-**Last reviewed:** 2026-08-26
+**Last reviewed:** 2026-11-21
 
 Scope: the Stellar Intel web app, its API, the intent flow, the reputation store,
 and the Soroban oracle. Out of scope by construction: theft of user funds or keys —
 the system is [non-custodial](NON_CUSTODY.md) and never holds either.
 
-| Threat                           | Vector                                                              | Mitigation                                                                                                                                                                                                                                                                                                                       |
-| -------------------------------- | ------------------------------------------------------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| **Anchor failure / silent drop** | Anchor accepts a withdraw then never settles                        | Per-anchor outcomes feed the reputation score (fill rate); failing anchors rank down. Failed quotes render as unavailable, never as a zero/fabricated rate. Nightly `data-health` validation.                                                                                                                                    |
-| **MITM on anchor traffic**       | Tampered `stellar.toml` or quote in transit                         | TLS to anchor domains; anchor calls run server-side; SEP-10 pins the network passphrase and requires an https `WEB_AUTH_ENDPOINT`.                                                                                                                                                                                               |
-| **Hostile SEP-10 challenge**     | Anchor serves a payment or other transaction as the login challenge | Before signing, `validateSep10Challenge` requires: sequence 0, source and signature from the toml `SIGNING_KEY`, `manage_data`-only ops with the first for this wallet and anchor domain, finite current timebounds. Missing `SIGNING_KEY` fails closed. Cosmetic deviations (text memo, `web_auth_domain` value) are tolerated. |
-| **Intent replay**                | Re-submitting a previously-signed envelope                          | `lib/intent/replay.ts` treats each signed envelope as single-use; server recomputes the canonical hash and verifies the signature.                                                                                                                                                                                               |
-| **Intent tampering**             | Altering amount/anchor after signing                                | Server recomputes SHA-256 over the canonical intent and verifies the Ed25519 signature; `publicKey` must match. Any change invalidates the signature.                                                                                                                                                                            |
-| **Reputation poisoning**         | Forged or spam outcomes to skew scores                              | Append needs the sender's signature over the intent hash, is insert-only and registry-checked; scores and the publisher read attested rows only. On-chain writes gated by publisher authorization.                                                                                                                               |
-| **Oracle tampering**             | Unauthorized contract writes                                        | Publisher gate (`publishers::is_authorized` + `require_auth`) on `submit_outcome`; admin gate on `register_anchor`; the upgrade is time-locked (7 days between `propose_upgrade` and `upgrade`); a multi-signer admin is roadmap hardening.                                                                                      |
-| **Admin-route abuse**            | Hitting `/admin/disputes` or admin reputation routes                | Gated by server-only `ADMIN_SECRET_KEY` (not a `NEXT_PUBLIC_*` var).                                                                                                                                                                                                                                                             |
-| **Agent misuse**                 | An AI agent tries to drain a wallet via MCP                         | MCP surface is advisory + user-signed: every executing call must be signed by the user's wallet. No held keys, no autonomous spend.                                                                                                                                                                                              |
-| **Griefing / DoS on rates**      | Hammering `/api/rates` or anchors                                   | Per-anchor timeouts + isolation (`server-rates.ts`); API rate limiting (`lib/api/rate-limit.ts`).                                                                                                                                                                                                                                |
-| **Supply-chain compromise**      | Malicious dependency                                                | Dependabot + `dependency-review` + CodeQL; SBOM on release (roadmap).                                                                                                                                                                                                                                                            |
-| **Publisher key compromise**     | Stolen Soroban publisher key                                        | Server-held keys; rotation ceremony documented (roadmap).                                                                                                                                                                                                                                                                        |
+| Threat                               | Vector                                                                  | Mitigation                                                                                                                                                                                                                                                                                                                       |
+| ------------------------------------ | ----------------------------------------------------------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| **Anchor failure / silent drop**     | Anchor accepts a withdraw then never settles                            | Per-anchor outcomes feed the reputation score (fill rate); failing anchors rank down. Failed quotes render as unavailable, never as a zero/fabricated rate. Nightly `data-health` validation.                                                                                                                                    |
+| **MITM on anchor traffic**           | Tampered `stellar.toml` or quote in transit                             | TLS to anchor domains; anchor calls run server-side; SEP-10 pins the network passphrase and requires an https `WEB_AUTH_ENDPOINT`.                                                                                                                                                                                               |
+| **Hostile SEP-10 challenge**         | Anchor serves a payment or other transaction as the login challenge     | Before signing, `validateSep10Challenge` requires: sequence 0, source and signature from the toml `SIGNING_KEY`, `manage_data`-only ops with the first for this wallet and anchor domain, finite current timebounds. Missing `SIGNING_KEY` fails closed. Cosmetic deviations (text memo, `web_auth_domain` value) are tolerated. |
+| **Intent replay**                    | Re-submitting a previously-signed envelope                              | `lib/intent/replay.ts` treats each signed envelope as single-use; server recomputes the canonical hash and verifies the signature.                                                                                                                                                                                               |
+| **Intent tampering**                 | Altering amount/anchor after signing                                    | Server recomputes SHA-256 over the canonical intent and verifies the Ed25519 signature; `publicKey` must match. Any change invalidates the signature.                                                                                                                                                                            |
+| **Reputation poisoning**             | Forged or spam outcomes to skew scores                                  | Append needs the sender's signature over the intent hash, is insert-only and registry-checked; scores and the publisher read attested rows only. On-chain writes gated by publisher authorization.                                                                                                                               |
+| **Oracle tampering**                 | Unauthorized contract writes                                            | Publisher gate (`publishers::is_authorized` + `require_auth`) on `submit_outcome`; admin gate on `register_anchor`; the upgrade is time-locked (7 days between `propose_upgrade` and `upgrade`); a multi-signer admin is roadmap hardening.                                                                                      |
+| **Admin-route abuse**                | Hitting `/admin/disputes` or admin reputation routes                    | Gated by server-only `ADMIN_SECRET_KEY` (not a `NEXT_PUBLIC_*` var).                                                                                                                                                                                                                                                             |
+| **Agent misuse**                     | An AI agent tries to drain a wallet via MCP                             | MCP surface is advisory + user-signed: every executing call must be signed by the user's wallet. No held keys, no autonomous spend. Tool scopes (`quotes:read`, `intents:write`) restrict agent actions.                                                                                                                         |
+| **Leaked caller API key**            | An integrator's caller API key is exposed or committed                  | Scopes restrict permissions; immediate revocation terminates the key and invalidates all issued tokens; short-lived tokens minimize exposure; per-key rate limits and amount caps bound blast radius.                                                                                                                            |
+| **Runaway or prompt-injected agent** | Compromised agent loop or injected prompt attempts excessive operations | Per-caller rate limits and daily quotas throttle request volume; `MCP_MAX_INTENT_AMOUNT` caps single transaction amounts; dry run mode (`dryRun: true`) allows pre-flight verification; user wallet signature is still required for execution.                                                                                   |
+| **Griefing / DoS on rates**          | Hammering `/api/rates` or anchors                                       | Per-anchor timeouts + isolation (`server-rates.ts`); API rate limiting (`lib/api/rate-limit.ts`).                                                                                                                                                                                                                                |
+| **Supply-chain compromise**          | Malicious dependency                                                    | Dependabot + `dependency-review` + CodeQL; SBOM on release (roadmap).                                                                                                                                                                                                                                                            |
+| **Publisher key compromise**         | Stolen Soroban publisher key                                            | Server-held keys; rotation ceremony documented (roadmap).                                                                                                                                                                                                                                                                        |
 
 ## Review cadence
 

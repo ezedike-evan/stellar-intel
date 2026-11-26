@@ -260,6 +260,42 @@ export interface AnchorCensusResponse {
   rows: AnchorCensusRow[];
 }
 
+/** Response from POST /api/v1/auth/token when exchanging an API key for a short-lived token. */
+export interface CallerTokenResponse {
+  token: string;
+  tokenType: 'Bearer';
+  expiresIn: number;
+  expiresAt: string;
+  scopes: string[];
+  tier: string;
+}
+
+export interface UsageCaller {
+  kind: string;
+  keyPrefix: string | null;
+  tier: string;
+  scopes: string[];
+}
+
+export interface UsageQuota {
+  limit: number;
+  used: number;
+  resetAt: string;
+}
+
+export interface UsageWindow {
+  bucket: string;
+  used: number;
+  resetAt: string;
+}
+
+/** Response from GET /api/v1/usage matching AGS025. */
+export interface UsageResponse {
+  caller: UsageCaller;
+  quota: UsageQuota | null;
+  windows: UsageWindow[];
+}
+
 /** One entry in the public dispute adjudication log. */
 export interface AdjudicationEntry {
   seq: number;
@@ -284,7 +320,6 @@ export interface AdjudicationSummary {
   appealed: number;
 }
 
-/** Response shape for `GET /api/v1/disputes/log`. */
 /**
  * The v3 release-gate metric served at `GET /api/v1/refunds/summary`: counts of
  * the refund cases opened in the trailing window. Counts only, no accounts.
@@ -309,6 +344,7 @@ export interface RefundGateMetrics {
   gatePassing: boolean;
 }
 
+/** Response shape for `GET /api/v1/disputes/log`. */
 export interface AdjudicationLogResponse {
   entries: AdjudicationEntry[];
   head: { seq: number; entryHash: string } | null;
@@ -338,11 +374,12 @@ export const OPERATIONS = {
   getCorridorVolumeSavings: 'GET /api/v1/corridors/{corridor}/volume-savings',
   getHealth: 'GET /api/v1/health',
   getVolumeSavings: 'GET /api/v1/corridors/{corridor}/volume-savings',
+  exchangeToken: 'POST /api/v1/auth/token',
+  getUsage: 'GET /api/v1/usage',
   getSlippageBreaches: 'GET /api/v1/slippage-breaches',
   getSlippageBreach: 'GET /api/v1/slippage-breaches/{intentHash}',
   getSlippageCompliance: 'GET /api/v1/slippage-compliance',
   getDisputeLog: 'GET /api/v1/disputes/log',
-  exchangeToken: 'POST /api/v1/auth/token',
   getRefundsSummary: 'GET /api/v1/refunds/summary',
 } as const;
 
