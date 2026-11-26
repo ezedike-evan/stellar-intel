@@ -314,7 +314,11 @@ export const OPERATIONS = {
   getCorridorVolumeSavings: 'GET /api/v1/corridors/{corridor}/volume-savings',
   getHealth: 'GET /api/v1/health',
   getVolumeSavings: 'GET /api/v1/corridors/{corridor}/volume-savings',
+  getSlippageBreaches: 'GET /api/v1/slippage-breaches',
+  getSlippageBreach: 'GET /api/v1/slippage-breaches/{intentHash}',
+  getSlippageCompliance: 'GET /api/v1/slippage-compliance',
   getDisputeLog: 'GET /api/v1/disputes/log',
+  exchangeToken: 'POST /api/v1/auth/token',
 } as const;
 
 export type OperationName = keyof typeof OPERATIONS;

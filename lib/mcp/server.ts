@@ -23,6 +23,7 @@ export async function createServer(): Promise<McpServer> {
   const { registerExecuteTool } = await import('./tools/execute');
   const { registerProbeCoverageTool } = await import('./tools/probe-coverage');
   const { registerAnchorReputationTool } = await import('./tools/anchor-reputation');
+  const { registerAnchorSlaTool } = await import('./tools/anchor-sla');
   const { registerAnchorHealthTool } = await import('./tools/anchor-health');
   const { registerLeaderboardTool } = await import('./tools/leaderboard');
   const { registerCorridorsTool } = await import('./tools/corridors');
@@ -45,6 +46,7 @@ export async function createServer(): Promise<McpServer> {
   registerExecuteTool(server);
   registerProbeCoverageTool(server);
   registerAnchorReputationTool(server);
+  registerAnchorSlaTool(server);
   registerAnchorHealthTool(server);
   registerLeaderboardTool(server);
   registerCorridorsTool(server);

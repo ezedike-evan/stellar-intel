@@ -306,6 +306,47 @@ npx tsx scripts/mcp/server.ts`}
             <span className="rounded bg-accent-subtle px-2 py-0.5 text-xs font-medium text-accent">
               TOOL
             </span>
+            intel.anchor.sla
+          </h3>
+          <p className="mt-2 text-sm text-secondary-text">
+            Returns 30-day trailing p50/p95/p99 settle latency for an anchor, overall and per
+            corridor, with breach status and a daily p95 series. The state is{' '}
+            <code>insufficient_data</code> until 30 completed withdrawals exist, and p99 is null
+            below 100.
+          </p>
+
+          <div className="mt-4 grid grid-cols-1 gap-4 sm:grid-cols-2">
+            <div>
+              <h4 className="mb-2 text-sm font-medium text-primary-text">Input</h4>
+              <CodeBlock
+                language="json"
+                code={`{ "anchor": "moneygram", "corridor": "usdc-ngn" }`}
+              />
+            </div>
+            <div>
+              <h4 className="mb-2 text-sm font-medium text-primary-text">Output (abridged)</h4>
+              <CodeBlock
+                language="json"
+                code={`{
+  "anchorId": "moneygram",
+  "windowDays": 30,
+  "thresholds": { "p95Ms": 900000, "p99Ms": 3600000 },
+  "overall": {
+    "sla": { "state": "ok", "p50Ms": 60000, "p95Ms": 240000, "p99Ms": 610000 },
+    "breach": { "status": "within", "breaches": [] }
+  },
+  "history": [{ "day": "2026-11-01", "p95Ms": 230000, "sampleSize": 6 }]
+}`}
+              />
+            </div>
+          </div>
+        </div>
+
+        <div className="rounded-xl border border-border p-5">
+          <h3 className="flex items-center gap-2 text-lg font-semibold text-primary-text">
+            <span className="rounded bg-accent-subtle px-2 py-0.5 text-xs font-medium text-accent">
+              TOOL
+            </span>
             intel.anchor.health
           </h3>
           <p className="mt-2 text-sm text-secondary-text">

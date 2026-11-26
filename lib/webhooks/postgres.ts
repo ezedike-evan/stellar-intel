@@ -223,6 +223,19 @@ export class PostgresWebhookStore implements WebhookStore {
     return rows.map(rowToDelivery);
   }
 
+  async getDelivery(id: string): Promise<DeliveryRecord | null> {
+    await ensureSchema();
+    const { rows } = await getSqlExecutor().query(
+      `SELECT id, event_id, event_kind, subscription_id, url, status, attempts,
+              last_status_code, last_error, delivered_at, created_at
+         FROM webhook_delivery_log
+        WHERE id = $1`,
+      [id]
+    );
+    const row = rows[0];
+    return row ? rowToDelivery(row) : null;
+  }
+
   async listDeliveries(query: DeliveryQuery): Promise<DeliveryRecord[]> {
     await ensureSchema();
     const rawLimit = query.limit ?? 100;

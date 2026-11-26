@@ -31,6 +31,10 @@ const inputShape = {
     .describe(
       "Base64 XDR of the unsignedTx from intel.offramp.prepare, signed by the sender's own wallet"
     ),
+  dryRun: z
+    .boolean()
+    .optional()
+    .describe('When true, run every check and return the transaction hash without submitting it'),
 };
 
 export function registerExecuteTool(server: McpServer): void {
@@ -40,7 +44,7 @@ export function registerExecuteTool(server: McpServer): void {
       title: 'Execute a prepared intent',
       description:
         'Verifies an agent-signed intent + transaction against the prepared intent and submits it to ' +
-        'Horizon. Stellar Intel never signs anything — the agent signs the intent hash and the ' +
+        'Horizon (or verifies without broadcasting when dryRun is true). Stellar Intel never signs anything — the agent signs the intent hash and the ' +
         'transaction itself with its own wallet before calling this tool.',
       inputSchema: inputShape,
       outputSchema: ExecuteOutputSchema,

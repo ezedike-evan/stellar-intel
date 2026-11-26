@@ -525,4 +525,67 @@ describe('deposit fields and the useTransferStatus alias (#1467)', () => {
   it('useTransferStatus is the very same hook as useWithdrawStatus', () => {
     expect(useTransferStatus).toBe(useWithdrawStatus);
   });
+
+  it('posts observation to /api/intent/status with Bearer token on status change', async () => {
+    const fetchSpy = vi.fn(async (url: unknown) => {
+      if (typeof url === 'string' && url.includes('/api/intent/status')) {
+        return {
+          ok: true,
+          json: async () => ({
+            status: 'pending_external',
+            previous: null,
+            changed: true,
+            terminal: false,
+          }),
+        };
+      }
+      return {
+        ok: true,
+        json: async () => ({
+          transaction: {
+            id: TXN_ID,
+            status: 'pending_external',
+          },
+        }),
+      };
+    });
+    vi.stubGlobal('fetch', fetchSpy);
+
+    const { result } = renderHook(
+      () =>
+        useWithdrawStatus(TRANSFER_SERVER, TXN_ID, JWT, {
+          anchorId: 'cowrie',
+          intentHash: 'a'.repeat(64),
+          corridor: 'usdc-ngn',
+          direction: 'withdraw',
+          quotedAmount: '100',
+          quotedRate: '1500',
+          publicKey: 'GA5ZSEJYB37JRC5AVCIA5MOP4RHTM335X2KGX3IHOJAPP5RE34K4KZVN',
+          signature: 'sig-test',
+        }),
+      { wrapper }
+    );
+    await waitFor(() => expect(result.current.isLoading).toBe(false));
+
+    await waitFor(() => {
+      const calls = fetchSpy.mock.calls as unknown as Array<[unknown, RequestInit | undefined]>;
+      const statusCalls = calls.filter(
+        ([callUrl]) => typeof callUrl === 'string' && callUrl.includes('/api/intent/status')
+      );
+      expect(statusCalls.length).toBeGreaterThanOrEqual(1);
+      const firstCall = statusCalls[0];
+      expect(firstCall?.[1]?.headers).toMatchObject({
+        Authorization: `Bearer ${JWT}`,
+      });
+      const body = JSON.parse((firstCall?.[1]?.body as string) ?? '{}');
+      expect(body).toMatchObject({
+        anchorId: 'cowrie',
+        transferServer: TRANSFER_SERVER,
+        transactionId: TXN_ID,
+        protocol: 'sep24',
+        direction: 'withdraw',
+        intentHash: 'a'.repeat(64),
+      });
+    });
+  });
 });

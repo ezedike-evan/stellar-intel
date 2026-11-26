@@ -7,6 +7,8 @@ import type { WebhookSubscription } from '@/lib/webhooks/types';
 const noopSleep = () => Promise.resolve();
 
 const CREATED_PAYLOAD = {
+  intentHash: 'aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa',
+  direction: 'offramp' as const,
   corridorId: 'usdc-ngn',
   anchorId: 'cowrie',
   quoteId: 'q-1',

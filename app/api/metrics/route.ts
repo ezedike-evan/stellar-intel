@@ -9,6 +9,7 @@ import {
 import type { ApiError } from '@/types';
 import { enforceRateLimit } from '@/lib/api/response';
 import { ANCHORS } from '@/constants/anchors';
+import { loadSlippageCompliance } from '@/lib/reputation/slippage-compliance-loader';
 
 export const runtime = 'nodejs';
 
@@ -47,13 +48,15 @@ export async function GET(request: NextRequest): Promise<NextResponse> {
     if (limited) return limited;
 
     const snapshot = getMetricsSnapshot();
+    const slippageCompliance = await loadSlippageCompliance(30);
     logger.info({
       event: 'metrics_snapshot',
       intentSuccess: snapshot.intents.success,
       intentErrors: snapshot.intents.errorTotal,
       anchors: Object.keys(snapshot.anchorLatency).length,
+      slippageCompliancePct: slippageCompliance?.compliancePct ?? null,
     });
-    return NextResponse.json(snapshot);
+    return NextResponse.json({ ...snapshot, slippageCompliance });
   });
 }
 

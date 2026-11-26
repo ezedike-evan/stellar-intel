@@ -13,6 +13,28 @@ function resetEnv(): void {
   process.env = { ...ORIGINAL_ENV };
 }
 
+/** Minimal LIKE matcher for the fake executor: `%` is any run, `_` is
+ * one character, `\x` is a literal x. Mirrors the `ESCAPE '\'` in the
+ * real query, so a test that forgets to escape a wildcard fails here.
+ */
+function likeToRegExp(pattern: string): RegExp {
+  let re = '^';
+  for (let i = 0; i < pattern.length; i++) {
+    const ch = pattern.charAt(i);
+    if (ch === '\\' && i + 1 < pattern.length) {
+      re += pattern.charAt(i + 1).replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+      i++;
+    } else if (ch === '%') {
+      re += '.*';
+    } else if (ch === '_') {
+      re += '.';
+    } else {
+      re += ch.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+    }
+  }
+  return new RegExp(re + '$');
+}
+
 /** Minimal in-memory stand-in for the tables the shared layer uses. */
 function makeFakeDb() {
   const buckets = new Map<string, number>();
@@ -36,6 +58,21 @@ function makeFakeDb() {
         if (Number(id.split('@')[1]) < cutoff) buckets.delete(id);
       }
       return { rows: [] };
+    }
+
+    if (sql.includes('SELECT bucket_key, count FROM rate_limit_buckets')) {
+      const [pattern, windowStart] = params as [string, number];
+      const re = likeToRegExp(pattern);
+      const rows: Array<{ bucket_key: string; count: number }> = [];
+      for (const [id, count] of buckets) {
+        const at = id.lastIndexOf('@');
+        const key = id.slice(0, at);
+        const start = Number(id.slice(at + 1));
+        if (start !== windowStart) continue;
+        if (!re.test(key)) continue;
+        rows.push({ bucket_key: key, count });
+      }
+      return { rows };
     }
 
     if (sql.includes('INSERT INTO advisory_locks')) {
@@ -175,6 +212,32 @@ describe('shared rate limiter (#911)', () => {
     delete process.env.DATABASE_URL;
     const { checkRateLimit } = await import('@/lib/api/rate-limit');
     expect((await checkRateLimit('1.2.3.4')).shared).toBe(false);
+  });
+
+  it('getRateLimitCounts reads the current window and escapes LIKE wildcards', async () => {
+    const { checkRateLimit, getRateLimitCounts, db } = await loadWithFakeDb();
+
+    // Two keys that differ only where `_` sits: an unescaped `_` in the
+    // LIKE pattern would match both.
+    await checkRateLimit('user_name', { bucket: 'b', windowMs: 60_000 });
+    await checkRateLimit('userXname', { bucket: 'b', windowMs: 60_000 });
+
+    const windowStart = Math.floor(Date.now() / 60_000) * 60_000;
+    // A bucket in another window: same key, must not be returned.
+    db.buckets.set(`b:user_name@${windowStart - 60_000}`, 7);
+
+    const rows = await getRateLimitCounts('user_name', windowStart);
+    expect(rows).toEqual([{ bucketKey: 'b:user_name', count: 1 }]);
+
+    // And the contract the read actually sent: a LIKE pattern with the suffix
+    // escaped, filtered to this window.
+    const select = db.query.mock.calls.find(([sql]) =>
+      String(sql).includes('SELECT bucket_key, count FROM rate_limit_buckets')
+    );
+    expect(select).toBeDefined();
+    const [, params] = select as [string, unknown[]];
+    expect(params[0]).toBe('%:user\\_name');
+    expect(params[1]).toBe(windowStart);
   });
 });
 

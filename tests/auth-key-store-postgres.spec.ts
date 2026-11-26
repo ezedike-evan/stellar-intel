@@ -1,5 +1,6 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import type { ApiKeyRecord } from '@/lib/auth/key-store';
+import { apiKeyStoreContract } from './fixtures/api-key-store-contract';
 
 // Drives PostgresApiKeyStore with a fake executor, as webhooks-postgres-store.spec.ts
 // does. TIMESTAMPTZ columns come back as Date objects, as pg returns them.
@@ -145,4 +146,8 @@ describe('PostgresApiKeyStore', () => {
     await store.touch(RECORD.keyId, '2026-06-01T00:00:00.000Z');
     expect((await store.get(RECORD.keyId))?.lastUsedAt).toBe('2026-06-01T00:00:00.000Z');
   });
+});
+
+describe('PostgresApiKeyStore satisfies the ApiKeyStore contract', () => {
+  apiKeyStoreContract(async () => (await loadWithFakeDb()).store);
 });

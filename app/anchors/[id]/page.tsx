@@ -5,10 +5,15 @@ import { buildScorecards, mapOutcomeRows } from '@/lib/reputation/aggregate';
 import { getHistoryBuckets } from '@/lib/reputation/buckets';
 import { computeQuoteGapStats } from '@/lib/reputation/quote-gap';
 import { getDisputeStore, toPublicDisputeItems } from '@/lib/reputation/disputes';
+import { getRefundStore } from '@/lib/refunds/store';
+import { computeAnchorRefundStats, type AnchorRefundStats } from '@/lib/refunds/anchor-stats';
 import { getReputationStore, ReputationStoreUnavailableError } from '@/lib/reputation/store';
 import { AnchorProfile, type AnchorProfileData } from '@/components/offramp/AnchorProfile';
 import { ScorecardCard } from '@/components/offramp/ScorecardCard';
 import { QuoteGapCard } from '@/components/anchors/QuoteGapCard';
+import { ExecutionSlaCard } from '@/components/anchors/ExecutionSlaCard';
+import { buildExecutionSlaReport } from '@/lib/reputation/execution-sla';
+import { flags } from '@/lib/flags';
 
 const SITE_URL = process.env.NEXT_PUBLIC_SITE_URL ?? 'https://stellar-intel.vercel.app';
 const DEFAULT_TITLE = 'Anchor profile — Stellar Intel';
@@ -117,6 +122,17 @@ export default async function AnchorDetailPage({
 
   const score = scorecards[30].state === 'ok' ? scorecards[30].fillRate : null;
 
+  // The anchor's refund record over 90 days (RFD011): read-only, never part of
+  // the score. A refund store that cannot be read shows "No refund data."
+  let refunds: AnchorRefundStats | null = null;
+  try {
+    const openedSince = new Date(Date.now() - 90 * 24 * 60 * 60 * 1000).toISOString();
+    const cases = await getRefundStore().list({ anchorId: anchor.id, openedSince });
+    refunds = computeAnchorRefundStats(cases);
+  } catch {
+    refunds = null;
+  }
+
   const profileData: AnchorProfileData = {
     id: anchor.id,
     name: anchor.name,
@@ -138,7 +154,12 @@ export default async function AnchorDetailPage({
     history: history.buckets,
     disputes,
     oracleTxId: lastPublished?.oracleTxHash ?? null,
+    refunds,
   };
+
+  // Behind a flag until anchors have settlement volume (SLA006). Built from the
+  // rows already loaded above, so it adds no store query.
+  const slaReport = flags.executionSla ? buildExecutionSlaReport(rows, anchor.id) : null;
 
   return (
     <div className="mx-auto max-w-5xl space-y-8 px-4 py-8">
@@ -148,6 +169,7 @@ export default async function AnchorDetailPage({
         window="30d"
         latestOracleTxHash={lastPublished?.oracleTxHash ?? undefined}
       />
+      {slaReport && <ExecutionSlaCard report={slaReport} />}
       <QuoteGapCard {...quoteGap} />
     </div>
   );
