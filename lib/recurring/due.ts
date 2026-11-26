@@ -1,11 +1,9 @@
-import {
-  type StoredStandingAuthorization,
-  type StandingAuthorizationPeriod,
-} from '@/types/recurring';
-import { remainingCapForPeriod, periodWindow } from './enforce';
 import { parseDecimal } from './scheduler';
+import { periodWindow, remainingCapForPeriod } from './enforce';
+import type { StandingAuthorizationRecord, StandingExecutionRecord } from './authorization-store';
+import type { StandingAuthorizationTerms } from '@/types/recurring';
 
-export type DuePhase =
+export type AuthorizationPhase =
   | 'scheduled'
   | 'due'
   | 'confirmed_this_period'
@@ -16,159 +14,167 @@ export type DuePhase =
 
 export interface DueReminder {
   authorizationId: string;
-  sender: string;
+  cycleNumber: number;
+  periodIndex: number;
+  periodStart: string;
+  periodEnd: string;
   corridorId: string;
   sourceAsset: string;
   destinationAsset: string;
   amount: string;
   remainingCap: string;
-  period: StandingAuthorizationPeriod;
-  phase: DuePhase;
-  due: boolean;
-  nextDueAt: string;
+  anchorAllowlist: string[];
+  termsHash: string;
+}
+
+export interface AuthorizationState {
+  phase: AuthorizationPhase;
+  due: DueReminder | null;
+  nextDueAt: string | null;
   missedPeriods: number;
 }
 
+function calculateMissedPeriods(
+  terms: StandingAuthorizationTerms,
+  confirmed: StandingExecutionRecord[],
+  now: Date
+): number {
+  const startAt = new Date(terms.startAt);
+  const stopAt = new Date(terms.stopAt);
+
+  if (now.getTime() < startAt.getTime()) {
+    return 0;
+  }
+
+  const confirmedIndices = new Set(confirmed.map((e) => e.periodIndex));
+
+  let maxIndex: number;
+  if (now.getTime() >= stopAt.getTime()) {
+    const lastWindow = periodWindow(terms, new Date(stopAt.getTime() - 1));
+    if (!lastWindow) return 0;
+    maxIndex = lastWindow.index + 1;
+  } else {
+    const w = periodWindow(terms, now);
+    if (!w) return 0;
+    maxIndex = w.index;
+  }
+
+  let missed = 0;
+  for (let i = 0; i < maxIndex; i++) {
+    if (!confirmedIndices.has(i)) {
+      missed++;
+    }
+  }
+  return missed;
+}
+
 export function computeAuthorizationState(
-  auth: StoredStandingAuthorization,
-  nowMs: number = Date.now()
-): DueReminder {
-  const { terms, status, executions } = auth;
-  const startEpoch = new Date(terms.startDate).getTime();
+  record: StandingAuthorizationRecord,
+  executions: StandingExecutionRecord[],
+  now: Date
+): AuthorizationState {
+  const terms = record.authorization.terms;
+  const confirmed = executions.filter((e) => e.status === 'confirmed');
+  const missedPeriods = calculateMissedPeriods(terms, confirmed, now);
 
-  if (status === 'paused') {
+  if (record.status === 'cancelled') {
     return {
-      authorizationId: auth.termsHash,
-      sender: terms.sender,
-      corridorId: terms.corridorId,
-      sourceAsset: terms.sourceAsset,
-      destinationAsset: terms.destinationAsset,
-      amount: terms.amount,
-      remainingCap: '0',
-      period: terms.period,
-      phase: 'paused',
-      due: false,
-      nextDueAt: '',
-      missedPeriods: 0,
-    };
-  }
-
-  if (status === 'cancelled') {
-    return {
-      authorizationId: auth.termsHash,
-      sender: terms.sender,
-      corridorId: terms.corridorId,
-      sourceAsset: terms.sourceAsset,
-      destinationAsset: terms.destinationAsset,
-      amount: terms.amount,
-      remainingCap: '0',
-      period: terms.period,
       phase: 'cancelled',
-      due: false,
-      nextDueAt: '',
-      missedPeriods: 0,
+      due: null,
+      nextDueAt: null,
+      missedPeriods,
     };
   }
 
-  if (terms.stopDate && nowMs > new Date(terms.stopDate).getTime()) {
+  if (record.status === 'paused') {
     return {
-      authorizationId: auth.termsHash,
-      sender: terms.sender,
-      corridorId: terms.corridorId,
-      sourceAsset: terms.sourceAsset,
-      destinationAsset: terms.destinationAsset,
-      amount: terms.amount,
-      remainingCap: '0',
-      period: terms.period,
+      phase: 'paused',
+      due: null,
+      nextDueAt: null,
+      missedPeriods,
+    };
+  }
+
+  const startAt = new Date(terms.startAt);
+  const stopAt = new Date(terms.stopAt);
+
+  if (now.getTime() >= stopAt.getTime()) {
+    return {
       phase: 'completed',
-      due: false,
-      nextDueAt: '',
-      missedPeriods: 0,
+      due: null,
+      nextDueAt: null,
+      missedPeriods,
     };
   }
 
-  if (nowMs < startEpoch) {
-    const { remainingCap } = remainingCapForPeriod(terms, executions, startEpoch);
+  if (now.getTime() < startAt.getTime()) {
     return {
-      authorizationId: auth.termsHash,
-      sender: terms.sender,
-      corridorId: terms.corridorId,
-      sourceAsset: terms.sourceAsset,
-      destinationAsset: terms.destinationAsset,
-      amount: terms.amount,
-      remainingCap,
-      period: terms.period,
       phase: 'scheduled',
-      due: false,
-      nextDueAt: terms.startDate,
+      due: null,
+      nextDueAt: terms.startAt,
       missedPeriods: 0,
     };
   }
 
-  const window = periodWindow(terms.period, nowMs, terms.startDate);
-  const { remainingCap } = remainingCapForPeriod(terms, executions, nowMs);
-
-  const confirmedThisWindow = executions.filter((ex) => {
-    if (ex.status !== 'confirmed') return false;
-    const t = new Date(ex.executedAt).getTime();
-    return t >= window.startMs && t < window.endMs;
-  });
-
-  const nextDueAt = new Date(window.endMs).toISOString();
-
-  const reqScaled = parseDecimal(terms.amount);
-  const remScaled = parseDecimal(remainingCap);
-  if (remScaled < reqScaled) {
+  const w = periodWindow(terms, now);
+  if (!w) {
     return {
-      authorizationId: auth.termsHash,
-      sender: terms.sender,
-      corridorId: terms.corridorId,
-      sourceAsset: terms.sourceAsset,
-      destinationAsset: terms.destinationAsset,
-      amount: terms.amount,
-      remainingCap,
-      period: terms.period,
-      phase: 'cap_reached',
-      due: false,
-      nextDueAt,
-      missedPeriods: 0,
+      phase: 'completed',
+      due: null,
+      nextDueAt: null,
+      missedPeriods,
     };
   }
 
-  if (confirmedThisWindow.length > 0) {
+  const cycleNumber = w.index + 1;
+  const confirmedThisPeriod = confirmed.some((e) => e.periodIndex === w.index);
+
+  if (confirmedThisPeriod) {
+    const nextDue = w.end.getTime() >= stopAt.getTime() ? null : w.end.toISOString();
     return {
-      authorizationId: auth.termsHash,
-      sender: terms.sender,
-      corridorId: terms.corridorId,
-      sourceAsset: terms.sourceAsset,
-      destinationAsset: terms.destinationAsset,
-      amount: terms.amount,
-      remainingCap,
-      period: terms.period,
       phase: 'confirmed_this_period',
-      due: false,
-      nextDueAt,
-      missedPeriods: 0,
+      due: null,
+      nextDueAt: nextDue,
+      missedPeriods,
     };
   }
 
-  let stepMs = 24 * 60 * 60 * 1000;
-  if (terms.period === 'weekly') stepMs = 7 * 24 * 60 * 60 * 1000;
-  const cycleIndex = terms.period === 'monthly' ? 0 : Math.floor((nowMs - startEpoch) / stepMs);
-  const missedPeriods = cycleIndex > 0 ? cycleIndex : 0;
+  const priors = confirmed.map((e) => ({ amount: e.amount, at: e.createdAt }));
+  const remainingCap = remainingCapForPeriod(terms, priors, now);
 
-  return {
-    authorizationId: auth.termsHash,
-    sender: terms.sender,
+  if (remainingCap === '0') {
+    const nextDue = w.end.getTime() >= stopAt.getTime() ? null : w.end.toISOString();
+    return {
+      phase: 'cap_reached',
+      due: null,
+      nextDueAt: nextDue,
+      missedPeriods,
+    };
+  }
+
+  const termsAmountBig = parseDecimal(terms.amount);
+  const remCapBig = parseDecimal(remainingCap);
+  const dueAmount = termsAmountBig < remCapBig ? terms.amount : remainingCap;
+
+  const due: DueReminder = {
+    authorizationId: record.id,
+    cycleNumber,
+    periodIndex: w.index,
+    periodStart: w.start.toISOString(),
+    periodEnd: w.end.toISOString(),
     corridorId: terms.corridorId,
     sourceAsset: terms.sourceAsset,
     destinationAsset: terms.destinationAsset,
-    amount: terms.amount,
+    amount: dueAmount,
     remainingCap,
-    period: terms.period,
+    anchorAllowlist: terms.anchorAllowlist,
+    termsHash: record.termsHash,
+  };
+
+  return {
     phase: 'due',
-    due: true,
-    nextDueAt,
+    due,
+    nextDueAt: w.start.toISOString(),
     missedPeriods,
   };
 }

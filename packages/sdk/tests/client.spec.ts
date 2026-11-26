@@ -169,6 +169,18 @@ describe('StellarIntelClient — requests', () => {
     expect(headers['API-Version']).toBe(API_VERSION);
   });
 
+  it('reads the refund gate metric from /api/v1/refunds/summary', async () => {
+    const fetchMock = vi.fn(async (_url: RequestInfo | URL, _init?: RequestInit) =>
+      jsonResponse(200, { windowDays: 30, unsignaled: 0, gatePassing: true })
+    );
+
+    const summary = await makeClient(fetchMock as never).getRefundsSummary();
+
+    expect(String(fetchMock.mock.calls[0]![0])).toMatch(/\/api\/v1\/refunds\/summary$/);
+    expect((fetchMock.mock.calls[0]![1] as RequestInit).method).toBe('GET');
+    expect(summary.gatePassing).toBe(true);
+  });
+
   it('does not send an idempotency key on reads', async () => {
     const fetchMock = vi.fn(async (_url: RequestInfo | URL, _init?: RequestInit) =>
       jsonResponse(200, { rates: [] })
@@ -334,5 +346,211 @@ describe('StellarIntelClient — SEP-38 readiness', () => {
 
     expect(await makeClient(fetchMock as never).getSep38Readiness()).toEqual(body);
     expect(String(fetchMock.mock.calls[0]![0])).toBe('https://api.test/api/v1/sep38/readiness');
+  });
+});
+
+describe('StellarIntelClient — authentication', () => {
+  it('sends Authorization: Bearer <apiKey> when apiKey is provided', async () => {
+    const fetchMock = vi.fn().mockResolvedValue(jsonResponse(200, { ok: true }));
+    const client = new StellarIntelClient({
+      baseUrl: 'https://api.test',
+      fetch: fetchMock as never,
+      apiKey: 'sik_my_api_key_12345',
+      sleep: async () => {},
+    });
+
+    await client.getHealth();
+
+    expect(fetchMock).toHaveBeenCalledTimes(1);
+    const headers = (fetchMock.mock.calls[0]![1] as RequestInit).headers as Record<string, string>;
+    expect(headers['Authorization']).toBe('Bearer sik_my_api_key_12345');
+  });
+
+  it('calls getToken once for a call that retries twice', async () => {
+    const fetchMock = vi
+      .fn()
+      .mockResolvedValueOnce(jsonResponse(500, {}))
+      .mockResolvedValueOnce(jsonResponse(500, {}))
+      .mockResolvedValueOnce(jsonResponse(200, { ok: true }));
+
+    const getToken = vi.fn().mockResolvedValue('dynamic-bearer-token-abc');
+    const client = new StellarIntelClient({
+      baseUrl: 'https://api.test',
+      fetch: fetchMock as never,
+      getToken,
+      maxRetries: 3,
+      sleep: async () => {},
+    });
+
+    await client.getHealth();
+
+    expect(getToken).toHaveBeenCalledTimes(1);
+    expect(fetchMock).toHaveBeenCalledTimes(3);
+    for (const call of fetchMock.mock.calls) {
+      const headers = (call[1] as RequestInit).headers as Record<string, string>;
+      expect(headers['Authorization']).toBe('Bearer dynamic-bearer-token-abc');
+    }
+  });
+
+  it('throws TypeError if both apiKey and getToken are passed', () => {
+    expect(
+      () =>
+        new StellarIntelClient({
+          baseUrl: 'https://api.test',
+          apiKey: 'sik_123',
+          getToken: () => 'token_123',
+        })
+    ).toThrow(new TypeError('Pass apiKey or getToken, not both'));
+  });
+
+  it('does not retry 401 responses', async () => {
+    const fetchMock = vi.fn().mockResolvedValue(
+      jsonResponse(401, {
+        error: { code: 'UNAUTHORIZED', message: 'Invalid credentials', requestId: 'req_1' },
+      })
+    );
+    const client = new StellarIntelClient({
+      baseUrl: 'https://api.test',
+      fetch: fetchMock as never,
+      maxRetries: 3,
+      sleep: async () => {},
+    });
+
+    await expect(client.getHealth()).rejects.toThrow(StellarIntelApiError);
+    expect(fetchMock).toHaveBeenCalledTimes(1);
+  });
+
+  it('never leaks the key in StellarIntelApiError message or JSON.stringify(error) on 401', async () => {
+    const secretKey = 'sik_super_secret_caller_api_key_12345';
+    const fetchMock = vi.fn().mockResolvedValue(
+      jsonResponse(401, {
+        error: {
+          code: 'UNAUTHORIZED',
+          message: `Invalid key: ${secretKey}`,
+          requestId: 'req_test',
+        },
+      })
+    );
+    const client = new StellarIntelClient({
+      baseUrl: 'https://api.test',
+      fetch: fetchMock as never,
+      apiKey: secretKey,
+      sleep: async () => {},
+    });
+
+    let capturedError: unknown;
+    try {
+      await client.getHealth();
+    } catch (err) {
+      capturedError = err;
+    }
+
+    expect(capturedError).toBeInstanceOf(StellarIntelApiError);
+    const err = capturedError as StellarIntelApiError;
+    expect(err.message).not.toContain(secretKey);
+    expect(JSON.stringify(err)).not.toContain(secretKey);
+  });
+
+  it('never leaks the key in StellarIntelResponseError on non-JSON 401', async () => {
+    const secretKey = 'sik_super_secret_caller_api_key_12345';
+    const fetchMock = vi.fn().mockResolvedValue(
+      new Response(`Access denied for Bearer ${secretKey}`, {
+        status: 401,
+        headers: { 'content-type': 'text/plain' },
+      })
+    );
+    const client = new StellarIntelClient({
+      baseUrl: 'https://api.test',
+      fetch: fetchMock as never,
+      apiKey: secretKey,
+      sleep: async () => {},
+    });
+
+    let capturedError: unknown;
+    try {
+      await client.getHealth();
+    } catch (err) {
+      capturedError = err;
+    }
+
+    expect(capturedError).toBeInstanceOf(StellarIntelResponseError);
+    const err = capturedError as StellarIntelResponseError;
+    expect(err.message).not.toContain(secretKey);
+    expect(err.body).not.toContain(secretKey);
+    expect(JSON.stringify(err)).not.toContain(secretKey);
+  });
+});
+
+describe('StellarIntelClient — exchangeToken and getUsage', () => {
+  it('exchangeToken hits POST /api/v1/auth/token with no idempotency key', async () => {
+    const tokenResp = {
+      token: 'tok_123',
+      tokenType: 'Bearer',
+      expiresIn: 900,
+      expiresAt: '2026-11-21T12:00:00.000Z',
+      scopes: ['quotes:read'],
+      tier: 'standard',
+    };
+    const fetchMock = vi.fn().mockResolvedValue(jsonResponse(200, tokenResp));
+    const client = new StellarIntelClient({
+      baseUrl: 'https://api.test',
+      fetch: fetchMock as never,
+      sleep: async () => {},
+    });
+
+    const result = await client.exchangeToken({ scopes: ['quotes:read'], ttlSeconds: 300 });
+
+    expect(result).toEqual(tokenResp);
+    expect(fetchMock).toHaveBeenCalledTimes(1);
+    const [url, init] = fetchMock.mock.calls[0] as [string, RequestInit];
+    expect(url).toBe('https://api.test/api/v1/auth/token');
+    expect(init.method).toBe('POST');
+    expect(JSON.parse(init.body as string)).toEqual({ scopes: ['quotes:read'], ttlSeconds: 300 });
+    const headers = init.headers as Record<string, string>;
+    expect(headers['Idempotency-Key']).toBeUndefined();
+  });
+
+  it('exchangeToken works without input', async () => {
+    const tokenResp = {
+      token: 'tok_default',
+      tokenType: 'Bearer',
+      expiresIn: 900,
+      expiresAt: '2026-11-21T12:00:00.000Z',
+      scopes: ['quotes:read', 'intents:write'],
+      tier: 'standard',
+    };
+    const fetchMock = vi.fn().mockResolvedValue(jsonResponse(200, tokenResp));
+    const client = new StellarIntelClient({
+      baseUrl: 'https://api.test',
+      fetch: fetchMock as never,
+      sleep: async () => {},
+    });
+
+    const result = await client.exchangeToken();
+    expect(result).toEqual(tokenResp);
+    const [, init] = fetchMock.mock.calls[0] as [string, RequestInit];
+    expect(init.body).toBeUndefined();
+  });
+
+  it('getUsage hits GET /api/v1/usage', async () => {
+    const usageResp = {
+      caller: { kind: 'key', keyPrefix: 'sik_0123', tier: 'standard', scopes: ['quotes:read'] },
+      quota: { limit: 50000, used: 10, resetAt: '2026-11-22T00:00:00.000Z' },
+      windows: [{ bucket: 'v1.health', used: 2, resetAt: '2026-11-21T12:01:00.000Z' }],
+    };
+    const fetchMock = vi.fn().mockResolvedValue(jsonResponse(200, usageResp));
+    const client = new StellarIntelClient({
+      baseUrl: 'https://api.test',
+      fetch: fetchMock as never,
+      sleep: async () => {},
+    });
+
+    const result = await client.getUsage();
+
+    expect(result).toEqual(usageResp);
+    expect(fetchMock).toHaveBeenCalledTimes(1);
+    const [url, init] = fetchMock.mock.calls[0] as [string, RequestInit];
+    expect(url).toBe('https://api.test/api/v1/usage');
+    expect(init.method).toBe('GET');
   });
 });

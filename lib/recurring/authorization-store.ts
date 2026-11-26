@@ -1,104 +1,118 @@
-import {
-  type StoredStandingAuthorization,
-  type SignedStandingAuthorization,
-  type ExecutionRecord,
-  type StandingAuthorizationStatus,
-} from '@/types/recurring';
+import { hasDatabaseUrl } from '@/lib/reputation/pool';
+import type { SignedStandingAuthorization, StandingAuthorizationStatus } from '@/types/recurring';
+import { PostgresStandingAuthorizationStore } from './postgres';
+
+export interface StandingAuthorizationRecord {
+  id: string;
+  termsHash: string;
+  authorization: SignedStandingAuthorization;
+  status: StandingAuthorizationStatus;
+  createdAt: string;
+  updatedAt: string;
+}
+
+export type StandingExecutionStatus = 'confirmed' | 'rejected';
+
+export interface StandingExecutionRecord {
+  id: string;
+  authorizationId: string;
+  cycleNumber: number;
+  periodIndex: number;
+  amount: string;
+  anchorId: string;
+  intentHash: string;
+  transactionId: string | null;
+  status: StandingExecutionStatus;
+  rejectCode: string | null;
+  createdAt: string;
+}
 
 export interface StandingAuthorizationStore {
-  save(signed: SignedStandingAuthorization): Promise<StoredStandingAuthorization>;
-  get(id: string): Promise<StoredStandingAuthorization | null>;
-  list(filter?: { sender?: string; status?: StandingAuthorizationStatus }): Promise<StoredStandingAuthorization[]>;
-  updateStatus(
+  create(
+    record: StandingAuthorizationRecord
+  ): Promise<{ ok: true } | { ok: false; code: 'duplicate' }>;
+  get(id: string): Promise<StandingAuthorizationRecord | null>;
+  setStatus(
     id: string,
     status: StandingAuthorizationStatus,
-    metadata?: { pausedAt?: string; cancelledAt?: string }
-  ): Promise<StoredStandingAuthorization | null>;
-  recordExecution(id: string, execution: ExecutionRecord): Promise<StoredStandingAuthorization | null>;
-  clear(): Promise<void>;
+    updatedAt: string
+  ): Promise<StandingAuthorizationRecord | null>;
+  appendExecution(
+    exec: StandingExecutionRecord
+  ): Promise<{ ok: true } | { ok: false; code: 'duplicate_cycle' }>;
+  listExecutions(authorizationId: string): Promise<StandingExecutionRecord[]>;
 }
 
 export class InMemoryStandingAuthorizationStore implements StandingAuthorizationStore {
-  private records = new Map<string, StoredStandingAuthorization>();
+  private authorizations = new Map<string, StandingAuthorizationRecord>();
+  private termsHashes = new Set<string>();
+  private executions = new Map<string, StandingExecutionRecord[]>();
 
-  async save(signed: SignedStandingAuthorization): Promise<StoredStandingAuthorization> {
-    const existing = this.records.get(signed.termsHash);
-    if (existing) {
-      return existing;
+  async create(
+    record: StandingAuthorizationRecord
+  ): Promise<{ ok: true } | { ok: false; code: 'duplicate' }> {
+    if (this.authorizations.has(record.id) || this.termsHashes.has(record.termsHash)) {
+      return { ok: false, code: 'duplicate' };
     }
-    const stored: StoredStandingAuthorization = {
-      terms: signed.terms,
-      termsHash: signed.termsHash,
-      signature: signed.signature,
-      publicKey: signed.publicKey,
-      createdAt: new Date().toISOString(),
-      status: 'active',
-      executions: [],
-    };
-    this.records.set(signed.termsHash, stored);
-    return stored;
+    this.authorizations.set(record.id, structuredClone(record));
+    this.termsHashes.add(record.termsHash);
+    return { ok: true };
   }
 
-  async get(id: string): Promise<StoredStandingAuthorization | null> {
-    return this.records.get(id) ?? null;
+  async get(id: string): Promise<StandingAuthorizationRecord | null> {
+    const rec = this.authorizations.get(id);
+    return rec ? structuredClone(rec) : null;
   }
 
-  async list(filter?: {
-    sender?: string;
-    status?: StandingAuthorizationStatus;
-  }): Promise<StoredStandingAuthorization[]> {
-    let all = Array.from(this.records.values());
-    if (filter?.sender) {
-      all = all.filter((r) => r.terms.sender === filter.sender);
-    }
-    if (filter?.status) {
-      all = all.filter((r) => r.status === filter.status);
-    }
-    return all;
-  }
-
-  async updateStatus(
+  async setStatus(
     id: string,
     status: StandingAuthorizationStatus,
-    metadata?: { pausedAt?: string; cancelledAt?: string }
-  ): Promise<StoredStandingAuthorization | null> {
-    const item = this.records.get(id);
-    if (!item) return null;
-    item.status = status;
-    if (metadata?.pausedAt !== undefined) item.pausedAt = metadata.pausedAt;
-    if (metadata?.cancelledAt !== undefined) item.cancelledAt = metadata.cancelledAt;
-    this.records.set(id, item);
-    return item;
+    updatedAt: string
+  ): Promise<StandingAuthorizationRecord | null> {
+    const rec = this.authorizations.get(id);
+    if (!rec) return null;
+    rec.status = status;
+    rec.updatedAt = updatedAt;
+    return structuredClone(rec);
   }
 
-  async recordExecution(
-    id: string,
-    execution: ExecutionRecord
-  ): Promise<StoredStandingAuthorization | null> {
-    const item = this.records.get(id);
-    if (!item) return null;
-    const exists = item.executions.some((e) => e.intentHash === execution.intentHash);
-    if (!exists) {
-      item.executions.push(execution);
-      this.records.set(id, item);
+  async appendExecution(
+    exec: StandingExecutionRecord
+  ): Promise<{ ok: true } | { ok: false; code: 'duplicate_cycle' }> {
+    const list = this.executions.get(exec.authorizationId) ?? [];
+    if (
+      exec.status === 'confirmed' &&
+      list.some((e) => e.status === 'confirmed' && e.cycleNumber === exec.cycleNumber)
+    ) {
+      return { ok: false, code: 'duplicate_cycle' };
     }
-    return item;
+    list.push(structuredClone(exec));
+    this.executions.set(exec.authorizationId, list);
+    return { ok: true };
   }
 
-  async clear(): Promise<void> {
-    this.records.clear();
+  async listExecutions(authorizationId: string): Promise<StandingExecutionRecord[]> {
+    const list = this.executions.get(authorizationId) ?? [];
+    return structuredClone(
+      [...list].sort((a, b) => {
+        if (a.cycleNumber !== b.cycleNumber) return a.cycleNumber - b.cycleNumber;
+        return a.createdAt.localeCompare(b.createdAt);
+      })
+    );
   }
 }
 
 let storeInstance: StandingAuthorizationStore | null = null;
 
-export function getStore(reset?: boolean): StandingAuthorizationStore {
-  if (reset || !storeInstance) {
-    storeInstance = new InMemoryStandingAuthorizationStore();
+export function getStandingAuthorizationStore(): StandingAuthorizationStore {
+  if (!storeInstance) {
+    storeInstance = hasDatabaseUrl()
+      ? new PostgresStandingAuthorizationStore()
+      : new InMemoryStandingAuthorizationStore();
   }
   return storeInstance;
 }
 
-export function resetStandingAuthorizationStore(): void {
-  storeInstance = new InMemoryStandingAuthorizationStore();
+export function _setStandingAuthorizationStore(store: StandingAuthorizationStore | null): void {
+  storeInstance = store;
 }

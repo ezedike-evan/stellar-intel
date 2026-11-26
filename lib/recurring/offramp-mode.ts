@@ -1,76 +1,58 @@
-import type { AnchorRate } from '@/types';
-import { parseDecimal } from './scheduler';
+import { compareDecimals } from '@/lib/decimal';
+import type { Intent } from '@/lib/intent/hash';
 
-export interface RecurringOfframpParams {
-  recurring: true;
-  authId: string;
-  sender?: string | undefined;
-  corridorId?: string | undefined;
-  amount?: string | undefined;
-  sourceAsset?: string | undefined;
-  destinationAsset?: string | undefined;
-  period?: string | undefined;
-  remainingCap?: string | undefined;
-  allowlist?: string[] | undefined;
+// ─── Standing-order mode for /offramp (REC011) ───────────────────────────────
+//
+// Pure helpers the off-ramp page uses when it is opened from a due reminder:
+// read the standing order from the URL, limit the rate table to the signed
+// allowlist, guard the remaining cap, and add the standing order fields to the
+// outcome intent the user already signs. Browser-safe: no server imports.
+
+export interface RecurringOfframpContext {
+  authorizationId: string;
+  cycleNumber: number;
+  anchorAllowlist: string[];
+  remainingCap: string;
 }
 
+const UUID_PATTERN = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+const CYCLE_PATTERN = /^[1-9]\d*$/;
+
+/** `?recurring=<uuid>&cycle=<n>`, with n an integer of 1 or more; otherwise null. */
 export function parseRecurringParams(
-  searchParams: URLSearchParams | { get: (k: string) => string | null }
-): RecurringOfframpParams | null {
-  const rec = searchParams.get('recurring');
-  const authId = searchParams.get('authId') || searchParams.get('id');
-
-  if (rec !== '1' && rec !== 'true' && !authId) {
-    return null;
-  }
-
-  if (!authId) {
-    return null;
-  }
-
-  const allowlistRaw = searchParams.get('allowlist');
-  const allowlist = allowlistRaw ? allowlistRaw.split(',').map((s) => s.trim()).filter(Boolean) : undefined;
-
-  return {
-    recurring: true,
-    authId,
-    sender: searchParams.get('sender') ?? undefined,
-    corridorId: searchParams.get('corridorId') ?? undefined,
-    amount: searchParams.get('amount') ?? undefined,
-    sourceAsset: searchParams.get('sourceAsset') ?? undefined,
-    destinationAsset: searchParams.get('destinationAsset') ?? undefined,
-    period: searchParams.get('period') ?? undefined,
-    remainingCap: searchParams.get('remainingCap') ?? undefined,
-    allowlist,
-  };
+  search: string
+): { authorizationId: string; cycleNumber: number } | null {
+  const params = new URLSearchParams(search);
+  const authorizationId = params.get('recurring');
+  const cycle = params.get('cycle');
+  if (!authorizationId || !UUID_PATTERN.test(authorizationId)) return null;
+  if (!cycle || !CYCLE_PATTERN.test(cycle)) return null;
+  const cycleNumber = Number(cycle);
+  if (!Number.isSafeInteger(cycleNumber)) return null;
+  return { authorizationId, cycleNumber };
 }
 
-export function filterRatesToAllowlist(
-  rates: AnchorRate[],
-  allowlist: string[] | undefined
-): AnchorRate[] {
-  if (!allowlist || allowlist.length === 0) return rates;
-  return rates.filter((r) => allowlist.includes(r.anchorId));
+export function filterRatesToAllowlist<T extends { anchorId: string }>(
+  rates: T[],
+  allowlist: string[]
+): T[] {
+  const allowed = new Set(allowlist);
+  return rates.filter((rate) => allowed.has(rate.anchorId));
 }
 
-export function exceedsRemainingCap(amount: string, remainingCap: string): boolean {
-  if (!amount || !remainingCap) return false;
-  try {
-    const amtScaled = parseDecimal(amount);
-    const capScaled = parseDecimal(remainingCap);
-    return amtScaled > capScaled;
-  } catch {
-    return false;
-  }
-}
-
+/** The outcome intent plus the standing order it confirms (REC009's schema). */
 export function withRecurringFields(
-  intent: Record<string, unknown>,
-  recurring: RecurringOfframpParams
-): Record<string, unknown> {
+  intent: Intent,
+  ctx: RecurringOfframpContext
+): Intent & { recurringAuthorizationId: string; cycleNumber: number } {
   return {
     ...intent,
-    recurring: true,
-    authorizationId: recurring.authId,
+    recurringAuthorizationId: ctx.authorizationId,
+    cycleNumber: ctx.cycleNumber,
   };
+}
+
+/** True when `amount` is more than what is left of this period's cap. */
+export function exceedsRemainingCap(amount: string, remainingCap: string): boolean {
+  return compareDecimals(amount, remainingCap) > 0;
 }

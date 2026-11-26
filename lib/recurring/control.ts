@@ -1,63 +1,35 @@
 import { z } from 'zod';
-import { Keypair } from '@stellar/stellar-sdk';
-import {
-  type StoredStandingAuthorization,
-  type StandingAuthorizationStatus,
-} from '@/types/recurring';
+import { AMOUNT_PATTERN, STELLAR_PUBKEY_PATTERN } from '@/lib/patterns';
+import type { StandingAuthorizationStatus } from '@/types/recurring';
 
-export const RecurringControlSchema = z.object({
-  action: z.enum(['pause', 'resume', 'cancel']),
-  timestamp: z.number().int().positive(),
-  nonce: z.string().min(1),
-  signature: z.string().min(1),
-});
+export const RecurringControlSchema = z
+  .object({
+    type: z.literal('recurring-control'),
+    action: z.enum(['pause', 'resume', 'cancel']),
+    authorizationId: z.string().uuid(),
+    sender: z.string().regex(STELLAR_PUBKEY_PATTERN),
+    sourceAsset: z.string().min(1),
+    destinationAsset: z.string().min(1),
+    amount: z.string().regex(AMOUNT_PATTERN),
+    nonce: z.string().regex(/^[0-9a-f]{32}$/),
+    deadline: z.iso.datetime(),
+  })
+  .strict();
 
 export type RecurringControl = z.infer<typeof RecurringControlSchema>;
 
 export function applyControlAction(
-  auth: StoredStandingAuthorization,
+  status: StandingAuthorizationStatus,
   action: 'pause' | 'resume' | 'cancel'
-): { ok: true; nextStatus: StandingAuthorizationStatus } | { ok: false; message: string } {
-  if (auth.status === 'cancelled') {
-    return { ok: false, message: 'Cannot modify a cancelled standing authorization' };
+): { ok: true; status: StandingAuthorizationStatus } | { ok: false; code: 'invalid_transition' } {
+  if (status === 'active' && action === 'pause') {
+    return { ok: true, status: 'paused' };
   }
-  if (auth.status === 'completed') {
-    return { ok: false, message: 'Cannot modify a completed standing authorization' };
+  if (status === 'paused' && action === 'resume') {
+    return { ok: true, status: 'active' };
   }
-
-  if (action === 'pause') {
-    if (auth.status === 'paused') {
-      return { ok: false, message: 'Standing authorization is already paused' };
-    }
-    return { ok: true, nextStatus: 'paused' };
+  if ((status === 'active' || status === 'paused') && action === 'cancel') {
+    return { ok: true, status: 'cancelled' };
   }
-
-  if (action === 'resume') {
-    if (auth.status !== 'paused') {
-      return { ok: false, message: 'Standing authorization is not paused' };
-    }
-    return { ok: true, nextStatus: 'active' };
-  }
-
-  if (action === 'cancel') {
-    return { ok: true, nextStatus: 'cancelled' };
-  }
-
-  return { ok: false, message: `Unknown control action: ${action}` };
-}
-
-export function verifyControlSignature(
-  senderPublicKey: string,
-  payload: { authorizationId: string; action: string; timestamp: number; nonce: string },
-  signature: string
-): boolean {
-  try {
-    const kp = Keypair.fromPublicKey(senderPublicKey);
-    const text = `${payload.authorizationId}:${payload.action}:${payload.timestamp}:${payload.nonce}`;
-    const dataBytes = new TextEncoder().encode(text);
-    const sigBytes = Buffer.from(signature, 'base64');
-    return kp.verify(dataBytes, sigBytes);
-  } catch {
-    return false;
-  }
+  return { ok: false, code: 'invalid_transition' };
 }

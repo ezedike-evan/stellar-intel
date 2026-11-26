@@ -111,6 +111,36 @@ export async function incrementRateLimitCount(
   return count == null ? null : Number(count);
 }
 
+/**
+ * Reads the counts for every bucket key ending in `:<suffix>` in the window
+ * starting at `windowStart`, without incrementing anything.
+ *
+ * Returns null when there is no shared backend. The caller strips the
+ * `:<suffix>` to recover the bucket name.
+ */
+export async function getRateLimitCounts(
+  suffix: string,
+  windowStart: number
+): Promise<Array<{ bucketKey: string; count: number }> | null> {
+  if (!hasSharedBackend()) return null;
+
+  await ensureSchema();
+  const { rows } = await getSqlExecutor().query(
+    `SELECT bucket_key, count FROM rate_limit_buckets WHERE window_start = $2 AND bucket_key LIKE $1 ESCAPE '\\'`,
+    [`%:` + escapeLike(suffix), windowStart]
+  );
+
+  return rows.map((row) => ({
+    bucketKey: String(row['bucket_key']),
+    count: Number(row['count']),
+  }));
+}
+
+/** Escapes the LIKE wildcards (`%`, `_`) and the escape character itself. */
+function escapeLike(value: string): string {
+  return value.replace(/([\\%_])/g, '\\$1');
+}
+
 /** Drops windows that closed before `cutoff`. Safe to call opportunistically. */
 export async function pruneRateLimitBuckets(cutoff: number): Promise<void> {
   if (!hasSharedBackend()) return;

@@ -1,4 +1,68 @@
 import { z } from 'zod';
+import { AMOUNT_PATTERN, STELLAR_PUBKEY_PATTERN } from '@/lib/patterns';
+
+// ─── Standing Authorization (v3 recurring intent) ────────────────────────────
+
+export const STANDING_AUTHORIZATION_PERIODS = ['daily', 'weekly', 'biweekly', 'monthly'] as const;
+export type StandingAuthorizationPeriod = (typeof STANDING_AUTHORIZATION_PERIODS)[number];
+export type StandingAuthorizationStatus = 'active' | 'paused' | 'cancelled';
+
+export const StandingAuthorizationTermsSchema = z
+  .object({
+    type: z.literal('recurring-authorization'),
+    version: z.literal(1),
+    sender: z.string().regex(STELLAR_PUBKEY_PATTERN),
+    corridorId: z.string().min(1),
+    sourceAsset: z.string().min(1),
+    destinationAsset: z.string().min(1),
+    amount: z.string().regex(AMOUNT_PATTERN),
+    perPeriodCap: z.string().regex(AMOUNT_PATTERN),
+    period: z.enum(STANDING_AUTHORIZATION_PERIODS),
+    startAt: z.iso.datetime(),
+    stopAt: z.iso.datetime(),
+    anchorAllowlist: z.array(z.string().min(1).max(64)).min(1).max(10),
+    nonce: z.string().regex(/^[0-9a-f]{32}$/),
+  })
+  .strict()
+  .superRefine((val, ctx) => {
+    if (Date.parse(val.stopAt) <= Date.parse(val.startAt)) {
+      ctx.addIssue({
+        code: 'custom',
+        path: ['stopAt'],
+        message: 'stopAt must be after startAt',
+      });
+    }
+    if (new Set(val.anchorAllowlist).size !== val.anchorAllowlist.length) {
+      ctx.addIssue({
+        code: 'custom',
+        path: ['anchorAllowlist'],
+        message: 'anchorAllowlist must not contain duplicates',
+      });
+    }
+    if (val.corridorId !== `${val.sourceAsset}-${val.destinationAsset}`.toLowerCase()) {
+      ctx.addIssue({
+        code: 'custom',
+        path: ['corridorId'],
+        message: 'corridorId must match sourceAsset-destinationAsset',
+      });
+    }
+  });
+
+export type StandingAuthorizationTerms = z.infer<typeof StandingAuthorizationTermsSchema>;
+
+export const SignedStandingAuthorizationSchema = z
+  .object({
+    terms: StandingAuthorizationTermsSchema,
+    termsHash: z.string().regex(/^[0-9a-f]{64}$/),
+    signature: z.string().min(1).max(200),
+    publicKey: z.string().regex(STELLAR_PUBKEY_PATTERN),
+  })
+  .refine((d) => d.publicKey === d.terms.sender, {
+    path: ['publicKey'],
+    message: 'publicKey must match terms.sender',
+  });
+
+export type SignedStandingAuthorization = z.infer<typeof SignedStandingAuthorizationSchema>;
 
 // ─── Cadence ──────────────────────────────────────────────────────────────────
 
@@ -123,6 +187,9 @@ export type RecurringIntent = z.infer<typeof RecurringIntentSchema>;
 /**
  * The envelope the user signs once to authorize a recurring intent series.
  * The signature covers the canonical JSON of the inner recurringIntent.
+ *
+ * @deprecated Signs mutable state and cannot serve as a deterministic standing order.
+ * Use {@link SignedStandingAuthorizationSchema} instead.
  */
 export const RecurringAuthorizationSchema = z
   .object({
@@ -243,80 +310,3 @@ export type CycleEvaluationResult =
       reason: 'max_cycles_reached' | 'stop_date_passed' | 'expired';
       message: string;
     };
-
-// ─── Standing Authorization (REC001 - REC013) ─────────────────────────────────
-
-export const STANDING_AUTHORIZATION_PERIODS = ['daily', 'weekly', 'monthly'] as const;
-export type StandingAuthorizationPeriod = (typeof STANDING_AUTHORIZATION_PERIODS)[number];
-
-export interface PeriodWindow {
-  startMs: number;
-  endMs: number;
-}
-
-export const StandingAuthorizationTermsSchema = z.object({
-  type: z.literal('recurring-authorization'),
-  version: z.literal(1),
-  sender: z.string().regex(/^G[A-Z0-9]{55}$/, {
-    message: 'sender must be a valid Stellar public key (G…, 56 chars)',
-  }),
-  corridorId: z.string().min(1, { message: 'corridorId is required' }),
-  sourceAsset: z.string().min(1, { message: 'sourceAsset is required' }),
-  destinationAsset: z.string().min(1, { message: 'destinationAsset is required' }),
-  amount: z
-    .string()
-    .regex(/^\d+(\.\d+)?$/, { message: 'amount must be a non-negative decimal string' })
-    .refine((v) => parseFloat(v) > 0, { message: 'amount must be greater than zero' }),
-  perPeriodCap: z
-    .string()
-    .regex(/^\d+(\.\d+)?$/, { message: 'perPeriodCap must be a non-negative decimal string' })
-    .refine((v) => parseFloat(v) > 0, { message: 'perPeriodCap must be greater than zero' }),
-  period: z.enum(STANDING_AUTHORIZATION_PERIODS),
-  startDate: z.string().datetime({ message: 'startDate must be an ISO 8601 UTC string' }),
-  stopDate: z.string().datetime({ message: 'stopDate must be an ISO 8601 UTC string' }).optional(),
-  anchorAllowlist: z
-    .array(z.string().min(1))
-    .min(1, { message: 'anchorAllowlist must contain at least one anchor' }),
-  nonce: z.string().min(1, { message: 'nonce is required' }),
-});
-
-export type StandingAuthorizationTerms = z.infer<typeof StandingAuthorizationTermsSchema>;
-
-export const SignedStandingAuthorizationSchema = z.object({
-  terms: StandingAuthorizationTermsSchema,
-  termsHash: z.string().regex(/^[0-9a-f]{64}$/, { message: 'termsHash must be a 64-char hex string' }),
-  signature: z.string().min(1, { message: 'signature is required' }),
-  publicKey: z.string().regex(/^G[A-Z0-9]{55}$/, { message: 'publicKey must be a valid Stellar public key' }),
-});
-
-export type SignedStandingAuthorization = z.infer<typeof SignedStandingAuthorizationSchema>;
-
-export type StandingAuthorizationStatus = 'active' | 'paused' | 'cancelled' | 'completed';
-
-export interface ExecutionRecord {
-  id: string;
-  intentHash: string;
-  authorizationId: string;
-  sender: string;
-  anchorId: string;
-  amount: string;
-  executedAt: string;
-  status: 'confirmed' | 'rejected';
-  rejectionReason?: string;
-  feeCharged?: string;
-}
-
-export interface StoredStandingAuthorization {
-  terms: StandingAuthorizationTerms;
-  termsHash: string;
-  signature: string;
-  publicKey: string;
-  createdAt: string;
-  status: StandingAuthorizationStatus;
-  pausedAt?: string;
-  cancelledAt?: string;
-  executions: ExecutionRecord[];
-}
-
-export type { RecurringExecutionIntent, SignedRecurringExecution } from '@/lib/recurring/execution';
-

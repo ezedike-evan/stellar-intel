@@ -3,6 +3,7 @@ import { withV1 } from '@/lib/api/v1';
 import { createOnrampIntent } from '@/lib/intent/onramp';
 import { OnrampIntentSchema } from '@/lib/intent/onramp-schema';
 import { verifyOptionalIntentAttestation } from '@/lib/intent/verify';
+import { emitWebhookEvent } from '@/lib/webhooks/emit';
 
 export const runtime = 'nodejs';
 
@@ -21,7 +22,7 @@ export const runtime = 'nodejs';
 export async function POST(request: NextRequest): Promise<NextResponse> {
   return withV1(
     request,
-    { bucket: 'v1.intent.onramp', maxRequests: 20, idempotent: true },
+    { bucket: 'v1.intent.onramp', maxRequests: 20, scope: 'intents:write', idempotent: true },
     async (ctx) => {
       const body = await request.json().catch(() => null);
 
@@ -50,7 +51,26 @@ export async function POST(request: NextRequest): Promise<NextResponse> {
         return ctx.error(result.code.toLowerCase(), result.message, result.status);
       }
 
-      return { status: 200, body: result.response };
+      emitWebhookEvent(
+        'intent.created',
+        {
+          intentHash: result.response.intentHash,
+          direction: 'onramp',
+          corridorId: result.response.route.corridorId,
+          anchorId: result.response.route.anchorId,
+          quoteId: null,
+          amount: intent.amount,
+          sourceAsset: intent.sourceAsset,
+          destinationAsset: intent.destinationAsset,
+        },
+        { idempotencyKey: `intent.created:onramp:${result.response.intentHash}` }
+      );
+
+      return {
+        status: 200,
+        body: result.response,
+        auditIntentHash: result.response.intentHash,
+      };
     }
   );
 }

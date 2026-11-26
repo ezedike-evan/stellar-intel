@@ -1,96 +1,81 @@
 'use client';
 
-import React, { useEffect, useState } from 'react';
+import { useEffect, useState } from 'react';
 import Link from 'next/link';
 import { loadRecurringIds } from '@/lib/recurring/client';
 import type { DueReminder } from '@/lib/recurring/due';
 
-interface DueRemindersBannerProps {
-  currentAuthId?: string | undefined;
+/** The pre-filled, allowlist-limited off-ramp for one due reminder (REC011). */
+export function reminderHref(r: DueReminder): string {
+  const sp = new URLSearchParams({
+    corridor: r.corridorId,
+    amount: r.amount,
+    recurring: r.authorizationId,
+    cycle: String(r.cycleNumber),
+  });
+  return `/offramp?${sp.toString()}`;
 }
 
-export function DueRemindersBanner({ currentAuthId }: DueRemindersBannerProps) {
+/**
+ * Lists the standing-order payments that are due now for the orders this
+ * browser created. Fetches once on mount and renders nothing when there are no
+ * stored ids, nothing is due, or the request fails.
+ */
+export function DueRemindersBanner() {
   const [reminders, setReminders] = useState<DueReminder[]>([]);
-  const [loading, setLoading] = useState<boolean>(true);
-  const [dismissed, setDismissed] = useState<boolean>(false);
 
   useEffect(() => {
-    const ids = loadRecurringIds();
-    if (ids.length === 0) {
-      setLoading(false);
-      return;
-    }
+    // The due route accepts at most 20 ids per request.
+    const ids = loadRecurringIds().slice(0, 20);
+    if (ids.length === 0) return;
 
     let active = true;
-    async function fetchDue() {
-      try {
-        const res = await fetch(`/api/recurring/due?ids=${encodeURIComponent(ids.join(','))}`);
+    fetch(`/api/recurring/due?ids=${ids.map(encodeURIComponent).join(',')}`)
+      .then(async (res) => {
         if (!res.ok) return;
-        const data = await res.json();
+        const data = (await res.json()) as { reminders?: unknown };
         if (active && Array.isArray(data.reminders)) {
-          const dueList = data.reminders.filter(
-            (r: DueReminder) => r.due && (!currentAuthId || r.authorizationId !== currentAuthId)
-          );
-          setReminders(dueList);
+          setReminders(data.reminders as DueReminder[]);
         }
-      } catch {
-        // silently fallback
-      } finally {
-        if (active) setLoading(false);
-      }
-    }
-
-    fetchDue();
+      })
+      .catch(() => {
+        // A reminder is a convenience: on any failure, show nothing.
+      });
     return () => {
       active = false;
     };
-  }, [currentAuthId]);
+  }, []);
 
-  if (dismissed || loading || reminders.length === 0) {
-    return null;
-  }
+  if (reminders.length === 0) return null;
 
   return (
-    <aside
-      role="region"
-      aria-label="Standing order reminders"
-      className="mb-6 rounded-lg border border-amber-500/30 bg-amber-500/10 p-4 text-amber-200"
+    <section
+      aria-label="Standing order payments due"
+      className="rounded-xl border border-border bg-bg-sunken px-4 py-3 text-sm"
     >
-      <div className="flex items-start justify-between gap-3">
-        <div className="flex items-start gap-2">
-          <span className="mt-0.5 text-lg" aria-hidden="true">
-            ⏰
-          </span>
-          <div>
-            <h4 className="font-semibold text-amber-100">
-              You have {reminders.length} standing payment{reminders.length > 1 ? 's' : ''} due
-            </h4>
-            <ul className="mt-2 space-y-1 text-sm">
-              {reminders.map((r) => (
-                <li key={r.authorizationId} className="flex items-center gap-2">
-                  <span>
-                    {r.amount} {r.sourceAsset} → {r.destinationAsset} ({r.corridorId})
-                  </span>
-                  <Link
-                    href={`/offramp?recurring=1&authId=${encodeURIComponent(r.authorizationId)}&corridorId=${encodeURIComponent(r.corridorId)}&amount=${encodeURIComponent(r.amount)}&sourceAsset=${encodeURIComponent(r.sourceAsset)}&destinationAsset=${encodeURIComponent(r.destinationAsset)}&remainingCap=${encodeURIComponent(r.remainingCap)}`}
-                    className="font-medium underline hover:text-amber-50"
-                  >
-                    Execute now
-                  </Link>
-                </li>
-              ))}
-            </ul>
-          </div>
-        </div>
-        <button
-          type="button"
-          onClick={() => setDismissed(true)}
-          className="text-sm text-amber-300 hover:text-amber-100"
-          aria-label="Dismiss reminder"
-        >
-          ✕
-        </button>
-      </div>
-    </aside>
+      <h2 className="font-medium text-primary-text">
+        {reminders.length === 1
+          ? 'A standing order payment is due'
+          : `${reminders.length} standing order payments are due`}
+      </h2>
+      <ul className="mt-2 space-y-1.5">
+        {reminders.map((r) => (
+          <li
+            key={`${r.authorizationId}-${r.cycleNumber}`}
+            className="flex flex-wrap items-center justify-between gap-x-4 gap-y-1"
+          >
+            <span className="text-secondary-text">
+              {r.amount} {r.sourceAsset} → {r.destinationAsset} is due
+            </span>
+            <Link
+              href={reminderHref(r)}
+              className="font-medium text-accent underline underline-offset-2 hover:opacity-80"
+            >
+              Pay now
+            </Link>
+          </li>
+        ))}
+      </ul>
+    </section>
   );
 }

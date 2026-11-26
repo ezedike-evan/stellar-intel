@@ -1,237 +1,153 @@
-import { hasScope, type ApiScope, isApiScope } from './api-keys';
+import { isApiScope, type ApiScope } from './api-keys';
+
+// ─── Signed short-lived caller tokens (AGS010) ─────────────────────────────────
+//
+// Compact HS256 JWS on Web Crypto; no JWT dependency. The algorithm is fixed
+// here and never read from the token header, so it cannot be downgraded.
 
 export const TOKEN_AUDIENCE = 'stellar-intel';
-export const DEFAULT_TOKEN_EXP_SECONDS = 300; // 5 minutes
+export const MAX_TOKEN_TTL_SECONDS = 900;
+export const MIN_TOKEN_SECRET_LENGTH = 32;
 
-export interface CallerTokenPayload {
+/** Allowed clock skew for `iat`, in seconds. */
+const IAT_SKEW_SECONDS = 30;
+const KEY_ID_PATTERN = /^[0-9a-f]{16}$/;
+const HEADER = { alg: 'HS256', typ: 'JWT' } as const;
+
+export interface CallerTokenClaims {
   sub: string;
-  scopes: ApiScope[];
-  tier?: 'free' | 'pro' | 'partner';
-  rateLimit?: number;
-  iat?: number;
-  exp?: number;
-  aud?: string;
-  iss?: string;
+  scp: ApiScope[];
+  iat: number;
+  exp: number;
+  jti: string;
+  aud: typeof TOKEN_AUDIENCE;
 }
 
-export type VerifyCallerTokenResult =
-  | { ok: true; payload: Required<Pick<CallerTokenPayload, 'sub' | 'scopes' | 'iat' | 'exp' | 'aud'>> & CallerTokenPayload }
-  | { ok: false; code: 'MALFORMED' | 'EXPIRED' | 'INVALID_SIGNATURE' | 'INVALID_AUDIENCE' | 'MISSING_SECRET'; message: string };
+export type TokenVerification =
+  | { ok: true; claims: CallerTokenClaims }
+  | { ok: false; code: 'malformed_token' | 'bad_signature' | 'token_expired' | 'wrong_audience' };
 
-function base64UrlEncode(data: Uint8Array | string): string {
-  let bytes: Uint8Array;
-  if (typeof data === 'string') {
-    bytes = new TextEncoder().encode(data);
-  } else {
-    bytes = data;
-  }
-
-  let binary = '';
-  for (let i = 0; i < bytes.byteLength; i++) {
-    const b = bytes[i];
-    if (b !== undefined) {
-      binary += String.fromCharCode(b);
-    }
-  }
-
-  let b64 = '';
-  if (typeof btoa !== 'undefined') {
-    b64 = btoa(binary);
-  } else if (typeof Buffer !== 'undefined') {
-    b64 = Buffer.from(bytes).toString('base64');
-  }
-
-  return b64.replace(/\+/g, '-').replace(/\//g, '_').replace(/=+$/, '');
+/** Null when unset or shorter than MIN_TOKEN_SECRET_LENGTH: tokens are then disabled. */
+export function getTokenSecret(): string | null {
+  const secret = process.env.CALLER_TOKEN_SECRET;
+  if (!secret || secret.length < MIN_TOKEN_SECRET_LENGTH) return null;
+  return secret;
 }
 
-function base64UrlDecode(str: string): Uint8Array {
-  let b64 = str.replace(/-/g, '+').replace(/_/g, '/');
-  while (b64.length % 4 !== 0) {
-    b64 += '=';
-  }
-
-  let binary = '';
-  if (typeof atob !== 'undefined') {
-    binary = atob(b64);
-  } else if (typeof Buffer !== 'undefined') {
-    binary = Buffer.from(b64, 'base64').toString('binary');
-  }
-
-  const bytes = new Uint8Array(binary.length);
-  for (let i = 0; i < binary.length; i++) {
-    bytes[i] = binary.charCodeAt(i);
-  }
-  return bytes;
-}
-
-export function getTokenSecret(): string {
-  const secret = process.env.CALLER_TOKEN_SECRET || process.env.JWT_SECRET;
-  if (secret && secret.length > 0) {
-    return secret;
-  }
-  if (process.env.NODE_ENV === 'test') {
-    return 'test-caller-token-secret-must-be-long-enough-32bytes';
-  }
-  return '';
-}
-
-export function looksLikeToken(val: string): boolean {
-  if (typeof val !== 'string') return false;
-  const parts = val.split('.');
+/** Three non-empty dot-separated segments. An `sik_` key never matches. */
+export function looksLikeToken(raw: string): boolean {
+  const parts = raw.split('.');
   return parts.length === 3 && parts.every((p) => p.length > 0);
 }
 
-async function getHmacKey(secret: string): Promise<CryptoKey> {
-  const enc = new TextEncoder().encode(secret);
-  return crypto.subtle.importKey(
+function encodeJson(value: unknown): string {
+  return Buffer.from(JSON.stringify(value)).toString('base64url');
+}
+
+function decodeJson(segment: string): unknown {
+  try {
+    return JSON.parse(Buffer.from(segment, 'base64url').toString('utf8'));
+  } catch {
+    return undefined;
+  }
+}
+
+function importKey(secret: string): Promise<CryptoKey> {
+  return globalThis.crypto.subtle.importKey(
     'raw',
-    enc,
-    { name: 'HMAC', hash: { name: 'SHA-256' } },
+    new TextEncoder().encode(secret),
+    { name: 'HMAC', hash: 'SHA-256' },
     false,
     ['sign', 'verify']
   );
 }
 
 export async function signCallerToken(
-  payload: CallerTokenPayload,
-  secretOverride?: string
+  input: { keyId: string; scopes: ApiScope[]; ttlSeconds: number },
+  secret: string,
+  now: number = Date.now()
 ): Promise<string> {
-  const secret = secretOverride ?? getTokenSecret();
-  if (!secret) {
-    throw new Error('CALLER_TOKEN_SECRET is not configured');
+  if (input.ttlSeconds < 1 || input.ttlSeconds > MAX_TOKEN_TTL_SECONDS) {
+    throw new RangeError(`ttlSeconds must be between 1 and ${MAX_TOKEN_TTL_SECONDS}`);
   }
-
-  const now = Math.floor(Date.now() / 1000);
-  const header = { alg: 'HS256', typ: 'JWT' };
-  const fullPayload: CallerTokenPayload = {
-    ...payload,
-    iat: payload.iat ?? now,
-    exp: payload.exp ?? now + DEFAULT_TOKEN_EXP_SECONDS,
-    aud: payload.aud ?? TOKEN_AUDIENCE,
-    iss: payload.iss ?? 'stellar-intel',
+  const iat = Math.floor(now / 1000);
+  const claims: CallerTokenClaims = {
+    sub: input.keyId,
+    scp: [...input.scopes],
+    iat,
+    exp: iat + input.ttlSeconds,
+    jti: globalThis.crypto.randomUUID(),
+    aud: TOKEN_AUDIENCE,
   };
-
-  const headerB64 = base64UrlEncode(JSON.stringify(header));
-  const payloadB64 = base64UrlEncode(JSON.stringify(fullPayload));
-  const signingInput = `${headerB64}.${payloadB64}`;
-
-  const key = await getHmacKey(secret);
-  const signatureBuffer = await crypto.subtle.sign(
+  const signingInput = `${encodeJson(HEADER)}.${encodeJson(claims)}`;
+  const sig = await globalThis.crypto.subtle.sign(
     'HMAC',
-    key,
+    await importKey(secret),
     new TextEncoder().encode(signingInput)
   );
+  return `${signingInput}.${Buffer.from(sig).toString('base64url')}`;
+}
 
-  const signatureB64 = base64UrlEncode(new Uint8Array(signatureBuffer));
-  return `${signingInput}.${signatureB64}`;
+function isRecord(value: unknown): value is Record<string, unknown> {
+  return typeof value === 'object' && value !== null && !Array.isArray(value);
 }
 
 export async function verifyCallerToken(
   token: string,
-  secretOverride?: string
-): Promise<VerifyCallerTokenResult> {
-  const secret = secretOverride ?? getTokenSecret();
-  if (!secret) {
-    return {
-      ok: false,
-      code: 'MISSING_SECRET',
-      message: 'Caller token secret is not configured',
-    };
-  }
-
-  if (!looksLikeToken(token)) {
-    return {
-      ok: false,
-      code: 'MALFORMED',
-      message: 'Token is not a well-formed 3-part JWT',
-    };
-  }
+  secret: string,
+  now: number = Date.now()
+): Promise<TokenVerification> {
+  const malformed = { ok: false, code: 'malformed_token' } as const;
 
   const parts = token.split('.');
-  if (parts.length !== 3 || !parts[0] || !parts[1] || !parts[2]) {
-    return {
-      ok: false,
-      code: 'MALFORMED',
-      message: 'Token is not a well-formed 3-part JWT',
-    };
+  if (parts.length !== 3) return malformed;
+  const [headerSeg, payloadSeg, sigSeg] = parts as [string, string, string];
+
+  const header = decodeJson(headerSeg);
+  if (
+    !isRecord(header) ||
+    Object.keys(header).length !== 2 ||
+    header['alg'] !== HEADER.alg ||
+    header['typ'] !== HEADER.typ
+  ) {
+    return malformed;
   }
 
-  const [headerB64, payloadB64, signatureB64] = parts as [string, string, string];
-
-  let header: { alg?: string; typ?: string };
-  let payload: CallerTokenPayload;
-  try {
-    const headerStr = new TextDecoder().decode(base64UrlDecode(headerB64));
-    const payloadStr = new TextDecoder().decode(base64UrlDecode(payloadB64));
-    header = JSON.parse(headerStr);
-    payload = JSON.parse(payloadStr);
-  } catch {
-    return {
-      ok: false,
-      code: 'MALFORMED',
-      message: 'Header or payload cannot be JSON decoded',
-    };
-  }
-
-  if (header.alg !== 'HS256') {
-    return {
-      ok: false,
-      code: 'MALFORMED',
-      message: `Unsupported algorithm: ${header.alg}`,
-    };
-  }
-
-  const signingInput = `${headerB64}.${payloadB64}`;
-  const signatureBytes = base64UrlDecode(signatureB64);
-  const key = await getHmacKey(secret);
-
-  const valid = await crypto.subtle.verify(
+  const valid = await globalThis.crypto.subtle.verify(
     'HMAC',
-    key,
-    signatureBytes as unknown as BufferSource,
-    new TextEncoder().encode(signingInput) as unknown as BufferSource
+    await importKey(secret),
+    Buffer.from(sigSeg, 'base64url'),
+    new TextEncoder().encode(`${headerSeg}.${payloadSeg}`)
   );
+  if (!valid) return { ok: false, code: 'bad_signature' };
 
-  if (!valid) {
-    return {
-      ok: false,
-      code: 'INVALID_SIGNATURE',
-      message: 'Token signature verification failed',
-    };
+  const payload = decodeJson(payloadSeg);
+  if (!isRecord(payload)) return malformed;
+
+  const { sub, scp, iat, exp, jti, aud } = payload;
+  if (!Number.isInteger(iat) || !Number.isInteger(exp)) return malformed;
+  const iatSec = iat as number;
+  const expSec = exp as number;
+  const nowSec = Math.floor(now / 1000);
+
+  if (expSec <= nowSec) return { ok: false, code: 'token_expired' };
+  if (aud !== TOKEN_AUDIENCE) return { ok: false, code: 'wrong_audience' };
+
+  if (
+    iatSec > nowSec + IAT_SKEW_SECONDS ||
+    expSec - iatSec > MAX_TOKEN_TTL_SECONDS ||
+    typeof sub !== 'string' ||
+    !KEY_ID_PATTERN.test(sub) ||
+    typeof jti !== 'string' ||
+    !Array.isArray(scp) ||
+    scp.length === 0 ||
+    !scp.every(isApiScope)
+  ) {
+    return malformed;
   }
-
-  const now = Math.floor(Date.now() / 1000);
-  if (typeof payload.exp === 'number' && payload.exp < now) {
-    return {
-      ok: false,
-      code: 'EXPIRED',
-      message: `Token expired at ${new Date(payload.exp * 1000).toISOString()}`,
-    };
-  }
-
-  if (payload.aud && payload.aud !== TOKEN_AUDIENCE) {
-    return {
-      ok: false,
-      code: 'INVALID_AUDIENCE',
-      message: `Invalid audience: expected ${TOKEN_AUDIENCE}, got ${payload.aud}`,
-    };
-  }
-
-  const scopes = Array.isArray(payload.scopes)
-    ? payload.scopes.filter(isApiScope)
-    : [];
 
   return {
     ok: true,
-    payload: {
-      ...payload,
-      sub: payload.sub ?? 'anonymous',
-      scopes,
-      iat: payload.iat ?? now,
-      exp: payload.exp ?? now + DEFAULT_TOKEN_EXP_SECONDS,
-      aud: payload.aud ?? TOKEN_AUDIENCE,
-    },
+    claims: { sub, scp: [...scp], iat: iatSec, exp: expSec, jti, aud: TOKEN_AUDIENCE },
   };
 }
-
-export { hasScope, isApiScope };

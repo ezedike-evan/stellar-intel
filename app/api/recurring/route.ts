@@ -1,52 +1,105 @@
+import { randomUUID } from 'crypto';
 import { NextRequest, NextResponse } from 'next/server';
-import { SignedStandingAuthorizationSchema } from '@/types/recurring';
+import { withRequestLogger } from '@/lib/logger';
+import { isFlag } from '@/lib/flags';
+import { enforceRateLimit } from '@/lib/api/response';
 import { verifyStandingAuthorization } from '@/lib/recurring/authorization';
-import { getStore } from '@/lib/recurring/authorization-store';
-import { checkRateLimit, getClientIp } from '@/lib/api/rate-limit';
+import {
+  getStandingAuthorizationStore,
+  type StandingAuthorizationRecord,
+} from '@/lib/recurring/authorization-store';
+import { computeAuthorizationState } from '@/lib/recurring/due';
+import type { ApiError } from '@/types';
 
-export async function POST(req: NextRequest) {
-  if (process.env.FLAG_RECURRING_STANDINGS_ENABLED === 'false') {
-    return NextResponse.json(
-      { error: 'Recurring standing orders are disabled by feature flag' },
-      { status: 503 }
+export const runtime = 'nodejs';
+
+// ─── POST /api/recurring ──────────────────────────────────────────────────────
+//
+// Stores a signed standing authorization (REC007). The id is a random UUID that
+// only the creator learns, so it doubles as the read capability for GET
+// /api/recurring/{id}. Behind NEXT_PUBLIC_RECURRING_INTENTS: with the flag off the
+// route answers like one that does not exist.
+
+export async function POST(request: NextRequest): Promise<NextResponse> {
+  if (!isFlag('recurringIntents')) {
+    return NextResponse.json<ApiError>(
+      { code: 'NOT_FOUND', message: 'Not found' },
+      { status: 404 }
     );
   }
 
-  const clientIp = getClientIp(req.headers);
-  const rl = await checkRateLimit(clientIp, { bucket: 'api.recurring.create', maxRequests: 30 });
-  if (!rl.allowed) {
-    return NextResponse.json({ error: 'Too many requests' }, { status: 429 });
-  }
+  return withRequestLogger(request, 'api.recurring.create', async (logger) => {
+    const limited = await enforceRateLimit(request, {
+      bucket: 'api.recurring.create',
+      maxRequests: 10,
+    });
+    if (limited) return limited;
 
-  let body: unknown;
-  try {
-    body = await req.json();
-  } catch {
-    return NextResponse.json({ error: 'Invalid JSON body' }, { status: 400 });
-  }
+    let body: unknown;
+    try {
+      body = await request.json();
+    } catch {
+      return NextResponse.json<ApiError>(
+        { code: 'INVALID_JSON', message: 'Request body must be valid JSON' },
+        { status: 400 }
+      );
+    }
 
-  const parseRes = SignedStandingAuthorizationSchema.safeParse(body);
-  if (!parseRes.success) {
+    const verified = await verifyStandingAuthorization(body);
+    if (!verified.ok) {
+      logger.warn({ event: 'standing_authorization_rejected', code: verified.code });
+      if (verified.code === 'invalid_payload') {
+        return NextResponse.json<ApiError>(
+          { code: 'VALIDATION_ERROR', message: verified.message },
+          { status: 400 }
+        );
+      }
+      if (verified.code === 'hash_mismatch' || verified.code === 'invalid_signature') {
+        return NextResponse.json<ApiError>(
+          { code: 'UNAUTHORIZED', message: verified.message },
+          { status: 401 }
+        );
+      }
+      return NextResponse.json<ApiError>(
+        { code: verified.code.toUpperCase(), message: verified.message },
+        { status: 422 }
+      );
+    }
+
+    const { authorization } = verified;
+    const now = new Date();
+    const record: StandingAuthorizationRecord = {
+      id: randomUUID(),
+      termsHash: authorization.termsHash,
+      authorization,
+      status: 'active',
+      createdAt: now.toISOString(),
+      updatedAt: now.toISOString(),
+    };
+
+    const created = await getStandingAuthorizationStore().create(record);
+    if (!created.ok) {
+      return NextResponse.json<ApiError>(
+        {
+          code: 'DUPLICATE_AUTHORIZATION',
+          message: 'This standing authorization has already been submitted',
+        },
+        { status: 409 }
+      );
+    }
+
+    // Never log the sender: only the id, corridor and period.
+    logger.info({
+      event: 'standing_authorization_created',
+      id: record.id,
+      corridorId: authorization.terms.corridorId,
+      period: authorization.terms.period,
+    });
+
+    const state = computeAuthorizationState(record, [], now);
     return NextResponse.json(
-      { error: 'Invalid standing authorization schema', details: parseRes.error.issues },
-      { status: 400 }
+      { id: record.id, termsHash: record.termsHash, state },
+      { status: 201 }
     );
-  }
-
-  const verification = await verifyStandingAuthorization(parseRes.data);
-  if (!verification.ok) {
-    return NextResponse.json(
-      { error: verification.message, code: verification.code },
-      { status: 400 }
-    );
-  }
-
-  const store = getStore();
-  const existing = await store.get(parseRes.data.termsHash);
-  if (existing) {
-    return NextResponse.json({ authorization: existing }, { status: 200 });
-  }
-
-  const stored = await store.save(parseRes.data);
-  return NextResponse.json({ authorization: stored }, { status: 201 });
+  });
 }

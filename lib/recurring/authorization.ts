@@ -1,85 +1,114 @@
-import { Keypair } from '@stellar/stellar-sdk';
-import { canonicalJson } from '@/lib/intent/hash';
+import { hashIntent, type HashableIntent } from '@/lib/intent/hash';
+import { verifyIntentSignature } from '@/lib/intent/verify';
+import { registeredAnchorsForCorridor } from '@/lib/intent/anchor-accounts';
+import { isValidCorridorId } from '@/lib/stellar/anchors';
 import {
-  type StandingAuthorizationTerms,
+  SignedStandingAuthorizationSchema,
   type SignedStandingAuthorization,
-  StandingAuthorizationTermsSchema,
+  type StandingAuthorizationTerms,
 } from '@/types/recurring';
+import { compareDecimals } from './scheduler';
+
+export const STANDING_AUTHORIZATION_MAX_DAYS = 366;
+
+const DAY_MS = 24 * 60 * 60 * 1000;
 
 export async function hashStandingAuthorization(
   terms: StandingAuthorizationTerms
 ): Promise<string> {
-  const canonical = canonicalJson(terms);
-  const digest = await crypto.subtle.digest('SHA-256', new TextEncoder().encode(canonical));
-  return Array.from(new Uint8Array(digest))
-    .map((b) => b.toString(16).padStart(2, '0'))
-    .join('');
+  return hashIntent(terms as unknown as HashableIntent);
 }
+
+// ─── Server-side verification (REC002) ───────────────────────────────────────
+
+export type StandingAuthorizationErrorCode =
+  | 'invalid_payload'
+  | 'hash_mismatch'
+  | 'invalid_signature'
+  | 'unknown_corridor'
+  | 'anchor_not_in_corridor'
+  | 'amount_exceeds_cap'
+  | 'stop_in_past'
+  | 'start_too_old'
+  | 'window_too_long';
 
 export type StandingAuthorizationVerification =
   | { ok: true; authorization: SignedStandingAuthorization }
-  | {
-      ok: false;
-      code:
-        | 'INVALID_TERMS'
-        | 'HASH_MISMATCH'
-        | 'SIGNER_MISMATCH'
-        | 'INVALID_SIGNATURE';
-      message: string;
-    };
+  | { ok: false; code: StandingAuthorizationErrorCode; message: string };
 
+function fail(
+  code: StandingAuthorizationErrorCode,
+  message: string
+): StandingAuthorizationVerification {
+  return { ok: false, code, message };
+}
+
+/**
+ * Prove that the sender signed exactly these terms and that the terms are within
+ * policy, before a standing order is stored. The checks run in a fixed order and
+ * the first failure wins. Never throws: any unexpected error is `invalid_payload`.
+ */
 export async function verifyStandingAuthorization(
-  signed: SignedStandingAuthorization
+  input: unknown,
+  opts: { now?: Date } = {}
 ): Promise<StandingAuthorizationVerification> {
-  const parseRes = StandingAuthorizationTermsSchema.safeParse(signed?.terms);
-  if (!parseRes.success) {
-    return {
-      ok: false,
-      code: 'INVALID_TERMS',
-      message: parseRes.error.issues.map((i) => i.message).join('; '),
-    };
-  }
-
-  const computedHash = await hashStandingAuthorization(parseRes.data);
-  if (computedHash !== signed.termsHash) {
-    return {
-      ok: false,
-      code: 'HASH_MISMATCH',
-      message: `Computed hash ${computedHash} does not match provided termsHash ${signed.termsHash}`,
-    };
-  }
-
-  if (signed.publicKey !== parseRes.data.sender) {
-    return {
-      ok: false,
-      code: 'SIGNER_MISMATCH',
-      message: `Envelope publicKey ${signed.publicKey} does not match terms sender ${parseRes.data.sender}`,
-    };
-  }
-
   try {
-    const kp = Keypair.fromPublicKey(signed.publicKey);
-    const dataBytes = new TextEncoder().encode(signed.termsHash);
-    const sigBytes = Buffer.from(signed.signature, 'base64');
-    const valid = kp.verify(dataBytes, sigBytes);
-    if (!valid) {
-      return {
-        ok: false,
-        code: 'INVALID_SIGNATURE',
-        message: 'Signature verification failed against termsHash',
-      };
+    const parsed = SignedStandingAuthorizationSchema.safeParse(input);
+    if (!parsed.success) {
+      return fail(
+        'invalid_payload',
+        parsed.error.issues[0]?.message ?? 'Invalid standing authorization'
+      );
     }
-  } catch (err: unknown) {
-    const msg = err instanceof Error ? err.message : 'Invalid signature format';
-    return {
-      ok: false,
-      code: 'INVALID_SIGNATURE',
-      message: msg,
-    };
-  }
+    const authorization = parsed.data;
+    const { terms, termsHash, publicKey, signature } = authorization;
 
-  return {
-    ok: true,
-    authorization: signed,
-  };
+    if ((await hashStandingAuthorization(terms)) !== termsHash) {
+      return fail('hash_mismatch', 'termsHash does not match the hash of terms');
+    }
+
+    if (!verifyIntentSignature({ intentHash: termsHash, publicKey, signature })) {
+      return fail('invalid_signature', 'signature does not verify against publicKey');
+    }
+
+    if (!isValidCorridorId(terms.corridorId)) {
+      return fail('unknown_corridor', `Unknown corridor: ${terms.corridorId}`);
+    }
+
+    const served = new Set(registeredAnchorsForCorridor(terms.corridorId));
+    const outside = terms.anchorAllowlist.find((id) => !served.has(id));
+    if (outside !== undefined) {
+      return fail(
+        'anchor_not_in_corridor',
+        `Anchor ${outside} does not serve corridor ${terms.corridorId}`
+      );
+    }
+
+    if (compareDecimals(terms.amount, terms.perPeriodCap) > 0) {
+      return fail('amount_exceeds_cap', 'amount exceeds perPeriodCap');
+    }
+
+    const now = (opts.now ?? new Date()).getTime();
+    const startAt = Date.parse(terms.startAt);
+    const stopAt = Date.parse(terms.stopAt);
+
+    if (stopAt <= now) {
+      return fail('stop_in_past', 'stopAt is not in the future');
+    }
+
+    if (startAt < now - DAY_MS) {
+      return fail('start_too_old', 'startAt is more than 24 hours in the past');
+    }
+
+    if (stopAt - startAt > STANDING_AUTHORIZATION_MAX_DAYS * DAY_MS) {
+      return fail(
+        'window_too_long',
+        `stopAt must be within ${STANDING_AUTHORIZATION_MAX_DAYS} days of startAt`
+      );
+    }
+
+    return { ok: true, authorization };
+  } catch {
+    return fail('invalid_payload', 'Invalid standing authorization');
+  }
 }
