@@ -249,6 +249,18 @@ async function handleOperation(
   // so it is held to that route's limits: one mutation field per request, charged
   // to the same bucket. Without this it is the cheapest way to call the builder.
   const selected = getOperationAST(document, operation.operationName ?? null);
+
+  // GraphQL-over-HTTP: a mutation must not run on a GET. A GET mutation puts the
+  // intent's sender and recipient into URLs (access logs, browser history, CDN
+  // logs), and an <img src> on any page can trigger it. Checked before the
+  // intent rate-limit charge and before execute.
+  if (request.method === 'GET' && selected?.operation === 'mutation') {
+    return NextResponse.json(
+      { data: null, errors: [{ message: 'Mutations must be sent with POST' }] },
+      { status: 405, headers: { Allow: 'POST' } }
+    );
+  }
+
   const isMutation = selected?.operation === 'mutation';
   // Queries are audited for key and token callers only; mutations always (AGS014).
   const auditQuery = selected?.operation === 'query' && caller.kind !== 'anonymous';

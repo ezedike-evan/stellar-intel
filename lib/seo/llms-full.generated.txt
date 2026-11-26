@@ -2792,7 +2792,7 @@ Additional field:
 
 # GraphQL API
 
-**Last reviewed:** 2026-10-18
+**Last reviewed:** 2026-11-23
 
 An additive, alternative surface over the same resources REST v1 exposes —
 anchors, health, rates, and off-ramp intents. **REST v1 stays canonical**
@@ -2829,8 +2829,9 @@ GET  /api/graphql?query=...&variables=...&operationName=...
 
 Supports both `POST` with a JSON body (`{query, variables, operationName}`) and
 `GET` with query parameters (`?query=`, optional `variables` as JSON, and
-optional `operationName`). Requests are rate limited per IP (`api.graphql`
-bucket, 60 requests/minute), mirroring the REST routes.
+optional `operationName`). Mutations are POST-only, and a mutation sent over
+`GET` answers `HTTP 405` with `Allow: POST`. Requests are rate limited per IP
+(`api.graphql` bucket, 60 requests/minute), mirroring the REST routes.
 
 ## Example query
 
