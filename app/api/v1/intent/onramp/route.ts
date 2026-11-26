@@ -3,6 +3,7 @@ import { withV1 } from '@/lib/api/v1';
 import { createOnrampIntent } from '@/lib/intent/onramp';
 import { OnrampIntentSchema } from '@/lib/intent/onramp-schema';
 import { verifyOptionalIntentAttestation } from '@/lib/intent/verify';
+import { emitWebhookEvent } from '@/lib/webhooks/emit';
 
 export const runtime = 'nodejs';
 
@@ -49,6 +50,21 @@ export async function POST(request: NextRequest): Promise<NextResponse> {
       if (!result.ok) {
         return ctx.error(result.code.toLowerCase(), result.message, result.status);
       }
+
+      emitWebhookEvent(
+        'intent.created',
+        {
+          intentHash: result.response.intentHash,
+          direction: 'onramp',
+          corridorId: result.response.route.corridorId,
+          anchorId: result.response.route.anchorId,
+          quoteId: null,
+          amount: intent.amount,
+          sourceAsset: intent.sourceAsset,
+          destinationAsset: intent.destinationAsset,
+        },
+        { idempotencyKey: `intent.created:onramp:${result.response.intentHash}` }
+      );
 
       return {
         status: 200,

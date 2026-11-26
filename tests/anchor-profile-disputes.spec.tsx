@@ -14,6 +14,7 @@ function profile(disputes: PublicDisputeItem[]): AnchorProfileData {
     history: [],
     disputes,
     oracleTxId: null,
+    refunds: null,
   };
 }
 

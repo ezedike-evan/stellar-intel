@@ -311,7 +311,7 @@ An anchor graduates to **live** status when it has accumulated at least
 scorecard window. At that point:
 
 - The scorecard `state` becomes `"ok"` and exposes full metrics: `fillRate`,
-  `settleMs` (p50 / p95), and `slippage` (p50 / p95)
+  `settleMs` (p50 / p95), and `slippage` (p50 / p95). (Note: Scorecard `settleMs` percentiles are computed via weighted interpolation with MAD outlier trimming for scoring; for public execution SLA benchmarks and breach evaluations without trimming, see [Execution SLA in SETTLEMENT_SLA.md](SETTLEMENT_SLA.md#execution-sla-public-settle-time-percentiles).)
 - A composite score is computed and mapped to a
   [score band](../lib/reputation/bands.ts):
 

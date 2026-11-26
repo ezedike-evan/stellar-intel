@@ -1,17 +1,24 @@
+/**
+ * lib/recurring/enforce.ts
+ *
+ * Server-side limits on a standing authorization (REC003): the per-period cap,
+ * the start and stop dates, and the anchor allowlist. Pure: no store, no clock
+ * reads. Amounts are compared as 7-dp scaled BigInts, never as floats.
+ */
+import type { StandingAuthorizationStatus, StandingAuthorizationTerms } from '@/types/recurring';
 import { parseDecimal } from './scheduler';
-import type {
-  StandingAuthorizationTerms,
-  StandingAuthorizationStatus,
-} from '@/types/recurring';
 
+const SCALE = 10_000_000n;
+const DAY_MS = 24 * 60 * 60 * 1000;
+const FIXED_PERIOD_MS = { daily: DAY_MS, weekly: 7 * DAY_MS, biweekly: 14 * DAY_MS } as const;
+
+/** The inverse of parseDecimal: 7 dp, trailing zeros and a trailing "." trimmed. */
 export function formatScaledDecimal(v: bigint): string {
-  const sign = v < 0n ? '-' : '';
-  const abs = v < 0n ? -v : v;
-  const whole = abs / 10000000n;
-  const frac = abs % 10000000n;
-  if (frac === 0n) return `${sign}${whole}`;
-  const fracStr = frac.toString().padStart(7, '0').replace(/0+$/, '');
-  return `${sign}${whole}.${fracStr}`;
+  const negative = v < 0n;
+  const abs = negative ? -v : v;
+  const whole = abs / SCALE;
+  const frac = (abs % SCALE).toString().padStart(7, '0').replace(/0+$/, '');
+  return `${negative ? '-' : ''}${whole}${frac ? `.${frac}` : ''}`;
 }
 
 export interface PeriodWindow {
@@ -20,65 +27,64 @@ export interface PeriodWindow {
   end: Date;
 }
 
-export function periodWindow(
-  terms: Pick<StandingAuthorizationTerms, 'period' | 'startAt' | 'stopAt'>,
-  at: Date
-): PeriodWindow | null {
-  const startAt = new Date(terms.startAt);
-  const stopAt = new Date(terms.stopAt);
+type WindowTerms = Pick<StandingAuthorizationTerms, 'period' | 'startAt' | 'stopAt'>;
 
-  if (at.getTime() < startAt.getTime() || at.getTime() >= stopAt.getTime()) {
-    return null;
-  }
-
-  if (terms.period === 'monthly') {
-    const index =
-      (at.getUTCFullYear() - startAt.getUTCFullYear()) * 12 +
-      (at.getUTCMonth() - startAt.getUTCMonth());
-
-    const start =
-      index === 0
-        ? startAt
-        : new Date(Date.UTC(startAt.getUTCFullYear(), startAt.getUTCMonth() + index, 1, 0, 0, 0, 0));
-
-    const nextMonth = new Date(
-      Date.UTC(startAt.getUTCFullYear(), startAt.getUTCMonth() + index + 1, 1, 0, 0, 0, 0)
-    );
-    const end = nextMonth.getTime() > stopAt.getTime() ? stopAt : nextMonth;
-
-    return { index, start, end };
-  }
-
-  const periodDays = terms.period === 'daily' ? 1 : terms.period === 'weekly' ? 7 : 14;
-  const lenMs = periodDays * 86_400_000;
-
-  const index = Math.floor((at.getTime() - startAt.getTime()) / lenMs);
-  const start = new Date(startAt.getTime() + index * lenMs);
-  const rawEnd = new Date(startAt.getTime() + (index + 1) * lenMs);
-  const end = rawEnd.getTime() > stopAt.getTime() ? stopAt : rawEnd;
-
-  return { index, start, end };
+function monthIndex(d: Date): number {
+  return d.getUTCFullYear() * 12 + d.getUTCMonth();
 }
 
+function monthStart(monthIdx: number): number {
+  return Date.UTC(Math.floor(monthIdx / 12), monthIdx % 12, 1);
+}
+
+/**
+ * The period window containing `at`, or null outside [startAt, stopAt).
+ * Daily, weekly and biweekly windows are fixed lengths counted from startAt.
+ * Monthly windows are UTC calendar months: window 0 starts at startAt, later
+ * ones at 00:00 UTC on the 1st. `end` is the next window's start, capped at stopAt.
+ */
+export function periodWindow(terms: WindowTerms, at: Date): PeriodWindow | null {
+  const startMs = Date.parse(terms.startAt);
+  const stopMs = Date.parse(terms.stopAt);
+  const atMs = at.getTime();
+  if (atMs < startMs || atMs >= stopMs) return null;
+
+  if (terms.period === 'monthly') {
+    const first = monthIndex(new Date(startMs));
+    const index = monthIndex(at) - first;
+    const start = index === 0 ? startMs : monthStart(first + index);
+    const end = Math.min(monthStart(first + index + 1), stopMs);
+    return { index, start: new Date(start), end: new Date(end) };
+  }
+
+  const len = FIXED_PERIOD_MS[terms.period];
+  const index = Math.floor((atMs - startMs) / len);
+  const start = startMs + index * len;
+  return { index, start: new Date(start), end: new Date(Math.min(start + len, stopMs)) };
+}
+
+function inWindow(window: PeriodWindow, iso: string): boolean {
+  const t = Date.parse(iso);
+  return t >= window.start.getTime() && t < window.end.getTime();
+}
+
+function spentInWindow(window: PeriodWindow, prior: Array<{ amount: string; at: string }>): bigint {
+  return prior.reduce(
+    (sum, p) => (inWindow(window, p.at) ? sum + parseDecimal(p.amount) : sum),
+    0n
+  );
+}
+
+/** perPeriodCap minus what `prior` spent in the window containing `at`, floored at '0'. */
 export function remainingCapForPeriod(
   terms: StandingAuthorizationTerms,
   prior: Array<{ amount: string; at: string }>,
   at: Date
 ): string {
-  const w = periodWindow(terms, at);
-  if (!w) return '0';
-
-  const cap = parseDecimal(terms.perPeriodCap);
-  let sum = 0n;
-  for (const p of prior) {
-    const t = new Date(p.at).getTime();
-    if (t >= w.start.getTime() && t < w.end.getTime()) {
-      sum += parseDecimal(p.amount);
-    }
-  }
-
-  if (sum >= cap) return '0';
-  return formatScaledDecimal(cap - sum);
+  const window = periodWindow(terms, at);
+  if (!window) return '0';
+  const remaining = parseDecimal(terms.perPeriodCap) - spentInWindow(window, prior);
+  return formatScaledDecimal(remaining > 0n ? remaining : 0n);
 }
 
 export type ExecutionCheckCode =
@@ -90,102 +96,61 @@ export type ExecutionCheckCode =
   | 'anchor_not_allowed'
   | 'period_cap_exceeded';
 
+export interface ProposedExecution {
+  corridorId: string;
+  sourceAsset: string;
+  destinationAsset: string;
+  anchorId: string;
+  amount: string;
+  at: Date;
+}
+
+/**
+ * Checks one proposed execution against a standing authorization. `prior`
+ * must only hold confirmed executions; the caller filters.
+ */
 export function checkExecutionAgainstAuthorization(input: {
   terms: StandingAuthorizationTerms;
   status: StandingAuthorizationStatus;
   prior: Array<{ amount: string; at: string }>;
-  proposed: {
-    corridorId: string;
-    sourceAsset: string;
-    destinationAsset: string;
-    anchorId: string;
-    amount: string;
-    at: Date;
-  };
+  proposed: ProposedExecution;
 }):
   | { ok: true; window: PeriodWindow; remainingAfter: string }
   | { ok: false; code: ExecutionCheckCode; message: string } {
-  if (input.status !== 'active') {
-    return {
-      ok: false,
-      code: 'authorization_inactive',
-      message: 'Standing authorization is not active.',
-    };
+  const { terms, status, prior, proposed } = input;
+  const fail = (code: ExecutionCheckCode, message: string) => ({
+    ok: false as const,
+    code,
+    message,
+  });
+  const atMs = proposed.at.getTime();
+
+  if (status !== 'active') return fail('authorization_inactive', `The standing order is ${status}`);
+  if (atMs < Date.parse(terms.startAt)) {
+    return fail('not_started', 'The standing order has not started yet');
   }
-
-  const startAt = new Date(input.terms.startAt);
-  const stopAt = new Date(input.terms.stopAt);
-
-  if (input.proposed.at.getTime() < startAt.getTime()) {
-    return {
-      ok: false,
-      code: 'not_started',
-      message: 'Authorization start date is in the future.',
-    };
+  if (atMs >= Date.parse(terms.stopAt)) {
+    return fail('stop_date_passed', 'The standing order has passed its stop date');
   }
-
-  if (input.proposed.at.getTime() >= stopAt.getTime()) {
-    return {
-      ok: false,
-      code: 'stop_date_passed',
-      message: 'Authorization stop date has passed.',
-    };
+  if (proposed.corridorId.toLowerCase() !== terms.corridorId.toLowerCase()) {
+    return fail('corridor_mismatch', 'The corridor does not match the standing order');
   }
-
-  if (input.proposed.corridorId.toLowerCase() !== input.terms.corridorId.toLowerCase()) {
-    return {
-      ok: false,
-      code: 'corridor_mismatch',
-      message: 'Proposed corridor does not match authorization.',
-    };
-  }
-
   if (
-    input.proposed.sourceAsset.toLowerCase() !== input.terms.sourceAsset.toLowerCase() ||
-    input.proposed.destinationAsset.toLowerCase() !== input.terms.destinationAsset.toLowerCase()
+    proposed.sourceAsset.toLowerCase() !== terms.sourceAsset.toLowerCase() ||
+    proposed.destinationAsset.toLowerCase() !== terms.destinationAsset.toLowerCase()
   ) {
-    return {
-      ok: false,
-      code: 'asset_mismatch',
-      message: 'Proposed assets do not match authorization.',
-    };
+    return fail('asset_mismatch', 'The assets do not match the standing order');
+  }
+  if (!terms.anchorAllowlist.includes(proposed.anchorId)) {
+    return fail('anchor_not_allowed', 'That anchor is not on the standing order allowlist');
   }
 
-  if (!input.terms.anchorAllowlist.includes(input.proposed.anchorId)) {
-    return {
-      ok: false,
-      code: 'anchor_not_allowed',
-      message: `Anchor "${input.proposed.anchorId}" is not in the allowlist.`,
-    };
+  const window = periodWindow(terms, proposed.at);
+  if (!window) return fail('stop_date_passed', 'The standing order has passed its stop date');
+  const spent = spentInWindow(window, prior) + parseDecimal(proposed.amount);
+  const cap = parseDecimal(terms.perPeriodCap);
+  if (spent > cap) {
+    return fail('period_cap_exceeded', 'This payment would exceed the per-period cap');
   }
-
-  const w = periodWindow(input.terms, input.proposed.at);
-  if (!w) {
-    return {
-      ok: false,
-      code: 'stop_date_passed',
-      message: 'Authorization is not currently active.',
-    };
-  }
-
-  const cap = parseDecimal(input.terms.perPeriodCap);
-  let sum = 0n;
-  for (const p of input.prior) {
-    const t = new Date(p.at).getTime();
-    if (t >= w.start.getTime() && t < w.end.getTime()) {
-      sum += parseDecimal(p.amount);
-    }
-  }
-
-  const proposedAmount = parseDecimal(input.proposed.amount);
-  if (sum + proposedAmount > cap) {
-    return {
-      ok: false,
-      code: 'period_cap_exceeded',
-      message: 'Proposed execution exceeds the per-period cap.',
-    };
-  }
-
-  const remainingAfter = formatScaledDecimal(cap - (sum + proposedAmount));
-  return { ok: true, window: w, remainingAfter };
+  return { ok: true, window, remainingAfter: formatScaledDecimal(cap - spent) };
 }

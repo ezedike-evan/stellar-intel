@@ -84,6 +84,12 @@ describe('DepositStatusTracker (#1469)', () => {
     expect(onStartAnother).toHaveBeenCalledTimes(1);
   });
 
+  it('tells a refunded depositor the refund goes to the account they paid from', () => {
+    render(<DepositStatusTracker {...BASE} status="refunded" onStartAnother={vi.fn()} />);
+    expect(screen.getByText(/refunded your payment to the account you paid from/)).toBeTruthy();
+    expect(screen.queryByText(/Check your Stellar wallet/)).toBeNull();
+  });
+
   it('shows a polling error inline', () => {
     render(<DepositStatusTracker {...BASE} error="Could not reach the anchor" />);
     expect(screen.getByText('Could not reach the anchor')).toBeTruthy();
