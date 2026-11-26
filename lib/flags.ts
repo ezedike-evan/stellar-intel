@@ -9,7 +9,8 @@ export type FlagName =
   | 'firmQuoteBonus'
   | 'disputeLadder'
   | 'refundGuarantees'
-  | 'executionSla';
+  | 'executionSla'
+  | 'slippageBreaches';
 
 export const flags: Record<FlagName, boolean> = {
   // Default to enabled unless explicitly set to 'off'
@@ -40,6 +41,10 @@ export const flags: Record<FlagName, boolean> = {
   refundGuarantees: (process.env.NEXT_PUBLIC_REFUND_GUARANTEES || 'off') === 'on',
   // Execution SLA card on the anchor page. Default OFF until anchors have settlement volume.
   executionSla: (process.env.NEXT_PUBLIC_EXECUTION_SLA || 'off') === 'on',
+  // Below-minimum notice on the off-ramp status view when a completed withdrawal
+  // settles under the signed minReceive floor. Default OFF; opt in with
+  // NEXT_PUBLIC_SLIPPAGE_BREACHES=on.
+  slippageBreaches: (process.env.NEXT_PUBLIC_SLIPPAGE_BREACHES || 'off') === 'on',
 };
 
 export function isFlag(name: FlagName) {

@@ -483,6 +483,10 @@ function OfframpContent() {
             isLoading={withdrawStatus.isLoading}
             error={withdrawStatus.error}
             attemptCount={withdrawStatus.attemptCount}
+            minReceive={outcomeContext?.minReceive}
+            breachRecordUrl={
+              outcomeContext ? `/api/v1/slippage-breaches/${outcomeContext.intentHash}` : undefined
+            }
             onAdjust={handleOffRampAnother}
             {...(flags.disputeLadder && outcomeContext
               ? { onDisputeOpen: () => setDisputeOpen(true) }
