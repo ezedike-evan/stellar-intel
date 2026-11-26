@@ -1,4 +1,4 @@
-import { describe, it, expect } from 'vitest';
+import { describe, it, expect, vi } from 'vitest';
 import type { Anchor } from '@/types';
 import {
   ANCHORS,
@@ -13,6 +13,12 @@ import {
   getTrackedAnchors,
   ROUTABLE_SEPS,
 } from '@/lib/stellar/anchors';
+
+// These specs pin registry behaviour, not tonight's outages: the nightly ledger
+// can flag any anchor degraded, which hides it from its corridors.
+vi.mock('@/constants/anchor-health.json', () => ({
+  default: { thresholdNights: 3, updatedAt: '2026-01-01T00:00:00.000Z', anchors: {} },
+}));
 
 describe('ANCHORS', () => {
   it('contains MoneyGram, Cowrie, Anclap, and nTokens', () => {
