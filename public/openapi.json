@@ -5640,6 +5640,128 @@
         }
       }
     },
+    "/api/v1/usage": {
+      "get": {
+        "summary": "Caller usage (v1)",
+        "description": "The caller's own tier, scopes, daily quota and current per-minute windows, read without spending quota on the counted buckets. Any caller may read its own usage.",
+        "tags": [
+          "System"
+        ],
+        "responses": {
+          "200": {
+            "description": "Usage snapshot",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "caller": {
+                      "type": "object",
+                      "properties": {
+                        "kind": {
+                          "type": "string"
+                        },
+                        "keyPrefix": {
+                          "type": [
+                            "string",
+                            "null"
+                          ]
+                        },
+                        "tier": {
+                          "type": "string"
+                        },
+                        "scopes": {
+                          "type": "array",
+                          "items": {
+                            "type": "string"
+                          }
+                        }
+                      },
+                      "required": [
+                        "kind",
+                        "keyPrefix",
+                        "tier",
+                        "scopes"
+                      ]
+                    },
+                    "quota": {
+                      "type": [
+                        "object",
+                        "null"
+                      ],
+                      "properties": {
+                        "limit": {
+                          "type": "number"
+                        },
+                        "used": {
+                          "type": "number"
+                        },
+                        "resetAt": {
+                          "type": "string"
+                        }
+                      },
+                      "required": [
+                        "limit",
+                        "used",
+                        "resetAt"
+                      ]
+                    },
+                    "windows": {
+                      "type": "array",
+                      "items": {
+                        "type": "object",
+                        "properties": {
+                          "bucket": {
+                            "type": "string"
+                          },
+                          "used": {
+                            "type": "number"
+                          },
+                          "resetAt": {
+                            "type": "string"
+                          }
+                        },
+                        "required": [
+                          "bucket",
+                          "used",
+                          "resetAt"
+                        ]
+                      }
+                    }
+                  },
+                  "required": [
+                    "caller",
+                    "quota",
+                    "windows"
+                  ],
+                  "additionalProperties": {}
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Missing or invalid credentials",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiError"
+                }
+              }
+            }
+          },
+          "429": {
+            "description": "Rate limited",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
     "/api/status": {
       "get": {
         "summary": "API version and deprecation status",

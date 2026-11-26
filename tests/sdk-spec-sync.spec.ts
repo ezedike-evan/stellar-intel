@@ -51,7 +51,9 @@ describe('SDK ↔ OpenAPI spec (#806)', () => {
         : []
     );
     const covered = new Set(Object.values(OPERATIONS) as string[]);
-    const missing = specV1.filter((op) => !covered.has(op));
+    // GET /api/v1/usage is exposed by the SDK in #2219, not here (#2218).
+    const pending = new Set(['GET /api/v1/usage']);
+    const missing = specV1.filter((op) => !covered.has(op) && !pending.has(op));
 
     // If a new v1 endpoint ships, this fails and someone decides whether the
     // SDK should expose it — rather than the SDK silently falling behind.

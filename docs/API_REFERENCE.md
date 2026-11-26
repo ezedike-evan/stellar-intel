@@ -93,6 +93,7 @@ the hardening contract (see `lib/api/v1.ts`):
   - [`POST /api/reputation/refresh`](#post-apireputationrefresh)
   - [`GET /api/status`](#get-apistatus)
   - [`GET /api/v1/health`](#get-apiv1health)
+  - [`GET /api/v1/usage`](#get-apiv1usage)
   - [`GET /api/webhooks/deliveries`](#get-apiwebhooksdeliveries)
   - [`POST /api/webhooks/deliveries/{id}/redeliver`](#post-apiwebhooksdeliveriesidredeliver)
   - [`GET /api/webhooks/failures`](#get-apiwebhooksfailures)
@@ -1381,6 +1382,22 @@ Liveness and dependency status for the public v1 surface. Required scope: quotes
 | Status | Description | Content-Type | Schema |
 | :--- | :--- | :--- | :--- |
 | `200` | Health snapshot | `application/json` | `object` |
+| `429` | Rate limited | `application/json` | `ApiError` |
+
+---
+
+### `GET /api/v1/usage`
+
+**Summary:** Caller usage (v1)  
+
+The caller's own tier, scopes, daily quota and current per-minute windows, read without spending quota on the counted buckets. Any caller may read its own usage.
+
+#### Responses
+
+| Status | Description | Content-Type | Schema |
+| :--- | :--- | :--- | :--- |
+| `200` | Usage snapshot | `application/json` | `object` |
+| `401` | Missing or invalid credentials | `application/json` | `ApiError` |
 | `429` | Rate limited | `application/json` | `ApiError` |
 
 ---
