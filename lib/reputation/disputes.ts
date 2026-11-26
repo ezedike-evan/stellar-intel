@@ -1,5 +1,11 @@
 import { getSqlExecutor, hasDatabaseUrl } from '@/lib/reputation/pool';
-import { type DisputeCategory, type DisputeLevel, levelDeadline } from './dispute-ladder';
+import { publicDisputeRef } from './adjudication-log';
+import {
+  DISPUTE_CATEGORY_LABELS,
+  type DisputeCategory,
+  type DisputeLevel,
+  levelDeadline,
+} from './dispute-ladder';
 
 // ─── Dispute store ──────────────────────────────────────────────────────────────
 //
@@ -43,6 +49,8 @@ export interface DisputeStore {
   resolve(id: string, status: 'accepted' | 'rejected', resolvedAt: string): Promise<Dispute | null>;
   /** Escalates a dispute to the given level; null when id unknown or not open. */
   escalate(id: string, level: DisputeLevel, levelDeadline: string): Promise<Dispute | null>;
+  /** Opens an appeal for an accepted or rejected dispute; null when not resolved or already appealed. */
+  openAppeal(id: string, appealedAt: string, levelDeadline: string): Promise<Dispute | null>;
   /** Finds all disputes for an intent hash, newest first. */
   findByIntentHash(intentHash: string): Promise<Dispute[]>;
   /** Finds all disputes for a given subject kind and reference, newest first. */
@@ -85,6 +93,27 @@ export class InMemoryDisputeStore implements DisputeStore {
     const found = this.disputes.get(id);
     if (!found || found.status !== 'open') return null;
     const updated: Dispute = { ...found, level, levelDeadline };
+    this.disputes.set(id, updated);
+    return { ...updated };
+  }
+
+  async openAppeal(id: string, appealedAt: string, levelDeadline: string): Promise<Dispute | null> {
+    const found = this.disputes.get(id);
+    if (
+      !found ||
+      (found.status !== 'accepted' && found.status !== 'rejected') ||
+      found.appealedAt !== null
+    ) {
+      return null;
+    }
+    const updated: Dispute = {
+      ...found,
+      status: 'open',
+      level: 'appeal',
+      appealedAt,
+      levelDeadline,
+      resolvedAt: null,
+    };
     this.disputes.set(id, updated);
     return { ...updated };
   }
@@ -248,6 +277,18 @@ export class PostgresDisputeStore implements DisputeStore {
     return rows[0] ? toDispute(rows[0]) : null;
   }
 
+  async openAppeal(id: string, appealedAt: string, levelDeadline: string): Promise<Dispute | null> {
+    await ensureSchema();
+    const { rows } = await getSqlExecutor().query(
+      `UPDATE disputes
+       SET status = 'open', level = 'appeal', appealed_at = $2, level_deadline = $3, resolved_at = NULL
+       WHERE id = $1 AND status IN ('accepted', 'rejected') AND appealed_at IS NULL
+       RETURNING *`,
+      [id, appealedAt, levelDeadline]
+    );
+    return rows[0] ? toDispute(rows[0]) : null;
+  }
+
   async findByIntentHash(intentHash: string): Promise<Dispute[]> {
     await ensureSchema();
     const { rows } = await getSqlExecutor().query(
@@ -282,4 +323,36 @@ export function getDisputeStore(): DisputeStore {
 export function _setDisputeStore(store: DisputeStore | null): void {
   override = store;
   if (store === null) memoryStore = null;
+}
+
+// ─── Public view (DSP010) ───────────────────────────────────────────────────────
+
+/** A dispute as the public anchor profile shows it: no filer key, no free-text reason. */
+export interface PublicDisputeItem {
+  id: string;
+  createdAt: string;
+  reason: string;
+  status: 'open' | 'resolved';
+}
+
+/**
+ * The anchor's own disputes for its public profile, newest first, at most `limit`. The id is the
+ * public dispute reference, never the internal id, and the reason is the category label, never
+ * the filer's free text. Accepted and rejected disputes both show as resolved.
+ */
+export function toPublicDisputeItems(
+  disputes: readonly Dispute[],
+  anchorId: string,
+  limit = 10
+): PublicDisputeItem[] {
+  return disputes
+    .filter((d) => d.anchorId === anchorId)
+    .sort((a, b) => Date.parse(b.createdAt) - Date.parse(a.createdAt))
+    .slice(0, limit)
+    .map((d): PublicDisputeItem => ({
+      id: publicDisputeRef(d.id),
+      createdAt: d.createdAt,
+      reason: DISPUTE_CATEGORY_LABELS[d.category],
+      status: d.status === 'open' ? 'open' : 'resolved',
+    }));
 }

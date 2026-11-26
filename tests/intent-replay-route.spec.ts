@@ -8,6 +8,7 @@ import { clearRateLimitStore } from '@/lib/api/rate-limit';
 import { clearIdempotencyStore } from '@/lib/api/idempotency';
 import { POST as internalPOST } from '@/app/api/intent/offramp/route';
 import { POST as v1POST } from '@/app/api/v1/intent/offramp/route';
+import { _setWebhookEmitter } from '@/lib/webhooks/emit';
 
 // Routing is configuration-driven; without this every corridor is unroutable (#941).
 const TEST_ANCHOR_ACCOUNTS = JSON.stringify({
@@ -45,7 +46,11 @@ function req(url: string, body: unknown): NextRequest {
   });
 }
 
+let emitted: Array<{ kind: string; payload: Record<string, unknown> }> = [];
+
 beforeEach(() => {
+  emitted = [];
+  _setWebhookEmitter((kind, payload) => emitted.push({ kind, payload }));
   clearIntentReplayStore();
   clearRateLimitStore();
   clearIdempotencyStore();
@@ -54,6 +59,7 @@ beforeEach(() => {
 });
 
 afterEach(() => {
+  _setWebhookEmitter(null);
   clearIntentReplayStore();
   vi.unstubAllEnvs();
 });
@@ -78,7 +84,7 @@ describe.each([
     expect(res.status).toBe(200);
   });
 
-  it('rejects a resubmitted nonce with 409', async () => {
+  it('rejects a resubmitted nonce with 409 and emits intent.rejected', async () => {
     const kp = Keypair.random();
     const deadline = new Date(Date.now() + 60_000).toISOString();
     const intent = baseIntent({ nonce: nonce(), deadline });
@@ -87,6 +93,7 @@ describe.each([
     const first = await post(req(url, body));
     expect(first.status).toBe(200);
 
+    emitted = [];
     // Same body, fresh idempotency key so it is not just an idempotent replay.
     const second = await post(
       new NextRequest(url, {
@@ -96,22 +103,61 @@ describe.each([
       })
     );
     expect(second.status).toBe(409);
+    expect(emitted).toEqual([
+      {
+        kind: 'intent.rejected',
+        payload: {
+          intentHash: expect.stringMatching(/^[0-9a-f]{64}$/),
+          direction: 'offramp',
+          reason: 'replay_detected',
+          sourceAsset: 'USDC',
+          destinationAsset: 'NGN',
+          amount: '100',
+        },
+      },
+    ]);
   });
 
-  it('rejects a past deadline with 410', async () => {
+  it('rejects a past deadline with 410 and emits intent.expired', async () => {
     const kp = Keypair.random();
     const deadline = new Date(Date.now() - 60_000).toISOString();
     const intent = baseIntent({ nonce: nonce(), deadline });
     const res = await post(req(url, await signedBody(intent, kp)));
     expect(res.status).toBe(410);
+    expect(emitted).toEqual([
+      {
+        kind: 'intent.expired',
+        payload: {
+          intentHash: expect.stringMatching(/^[0-9a-f]{64}$/),
+          direction: 'offramp',
+          deadline,
+          sourceAsset: 'USDC',
+          destinationAsset: 'NGN',
+          amount: '100',
+        },
+      },
+    ]);
   });
 
-  it('rejects a signed intent missing a nonce with 400', async () => {
+  it('rejects a signed intent missing a nonce with 400 and emits intent.rejected', async () => {
     const kp = Keypair.random();
     const deadline = new Date(Date.now() + 60_000).toISOString();
     const intent = baseIntent({ deadline });
     const res = await post(req(url, await signedBody(intent, kp)));
     expect(res.status).toBe(400);
+    expect(emitted).toEqual([
+      {
+        kind: 'intent.rejected',
+        payload: {
+          intentHash: expect.stringMatching(/^[0-9a-f]{64}$/),
+          direction: 'offramp',
+          reason: 'missing_replay_fields',
+          sourceAsset: 'USDC',
+          destinationAsset: 'NGN',
+          amount: '100',
+        },
+      },
+    ]);
   });
 
   it('accepts an unsigned intent without a nonce', async () => {

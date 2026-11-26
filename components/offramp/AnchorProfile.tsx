@@ -1,14 +1,8 @@
 import Link from 'next/link';
 import { STELLAR_EXPERT_URL } from '@/constants';
 import type { Bucket } from '@/lib/reputation/buckets';
+import type { PublicDisputeItem } from '@/lib/reputation/disputes';
 import type { AnchorRefundStats } from '@/lib/refunds/anchor-stats';
-
-type DisputeItem = {
-  id: string;
-  createdAt: string;
-  reason: string;
-  status: 'open' | 'resolved';
-};
 
 type CorridorItem = {
   id: string;
@@ -25,7 +19,7 @@ export interface AnchorProfileData {
   sampleSize: number;
   corridors: CorridorItem[];
   history: Bucket[];
-  disputes: DisputeItem[];
+  disputes: PublicDisputeItem[];
   oracleTxId: string | null;
   refunds: AnchorRefundStats | null;
 }
@@ -203,6 +197,12 @@ export function AnchorProfile({ data }: { data: AnchorProfileData }) {
             ))}
           </ul>
         )}
+        <Link
+          href="/disputes"
+          className="mt-4 inline-block text-xs font-medium text-accent hover:underline dark:text-accent"
+        >
+          Full dispute log
+        </Link>
       </article>
     </section>
   );

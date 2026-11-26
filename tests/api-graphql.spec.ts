@@ -23,7 +23,7 @@ vi.mock('@/lib/stellar/server-rates', () => ({
   })),
 }));
 
-import { POST } from '@/app/api/graphql/route';
+import { GET, POST } from '@/app/api/graphql/route';
 import { checkRateLimit, clearRateLimitStore } from '@/lib/api/rate-limit';
 import { clearRateCache } from '@/lib/api/rate-cache';
 
@@ -234,6 +234,54 @@ describe('POST /api/graphql — rate limiting', () => {
 
     expect(res.status).toBe(429);
     expect(res.headers.get('Retry-After')).toBeTruthy();
+    expect(res.headers.get('X-RateLimit-Limit')).toBe('60');
+    expect(res.headers.get('X-RateLimit-Reset')).toBeTruthy();
+    expect(res.headers.get('RateLimit')).toMatch(/^"api\.graphql";r=0;t=\d+$/);
+    expect(res.headers.get('RateLimit-Policy')).toBe('"api.graphql";q=60;w=60');
+    const body = (await res.json()) as { code?: string };
+    expect(body.code).toBe('RATE_LIMITED');
+  });
+});
+
+describe('GET /api/graphql — mutations are POST-only', () => {
+  const MUTATION = `
+    mutation($input: OfframpIntentInput!) {
+      submitOfframpIntent(input: $input) { quoteId }
+    }
+  `;
+  const INPUT = {
+    sourceAsset: 'USDC',
+    destinationAsset: 'NGN',
+    amount: '100',
+    sender: VALID_SENDER,
+    recipient: 'NGN-BANK-ACCOUNT-123',
+  };
+
+  it('rejects a GET mutation with 405, Allow: POST and no data', async () => {
+    const params = new URLSearchParams({
+      query: MUTATION,
+      variables: JSON.stringify({ input: INPUT }),
+    });
+    const res = await GET(new NextRequest(`http://localhost/api/graphql?${params.toString()}`));
+
+    expect(res.status).toBe(405);
+    expect(res.headers.get('Allow')).toBe('POST');
+
+    const body = (await res.json()) as GraphQLResponse<{
+      submitOfframpIntent?: unknown;
+    }>;
+    expect(body.data?.submitOfframpIntent).toBeUndefined();
+    expect(body.errors?.[0]?.message).toBe('Mutations must be sent with POST');
+  });
+
+  it('still serves a GET query', async () => {
+    const params = new URLSearchParams({ query: '{ anchors { id } }' });
+    const res = await GET(new NextRequest(`http://localhost/api/graphql?${params.toString()}`));
+
+    expect(res.status).toBe(200);
+    const body = (await res.json()) as GraphQLResponse<{ anchors: Array<{ id: string }> }>;
+    expect(body.errors).toBeUndefined();
+    expect(body.data?.anchors.length).toBeGreaterThan(0);
   });
 });
 

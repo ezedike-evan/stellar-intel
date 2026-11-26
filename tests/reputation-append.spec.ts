@@ -1,7 +1,6 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { NextRequest } from 'next/server';
 import { Keypair } from '@stellar/stellar-sdk';
-import { hashIntent } from '@/lib/intent/hash';
 import type { OutcomeIntent } from '@/lib/reputation/schema';
 import { POST as appendPOST } from '@/app/api/reputation/append/route';
 import { GET as reconcileGET } from '@/app/api/reputation/reconcile/route';
@@ -13,6 +12,19 @@ import {
 } from '@/lib/reputation/store';
 import { SqliteReputationStore } from '@/lib/reputation/sqlite';
 import { _setWebhookEmitter } from '@/lib/webhooks/emit';
+import {
+  InMemorySlippageBreachStore,
+  _setSlippageBreachStore,
+  getSlippageBreachStore,
+  type SlippageBreachStore,
+} from '@/lib/reputation/slippage-breaches';
+import { hashIntent } from '@/lib/intent/hash';
+import {
+  _setRefundStore,
+  getRefundStore,
+  InMemoryRefundStore,
+  type RefundStore,
+} from '@/lib/refunds/store';
 
 let store: ReputationStore;
 let emitted: Array<{ kind: string; payload: Record<string, unknown> }>;
@@ -21,12 +33,16 @@ beforeEach(() => {
   clearRateLimitStore();
   store = new InMemoryReputationStore();
   _setReputationStore(store);
+  _setSlippageBreachStore(new InMemorySlippageBreachStore());
+  _setRefundStore(new InMemoryRefundStore());
   emitted = [];
   _setWebhookEmitter((kind, payload) => emitted.push({ kind, payload }));
 });
 
 afterEach(async () => {
   _setWebhookEmitter(null);
+  _setSlippageBreachStore(null);
+  _setRefundStore(null);
   vi.restoreAllMocks();
   vi.unstubAllGlobals();
   await store.close();
@@ -266,6 +282,54 @@ describe('POST /api/reputation/append — webhooks (#1341)', () => {
     ]);
   });
 
+  it('keys the events of a completed outcome on the intent hash (WHK005)', async () => {
+    const keys: Array<{ kind: string; opts: unknown }> = [];
+    _setWebhookEmitter((kind, _payload, opts) => keys.push({ kind, opts }));
+
+    expect((await appendPOST(req(signed()))).status).toBe(201);
+
+    expect(keys).toEqual([
+      {
+        kind: 'reputation.event_written',
+        opts: { idempotencyKey: `reputation.event_written:${HASH}` },
+      },
+      { kind: 'intent.settled', opts: { idempotencyKey: `intent.settled:${HASH}` } },
+    ]);
+  });
+
+  it('keys the events of a refunded outcome on the intent hash (WHK005)', async () => {
+    const keys: Array<{ kind: string; opts: unknown }> = [];
+    _setWebhookEmitter((kind, _payload, opts) => keys.push({ kind, opts }));
+
+    expect((await appendPOST(req(signed({ outcome: 'refunded' })))).status).toBe(201);
+
+    expect(keys).toEqual([
+      {
+        kind: 'reputation.event_written',
+        opts: { idempotencyKey: `reputation.event_written:${HASH}` },
+      },
+      { kind: 'intent.failed', opts: { idempotencyKey: `intent.failed:${HASH}` } },
+      // A refunded outcome opens a refund case (#2124), keyed on the new case's id.
+      {
+        kind: 'refund.opened',
+        opts: { idempotencyKey: expect.stringMatching(/^refund\.opened:[0-9a-f-]{36}$/) },
+      },
+    ]);
+  });
+
+  it('gives two outcomes different keys, and the kinds of one outcome different keys', async () => {
+    const keys: string[] = [];
+    _setWebhookEmitter((_kind, _payload, opts) => keys.push(opts?.idempotencyKey ?? '(none)'));
+    const other = 'c'.repeat(64);
+
+    expect((await appendPOST(req(signed()))).status).toBe(201);
+    expect((await appendPOST(req(signed({ intentHash: other })))).status).toBe(201);
+
+    expect(keys).toHaveLength(4);
+    expect(new Set(keys).size).toBe(4);
+    expect(keys).not.toContain('(none)');
+  });
+
   it('keeps stellarTransactionId as null on intent.settled when it was not sent', async () => {
     expect((await appendPOST(req(signed({ stellarTransactionId: undefined })))).status).toBe(201);
 
@@ -278,7 +342,12 @@ describe('POST /api/reputation/append — webhooks (#1341)', () => {
     async (outcome) => {
       expect((await appendPOST(req(signed({ outcome })))).status).toBe(201);
 
-      expect(emitted.map((e) => e.kind)).toEqual(['reputation.event_written', 'intent.failed']);
+      // Each of these, sent with a Stellar transaction id, also opens a refund case (#2124).
+      expect(emitted.map((e) => e.kind)).toEqual([
+        'reputation.event_written',
+        'intent.failed',
+        'refund.opened',
+      ]);
       expect(emitted[1]?.payload).toEqual({
         intentHash: HASH,
         anchorId: 'cowrie',
@@ -327,6 +396,140 @@ describe('POST /api/reputation/append — webhooks (#1341)', () => {
   });
 });
 
+describe('POST /api/reputation/append — intent.slippage_breach (SLP014)', () => {
+  /** A signed completed outcome for an intent that asked for at least 1400, delivering `deliveredAmount`. */
+  async function withMinReceive(transactionId: string, deliveredAmount: string) {
+    const outcomeIntent = {
+      type: 'offramp-outcome' as const,
+      sourceAsset: 'USDC',
+      destinationAsset: 'NGN',
+      amount: '100',
+      sender: sender.publicKey(),
+      recipient: 'user@example.com',
+      anchorId: 'cowrie',
+      corridor: 'ngnt-ngn',
+      transactionId,
+      minReceive: '1400',
+    };
+    const intentHash = await hashIntent(outcomeIntent);
+    const body = {
+      intentHash,
+      anchorId: 'cowrie',
+      corridor: 'ngnt-ngn',
+      direction: 'withdraw',
+      quotedRate: '1500.0',
+      quotedAmount: '100',
+      deliveredAmount,
+      outcome: 'completed',
+      minReceive: '1400',
+      outcomeIntent,
+      publicKey: sender.publicKey(),
+      signature: signRaw(intentHash, sender),
+    };
+    return { intentHash, body };
+  }
+
+  it("emits it after the outcome's own events, with exactly the listed keys", async () => {
+    const { intentHash, body } = await withMinReceive('anchor-tx-200', '1350');
+    expect((await appendPOST(req(body))).status).toBe(201);
+    const breach = await getSlippageBreachStore().get(intentHash);
+
+    expect(emitted.map((e) => e.kind)).toEqual([
+      'reputation.event_written',
+      'intent.settled',
+      'intent.slippage_breach',
+      // The breach opens a refund case (RFD014), announced last (#2124).
+      'refund.opened',
+    ]);
+    expect(emitted[2]?.payload).toEqual({
+      intentHash,
+      anchorId: 'cowrie',
+      corridor: 'ngnt-ngn',
+      minReceive: '1400',
+      amountOut: '1350',
+      shortfall: '50',
+      shortfallBps: 357,
+      evidenceHash: breach?.evidenceHash,
+      status: 'detected',
+      detectedAt: breach?.detectedAt,
+    });
+    expect(breach?.evidenceHash).toEqual(expect.any(String));
+    expect(breach?.detectedAt).toEqual(expect.any(String));
+  });
+
+  it('leaves the signer, the evidence and the anchor transaction id out of the payload', async () => {
+    const { intentHash, body } = await withMinReceive('anchor-tx-201', '1350');
+    expect((await appendPOST(req(body))).status).toBe(201);
+    const breach = await getSlippageBreachStore().get(intentHash);
+    const payload = emitted.find((e) => e.kind === 'intent.slippage_breach')?.payload ?? {};
+
+    // The record holds all three; the event carries none of them.
+    expect(breach?.signerAccount).toBe(sender.publicKey());
+    expect(breach?.anchorTransactionId).toBe('anchor-tx-201');
+    expect(payload).not.toHaveProperty('signerAccount');
+    expect(payload).not.toHaveProperty('evidence');
+    expect(payload).not.toHaveProperty('anchorTransactionId');
+    const sent = JSON.stringify(payload);
+    expect(sent).not.toContain(sender.publicKey());
+    expect(sent).not.toContain('anchor-tx-201');
+    expect(sent).not.toContain('user@example.com');
+  });
+
+  it('keys the event on the intent hash, so a retried emission is one event to a subscriber', async () => {
+    const seen: Array<{ kind: string; opts: unknown }> = [];
+    _setWebhookEmitter((kind, _payload, opts) => seen.push({ kind, opts }));
+    const { intentHash, body } = await withMinReceive('anchor-tx-205', '1350');
+    expect((await appendPOST(req(body))).status).toBe(201);
+
+    expect(seen.find((e) => e.kind === 'intent.slippage_breach')?.opts).toEqual({
+      idempotencyKey: `intent.slippage_breach:${intentHash}`,
+    });
+  });
+
+  it('emits nothing more when the outcome met its minimum', async () => {
+    const { body } = await withMinReceive('anchor-tx-202', '1450');
+    const res = await appendPOST(req(body));
+    expect(res.status).toBe(201);
+    expect((await res.json()).slippage).toBe('met');
+
+    expect(emitted.map((e) => e.kind)).toEqual(['reputation.event_written', 'intent.settled']);
+  });
+
+  it('emits nothing more for an outcome with no minimum to compare', async () => {
+    const res = await appendPOST(req(signed()));
+    expect(res.status).toBe(201);
+    expect((await res.json()).slippage).toBe('not_applicable');
+
+    expect(emitted.map((e) => e.kind)).toEqual(['reputation.event_written', 'intent.settled']);
+  });
+
+  it('emits nothing more when the breach could not be recorded', async () => {
+    _setSlippageBreachStore({
+      create: async () => {
+        throw new Error('db down');
+      },
+      get: async () => null,
+      list: async () => [],
+      resolveVerification: async () => null,
+      close: async () => {},
+    } as unknown as Parameters<typeof _setSlippageBreachStore>[0]);
+    const { body } = await withMinReceive('anchor-tx-203', '1350');
+    const res = await appendPOST(req(body));
+    expect(res.status).toBe(201);
+    expect((await res.json()).slippage).toBe('unrecorded');
+
+    expect(emitted.map((e) => e.kind)).toEqual(['reputation.event_written', 'intent.settled']);
+  });
+
+  it('a repeated POST of the same outcome does not announce the breach twice', async () => {
+    const { body } = await withMinReceive('anchor-tx-204', '1350');
+    expect((await appendPOST(req(body))).status).toBe(201);
+    expect((await appendPOST(req(body))).status).toBe(409);
+
+    expect(emitted.filter((e) => e.kind === 'intent.slippage_breach')).toHaveLength(1);
+  });
+});
+
 describe('append -> reconcile end-to-end (#220 + #221 + #219)', () => {
   it('backfills the delivered amount from Horizon within the store', async () => {
     await appendPOST(req(signed()));
@@ -360,6 +563,273 @@ describe('append -> reconcile end-to-end (#220 + #221 + #219)', () => {
     expect(row?.deliveredRate).toBe('1490.00000000'); // 149000 / 100
     expect(row?.reconciledAt).not.toBeNull();
     expect(await store.query({ pendingReconciliationOnly: true })).toHaveLength(0);
+  });
+});
+
+describe('POST /api/reputation/append — slippage detection (SLP008)', () => {
+  it('signed POST (with outcomeIntent) and deliveredAmount below minReceive → 201 slippage: "breach", and getSlippageBreachStore().get(intentHash) is not null', async () => {
+    const outcomeIntent = {
+      type: 'offramp-outcome' as const,
+      sourceAsset: 'USDC',
+      destinationAsset: 'NGN',
+      amount: '100',
+      sender: sender.publicKey(),
+      recipient: 'user@example.com',
+      anchorId: 'cowrie',
+      corridor: 'ngnt-ngn',
+      transactionId: 'anchor-tx-100',
+      minReceive: '1400',
+    };
+    const intentHash = await hashIntent(outcomeIntent);
+    const body = {
+      intentHash,
+      anchorId: 'cowrie',
+      corridor: 'ngnt-ngn',
+      direction: 'withdraw',
+      quotedRate: '1500.0',
+      quotedAmount: '100',
+      deliveredAmount: '1350',
+      outcome: 'completed',
+      minReceive: '1400',
+      outcomeIntent,
+      publicKey: sender.publicKey(),
+      signature: signRaw(intentHash, sender),
+    };
+
+    const res = await appendPOST(req(body));
+    expect(res.status).toBe(201);
+    const data = await res.json();
+    expect(data.slippage).toBe('breach');
+
+    const breach = await getSlippageBreachStore().get(intentHash);
+    expect(breach).not.toBeNull();
+    expect(breach?.amountOut).toBe('1350');
+    expect(breach?.minReceive).toBe('1400');
+    expect(breach?.shortfall).toBe('50');
+    expect(breach?.anchorTransactionId).toBe('anchor-tx-100');
+  });
+
+  it('above the floor → "met"', async () => {
+    const outcomeIntent = {
+      type: 'offramp-outcome' as const,
+      sourceAsset: 'USDC',
+      destinationAsset: 'NGN',
+      amount: '100',
+      sender: sender.publicKey(),
+      recipient: 'user@example.com',
+      anchorId: 'cowrie',
+      corridor: 'ngnt-ngn',
+      transactionId: 'anchor-tx-101',
+      minReceive: '1400',
+    };
+    const intentHash = await hashIntent(outcomeIntent);
+    const body = {
+      intentHash,
+      anchorId: 'cowrie',
+      corridor: 'ngnt-ngn',
+      direction: 'withdraw',
+      quotedRate: '1500.0',
+      quotedAmount: '100',
+      deliveredAmount: '1450',
+      outcome: 'completed',
+      minReceive: '1400',
+      outcomeIntent,
+      publicKey: sender.publicKey(),
+      signature: signRaw(intentHash, sender),
+    };
+
+    const res = await appendPOST(req(body));
+    expect(res.status).toBe(201);
+    const data = await res.json();
+    expect(data.slippage).toBe('met');
+    expect(await getSlippageBreachStore().get(intentHash)).toBeNull();
+  });
+
+  it('a duplicate POST → 409, still one breach', async () => {
+    const outcomeIntent = {
+      type: 'offramp-outcome' as const,
+      sourceAsset: 'USDC',
+      destinationAsset: 'NGN',
+      amount: '100',
+      sender: sender.publicKey(),
+      recipient: 'user@example.com',
+      anchorId: 'cowrie',
+      corridor: 'ngnt-ngn',
+      transactionId: 'anchor-tx-102',
+      minReceive: '1400',
+    };
+    const intentHash = await hashIntent(outcomeIntent);
+    const body = {
+      intentHash,
+      anchorId: 'cowrie',
+      corridor: 'ngnt-ngn',
+      direction: 'withdraw',
+      quotedRate: '1500.0',
+      quotedAmount: '100',
+      deliveredAmount: '1350',
+      outcome: 'completed',
+      minReceive: '1400',
+      outcomeIntent,
+      publicKey: sender.publicKey(),
+      signature: signRaw(intentHash, sender),
+    };
+
+    const res1 = await appendPOST(req(body));
+    expect(res1.status).toBe(201);
+    expect((await res1.json()).slippage).toBe('breach');
+
+    const res2 = await appendPOST(req(body));
+    expect(res2.status).toBe(409);
+
+    const list = await getSlippageBreachStore().list();
+    expect(list.filter((b) => b.intentHash === intentHash)).toHaveLength(1);
+  });
+
+  it('breach store failing → still 201 with "unrecorded"', async () => {
+    const failingStore: SlippageBreachStore = {
+      create: async () => {
+        throw new Error('Store failure');
+      },
+      get: async () => null,
+      list: async () => [],
+      resolveVerification: async () => null,
+    };
+    _setSlippageBreachStore(failingStore);
+
+    const outcomeIntent = {
+      type: 'offramp-outcome' as const,
+      sourceAsset: 'USDC',
+      destinationAsset: 'NGN',
+      amount: '100',
+      sender: sender.publicKey(),
+      recipient: 'user@example.com',
+      anchorId: 'cowrie',
+      corridor: 'ngnt-ngn',
+      transactionId: 'anchor-tx-103',
+      minReceive: '1400',
+    };
+    const intentHash = await hashIntent(outcomeIntent);
+    const body = {
+      intentHash,
+      anchorId: 'cowrie',
+      corridor: 'ngnt-ngn',
+      direction: 'withdraw',
+      quotedRate: '1500.0',
+      quotedAmount: '100',
+      deliveredAmount: '1350',
+      outcome: 'completed',
+      minReceive: '1400',
+      outcomeIntent,
+      publicKey: sender.publicKey(),
+      signature: signRaw(intentHash, sender),
+    };
+
+    const res = await appendPOST(req(body));
+    expect(res.status).toBe(201);
+    const data = await res.json();
+    expect(data.slippage).toBe('unrecorded');
+  });
+
+  it('a recorded slippage breach also opens an owed refund case (RFD014)', async () => {
+    const outcomeIntent = {
+      type: 'offramp-outcome' as const,
+      sourceAsset: 'USDC',
+      destinationAsset: 'NGN',
+      amount: '100',
+      sender: sender.publicKey(),
+      recipient: 'user@example.com',
+      anchorId: 'cowrie',
+      corridor: 'ngnt-ngn',
+      transactionId: 'anchor-tx-refund-breach',
+      minReceive: '1400',
+    };
+    const intentHash = await hashIntent(outcomeIntent);
+    const body = {
+      intentHash,
+      anchorId: 'cowrie',
+      corridor: 'ngnt-ngn',
+      direction: 'withdraw',
+      quotedRate: '1500.0',
+      quotedAmount: '100',
+      deliveredAmount: '1350',
+      outcome: 'completed',
+      minReceive: '1400',
+      outcomeIntent,
+      publicKey: sender.publicKey(),
+      signature: signRaw(intentHash, sender),
+    };
+
+    const res = await appendPOST(req(body));
+    expect(res.status).toBe(201);
+    expect((await res.json()).slippage).toBe('breach');
+
+    const refundCases = await getRefundStore().getByIntentHash(intentHash);
+    expect(refundCases).toHaveLength(1);
+    expect(refundCases[0]).toMatchObject({
+      reason: 'slippage_breach',
+      status: 'owed',
+      refundedAt: null,
+      amountPaid: '100',
+    });
+  });
+});
+
+describe('POST /api/reputation/append — auto-open refund cases (RFD004)', () => {
+  let refundStore: InMemoryRefundStore;
+
+  beforeEach(() => {
+    refundStore = new InMemoryRefundStore();
+    _setRefundStore(refundStore);
+  });
+
+  afterEach(() => {
+    _setRefundStore(null);
+  });
+
+  it('opens a refunded case for a signed refunded append', async () => {
+    expect((await appendPOST(req(signed({ outcome: 'refunded' })))).status).toBe(201);
+    const cases = await refundStore.list();
+    expect(cases).toHaveLength(1);
+    expect(cases[0]).toMatchObject({
+      intentHash: HASH,
+      reason: 'anchor_refunded',
+      status: 'refunded',
+      amountPaid: '100',
+    });
+    expect(cases[0]?.refundedAt).not.toBeNull();
+  });
+
+  it('opens an owed case for a signed withdraw error after payment', async () => {
+    expect((await appendPOST(req(signed({ outcome: 'error' })))).status).toBe(201);
+    const cases = await refundStore.list();
+    expect(cases).toHaveLength(1);
+    expect(cases[0]).toMatchObject({ reason: 'anchor_error_after_payment', status: 'owed' });
+    expect(cases[0]?.refundedAt).toBeNull();
+  });
+
+  it('opens nothing for a completed append', async () => {
+    expect((await appendPOST(req(signed()))).status).toBe(201);
+    expect(await refundStore.list()).toHaveLength(0);
+  });
+
+  it('still answers 201 when the refund store throws', async () => {
+    const throwing: RefundStore = {
+      open: async () => {
+        throw new Error('refund store down');
+      },
+      get: async () => null,
+      getByIntentHash: async () => [],
+      list: async () => [],
+      acknowledge: async () => null,
+    };
+    _setRefundStore(throwing);
+    expect((await appendPOST(req(signed({ outcome: 'refunded' })))).status).toBe(201);
+  });
+
+  it('does not open a second case for a duplicate append', async () => {
+    expect((await appendPOST(req(signed({ outcome: 'refunded' })))).status).toBe(201);
+    expect((await appendPOST(req(signed({ outcome: 'refunded' })))).status).toBe(409);
+    expect(await refundStore.list()).toHaveLength(1);
   });
 });
 

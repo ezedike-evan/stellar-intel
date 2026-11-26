@@ -23,6 +23,7 @@ export async function createServer(): Promise<McpServer> {
   const { registerExecuteTool } = await import('./tools/execute');
   const { registerProbeCoverageTool } = await import('./tools/probe-coverage');
   const { registerAnchorReputationTool } = await import('./tools/anchor-reputation');
+  const { registerAnchorSlaTool } = await import('./tools/anchor-sla');
   const { registerAnchorHealthTool } = await import('./tools/anchor-health');
   const { registerLeaderboardTool } = await import('./tools/leaderboard');
   const { registerCorridorsTool } = await import('./tools/corridors');
@@ -31,6 +32,7 @@ export async function createServer(): Promise<McpServer> {
   const { registerPrompts } = await import('./prompts');
   const { registerAnchorHealthResource } = await import('./resources/anchor-health');
   const { applyToolRateLimit } = await import('./rate-limit');
+  const { applyToolScopes } = await import('./scopes');
 
   const server = new McpServer({
     name: '@stellarintel/mcp',
@@ -39,12 +41,18 @@ export async function createServer(): Promise<McpServer> {
   // Before any tool is registered: the limiter wraps `registerTool`, so a tool
   // registered afterwards is covered without opting in. See rate-limit.ts.
   applyToolRateLimit(server);
+  // Installed after the limiter, so it wraps the limiter's `registerTool`. Each
+  // wrapper runs its check and then calls the next, so at call time the rate
+  // limit runs first and the scope check second: a denied call still counts
+  // against the caller's limit (AGS017). See scopes.ts.
+  applyToolScopes(server);
 
   registerQuoteTool(server);
   registerPrepareTool(server);
   registerExecuteTool(server);
   registerProbeCoverageTool(server);
   registerAnchorReputationTool(server);
+  registerAnchorSlaTool(server);
   registerAnchorHealthTool(server);
   registerLeaderboardTool(server);
   registerCorridorsTool(server);

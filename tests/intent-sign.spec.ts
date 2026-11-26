@@ -1,5 +1,5 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest';
-import { signIntent, IntentSignError } from '@/lib/intent/sign';
+import { signIntent, signHash, IntentSignError } from '@/lib/intent/sign';
 import { hashIntent } from '@/lib/intent/hash';
 import type { Intent } from '@/lib/intent/hash';
 import type { SignedIntentEnvelope } from '@/lib/intent/sign';
@@ -161,5 +161,88 @@ describe('signIntent — envelope determinism', () => {
     const e1 = await signIntent(INTENT);
     const e2 = await signIntent(other);
     expect(e1.intentHash).not.toBe(e2.intentHash);
+  });
+});
+
+// ─── signHash ─────────────────────────────────────────────────────────────────
+
+describe('signHash', () => {
+  const VALID_HASH = 'a'.repeat(64);
+
+  it('signs a valid 64 lowercase hex hash and returns envelope', async () => {
+    const envelope = await signHash(VALID_HASH);
+    expect(envelope).toEqual({
+      intentHash: VALID_HASH,
+      signature: MOCK_SIGNATURE,
+      publicKey: SENDER,
+    });
+    const api = await getApi();
+    expect(vi.mocked(api.signMessage)).toHaveBeenCalledWith(VALID_HASH);
+  });
+
+  it('rejects hashes that are not 64 characters long', async () => {
+    const api = await getApi();
+    const tooShort = 'a'.repeat(63);
+    const tooLong = 'a'.repeat(65);
+    const empty = '';
+
+    for (const invalid of [tooShort, tooLong, empty]) {
+      const promise = signHash(invalid);
+      await expect(promise).rejects.toMatchObject({
+        name: 'IntentSignError',
+        code: 'SIGN_FAILED',
+        message: 'hash must be 64 lowercase hex chars',
+      });
+      await expect(promise).rejects.toBeInstanceOf(IntentSignError);
+    }
+
+    expect(vi.mocked(api.signMessage)).not.toHaveBeenCalled();
+  });
+
+  it('rejects hashes containing uppercase hex characters', async () => {
+    const api = await getApi();
+    const uppercase = 'A'.repeat(64);
+    const mixed = 'a'.repeat(63) + 'F';
+
+    for (const invalid of [uppercase, mixed]) {
+      const promise = signHash(invalid);
+      await expect(promise).rejects.toMatchObject({
+        name: 'IntentSignError',
+        code: 'SIGN_FAILED',
+        message: 'hash must be 64 lowercase hex chars',
+      });
+      await expect(promise).rejects.toBeInstanceOf(IntentSignError);
+    }
+
+    expect(vi.mocked(api.signMessage)).not.toHaveBeenCalled();
+  });
+
+  it('rejects hashes containing non-hex characters', async () => {
+    const api = await getApi();
+    const nonHex = 'g'.repeat(64);
+    const withPunctuation = 'a'.repeat(63) + '!';
+
+    for (const invalid of [nonHex, withPunctuation]) {
+      const promise = signHash(invalid);
+      await expect(promise).rejects.toMatchObject({
+        name: 'IntentSignError',
+        code: 'SIGN_FAILED',
+        message: 'hash must be 64 lowercase hex chars',
+      });
+      await expect(promise).rejects.toBeInstanceOf(IntentSignError);
+    }
+
+    expect(vi.mocked(api.signMessage)).not.toHaveBeenCalled();
+  });
+
+  it('propagates Freighter errors during signHash', async () => {
+    const api = await getApi();
+    vi.mocked(api.signMessage).mockResolvedValue({ error: 'User rejected the request' } as never);
+
+    const promise = signHash(VALID_HASH);
+    await expect(promise).rejects.toMatchObject({
+      name: 'IntentSignError',
+      code: 'SIGN_REJECTED',
+    });
   });
 });

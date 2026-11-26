@@ -6,10 +6,51 @@ import {
 import { z } from 'zod';
 import { STELLAR_PUBKEY_PATTERN, AMOUNT_PATTERN, AMOUNT_7DP_PATTERN } from '@/lib/patterns';
 import { ExecutionSlaReportSchema } from '@/lib/reputation/execution-sla';
+import { API_SCOPES } from '@/lib/auth/api-keys';
 
 extendZodWithOpenApi(z);
 
 export const registry = new OpenAPIRegistry();
+
+registry.registerComponent('securitySchemes', 'adminKey', {
+  type: 'apiKey',
+  in: 'header',
+  name: 'x-admin-key',
+  description: 'Server-side ADMIN_SECRET_KEY. Operator only.',
+});
+
+registry.registerComponent('securitySchemes', 'bearerAuth', {
+  type: 'http',
+  scheme: 'bearer',
+  description: 'CRON_SECRET. Vercel Cron and the operator only.',
+});
+
+registry.registerComponent('securitySchemes', 'callerKey', {
+  type: 'http',
+  scheme: 'bearer',
+  description:
+    'Caller API key (sik_…) or a short-lived caller token. Optional on public routes: anonymous calls are served at the anonymous tier.',
+});
+
+registry.registerComponent('securitySchemes', 'adminKey', {
+  type: 'apiKey',
+  in: 'header',
+  name: 'x-admin-key',
+  description: 'Server-side ADMIN_SECRET_KEY. Operator only.',
+});
+
+registry.registerComponent('securitySchemes', 'bearerAuth', {
+  type: 'http',
+  scheme: 'bearer',
+  description: 'CRON_SECRET. Vercel Cron and the operator only.',
+});
+
+registry.registerComponent('securitySchemes', 'callerKey', {
+  type: 'http',
+  scheme: 'bearer',
+  description:
+    'Caller API key (sik_…) or a short-lived caller token. Optional on public routes: anonymous calls are served at the anonymous tier.',
+});
 
 // ─── Reusable param helpers ─────────────────────────────────────────────────
 
@@ -124,16 +165,6 @@ const ApiErrorSchema = registry.register(
   })
 );
 
-const RATE_LIMITED_429 = {
-  description: 'Rate limited',
-  content: { 'application/json': { schema: ApiErrorSchema } },
-} as const;
-
-const UNAUTHORIZED_401 = {
-  description: 'Missing or invalid credentials',
-  content: { 'application/json': { schema: ApiErrorSchema } },
-} as const;
-
 const IntentRequestSchema = registry.register(
   'IntentRequest',
   z.object({
@@ -200,6 +231,8 @@ const AnchorRateSchema = registry.register(
     expiresAt: z.string().optional(),
     quoteId: z.string().optional(),
     unverifiedPayout: z.boolean().optional(),
+    settleP95Ms: z.number().optional(),
+    settleSampleSize: z.number().int().optional(),
   })
 );
 
@@ -268,10 +301,14 @@ const DisputeRecordSchema = registry.register(
   'DisputeRecord',
   z.object({
     id: z.string(),
+    ref: z.string(),
     intentHash: z.string(),
     publicKey: z.string(),
     anchorId: z.string(),
     reason: z.string(),
+    category: z.string(),
+    level: z.string(),
+    levelDeadline: z.string(),
     disputed: z.boolean(),
     createdAt: z.string(),
   })
@@ -288,6 +325,73 @@ const DisputeAdminSchema = registry.register(
     status: z.enum(['open', 'accepted', 'rejected']),
     createdAt: z.string(),
     resolvedAt: z.string().nullable(),
+    category: z.string(),
+    level: z.string(),
+    levelDeadline: z.string(),
+    subjectKind: z.string(),
+    subjectRef: z.string().nullable(),
+    appealedAt: z.string().nullable(),
+  })
+);
+
+const AdjudicationEntrySchema = registry.register(
+  'AdjudicationEntry',
+  z.object({
+    seq: z.number().int().describe('1-based sequential entry number in the hash chain'),
+    disputeRef: z.string().describe('Public dispute reference identifier'),
+    anchorId: z.string().describe('Identifier of the anchor involved'),
+    category: z
+      .string()
+      .describe(
+        'Dispute category (e.g. wrong_amount, not_received, delayed, wrong_account, refund_missing, other)'
+      ),
+    level: z.string().describe('Dispute ladder level (e.g. anchor, review, appeal)'),
+    action: z
+      .string()
+      .describe('Adjudication action (filed, escalated, accepted, rejected, appealed)'),
+    rationale: z.string().describe('Public rationale for the decision'),
+    decidedAt: z.string().describe('ISO 8601 timestamp of when the action was decided'),
+    prevHash: z.string().describe('SHA-256 hash of previous entry or 64 zeros for genesis'),
+    entryHash: z.string().describe('SHA-256 hash of this entry canonical representation'),
+  })
+);
+
+const AdjudicationSummarySchema = registry.register(
+  'AdjudicationSummary',
+  z.object({
+    filed: z.number().int().describe('Total number of distinct disputes filed'),
+    resolved: z.number().int().describe('Total number of resolved disputes (accepted or rejected)'),
+    accepted: z.number().int().describe('Number of disputes accepted'),
+    rejected: z.number().int().describe('Number of disputes rejected'),
+    open: z.number().int().describe('Number of disputes currently open'),
+    appealed: z.number().int().describe('Number of disputes with at least one appeal action'),
+  })
+);
+
+const AdjudicationLogResponseSchema = registry.register(
+  'AdjudicationLogResponse',
+  z.object({
+    entries: z.array(AdjudicationEntrySchema).describe('Adjudication entries matching the query'),
+    head: z
+      .object({
+        seq: z.number().int(),
+        entryHash: z.string(),
+      })
+      .nullable()
+      .describe('Latest entry in the adjudication log, or null if empty'),
+    verification: z
+      .object({
+        ok: z.boolean(),
+        length: z.number().int().optional(),
+        head: z.string().optional(),
+        brokenAtSeq: z.number().int().optional(),
+        reason: z.string().optional(),
+      })
+      .describe('Hash chain verification result across all entries'),
+    summary: AdjudicationSummarySchema.describe('Summary statistics across all disputes'),
+    hashFormat: z
+      .string()
+      .describe('Canonical hash format descriptor, e.g. stellar-intel/adjudication/v1'),
   })
 );
 
@@ -323,6 +427,31 @@ const PublisherHealthSchema = registry.register(
   })
 );
 
+const SlippageComplianceSchema = registry.register(
+  'SlippageCompliance',
+  z.object({
+    window: z
+      .union([z.literal(30), z.literal(90), z.literal('all')])
+      .describe('Evaluation window in days or "all"'),
+    eligibleIntents: z.number().int().describe('Total withdraw intents settled in the window'),
+    breaches: z.number().int().describe('Total slippage breaches detected in the window'),
+    verifiedBreaches: z.number().int().describe('Total verified breaches in the window'),
+    compliancePct: z
+      .number()
+      .nullable()
+      .describe(
+        'Percentage of withdraws meeting slippage floor (0-100), null if eligibleIntents is 0'
+      ),
+    gate: z
+      .object({
+        targetPct: z.number().describe('Target compliance percentage required to pass gate (99.0)'),
+        minIntents: z.number().int().describe('Minimum number of eligible intents required (100)'),
+        met: z.boolean().describe('Whether the release gate criteria are met'),
+      })
+      .describe('V3 release gate compliance criteria'),
+  })
+);
+
 const MetricsSnapshotSchema = registry.register(
   'MetricsSnapshot',
   z.object({
@@ -341,6 +470,67 @@ const MetricsSnapshotSchema = registry.register(
     ),
     ratesCache: z.object({ hits: z.number(), misses: z.number() }),
     publisherHealth: PublisherHealthSchema,
+    slippageCompliance: SlippageComplianceSchema.nullable().describe(
+      'Slippage compliance metrics for 30-day window, or null if store is unavailable'
+    ),
+  })
+);
+
+const RefundAckPaymentSchema = registry.register(
+  'RefundAckPayment',
+  z.object({
+    id: z.string().min(1).max(128).describe('Payment identifier'),
+    idType: z.enum(['stellar', 'external']).describe('Type of payment identifier'),
+    amount: z.string().regex(AMOUNT_PATTERN).max(40).describe('Amount refunded in this payment'),
+  })
+);
+
+const RefundAckPayloadSchema = registry.register(
+  'RefundAckPayload',
+  z.object({
+    type: z.literal('refund-ack').describe('Payload type discriminator'),
+    version: z.literal(1).describe('Payload format version'),
+    intentHash: z
+      .string()
+      .regex(/^[0-9a-f]{64}$/)
+      .describe('64-hex SHA-256 intent hash'),
+    anchorId: z.string().min(1).max(64).describe('Anchor identifier'),
+    account: z
+      .string()
+      .regex(STELLAR_PUBKEY_PATTERN)
+      .describe('Stellar public key of acknowledging user'),
+    amountRefunded: z.string().regex(AMOUNT_PATTERN).max(40).describe('Total amount refunded'),
+    refundFee: z.string().regex(AMOUNT_PATTERN).max(40).describe('Total refund fee deducted'),
+    payments: z.array(RefundAckPaymentSchema).max(20).describe('Individual refund payments'),
+  })
+);
+
+const RefundAckRequestBodySchema = registry.register(
+  'RefundAckRequestBody',
+  z.object({
+    ack: RefundAckPayloadSchema,
+    signature: z
+      .string()
+      .min(1)
+      .max(256)
+      .describe('Cryptographic signature over the canonical refund-ack payload hash'),
+  })
+);
+
+const RefundAckResponseSchema = registry.register(
+  'RefundAckResponse',
+  z.object({
+    id: z.string().describe('Refund case identifier'),
+    intentHash: z
+      .string()
+      .regex(/^[0-9a-f]{64}$/)
+      .describe('Intent hash for the refund case'),
+    status: z.literal('acknowledged').describe('Status of the refund case'),
+    acknowledgedAt: z.string().describe('ISO 8601 timestamp when acknowledged'),
+    onChainCheck: z
+      .enum(['verified', 'mismatch', 'unverifiable'])
+      .nullable()
+      .describe('On-chain verification status'),
   })
 );
 
@@ -349,9 +539,14 @@ void SignedIntentEnvelopeSchema;
 void AnchorRateSchema;
 void DisputeRecordSchema;
 void DisputeAdminSchema;
+void AdjudicationEntrySchema;
+void AdjudicationSummarySchema;
+void AdjudicationLogResponseSchema;
 void LeaderboardResponseSchema;
 void PublisherHealthSchema;
 void MetricsSnapshotSchema;
+void RefundAckRequestBodySchema;
+void RefundAckResponseSchema;
 
 // ─── Route registrations ─────────────────────────────────────────────────────
 
@@ -487,8 +682,9 @@ registry.registerPath({
   path: '/api/v1/anchors/{id}/health',
   summary: 'Get anchor health status',
   description:
-    "Returns the anchor's current health status, last-probe timestamp, and score breakdown. Returns 'unknown' or 'stale' when probes haven't run recently — honest degradation rather than fabricated data.",
+    "Returns the anchor's current health status, last-probe timestamp, and score breakdown. Returns 'unknown' or 'stale' when probes haven't run recently — honest degradation rather than fabricated data. Required scope: quotes:read.",
   tags: ['Anchors'],
+  security: [{}, { callerKey: [] }],
   request: {
     params: z.object({
       id: z.string().min(1).describe('Anchor identifier (e.g. moneygram, cowrie, anclap)'),
@@ -526,8 +722,9 @@ registry.registerPath({
   path: '/api/v1/anchors/{id}/price-history',
   summary: 'Get anchor SEP-38 price history',
   description:
-    'Returns recorded SEP-38 price observations for an anchor corridor, downsampled to at most 500 points (evenly spaced; first and last retained).',
+    'Returns recorded SEP-38 price observations for an anchor corridor, downsampled to at most 500 points (evenly spaced; first and last retained). Required scope: quotes:read.',
   tags: ['Anchors'],
+  security: [{}, { callerKey: [] }],
   request: {
     params: z.object({
       id: z.string().min(1).describe('Anchor identifier'),
@@ -617,8 +814,9 @@ registry.registerPath({
   path: '/api/v1/onramp/quote',
   summary: 'Get indicative deposit (on-ramp) quotes',
   description:
-    'Returns an indicative estimate per anchor for depositing a fiat amount into a Stellar asset. SEP-24 publishes deposit fees but the anchor sets the final conversion inside its interactive deposit window, so every figure is an estimate.',
+    'Returns an indicative estimate per anchor for depositing a fiat amount into a Stellar asset. SEP-24 publishes deposit fees but the anchor sets the final conversion inside its interactive deposit window, so every figure is an estimate. Required scope: quotes:read.',
   tags: ['On-ramp'],
+  security: [{}, { callerKey: [] }],
   request: {
     query: z.object({
       corridor: z.string().openapi({
@@ -688,8 +886,9 @@ registry.registerPath({
   description:
     'Signed gap between the rate shown before execution and the rate that landed, over completed, ' +
     'undisputed withdrawals in the window. Negative means users received less than quoted. ' +
-    'Stands in for SEP-38 firm quotes, which most anchors do not offer. Null statistics mean no samples.',
+    'Stands in for SEP-38 firm quotes, which most anchors do not offer. Null statistics mean no samples. Required scope: quotes:read.',
   tags: ['Anchors'],
+  security: [{}, { callerKey: [] }],
   request: {
     params: z.object({
       id: z.string().min(1).describe('Anchor identifier'),
@@ -750,8 +949,9 @@ registry.registerPath({
   description:
     'For each registered anchor: whether the operator declares SEP-38, whether its stellar.toml ' +
     'advertises a quote server, whether that server’s /info answers, and whether it lists the ' +
-    'anchor’s registered asset. Checked live and cached for ten minutes.',
+    'anchor’s registered asset. Checked live and cached for ten minutes. Required scope: quotes:read.',
   tags: ['Anchors'],
+  security: [{}, { callerKey: [] }],
   responses: {
     200: {
       description: 'Readiness per anchor',
@@ -925,7 +1125,7 @@ registry.registerPath({
                 minReceive: z.string(),
               })
               .optional()
-              .openapi({ description: 'The exact intent signed by the sender' }),
+              .openapi({ description: 'The exact outcome intent signed by sender' }),
           }),
         },
       },
@@ -936,7 +1136,12 @@ registry.registerPath({
       description: 'Outcome appended and attested',
       content: {
         'application/json': {
-          schema: z.object({ ok: z.boolean(), intentHash: z.string(), attested: z.boolean() }),
+          schema: z.object({
+            ok: z.boolean(),
+            intentHash: z.string(),
+            attested: z.boolean(),
+            slippage: z.enum(['not_applicable', 'met', 'breach', 'unrecorded']),
+          }),
         },
       },
     },
@@ -960,64 +1165,6 @@ registry.registerPath({
 });
 
 registry.registerPath({
-  method: 'get',
-  path: '/api/reputation/{anchor}/sla',
-  summary: 'Get anchor execution SLA',
-  description:
-    'Returns trailing 30-day settlement SLA percentiles (nearest-rank, no trimming) for an anchor, requiring at least 30 completed samples (and 100 for p99), evaluated against breach thresholds.',
-  tags: ['Reputation'],
-  request: {
-    params: z.object({ anchor: AnchorPathParam }),
-    query: z.object({ corridor: CorridorQueryParam }),
-  },
-  responses: {
-    200: {
-      description: 'Execution SLA report',
-      content: {
-        'application/json': {
-          schema: registry.register('ExecutionSlaReport', ExecutionSlaReportSchema),
-        },
-      },
-    },
-    400: {
-      description: 'Validation error',
-      content: { 'application/json': { schema: ApiErrorSchema } },
-    },
-    404: {
-      description: 'Unknown anchor',
-      content: { 'application/json': { schema: ApiErrorSchema } },
-    },
-  },
-});
-
-registry.registerPath({
-  method: 'get',
-  path: '/api/reputation/dispute-sweep',
-  summary: 'Sweep overdue disputes and owed refunds',
-  description:
-    'Cron-only route bearer-gated on CRON_SECRET. Escalates overdue anchor-level disputes and opens disputes for overdue owed refunds.',
-  tags: ['Reputation'],
-  security: [{ bearerAuth: [] }],
-  responses: {
-    200: {
-      description: 'Sweep completed',
-      content: {
-        'application/json': {
-          schema: z.object({
-            ok: z.boolean(),
-            scanned: z.number(),
-            escalated: z.number(),
-            refundDisputesOpened: z.number(),
-            sweptAt: z.string(),
-          }),
-        },
-      },
-    },
-    401: UNAUTHORIZED_401,
-  },
-});
-
-registry.registerPath({
   method: 'post',
   path: '/api/reputation/dispute',
   summary: 'Submit a reputation dispute',
@@ -1035,6 +1182,7 @@ registry.registerPath({
             signature: z.string(),
             anchorId: z.string(),
             reason: z.string(),
+            category: z.string().optional(),
           }),
         },
       },
@@ -1053,12 +1201,131 @@ registry.registerPath({
       description: 'Signature verification failed',
       content: { 'application/json': { schema: ApiErrorSchema } },
     },
+    409: {
+      description: 'Conflict: open dispute already exists',
+      content: { 'application/json': { schema: ApiErrorSchema } },
+    },
     422: {
       description: 'Validation error',
       content: { 'application/json': { schema: ApiErrorSchema } },
     },
     429: {
       description: 'Rate limited (10/24h)',
+      content: { 'application/json': { schema: ApiErrorSchema } },
+    },
+  },
+});
+
+export const DisputeLookupItemSchema = z.object({
+  ref: z.string().describe('Public dispute reference identifier'),
+  category: z.string().describe('Dispute category'),
+  level: z.string().describe('Current dispute ladder level'),
+  levelDeadline: z.string().describe('ISO 8601 deadline for current level'),
+  status: z.enum(['open', 'accepted', 'rejected']).describe('Dispute status'),
+  createdAt: z.string().describe('ISO 8601 timestamp when dispute was filed'),
+  resolvedAt: z.string().nullable().describe('ISO 8601 timestamp when dispute was resolved'),
+});
+
+registry.registerPath({
+  method: 'get',
+  path: '/api/reputation/dispute',
+  summary: 'Look up disputes for an intent',
+  description:
+    'Retrieves public dispute summaries for a given off-ramp intent hash. Returns newest first. Never includes personal data.',
+  tags: ['Reputation'],
+  request: {
+    query: z.object({
+      intentHash: z
+        .string()
+        .regex(/^[0-9a-f]{64}$/)
+        .openapi({
+          param: { name: 'intentHash', in: 'query' },
+          example: 'a'.repeat(64),
+          description: 'Lowercase hex-encoded SHA-256 intent hash (64 chars)',
+        }),
+    }),
+  },
+  responses: {
+    200: {
+      description: 'List of disputes for the intent',
+      content: {
+        'application/json': {
+          schema: z.object({
+            disputes: z.array(DisputeLookupItemSchema),
+          }),
+        },
+      },
+    },
+    422: {
+      description: 'Invalid intentHash format',
+      content: { 'application/json': { schema: ApiErrorSchema } },
+    },
+    429: {
+      description: 'Rate limited',
+      content: { 'application/json': { schema: ApiErrorSchema } },
+    },
+  },
+});
+
+export const AppealResponseSchema = z.object({
+  ref: z.string().describe('Dispute reference'),
+  level: z.literal('appeal').describe('New dispute level'),
+  levelDeadline: z.string().describe('ISO 8601 deadline for appeal'),
+});
+
+registry.registerPath({
+  method: 'post',
+  path: '/api/reputation/dispute/appeal',
+  summary: 'Appeal a resolved dispute',
+  description:
+    'Appeals a resolved dispute (accepted or rejected) within the 14-day window. Must be signed by the original filer.',
+  tags: ['Reputation'],
+  request: {
+    body: {
+      required: true,
+      content: {
+        'application/json': {
+          schema: z.object({
+            intentHash: z.string().regex(/^[0-9a-f]{64}$/),
+            publicKey: z.string().regex(STELLAR_PUBKEY_PATTERN),
+            signature: z.string(),
+            ref: z.string().regex(/^[0-9a-f]{16}$/),
+          }),
+        },
+      },
+    },
+  },
+  responses: {
+    200: {
+      description: 'Appeal accepted and dispute reopened at appeal level',
+      content: { 'application/json': { schema: AppealResponseSchema } },
+    },
+    400: {
+      description: 'Invalid request body',
+      content: { 'application/json': { schema: ApiErrorSchema } },
+    },
+    403: {
+      description: 'Invalid signature or caller is not original filer',
+      content: { 'application/json': { schema: ApiErrorSchema } },
+    },
+    404: {
+      description: 'Dispute not found',
+      content: { 'application/json': { schema: ApiErrorSchema } },
+    },
+    409: {
+      description: 'Dispute not resolved or already appealed',
+      content: { 'application/json': { schema: ApiErrorSchema } },
+    },
+    410: {
+      description: 'Appeal window closed (past 14 days)',
+      content: { 'application/json': { schema: ApiErrorSchema } },
+    },
+    422: {
+      description: 'Validation error',
+      content: { 'application/json': { schema: ApiErrorSchema } },
+    },
+    429: {
+      description: 'Rate limited',
       content: { 'application/json': { schema: ApiErrorSchema } },
     },
   },
@@ -1249,7 +1516,10 @@ registry.registerPath({
         },
       },
     },
-    401: UNAUTHORIZED_401,
+    401: {
+      description: 'Unauthorized',
+      content: { 'application/json': { schema: ApiErrorSchema } },
+    },
     409: {
       description: 'Tick already in progress',
       content: { 'application/json': { schema: ApiErrorSchema } },
@@ -1359,7 +1629,8 @@ registry.registerPath({
         'application/json': {
           schema: z.object({
             id: z.string(),
-            action: z.enum(['accept', 'reject']),
+            action: z.enum(['accept', 'reject', 'escalate']),
+            rationale: z.string().max(500).optional(),
           }),
         },
       },
@@ -1380,6 +1651,10 @@ registry.registerPath({
     },
     404: {
       description: 'Dispute not found',
+      content: { 'application/json': { schema: ApiErrorSchema } },
+    },
+    409: {
+      description: 'Conflict: dispute not open or cannot escalate',
       content: { 'application/json': { schema: ApiErrorSchema } },
     },
   },
@@ -1423,6 +1698,98 @@ registry.registerPath({
 // description above claimed the hardening contract applied to "every response".
 // A generated SDK built from the old spec would have covered just over half the
 // API.
+
+const RATE_LIMITED_429 = {
+  description: 'Rate limited',
+  content: { 'application/json': { schema: ApiErrorSchema } },
+} as const;
+
+const UNAUTHORIZED_401 = {
+  description: 'Missing or invalid credentials',
+  content: { 'application/json': { schema: ApiErrorSchema } },
+} as const;
+
+registry.registerPath({
+  method: 'get',
+  path: '/api/admin/audit/export',
+  summary: 'Export audit log (admin)',
+  description:
+    'Export audit log events over a date range as NDJSON or CSV. Requires adminKey or callerKey with admin scope.',
+  tags: ['Admin'],
+  security: [{ adminKey: [] }, { callerKey: [] }],
+  request: {
+    query: z.object({
+      from: z.string().openapi({ description: 'Start of ISO 8601 date range (inclusive)' }),
+      to: z.string().openapi({ description: 'End of ISO 8601 date range (exclusive)' }),
+      format: z
+        .enum(['ndjson', 'csv'])
+        .optional()
+        .openapi({ description: 'Export format ("ndjson" or "csv", default "ndjson")' }),
+      callerId: z
+        .string()
+        .optional()
+        .openapi({ description: 'Filter by caller id (e.g. "anonymous" or "key:<16-hex>")' }),
+    }),
+  },
+  responses: {
+    200: {
+      description: 'Audit log export stream',
+      content: {
+        'application/x-ndjson': {
+          schema: z.string(),
+        },
+        'text/csv': {
+          schema: z.string(),
+        },
+      },
+    },
+    400: {
+      description: 'Validation error',
+      content: { 'application/json': { schema: ApiErrorSchema } },
+    },
+    401: {
+      description: 'Authentication required',
+      content: { 'application/json': { schema: ApiErrorSchema } },
+    },
+    403: {
+      description: 'Forbidden',
+      content: { 'application/json': { schema: ApiErrorSchema } },
+    },
+    429: RATE_LIMITED_429,
+  },
+});
+
+registry.registerPath({
+  method: 'get',
+  path: '/api/reputation/{anchor}/sla',
+  summary: 'Get anchor execution SLA',
+  description:
+    'Returns trailing 30-day settlement SLA percentiles (nearest-rank, no trimming) for an anchor, requiring at least 30 completed samples (and 100 for p99), evaluated against breach thresholds.',
+  tags: ['Reputation'],
+  request: {
+    params: z.object({ anchor: AnchorPathParam }),
+    query: z.object({ corridor: CorridorQueryParam }),
+  },
+  responses: {
+    200: {
+      description: 'Execution SLA report',
+      content: {
+        'application/json': {
+          schema: registry.register('ExecutionSlaReport', ExecutionSlaReportSchema),
+        },
+      },
+    },
+    400: {
+      description: 'Validation error',
+      content: { 'application/json': { schema: ApiErrorSchema } },
+    },
+    404: {
+      description: 'Unknown anchor',
+      content: { 'application/json': { schema: ApiErrorSchema } },
+    },
+    429: RATE_LIMITED_429,
+  },
+});
 
 registry.registerPath({
   method: 'post',
@@ -1472,8 +1839,9 @@ registry.registerPath({
   summary: 'Submit an off-ramp intent (v1)',
   description:
     'The public v1 intent endpoint. Honours `Idempotency-Key`: a retried request replays the ' +
-    'original response with `Idempotency-Replayed: true` rather than creating a second intent.',
+    'original response with `Idempotency-Replayed: true` rather than creating a second intent. Required scope: intents:write.',
   tags: ['Intent'],
+  security: [{}, { callerKey: [] }],
   responses: {
     200: {
       description: 'Intent accepted',
@@ -1481,6 +1849,10 @@ registry.registerPath({
     },
     400: {
       description: 'Validation error',
+      content: { 'application/json': { schema: ApiErrorSchema } },
+    },
+    403: {
+      description: 'Forbidden: insufficient scope',
       content: { 'application/json': { schema: ApiErrorSchema } },
     },
     429: RATE_LIMITED_429,
@@ -1535,8 +1907,9 @@ registry.registerPath({
     'Routes a deposit intent to the best indicative anchor and returns the /onramp handoff URL, ' +
     'plus an unsigned changeTrust XDR when the destination account has no trustline. No anchor ' +
     'session is opened: KYC and the interactive deposit run in the browser. Honours ' +
-    '`Idempotency-Key` like the off-ramp endpoint.',
+    '`Idempotency-Key` like the off-ramp endpoint. Required scope: intents:write.',
   tags: ['Intent'],
+  security: [{}, { callerKey: [] }],
   request: {
     headers: z.object({
       'Idempotency-Key': z
@@ -1562,6 +1935,10 @@ registry.registerPath({
       description: 'Attestation signature did not verify',
       content: { 'application/json': { schema: ApiErrorSchema } },
     },
+    403: {
+      description: 'Forbidden: insufficient scope',
+      content: { 'application/json': { schema: ApiErrorSchema } },
+    },
     404: {
       description: 'No anchor serves this corridor',
       content: { 'application/json': { schema: ApiErrorSchema } },
@@ -1582,13 +1959,55 @@ registry.registerPath({
   method: 'get',
   path: '/api/v1/health',
   summary: 'Service health (v1)',
-  description: 'Liveness and dependency status for the public v1 surface.',
+  description:
+    'Liveness and dependency status for the public v1 surface. Required scope: quotes:read.',
   tags: ['System'],
+  security: [{}, { callerKey: [] }],
   responses: {
     200: {
       description: 'Health snapshot',
       content: { 'application/json': { schema: z.object({ status: z.string() }).passthrough() } },
     },
+    429: RATE_LIMITED_429,
+  },
+});
+
+registry.registerPath({
+  method: 'get',
+  path: '/api/v1/usage',
+  summary: 'Caller usage (v1)',
+  description:
+    "The caller's own tier, scopes, daily quota and current per-minute windows, read without spending quota on the counted buckets. Any caller may read its own usage.",
+  tags: ['System'],
+  responses: {
+    200: {
+      description: 'Usage snapshot',
+      content: {
+        'application/json': {
+          schema: z
+            .object({
+              caller: z.object({
+                kind: z.string(),
+                keyPrefix: z.string().nullable(),
+                tier: z.string(),
+                scopes: z.array(z.string()),
+              }),
+              quota: z
+                .object({
+                  limit: z.number(),
+                  used: z.number(),
+                  resetAt: z.string(),
+                })
+                .nullable(),
+              windows: z.array(
+                z.object({ bucket: z.string(), used: z.number(), resetAt: z.string() })
+              ),
+            })
+            .passthrough(),
+        },
+      },
+    },
+    401: UNAUTHORIZED_401,
     429: RATE_LIMITED_429,
   },
 });
@@ -1710,8 +2129,9 @@ registry.registerPath({
     'Reads the on-chain volume/savings oracle for one corridor: cumulative USDC routed, USDC ' +
     'saved against the baseline rate, and the settlement count behind both. Amounts are ' +
     'microUSDC. Served from the contract, so the aggregate is checkable without trusting this ' +
-    "app's own database. Zeroes are returned when the corridor has no on-chain entry yet.",
+    "app's own database. Zeroes are returned when the corridor has no on-chain entry yet. Required scope: quotes:read.",
   tags: ['Rates'],
+  security: [{}, { callerKey: [] }],
   request: {
     params: z.object({
       corridor: z.string().min(1).describe('Corridor identifier (e.g. usdc-ngn)'),
@@ -1797,8 +2217,9 @@ registry.registerPath({
     'ledger this deployment was built with. With `date` (YYYY-MM-DD), returns the ledger as it ' +
     'stood on that date, resolved from the git history of `constants/anchor-health.json` — so the ' +
     'series is fetchable without cloning the repository. The committed file remains the source of ' +
-    'truth; nothing is mirrored server-side. A dated response is immutable and cached as such.',
+    'truth; nothing is mirrored server-side. A dated response is immutable and cached as such. Required scope: quotes:read.',
   tags: ['Anchors'],
+  security: [{}, { callerKey: [] }],
   request: {
     query: z.object({
       date: z
@@ -1874,8 +2295,9 @@ registry.registerPath({
   description:
     'Serves the committed anchor census (constants/anchor-census-rows.json), covering every surveyed ' +
     'anchor — routable, health-only, or merely listed — not only the anchors registered for ' +
-    'routing. Optionally filtered to a single tier.',
+    'routing. Optionally filtered to a single tier. Required scope: quotes:read.',
   tags: ['Anchors'],
+  security: [{}, { callerKey: [] }],
   request: {
     query: z.object({
       tier: z
@@ -1891,6 +2313,49 @@ registry.registerPath({
     },
     400: {
       description: 'Invalid `tier` value',
+      content: { 'application/json': { schema: ApiErrorSchema } },
+    },
+    429: RATE_LIMITED_429,
+  },
+});
+
+registry.registerPath({
+  method: 'get',
+  path: '/api/v1/disputes/log',
+  summary: 'Get the public dispute adjudication log',
+  description:
+    'Serves the public, append-only, hash-chained dispute adjudication log, along with ' +
+    'verification status and summary counts. Required scope: quotes:read.',
+  tags: ['Reputation'],
+  security: [{}, { callerKey: [] }],
+  request: {
+    query: z.object({
+      afterSeq: z
+        .string()
+        .optional()
+        .openapi({
+          param: { name: 'afterSeq', in: 'query' },
+          example: '0',
+          description:
+            'Return entries strictly after this sequence number (integer >= 0, default 0)',
+        }),
+      limit: z
+        .string()
+        .optional()
+        .openapi({
+          param: { name: 'limit', in: 'query' },
+          example: '200',
+          description: 'Maximum number of entries to return (1-500, default 200)',
+        }),
+    }),
+  },
+  responses: {
+    200: {
+      description: 'The adjudication log entries and chain verification',
+      content: { 'application/json': { schema: AdjudicationLogResponseSchema } },
+    },
+    400: {
+      description: 'Invalid afterSeq or limit parameters',
       content: { 'application/json': { schema: ApiErrorSchema } },
     },
     429: RATE_LIMITED_429,
@@ -1938,10 +2403,37 @@ registry.registerPath({
 
 registry.registerPath({
   method: 'post',
+  path: '/api/reputation/dispute-sweep',
+  summary: 'Escalate overdue disputes',
+  description:
+    'Cron-triggered. Moves every open dispute that sat at the anchor response rung past its ' +
+    '72-hour deadline to maintainer review and records the move in the public adjudication log. ' +
+    'Disputes already at review or appeal are left for a human to decide. Protected by CRON_SECRET.',
+  tags: ['System'],
+  security: [{ bearerAuth: [] }],
+  responses: {
+    200: {
+      description: 'Sweep completed',
+      content: {
+        'application/json': {
+          schema: z.object({
+            scanned: z.number(),
+            escalated: z.number(),
+          }),
+        },
+      },
+    },
+    401: UNAUTHORIZED_401,
+  },
+});
+
+registry.registerPath({
+  method: 'post',
   path: '/api/admin/cache/invalidate',
   summary: 'Invalidate cached rates',
   description: 'Drops cached rate comparisons for one anchor or all of them. Admin only.',
   tags: ['System'],
+  security: [{ adminKey: [] }],
   responses: {
     200: {
       description: 'Cache invalidated',
@@ -1958,6 +2450,7 @@ registry.registerPath({
   summary: 'List webhook subscriptions',
   description: 'Admin only. See docs/WEBHOOKS.md for the delivery and signing contract.',
   tags: ['System'],
+  security: [{ adminKey: [] }],
   responses: {
     200: {
       description: 'Subscriptions',
@@ -1975,6 +2468,7 @@ registry.registerPath({
   description:
     'Admin only. Returns the per-subscription HMAC signing secret once, at creation time.',
   tags: ['System'],
+  security: [{ adminKey: [] }],
   responses: {
     201: {
       description: 'Subscription created',
@@ -1995,6 +2489,7 @@ registry.registerPath({
   summary: 'Delete a webhook subscription',
   description: 'Admin only.',
   tags: ['System'],
+  security: [{ adminKey: [] }],
   responses: {
     204: { description: 'Deleted' },
     401: UNAUTHORIZED_401,
@@ -2013,6 +2508,7 @@ registry.registerPath({
   description:
     'Admin only. Deliveries that exhausted their retries and were dead-lettered (see docs/WEBHOOKS.md).',
   tags: ['System'],
+  security: [{ adminKey: [] }],
   responses: {
     200: {
       description: 'Dead-lettered deliveries',
@@ -2023,7 +2519,776 @@ registry.registerPath({
   },
 });
 
+registry.registerPath({
+  method: 'get',
+  path: '/api/webhooks/deliveries',
+  summary: 'List webhook delivery records',
+  description:
+    'Admin only. Returns webhook delivery records filtered by status, subscription, or event, newest first.',
+  tags: ['System'],
+  request: {
+    query: z.object({
+      status: z
+        .enum(['success', 'failed', 'dead_letter'])
+        .optional()
+        .openapi({
+          param: { name: 'status', in: 'query' },
+          example: 'dead_letter',
+          description: 'Filter by delivery status (success, failed, dead_letter)',
+        }),
+      subscriptionId: z
+        .string()
+        .min(1)
+        .max(100)
+        .optional()
+        .openapi({
+          param: { name: 'subscriptionId', in: 'query' },
+          example: 'sub-1',
+          description: 'Filter by subscription ID',
+        }),
+      eventId: z
+        .string()
+        .min(1)
+        .max(100)
+        .optional()
+        .openapi({
+          param: { name: 'eventId', in: 'query' },
+          example: 'evt-1',
+          description: 'Filter by event ID',
+        }),
+      limit: z.coerce
+        .number()
+        .int()
+        .min(1)
+        .max(500)
+        .optional()
+        .openapi({
+          param: { name: 'limit', in: 'query' },
+          example: 100,
+          description: 'Maximum number of deliveries to return (1-500, default 100)',
+        }),
+    }),
+  },
+  responses: {
+    200: {
+      description: 'Webhook delivery records',
+      content: { 'application/json': { schema: z.array(z.object({}).passthrough()) } },
+    },
+    400: {
+      description: 'Validation error',
+      content: { 'application/json': { schema: ApiErrorSchema } },
+    },
+    401: UNAUTHORIZED_401,
+    429: RATE_LIMITED_429,
+  },
+});
+
+registry.registerPath({
+  method: 'post',
+  path: '/api/webhooks/deliveries/{id}/redeliver',
+  summary: 'Resend a logged webhook delivery',
+  description:
+    'Admin only. Sends the stored event of one logged delivery to its subscription again, with the original event `id` and idempotency key, so a consumer that already processed it de-duplicates. The attempt is logged as a new delivery record. A 202 means the attempt was made, not that the subscriber accepted it. See docs/WEBHOOKS.md.',
+  tags: ['System'],
+  security: [{ adminKey: [] }],
+  request: {
+    params: z.object({
+      id: z
+        .string()
+        .min(1)
+        .describe('Delivery record id, as listed by GET /api/webhooks/deliveries'),
+    }),
+  },
+  responses: {
+    202: {
+      description: 'The delivery was attempted again and logged',
+      content: {
+        'application/json': {
+          schema: z.object({
+            redelivered: z.literal(true),
+            eventId: z.string().describe('Id of the event that was resent'),
+            subscriptionId: z.string().describe('Subscription it was sent to'),
+          }),
+        },
+      },
+    },
+    403: {
+      description: 'Missing or invalid admin key',
+      content: { 'application/json': { schema: ApiErrorSchema } },
+    },
+    404: {
+      description: 'Unknown delivery id (`NOT_FOUND`)',
+      content: { 'application/json': { schema: ApiErrorSchema } },
+    },
+    409: {
+      description:
+        'The subscription no longer subscribes to the event kind (`EVENT_KIND_UNSUBSCRIBED`)',
+      content: { 'application/json': { schema: ApiErrorSchema } },
+    },
+    410: {
+      description:
+        'The event is not in the event store (`EVENT_NOT_RETAINED`), or the subscription was deleted (`SUBSCRIPTION_DELETED`)',
+      content: { 'application/json': { schema: ApiErrorSchema } },
+    },
+    429: RATE_LIMITED_429,
+  },
+});
+
+registry.registerPath({
+  method: 'post',
+  path: '/api/refunds/ack',
+  summary: 'Record user-signed refund acknowledgement',
+  description:
+    'Secured write route to record a user-signed refund acknowledgement for an owed or refunded case. ' +
+    'The server validates that only the original transfer signer can acknowledge, verifies the cryptographic signature over the canonical payload hash, and confirms the refunded amount does not exceed the paid amount.',
+  tags: ['Refunds'],
+  request: {
+    body: {
+      content: {
+        'application/json': {
+          schema: RefundAckRequestBodySchema,
+        },
+      },
+    },
+  },
+  responses: {
+    200: {
+      description: 'Refund acknowledgement recorded',
+      content: {
+        'application/json': {
+          schema: RefundAckResponseSchema,
+        },
+      },
+    },
+    400: {
+      description: 'Invalid JSON',
+      content: { 'application/json': { schema: ApiErrorSchema } },
+    },
+    401: UNAUTHORIZED_401,
+    403: {
+      description: 'Signer mismatch',
+      content: { 'application/json': { schema: ApiErrorSchema } },
+    },
+    404: {
+      description: 'No refund case found',
+      content: { 'application/json': { schema: ApiErrorSchema } },
+    },
+    409: {
+      description: 'Case already acknowledged',
+      content: { 'application/json': { schema: ApiErrorSchema } },
+    },
+    422: {
+      description: 'Validation error',
+      content: { 'application/json': { schema: ApiErrorSchema } },
+    },
+    429: RATE_LIMITED_429,
+  },
+});
+
 // ─── Spec builder ────────────────────────────────────────────────────────────
+
+const PublicRefundCaseSchema = registry.register(
+  'PublicRefundCase',
+  z.object({
+    id: z.string(),
+    intentHash: z.string(),
+    reason: z.enum([
+      'anchor_refunded',
+      'anchor_error_after_payment',
+      'expired_after_payment',
+      'slippage_breach',
+    ]),
+    anchorId: z.string(),
+    corridor: z.string(),
+    direction: z.enum(['withdraw', 'deposit']),
+    amountPaid: z.string(),
+    status: z.enum(['owed', 'refunded', 'acknowledged']),
+    amountRefunded: z.string().nullable(),
+    refundFee: z.string().nullable(),
+    payments: z.array(
+      z.object({
+        id: z.string(),
+        idType: z.enum(['stellar', 'external']),
+        amount: z.string(),
+        fee: z.string(),
+      })
+    ),
+    openedAt: z.string(),
+    refundedAt: z.string().nullable(),
+    acknowledgedAt: z.string().nullable(),
+    onChainCheck: z
+      .string()
+      .nullable()
+      .describe('verified, mismatch or unverifiable; null when no on-chain check was made'),
+  })
+);
+
+const IntentHashPathParam = z.string().openapi({
+  param: { name: 'intentHash', in: 'path' },
+  example: 'a3f1c2d4e5b60718293a4b5c6d7e8f90a1b2c3d4e5f60718293a4b5c6d7e8f90',
+  description: 'Lowercase hex SHA-256 intent hash (64 characters)',
+});
+
+registry.registerPath({
+  method: 'get',
+  path: '/api/refunds/{intentHash}',
+  summary: 'Look up refund cases for an intent',
+  description:
+    'Read-only lookup of the refund cases tracked for one intent, oldest first. An intent with ' +
+    'no cases returns an empty list, not 404. Only non-sensitive fields are returned; the signer ' +
+    'account and the acknowledgement proof are never exposed, and there is no lookup by account. ' +
+    'Responses are sent with Cache-Control: no-store.',
+  tags: ['Refunds'],
+  request: {
+    params: z.object({ intentHash: IntentHashPathParam }),
+  },
+  responses: {
+    200: {
+      description: 'Refund cases for the intent',
+      content: {
+        'application/json': {
+          schema: z.object({
+            intentHash: z.string(),
+            cases: z.array(PublicRefundCaseSchema),
+          }),
+        },
+      },
+    },
+    400: {
+      description: 'intentHash is not a lowercase 64-character hex string',
+      content: { 'application/json': { schema: ApiErrorSchema } },
+    },
+    429: RATE_LIMITED_429,
+  },
+});
+
+// ─── Slippage breaches (Issue #2106) ──────────────────────────────────────────
+
+const SlippageOnChainEvidenceSchema = registry.register(
+  'SlippageOnChainEvidence',
+  z.object({
+    txHash: z.string().describe('Stellar transaction hash'),
+    ledger: z.number().int().describe('Ledger sequence number'),
+    closedAt: z.string().describe('Ledger close time (ISO 8601)'),
+    successful: z.boolean().describe('Whether transaction succeeded'),
+    from: z.string().describe('Source account public key'),
+    to: z.string().describe('Destination account public key'),
+    assetCode: z.string().describe('Asset code transferred'),
+    assetIssuer: z.string().nullable().describe('Asset issuer public key'),
+    amount: z.string().describe('Amount transferred'),
+    memoType: z.string().describe('Memo type'),
+    memo: z.string().nullable().describe('Memo text or hash'),
+  })
+);
+
+const SlippageEvidenceSchema = registry.register(
+  'SlippageEvidence',
+  z.object({
+    v: z.literal(1).describe('Evidence schema version'),
+    networkPassphrase: z.string().describe('Stellar network passphrase'),
+    intentHash: z.string().describe('SHA-256 hash of the canonical intent'),
+    anchorId: z.string().describe('Anchor identifier'),
+    corridor: z.string().describe('Corridor identifier'),
+    signerAccount: z.string().describe('Signer Stellar account public key'),
+    minReceive: z.string().describe('Floor amount signed by user'),
+    anchorReported: z.object({
+      anchorTransactionId: z.string().nullable(),
+      amountOut: z.string(),
+      reportedBy: z.literal('sender'),
+    }),
+    shortfall: z.string().describe('Shortfall amount'),
+    shortfallBps: z.number().int().describe('Shortfall in basis points'),
+    onChain: SlippageOnChainEvidenceSchema.nullable(),
+    detectedAt: z.string().describe('ISO 8601 timestamp when breach was detected'),
+  })
+);
+
+const PublicSlippageBreachSummarySchema = registry.register(
+  'PublicSlippageBreachSummary',
+  z.object({
+    intentHash: z.string().describe('SHA-256 hash of the canonical intent'),
+    anchorId: z.string().describe('Anchor identifier'),
+    corridor: z.string().describe('Corridor identifier'),
+    minReceive: z.string().describe('Minimum receive amount signed in intent'),
+    amountOut: z.string().describe('Delivered amount reported by anchor'),
+    shortfall: z.string().describe('Amount by which delivery fell short of floor'),
+    shortfallBps: z.number().int().describe('Shortfall in basis points (1/100th of 1%)'),
+    status: z.enum(['detected', 'verified', 'rejected']).describe('Breach status'),
+    rejectionReason: z.string().nullable().describe('Reason for rejection if status is rejected'),
+    stellarTransactionId: z.string().nullable().describe('Stellar transaction hash'),
+    evidenceHash: z.string().describe('SHA-256 hash of the canonical evidence JSON'),
+    detectedAt: z.string().describe('ISO 8601 timestamp when breach was detected'),
+    verifiedAt: z
+      .string()
+      .nullable()
+      .describe('ISO 8601 timestamp when breach was verified/rejected'),
+  })
+);
+
+registry.registerPath({
+  method: 'get',
+  path: '/api/v1/slippage-breaches',
+  summary: 'List slippage breaches',
+  description:
+    'Returns a list of detected slippage breaches, newest first. Excludes sensitive signerAccount, recipient and raw evidence.',
+  tags: ['Reputation'],
+  request: {
+    query: z.object({
+      anchorId: z
+        .string()
+        .optional()
+        .openapi({
+          param: { name: 'anchorId', in: 'query' },
+          description: 'Filter by anchor identifier',
+        }),
+      status: z
+        .enum(['detected', 'verified', 'rejected'])
+        .optional()
+        .openapi({
+          param: { name: 'status', in: 'query' },
+          description: 'Filter by breach status',
+        }),
+      limit: z.coerce
+        .number()
+        .optional()
+        .openapi({
+          param: { name: 'limit', in: 'query' },
+          description: 'Maximum number of breaches to return (1-500, default 100)',
+          example: 100,
+        }),
+    }),
+  },
+  responses: {
+    200: {
+      description: 'List of slippage breaches',
+      content: {
+        'application/json': {
+          schema: z.object({
+            breaches: z.array(PublicSlippageBreachSummarySchema),
+          }),
+        },
+      },
+    },
+    400: {
+      description: 'Validation error',
+      content: { 'application/json': { schema: ApiErrorSchema } },
+    },
+    429: RATE_LIMITED_429,
+    503: {
+      description: 'Store unavailable',
+      content: { 'application/json': { schema: ApiErrorSchema } },
+    },
+  },
+});
+
+registry.registerPath({
+  method: 'get',
+  path: '/api/v1/slippage-breaches/{intentHash}',
+  summary: 'Get slippage breach detail',
+  description:
+    'Returns detailed information about a slippage breach, including full evidence and canonical evidence JSON string for independent SHA-256 verification.',
+  tags: ['Reputation'],
+  request: {
+    params: z.object({
+      intentHash: z
+        .string()
+        .regex(/^[0-9a-f]{64}$/)
+        .openapi({
+          param: { name: 'intentHash', in: 'path' },
+          description: '64-character lowercase hex SHA-256 intent hash',
+        }),
+    }),
+  },
+  responses: {
+    200: {
+      description: 'Slippage breach detail with evidence',
+      content: {
+        'application/json': {
+          schema: PublicSlippageBreachSummarySchema.extend({
+            evidence: SlippageEvidenceSchema,
+            canonicalEvidence: z
+              .string()
+              .describe('Canonical JSON representation of evidence for SHA-256 verification'),
+          }),
+        },
+      },
+    },
+    400: {
+      description: 'Invalid intentHash format',
+      content: { 'application/json': { schema: ApiErrorSchema } },
+    },
+    404: {
+      description: 'Breach not found',
+      content: { 'application/json': { schema: ApiErrorSchema } },
+    },
+    429: RATE_LIMITED_429,
+    503: {
+      description: 'Store unavailable',
+      content: { 'application/json': { schema: ApiErrorSchema } },
+    },
+  },
+});
+
+void SlippageComplianceSchema;
+
+// ─── Slippage compliance (Issue #2108) ────────────────────────────────────────
+
+registry.registerPath({
+  method: 'get',
+  path: '/api/v1/slippage-compliance',
+  summary: 'Get slippage compliance metrics',
+  description:
+    'Returns slippage compliance metrics and release gate status for the specified rolling window (30, 90 days, or all).',
+  tags: ['Reputation'],
+  request: {
+    query: z.object({
+      window: z
+        .enum(['30', '90', 'all'])
+        .optional()
+        .openapi({
+          param: { name: 'window', in: 'query' },
+          description: 'Evaluation window: 30, 90, or all (default 30)',
+          example: '30',
+        }),
+    }),
+  },
+  responses: {
+    200: {
+      description: 'Slippage compliance metrics and release gate status',
+      content: {
+        'application/json': {
+          schema: SlippageComplianceSchema,
+        },
+      },
+    },
+    400: {
+      description: 'Validation error',
+      content: { 'application/json': { schema: ApiErrorSchema } },
+    },
+    429: RATE_LIMITED_429,
+    503: {
+      description: 'Store unavailable',
+      content: { 'application/json': { schema: ApiErrorSchema } },
+    },
+  },
+});
+
+// ─── Refund release gate (Issue #2121) ────────────────────────────────────────
+
+const RefundGateMetricsSchema = registry.register(
+  'RefundGateMetrics',
+  z.object({
+    windowDays: z.number().int().describe('Trailing window in days (30)'),
+    since: z.string().describe('ISO start of the window; cases opened at or after it count'),
+    generatedAt: z.string().describe('ISO instant the metric was computed'),
+    opened: z.number().int().describe('Refund cases opened in the window'),
+    owed: z.number().int().describe('Cases the anchor still owes'),
+    refunded: z.number().int().describe('Cases the anchor refunded, not yet acknowledged'),
+    acknowledged: z.number().int().describe('Cases the user acknowledged'),
+    awaitingAck: z
+      .number()
+      .int()
+      .describe('Refunded cases still within the 72-hour acknowledgement grace period'),
+    unsignaled: z
+      .number()
+      .int()
+      .describe('Refunded cases past the 72-hour grace period with no acknowledgement'),
+    overdueOwed: z.number().int().describe('Owed cases opened more than 7 days ago'),
+    gatePassing: z.boolean().describe('True when unsignaled is 0 (the v3 release gate)'),
+  })
+);
+
+registry.registerPath({
+  method: 'get',
+  path: '/api/v1/refunds/summary',
+  summary: 'Get the unsignaled-refund release-gate metric',
+  description:
+    'Counts of the refund cases opened in the trailing 30 days, classified by status. A refunded case counts as unsignaled once it is more than 72 hours past its refund (or opening) with no acknowledgement; the v3 release gate passes when that count is 0. Counts only: no accounts, intent hashes or amounts. Cached for 60 seconds.',
+  tags: ['Reputation'],
+  responses: {
+    200: {
+      description: 'Refund release-gate metric',
+      content: { 'application/json': { schema: RefundGateMetricsSchema } },
+    },
+    429: RATE_LIMITED_429,
+  },
+});
+
+// ─── Admin caller keys (AGS006) ──────────────────────────────────────────────
+
+const ApiKeyRecordSchema = registry.register(
+  'ApiKeyRecord',
+  z.object({
+    keyId: z.string().describe('16 lowercase hex characters'),
+    displayPrefix: z.string().describe('sik_<keyId>; safe to show instead of the key'),
+    name: z.string(),
+    scopes: z.array(z.enum(['quotes:read', 'intents:write', 'reputation:write', 'admin'])),
+    tier: z.enum(['standard', 'partner']),
+    maxIntentAmount: z.string().nullable().describe('Per-key intent amount cap, or null'),
+    createdAt: z.string(),
+    expiresAt: z.string().nullable(),
+    revokedAt: z.string().nullable(),
+    lastUsedAt: z.string().nullable(),
+  })
+);
+
+const CreatedApiKeySchema = registry.register(
+  'CreatedApiKey',
+  z.object({
+    key: z.string().describe('The raw caller key. Returned once, at creation, and never again.'),
+    keyId: z.string(),
+    displayPrefix: z.string(),
+    name: z.string(),
+    scopes: z.array(z.enum(['quotes:read', 'intents:write', 'reputation:write', 'admin'])),
+    tier: z.enum(['standard', 'partner']),
+    maxIntentAmount: z.string().nullable(),
+    createdAt: z.string(),
+    expiresAt: z.string().nullable(),
+  })
+);
+
+const CreateApiKeyRequestSchema = registry.register(
+  'CreateApiKeyRequest',
+  z.object({
+    name: z.string().min(1).max(80).describe('Human label for the key holder'),
+    scopes: z
+      .array(z.enum(['quotes:read', 'intents:write', 'reputation:write', 'admin']))
+      .min(1)
+      .describe('Non-empty, no duplicates'),
+    tier: z.enum(['standard', 'partner']).optional().describe('Defaults to standard'),
+    expiresInDays: z.number().int().min(1).max(365).optional(),
+    maxIntentAmount: z.string().regex(AMOUNT_PATTERN).optional(),
+  })
+);
+
+registry.registerPath({
+  method: 'post',
+  path: '/api/admin/keys',
+  summary: 'Issue a caller API key (admin)',
+  description:
+    'Issues a caller key and returns the raw key exactly once, at creation. Only the SHA-256 hash ' +
+    'is stored. Authenticated by ADMIN_SECRET_KEY only — a caller key with the `admin` scope cannot ' +
+    'mint keys.',
+  tags: ['Admin'],
+  security: [{ adminKey: [] }],
+  request: {
+    body: {
+      required: true,
+      content: { 'application/json': { schema: CreateApiKeyRequestSchema } },
+    },
+  },
+  responses: {
+    201: {
+      description: 'Caller key issued. The response is not cacheable.',
+      content: { 'application/json': { schema: CreatedApiKeySchema } },
+    },
+    400: {
+      description: 'Validation error',
+      content: { 'application/json': { schema: ApiErrorSchema } },
+    },
+    403: {
+      description: 'Admin key required',
+      content: { 'application/json': { schema: ApiErrorSchema } },
+    },
+    429: RATE_LIMITED_429,
+  },
+});
+
+registry.registerPath({
+  method: 'get',
+  path: '/api/admin/keys',
+  summary: 'List caller API keys (admin)',
+  description: 'Lists issued caller keys newest first, without their hashes.',
+  tags: ['Admin'],
+  security: [{ adminKey: [] }],
+  responses: {
+    200: {
+      description: 'Caller keys, newest first',
+      content: { 'application/json': { schema: z.array(ApiKeyRecordSchema) } },
+    },
+    403: {
+      description: 'Admin key required',
+      content: { 'application/json': { schema: ApiErrorSchema } },
+    },
+    429: RATE_LIMITED_429,
+  },
+});
+
+registry.registerPath({
+  method: 'delete',
+  path: '/api/admin/keys/{keyId}',
+  summary: 'Revoke a caller API key (admin)',
+  description:
+    'Revokes a caller key immediately. Answers 404 for an unknown or already revoked key.',
+  tags: ['Admin'],
+  security: [{ adminKey: [] }],
+  request: {
+    params: z.object({
+      keyId: z
+        .string()
+        .regex(/^[0-9a-f]{16}$/)
+        .describe('16 lowercase hex characters'),
+    }),
+  },
+  responses: {
+    204: { description: 'Key revoked' },
+    400: {
+      description: 'Malformed keyId',
+      content: { 'application/json': { schema: ApiErrorSchema } },
+    },
+    403: {
+      description: 'Admin key required',
+      content: { 'application/json': { schema: ApiErrorSchema } },
+    },
+    404: {
+      description: 'Unknown or already revoked key',
+      content: { 'application/json': { schema: ApiErrorSchema } },
+    },
+    429: RATE_LIMITED_429,
+  },
+});
+
+registry.registerPath({
+  method: 'post',
+  path: '/api/intent/status',
+  summary: 'Observe anchor transaction status',
+  description:
+    'Observes the current settlement status of a SEP-24 or SEP-6 transaction server-side. Forwards the caller-provided SEP-10 JWT for a single read of the anchor transfer server without storing or logging it. Tracks status transitions to support webhook notifications.',
+  tags: ['Intent'],
+  request: {
+    headers: z.object({
+      authorization: z.string().describe('Bearer <jwt> containing SEP-10 authentication token'),
+    }),
+    body: {
+      required: true,
+      content: {
+        'application/json': {
+          schema: z.object({
+            anchorId: z.string().describe('Registered anchor ID'),
+            transferServer: z.string().describe('HTTPS URL of the anchor transfer server'),
+            transactionId: z.string().min(1).max(200).describe('Anchor transaction ID'),
+            protocol: z.enum(['sep24', 'sep6']).describe('Transfer protocol used'),
+            direction: z.enum(['withdraw', 'deposit']).describe('Transaction direction'),
+            intentHash: z
+              .string()
+              .regex(/^[0-9a-f]{64}$/)
+              .optional()
+              .describe('64-hex canonical intent hash'),
+          }),
+        },
+      },
+    },
+  },
+  responses: {
+    200: {
+      description: 'Status observation recorded',
+      content: {
+        'application/json': {
+          schema: z.object({
+            status: z.string().describe('Current status reported by the anchor'),
+            previous: z
+              .string()
+              .nullable()
+              .describe('Previous status observed by the server, or null if first observation'),
+            changed: z
+              .boolean()
+              .describe('Whether the status changed since the last server observation'),
+            terminal: z.boolean().describe('Whether the current status is terminal'),
+          }),
+        },
+      },
+    },
+    400: {
+      description: 'Validation error or transfer server not allowed',
+      content: { 'application/json': { schema: ApiErrorSchema } },
+    },
+    401: {
+      description: 'Bearer authorization token required',
+      content: { 'application/json': { schema: ApiErrorSchema } },
+    },
+    429: {
+      description: 'Rate limit exceeded',
+      content: { 'application/json': { schema: ApiErrorSchema } },
+    },
+    502: {
+      description: 'Upstream anchor returned an error',
+      content: { 'application/json': { schema: ApiErrorSchema } },
+    },
+  },
+});
+
+const TokenExchangeRequestSchema = registry.register(
+  'TokenExchangeRequest',
+  z.object({
+    scopes: z
+      .array(z.enum(API_SCOPES))
+      .min(1)
+      .optional()
+      .describe(
+        "Unique scopes to carry; each must be held by the key. Defaults to all of the key's scopes."
+      ),
+    ttlSeconds: z
+      .number()
+      .int()
+      .min(60)
+      .max(900)
+      .optional()
+      .describe('Token lifetime in seconds (60-900, default 900)'),
+  })
+);
+
+const TokenExchangeResponseSchema = registry.register(
+  'TokenExchangeResponse',
+  z.object({
+    token: z.string().describe('Compact HS256 JWT; send as `Authorization: Bearer <token>`'),
+    tokenType: z.literal('Bearer'),
+    expiresIn: z.number().int().describe('Seconds until the token expires'),
+    expiresAt: z.string().describe('ISO 8601 expiry time'),
+    scopes: z.array(z.enum(API_SCOPES)).describe('Scopes the token carries'),
+    tier: z.string().describe('Rate-limit tier of the minting key'),
+  })
+);
+
+registry.registerPath({
+  method: 'post',
+  path: '/api/v1/auth/token',
+  summary: 'Exchange an API key for a short-lived token (v1)',
+  description:
+    "Mints a token of at most 15 minutes carrying a subset of the calling key's scopes, for " +
+    'handing to an agent. Requires an API key: tokens and anonymous calls cannot mint tokens. ' +
+    'The response is sent with `Cache-Control: no-store`.',
+  tags: ['Auth'],
+  security: [{ callerKey: [] }],
+  request: {
+    body: {
+      required: false,
+      content: { 'application/json': { schema: TokenExchangeRequestSchema } },
+    },
+  },
+  responses: {
+    200: {
+      description: 'Token issued',
+      content: { 'application/json': { schema: TokenExchangeResponseSchema } },
+    },
+    400: {
+      description: 'Validation error',
+      content: { 'application/json': { schema: ApiErrorSchema } },
+    },
+    401: {
+      description: 'An API key is required (`api_key_required`), or the credential is invalid',
+      content: { 'application/json': { schema: ApiErrorSchema } },
+    },
+    403: {
+      description: 'A requested scope is not held by the key (`insufficient_scope`)',
+      content: { 'application/json': { schema: ApiErrorSchema } },
+    },
+    429: RATE_LIMITED_429,
+    503: {
+      description: 'Caller tokens are not enabled on this deployment (`tokens_unavailable`)',
+      content: { 'application/json': { schema: ApiErrorSchema } },
+    },
+  },
+});
 
 export function buildOpenApiSpec() {
   const generator = new OpenApiGeneratorV31(registry.definitions);

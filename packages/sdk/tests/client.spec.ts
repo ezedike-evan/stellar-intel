@@ -169,6 +169,18 @@ describe('StellarIntelClient — requests', () => {
     expect(headers['API-Version']).toBe(API_VERSION);
   });
 
+  it('reads the refund gate metric from /api/v1/refunds/summary', async () => {
+    const fetchMock = vi.fn(async (_url: RequestInfo | URL, _init?: RequestInit) =>
+      jsonResponse(200, { windowDays: 30, unsignaled: 0, gatePassing: true })
+    );
+
+    const summary = await makeClient(fetchMock as never).getRefundsSummary();
+
+    expect(String(fetchMock.mock.calls[0]![0])).toMatch(/\/api\/v1\/refunds\/summary$/);
+    expect((fetchMock.mock.calls[0]![1] as RequestInit).method).toBe('GET');
+    expect(summary.gatePassing).toBe(true);
+  });
+
   it('does not send an idempotency key on reads', async () => {
     const fetchMock = vi.fn(async (_url: RequestInfo | URL, _init?: RequestInit) =>
       jsonResponse(200, { rates: [] })

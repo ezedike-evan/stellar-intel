@@ -7,6 +7,7 @@ import { checkRateLimit, clearRateLimitStore } from '@/lib/api/rate-limit';
 import { _setDisputeStore, getDisputeStore } from '@/lib/reputation/disputes';
 import { verifyIntentSignature } from '@/lib/intent/verify';
 import { enforceRateLimit } from '@/lib/api/response';
+import { requireCallerScope } from '@/lib/auth/caller';
 import { checkDurableStore } from '@/lib/api/store-guard';
 import { getReputationStore } from '@/lib/reputation/store';
 import { ANCHORS } from '@/constants/anchors';
@@ -21,6 +22,7 @@ import {
   publicDisputeRef,
   _setAdjudicationLog,
 } from '@/lib/reputation/adjudication-log';
+import { emitWebhookEvent } from '@/lib/webhooks/emit';
 
 const DisputeBodySchema = z.object({
   intentHash: z.string().regex(/^[0-9a-f]{64}$/, {
@@ -89,6 +91,9 @@ export async function POST(request: NextRequest): Promise<NextResponse> {
       maxRequests: 10,
     });
     if (limited) return limited;
+
+    const auth = await requireCallerScope(request, 'reputation:write');
+    if (!auth.ok) return auth.response;
 
     let body: unknown;
     try {
@@ -209,6 +214,14 @@ export async function POST(request: NextRequest): Promise<NextResponse> {
       appealedAt: null,
     });
 
+    // Field by field: never publicKey or reason, which is free text that may
+    // carry personal data (WHK012).
+    emitWebhookEvent(
+      'dispute.opened',
+      { disputeId: id, intentHash, anchorId, createdAt },
+      { idempotencyKey: `dispute.opened:${id}` }
+    );
+
     try {
       await getAdjudicationLog().append({
         action: 'filed',
@@ -229,5 +242,44 @@ export async function POST(request: NextRequest): Promise<NextResponse> {
 
     logger.info({ event: 'dispute_created', disputeId: record.id, ref });
     return NextResponse.json(record, { status: 201 });
+  });
+}
+
+export async function GET(request: NextRequest): Promise<NextResponse> {
+  return withRequestLogger(request, 'api.reputation.dispute.lookup', async () => {
+    const limited = await enforceRateLimit(request, {
+      bucket: 'api.reputation.dispute.lookup',
+      maxRequests: 60,
+    });
+    if (limited) return limited;
+
+    const { searchParams } = new URL(request.url);
+    const intentHash = searchParams.get('intentHash');
+    if (!intentHash || !/^[0-9a-f]{64}$/.test(intentHash)) {
+      return NextResponse.json<ApiError>(
+        {
+          code: 'VALIDATION_ERROR',
+          message: 'intentHash must be a lowercase hex-encoded SHA-256 (64 chars)',
+        },
+        { status: 422 }
+      );
+    }
+
+    const list = await getDisputeStore().findByIntentHash(intentHash);
+    const sorted = [...list].sort(
+      (a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime()
+    );
+
+    const disputes = sorted.map((d) => ({
+      ref: publicDisputeRef(d.id),
+      category: d.category,
+      level: d.level,
+      levelDeadline: d.levelDeadline,
+      status: d.status,
+      createdAt: d.createdAt,
+      resolvedAt: d.resolvedAt,
+    }));
+
+    return NextResponse.json({ disputes }, { status: 200 });
   });
 }
