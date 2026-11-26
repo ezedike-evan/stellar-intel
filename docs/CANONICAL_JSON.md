@@ -98,6 +98,10 @@ Defined in [`lib/refunds/ack.ts`](../lib/refunds/ack.ts). When a user acknowledg
 
 The payload is canonicalized using `canonicalJsonValue(ack)` (keys sorted recursively, payments array preserving order) and hashed via `hashRefundAck(ack)` (`hashCanonical(ack)`). The resulting 64-character lowercase hex digest is signed via `signHash(hash)`.
 
+### Slippage-breach evidence
+
+Slippage-breach evidence is not signed, but it uses the same canonicalisation: `canonicalEvidenceJson(evidence)` in [`lib/reputation/slippage-evidence.ts`](../lib/reputation/slippage-evidence.ts) sorts keys recursively and serializes with `JSON.stringify`, and `evidenceHash` is the lowercase hex SHA-256 of that string. `GET /api/v1/slippage-breaches/{intentHash}` returns the canonical string as `canonicalEvidence` so anyone can recompute the hash. See [Slippage bounds](INTENT_API.md#slippage-bounds) for the evidence fields and a worked check.
+
 ## Related
 
 - [`docs/INTENT_API.md`](INTENT_API.md) — the envelope and endpoint.
