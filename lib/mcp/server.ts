@@ -31,6 +31,7 @@ export async function createServer(): Promise<McpServer> {
   const { registerOnrampPrepareTool } = await import('./tools/onramp-prepare');
   const { registerPrompts } = await import('./prompts');
   const { registerAnchorHealthResource } = await import('./resources/anchor-health');
+  const { applyToolAudit } = await import('./audit');
   const { applyToolRateLimit } = await import('./rate-limit');
   const { applyToolScopes } = await import('./scopes');
 
@@ -38,13 +39,14 @@ export async function createServer(): Promise<McpServer> {
     name: '@stellarintel/mcp',
     version: '0.1.0',
   });
-  // Before any tool is registered: the limiter wraps `registerTool`, so a tool
-  // registered afterwards is covered without opting in. See rate-limit.ts.
+  // Before any tool is registered, three wrappers are installed on
+  // `registerTool`, so a tool registered afterwards is covered without opting
+  // in. Each wraps the one installed before it, so at call time they run in
+  // install order: audit (outermost, so it sees refusals, AGS020), then the
+  // rate limit (rate-limit.ts), then the scope check (scopes.ts, AGS017).
+  applyToolAudit(server);
   applyToolRateLimit(server);
-  // Installed after the limiter, so it wraps the limiter's `registerTool`. Each
-  // wrapper runs its check and then calls the next, so at call time the rate
-  // limit runs first and the scope check second: a denied call still counts
-  // against the caller's limit (AGS017). See scopes.ts.
+  // After the limiter, so a denied call still counts against the caller's limit.
   applyToolScopes(server);
 
   registerQuoteTool(server);
