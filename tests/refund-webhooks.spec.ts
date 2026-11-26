@@ -180,7 +180,9 @@ describe('refund webhook events (#2124)', () => {
         caseId: caseRecord.id,
         intentHash,
         anchorId: 'cowrie',
-        onChainCheck: null,
+        // 'pay-1' is not a 64-hex transaction hash, so the Horizon check (#2118)
+        // reports a mismatch without a network call; the ack still stands.
+        onChainCheck: 'mismatch',
       });
       expect(opts).toEqual({ idempotencyKey: `refund.acknowledged:${caseRecord.id}` });
       expect(WEBHOOK_PAYLOAD_SCHEMAS['refund.acknowledged'].safeParse(payload).success).toBe(true);
