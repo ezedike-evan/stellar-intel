@@ -14,6 +14,9 @@ import { badInput } from '@/lib/mcp/errors';
  * spend limits are out of scope.
  */
 
+/** Any environment-shaped map; `process.env` qualifies. */
+type EnvLike = Record<string, string | undefined>;
+
 let warnedInvalidEnv = false;
 
 function isPositiveAmount(value: string): boolean {
@@ -21,7 +24,7 @@ function isPositiveAmount(value: string): boolean {
 }
 
 /** The deployment-wide cap from `MCP_MAX_INTENT_AMOUNT`, or null when unset or invalid. */
-export function globalAmountCap(env: NodeJS.ProcessEnv = process.env): string | null {
+export function globalAmountCap(env: EnvLike = process.env): string | null {
   const raw = env['MCP_MAX_INTENT_AMOUNT']?.trim();
   if (!raw) return null;
   if (isPositiveAmount(raw)) return raw;
@@ -38,7 +41,7 @@ export function globalAmountCap(env: NodeJS.ProcessEnv = process.env): string | 
 /** The lower of the caller's cap and the deployment cap, either alone, or null. */
 export function effectiveAmountCap(
   callerCap: string | null | undefined,
-  env?: NodeJS.ProcessEnv
+  env?: EnvLike
 ): string | null {
   const global = globalAmountCap(env);
   const caller = callerCap && isPositiveAmount(callerCap) ? callerCap : null;
