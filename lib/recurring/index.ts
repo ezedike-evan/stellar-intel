@@ -74,7 +74,13 @@ export {
   SignedStandingAuthorizationSchema,
 } from '@/types/recurring';
 
-export { STANDING_AUTHORIZATION_MAX_DAYS, hashStandingAuthorization } from './authorization';
+export {
+  STANDING_AUTHORIZATION_MAX_DAYS,
+  hashStandingAuthorization,
+  verifyStandingAuthorization,
+  type StandingAuthorizationErrorCode,
+  type StandingAuthorizationVerification,
+} from './authorization';
 // Standing authorizations store
 export * from './authorization-store';
 export * from './postgres';
