@@ -1,6 +1,9 @@
 import type { McpServer } from '@modelcontextprotocol/sdk/server/mcp.js';
+import type { AuthInfo } from '@modelcontextprotocol/sdk/server/auth/types.js';
 import type { IsomorphicHeaders } from '@modelcontextprotocol/sdk/types.js';
 import { checkRateLimit } from '@/lib/api/rate-limit';
+import { TIER_MULTIPLIER } from '@/lib/api/rate-limit-tiers';
+import type { CallerTierName } from '@/lib/auth/caller';
 
 /**
  * Per-client rate limiting for the MCP tool surface (#1050).
@@ -75,11 +78,30 @@ function headerValue(headers: IsomorphicHeaders | undefined, name: string): stri
 }
 
 /**
+ * The caller identity the HTTP transport attaches as `authInfo`.
+ *
+ * The hosted route resolves an API key to a `key:<keyId>` rate-limit key and
+ * passes it through `extra`; the raw credential is never included.
+ */
+function keyedRateLimitKey(authInfo: AuthInfo | undefined): string | undefined {
+  const value = (authInfo?.extra as { rateLimitKey?: unknown } | undefined)?.rateLimitKey;
+  return typeof value === 'string' && value.startsWith('key:') ? value : undefined;
+}
+
+/** The tier claim on `authInfo`, or `anonymous` when absent or unrecognised. */
+function callerTier(authInfo: AuthInfo | undefined): CallerTierName {
+  const tier = (authInfo?.extra as { tier?: unknown } | undefined)?.tier;
+  return tier === 'standard' || tier === 'partner' ? tier : 'anonymous';
+}
+
+/**
  * Who to count a call against.
  *
- * Streamable HTTP gives every client a session id, which is the right unit:
- * it survives across requests and is not shared between agents. Where there is
- * none, fall back to the forwarded client IP, then to a constant.
+ * A validated API key wins: the hosted endpoint's caller is that key, not
+ * whichever IP its cloud egress happens to use. Otherwise Streamable HTTP gives
+ * every client a session id, which is the right unit: it survives across
+ * requests and is not shared between agents. Where there is none, fall back to
+ * the forwarded client IP, then to a constant.
  *
  * `stdio` deliberately resolves to one shared key: a stdio server is a
  * subprocess of exactly one client, so "per-client" and "per-process" are the
@@ -88,7 +110,11 @@ function headerValue(headers: IsomorphicHeaders | undefined, name: string): stri
 export function resolveClientId(extra: {
   sessionId?: string;
   requestInfo?: { headers?: IsomorphicHeaders };
+  authInfo?: AuthInfo;
 }): string {
+  const keyed = keyedRateLimitKey(extra.authInfo);
+  if (keyed) return keyed;
+
   if (extra.sessionId?.trim()) return `session:${extra.sessionId.trim()}`;
 
   const headers = extra.requestInfo?.headers;
@@ -127,12 +153,15 @@ export function applyToolRateLimit(server: McpServer, options: ToolRateLimitOpti
       const extra = args[args.length - 1] as {
         sessionId?: string;
         requestInfo?: { headers?: IsomorphicHeaders };
+        authInfo?: AuthInfo;
       };
 
+      // Anonymous traffic (stdio, local, no key) multiplies by 1, so its
+      // effective limit is exactly what it was before tiers existed.
       const result = await checkRateLimit(resolveClientId(extra), {
         bucket: `${MCP_TOOL_RATE_LIMIT_BUCKET}:${name}`,
         windowMs,
-        maxRequests,
+        maxRequests: maxRequests * TIER_MULTIPLIER[callerTier(extra.authInfo)],
       });
 
       if (!result.allowed) {

@@ -4,6 +4,7 @@ import { WebStandardStreamableHTTPServerTransport } from '@modelcontextprotocol/
 import { createServer } from '@/lib/mcp/server';
 import { checkRateLimit, getClientIp } from '@/lib/api/rate-limit';
 import { checkDailyQuota, quotaHeaders } from '@/lib/api/quota';
+import { limitForTier } from '@/lib/api/rate-limit-tiers';
 import { resolveCaller } from '@/lib/auth/caller';
 import { withApiHeaders, withRateLimitHeaders } from '@/lib/api/response';
 import { getLogger } from '@/lib/logger';
@@ -36,10 +37,40 @@ const MCP_RATE_LIMIT = { bucket: 'api.mcp', maxRequests: 60 } as const;
 
 export async function POST(request: NextRequest): Promise<Response> {
   const logger = getLogger('api.mcp');
-  const ip = getClientIp(request.headers);
-  const rl = await checkRateLimit(ip, MCP_RATE_LIMIT);
+
+  // Identity first (AGS016): a keyed agent is counted as that key, at its
+  // tier's limit, rather than as whichever IP its cloud egress happens to use.
+  // A bad credential is rejected, never downgraded to anonymous, and its
+  // attempts are counted per IP so keys cannot be guessed without limit.
+  const resolution = await resolveCaller(request.headers);
+  if (!resolution.ok) {
+    const ip = getClientIp(request.headers);
+    const invalidRl = await checkRateLimit(ip, { bucket: 'auth.invalid', maxRequests: 30 });
+    if (!invalidRl.allowed) {
+      logger.warn({ event: 'rate_limit_exceeded', ip, retryAfter: invalidRl.retryAfter });
+      const limited = NextResponse.json(
+        { jsonrpc: '2.0', error: { code: -32000, message: 'Too many requests' }, id: null },
+        { status: 429, headers: { 'Retry-After': String(invalidRl.retryAfter) } }
+      );
+      return withApiHeaders(withRateLimitHeaders(limited, invalidRl, 'auth.invalid'));
+    }
+    logger.warn({ event: 'mcp_invalid_credential', code: resolution.code });
+    return NextResponse.json(
+      { jsonrpc: '2.0', error: { code: -32001, message: resolution.message }, id: null },
+      {
+        status: 401,
+        headers: { 'WWW-Authenticate': 'Bearer realm="stellar-intel", error="invalid_token"' },
+      }
+    );
+  }
+  const caller = resolution.caller;
+
+  const rl = await checkRateLimit(caller.rateLimitKey, {
+    bucket: MCP_RATE_LIMIT.bucket,
+    maxRequests: limitForTier(MCP_RATE_LIMIT.maxRequests, caller.tier),
+  });
   if (!rl.allowed) {
-    logger.warn({ event: 'rate_limit_exceeded', ip, retryAfter: rl.retryAfter });
+    logger.warn({ event: 'rate_limit_exceeded', caller: caller.id, retryAfter: rl.retryAfter });
     const limited = NextResponse.json(
       {
         jsonrpc: '2.0',
@@ -53,20 +84,7 @@ export async function POST(request: NextRequest): Promise<Response> {
   }
 
   // Daily quota (AGS024), shared with REST and GraphQL: one unit per request.
-  // Anonymous callers have none; a bad credential is rejected, never silently
-  // downgraded to anonymous.
-  const resolution = await resolveCaller(request.headers);
-  if (!resolution.ok) {
-    return NextResponse.json(
-      {
-        jsonrpc: '2.0',
-        error: { code: -32000, message: resolution.message },
-        id: null,
-      },
-      { status: 401 }
-    );
-  }
-  const caller = resolution.caller;
+  // Anonymous callers have none.
   let quotaHeadersOut: Record<string, string> = {};
   if (caller.kind !== 'anonymous') {
     const quota = await checkDailyQuota(caller);
@@ -111,7 +129,23 @@ export async function POST(request: NextRequest): Promise<Response> {
     // With enableJsonResponse the returned Response carries a fully buffered
     // JSON body rather than an open SSE stream, so it is safe to close the
     // server once this resolves.
-    const response = await transport.handleRequest(request);
+    //
+    // `token` is deliberately empty: the SDK requires the field, but tool
+    // handlers must never see the raw credential. Identity travels in
+    // `clientId` and `extra`.
+    const response = await transport.handleRequest(request, {
+      authInfo: {
+        token: '',
+        clientId: caller.id,
+        scopes: [...caller.scopes],
+        extra: {
+          kind: caller.kind,
+          tier: caller.tier,
+          rateLimitKey: caller.rateLimitKey,
+          maxIntentAmount: caller.maxIntentAmount,
+        },
+      },
+    });
     await server.close();
     server = undefined;
     if (Object.keys(quotaHeadersOut).length === 0) return response;
