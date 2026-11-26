@@ -1,6 +1,30 @@
 import type { OutcomeLogRow } from '@/types/reputation';
 import { getReputationStore, type ReputationStore } from '@/lib/reputation/store';
+import { emitWebhookEvent } from '@/lib/webhooks/emit';
 import { getRefundStore, type RefundCase, type RefundReason, type RefundStore } from './store';
+
+/**
+ * Tells webhook subscribers a refund is now tracked (#2124). The payload is built field
+ * by field so the signer account, the acknowledgement proof and the amounts never leave
+ * the platform. Only called once a case was actually inserted.
+ */
+export function emitRefundOpened(record: RefundCase): void {
+  emitWebhookEvent(
+    'refund.opened',
+    {
+      caseId: record.id,
+      intentHash: record.intentHash,
+      anchorId: record.anchorId,
+      corridor: record.corridor,
+      direction: record.direction,
+      reason: record.reason,
+      // A new case is owed or already refunded; it is never opened acknowledged.
+      status: record.status === 'refunded' ? 'refunded' : 'owed',
+      openedAt: record.openedAt,
+    },
+    { idempotencyKey: `refund.opened:${record.id}` }
+  );
+}
 
 // ─── Automatic refund detection (Issue #2115 / RFD004) ────────────────────────
 //
@@ -63,7 +87,9 @@ export async function openRefundCaseForOutcome(
   const record = refundCaseFromOutcome(row, reason);
   if (record === null) return null;
   const inserted = await store.open(record);
-  return inserted ? record : null;
+  if (!inserted) return null;
+  emitRefundOpened(record);
+  return record;
 }
 
 /**
@@ -88,6 +114,8 @@ export async function openRefundCaseForBreach(
   record.status = 'owed';
   record.refundedAt = null;
 
+  // No refund.opened here: the append route emits it for a breach case itself, after
+  // the outcome's own events and intent.slippage_breach, so subscribers see them in order.
   const inserted = await refunds.open(record);
   return inserted ? record : null;
 }

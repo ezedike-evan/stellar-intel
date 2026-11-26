@@ -87,7 +87,7 @@ export function DepositStatusTracker({
   const isTerminal =
     status != null && (isCompleted || status === 'refunded' || FAILURE.includes(status));
   const mustPay = status != null && USER_MUST_PAY.includes(status);
-  const terminalMessage = status ? terminalErrorMessage(status, transactionId) : null;
+  const terminalMessage = status ? terminalErrorMessage(status, transactionId, 'deposit') : null;
   const explainer = status ? statusExplainer(status, 'deposit') : null;
   const estimate = status ? statusTimeEstimate(status) : null;
   const outAsset = parseAsset(amountOutAsset);

@@ -108,6 +108,23 @@ const VALID_PAYLOADS: { [K in keyof WebhookEventPayloadMap]: WebhookEventPayload
     status: 'detected',
     detectedAt: '2026-11-20T12:00:00.000Z',
   },
+  'refund.opened': {
+    caseId: '7d0e8a3c-1b2f-4c5d-9e6f-0a1b2c3d4e5f',
+    intentHash: 'a'.repeat(64),
+    anchorId: 'cowrie',
+    corridor: 'usdc-ngn',
+    direction: 'withdraw',
+    reason: 'anchor_error_after_payment',
+    status: 'owed',
+    openedAt: '2026-11-20T12:00:00.000Z',
+  },
+  'refund.acknowledged': {
+    caseId: '7d0e8a3c-1b2f-4c5d-9e6f-0a1b2c3d4e5f',
+    intentHash: 'a'.repeat(64),
+    anchorId: 'cowrie',
+    acknowledgedAt: '2026-11-22T12:00:00.000Z',
+    onChainCheck: null,
+  },
 };
 
 /** The kinds WHK003 added, in the order they are registered. */
@@ -172,6 +189,9 @@ describe('the intent, settlement, dispute and oracle kinds (WHK003)', () => {
       ...ADDED_KINDS,
       // SLP014 registered one more, after them.
       'intent.slippage_breach',
+      // Then the refund kinds (#2124).
+      'refund.opened',
+      'refund.acknowledged',
     ]);
   });
 

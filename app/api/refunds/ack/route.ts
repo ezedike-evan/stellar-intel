@@ -6,6 +6,9 @@ import { RefundAckPayloadSchema, hashRefundAck } from '@/lib/refunds/ack';
 import { getRefundStore } from '@/lib/refunds/store';
 import { verifyIntentSignature } from '@/lib/intent/verify';
 import { compareDecimals } from '@/lib/decimal';
+import { emitWebhookEvent } from '@/lib/webhooks/emit';
+import { verifyRefundPayments } from '@/lib/refunds/verify-onchain';
+import type { RefundOnChainCheck } from '@/lib/refunds/store';
 
 export const runtime = 'nodejs';
 
@@ -174,7 +177,22 @@ export async function POST(request: NextRequest): Promise<NextResponse> {
       );
     }
 
-    // Step 8: State transition in store
+    // Step 8: On-chain verification (Issue #2118). Withdraw refunds are paid
+    // back on Stellar and can be checked on Horizon; deposit refunds are fiat.
+    let onChainCheck: RefundOnChainCheck = 'unverifiable';
+    if (caseRecord.direction === 'withdraw') {
+      onChainCheck = await verifyRefundPayments({
+        account: ack.account,
+        assetCode: (caseRecord.corridor.split('-')[0] ?? '').toUpperCase(),
+        payments: ack.payments,
+      });
+      if (onChainCheck === 'mismatch') {
+        // The user's signature stands; record the ack but flag the mismatch.
+        logger.warn({ event: 'refund_ack_onchain_mismatch', intentHash: ack.intentHash });
+      }
+    }
+
+    // Step 9: State transition in store
     const updated = await store.acknowledge(caseRecord.id, {
       amountRefunded: ack.amountRefunded,
       refundFee: ack.refundFee,
@@ -187,7 +205,7 @@ export async function POST(request: NextRequest): Promise<NextResponse> {
       ackHash: hash,
       ackSignature: signature,
       acknowledgedAt: new Date().toISOString(),
-      onChainCheck: null,
+      onChainCheck,
     });
 
     if (updated === null) {
@@ -200,8 +218,22 @@ export async function POST(request: NextRequest): Promise<NextResponse> {
       );
     }
 
-    // Step 9: Sanitized response (ZERO key/signature leakage)
+    // Step 10: Sanitized response (ZERO key/signature leakage)
     logger.info({ event: 'refund_acknowledged', intentHash: ack.intentHash });
+
+    // Built field by field (#2124): the signer account, ackHash, ackSignature and the
+    // refund amounts stay on the platform.
+    emitWebhookEvent(
+      'refund.acknowledged',
+      {
+        caseId: updated.id,
+        intentHash: updated.intentHash,
+        anchorId: updated.anchorId,
+        acknowledgedAt: updated.acknowledgedAt ?? new Date().toISOString(),
+        onChainCheck: updated.onChainCheck,
+      },
+      { idempotencyKey: `refund.acknowledged:${updated.id}` }
+    );
 
     return apiSuccessResponse({
       id: updated.id,

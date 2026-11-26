@@ -1,6 +1,16 @@
 // @vitest-environment node
-import { describe, it, expect, beforeEach, afterEach } from 'vitest';
+import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest';
 import { Keypair } from '@stellar/stellar-sdk';
+
+const { fetchPaymentsMock } = vi.hoisted(() => ({
+  fetchPaymentsMock: vi.fn(),
+}));
+
+vi.mock('@/lib/reputation/reconcile', async (importOriginal) => {
+  const actual = await importOriginal<typeof import('@/lib/reputation/reconcile')>();
+  return { ...actual, fetchPaymentsForTransaction: fetchPaymentsMock };
+});
+
 import { NextRequest } from 'next/server';
 import { POST } from '@/app/api/refunds/ack/route';
 import { InMemoryRefundStore, _setRefundStore, type RefundCase } from '@/lib/refunds/store';
@@ -95,6 +105,8 @@ describe('POST /api/refunds/ack (Issue #2117 / RFD006)', () => {
     store = new InMemoryRefundStore();
     _setRefundStore(store);
     signer = Keypair.random();
+    fetchPaymentsMock.mockReset();
+    fetchPaymentsMock.mockResolvedValue([]);
   });
 
   afterEach(() => {
@@ -136,7 +148,8 @@ describe('POST /api/refunds/ack (Issue #2117 / RFD006)', () => {
       intentHash,
       status: 'acknowledged',
       acknowledgedAt: expect.any(String),
-      onChainCheck: null,
+      // 'pay-1' is not a Stellar transaction hash, so the on-chain check mismatches.
+      onChainCheck: 'mismatch',
     });
 
     // Verify zero leakage in response
@@ -243,6 +256,81 @@ describe('POST /api/refunds/ack (Issue #2117 / RFD006)', () => {
     const json = await response.json();
     // case2 was oldest non-acknowledged
     expect(json.id).toBe('c-2');
+  });
+
+  // ─── On-chain verification (Issue #2118) ────────────────────────────────────
+
+  describe('on-chain refund verification', () => {
+    const TX = 'c'.repeat(64);
+
+    async function postSignedAck(intentHash: string, direction: 'withdraw' | 'deposit') {
+      const caseRecord = makeCase({
+        intentHash,
+        signerAccount: signer.publicKey(),
+        corridor: 'usdc-ngn',
+        direction,
+        amountPaid: '100.00',
+      });
+      await store.open(caseRecord);
+
+      const ack = makePayload({
+        intentHash,
+        account: signer.publicKey(),
+        amountRefunded: '100.00',
+        refundFee: '0.50',
+        payments: [{ id: TX, idType: 'stellar', amount: '99.50' }],
+      });
+      const hash = await hashRefundAck(ack);
+      const signature = signSep53(signer, hash);
+      const response = await POST(makePostRequest({ ack, signature }));
+      return { response, caseRecord };
+    }
+
+    it("withdraw: matching Horizon record → onChainCheck 'verified'", async () => {
+      fetchPaymentsMock.mockResolvedValue([
+        {
+          type: 'payment',
+          amount: '99.5000000',
+          asset_type: 'credit_alphanum4',
+          asset_code: 'USDC',
+          to: signer.publicKey(),
+          from: 'GBRPYHIL2CI3FNQ4BXLFMNDLFJUNPU2HY3ZMFSHONUCEOASW7QC7OX2H',
+        },
+      ]);
+
+      const { response, caseRecord } = await postSignedAck(makeIntentHash('c'), 'withdraw');
+      expect(response.status).toBe(200);
+      const json = await response.json();
+      expect(json.onChainCheck).toBe('verified');
+      expect(fetchPaymentsMock).toHaveBeenCalledWith(TX);
+
+      const stored = await store.get(caseRecord.id);
+      expect(stored?.onChainCheck).toBe('verified');
+    });
+
+    it("withdraw: no Horizon records → 'mismatch' and the ack is still recorded", async () => {
+      fetchPaymentsMock.mockResolvedValue([]);
+
+      const { response, caseRecord } = await postSignedAck(makeIntentHash('d'), 'withdraw');
+      expect(response.status).toBe(200);
+      const json = await response.json();
+      expect(json.onChainCheck).toBe('mismatch');
+
+      const stored = await store.get(caseRecord.id);
+      expect(stored?.status).toBe('acknowledged');
+      expect(stored?.onChainCheck).toBe('mismatch');
+    });
+
+    it("deposit: stores 'unverifiable' without calling Horizon", async () => {
+      const { response, caseRecord } = await postSignedAck(makeIntentHash('e'), 'deposit');
+      expect(response.status).toBe(200);
+      const json = await response.json();
+      expect(json.onChainCheck).toBe('unverifiable');
+      expect(fetchPaymentsMock).not.toHaveBeenCalled();
+
+      const stored = await store.get(caseRecord.id);
+      expect(stored?.onChainCheck).toBe('unverifiable');
+    });
   });
 
   // ─── 400 Bad Request ────────────────────────────────────────────────────────

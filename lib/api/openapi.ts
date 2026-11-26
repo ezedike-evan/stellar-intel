@@ -1974,6 +1974,46 @@ registry.registerPath({
 
 registry.registerPath({
   method: 'get',
+  path: '/api/v1/usage',
+  summary: 'Caller usage (v1)',
+  description:
+    "The caller's own tier, scopes, daily quota and current per-minute windows, read without spending quota on the counted buckets. Any caller may read its own usage.",
+  tags: ['System'],
+  responses: {
+    200: {
+      description: 'Usage snapshot',
+      content: {
+        'application/json': {
+          schema: z
+            .object({
+              caller: z.object({
+                kind: z.string(),
+                keyPrefix: z.string().nullable(),
+                tier: z.string(),
+                scopes: z.array(z.string()),
+              }),
+              quota: z
+                .object({
+                  limit: z.number(),
+                  used: z.number(),
+                  resetAt: z.string(),
+                })
+                .nullable(),
+              windows: z.array(
+                z.object({ bucket: z.string(), used: z.number(), resetAt: z.string() })
+              ),
+            })
+            .passthrough(),
+        },
+      },
+    },
+    401: UNAUTHORIZED_401,
+    429: RATE_LIMITED_429,
+  },
+});
+
+registry.registerPath({
+  method: 'get',
   path: '/api/status',
   summary: 'API version and deprecation status',
   description:
