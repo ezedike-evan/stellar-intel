@@ -46,7 +46,7 @@ export const EVENTS: { kind: string; description: string; emitted: boolean }[] =
   {
     kind: 'settlement.status_changed',
     description: "An anchor transaction's status changes",
-    emitted: false,
+    emitted: true,
   },
   {
     kind: 'dispute.opened',

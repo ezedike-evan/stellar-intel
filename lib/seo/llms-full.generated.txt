@@ -4388,22 +4388,22 @@ Stellar Intel can push real-time event notifications to your HTTPS endpoint inst
 Fourteen kinds can be subscribed to. "Live" kinds have a producer; the others are accepted
 by `POST /api/webhooks/subscriptions` and start arriving once their producer ships.
 
-| Kind                           | Fires when                                                                                                                | Status                         |
-| ------------------------------ | ------------------------------------------------------------------------------------------------------------------------- | ------------------------------ |
-| `intent.created`               | `POST /api/intent/offramp`, `POST /api/v1/intent/offramp` or `POST /api/v1/intent/onramp` returns 200                     | Live                           |
-| `intent.settled`               | `POST /api/reputation/append` returns 201 for a `completed` outcome                                                       | Live                           |
-| `intent.failed`                | `POST /api/reputation/append` returns 201 for an `error`, `expired` or `refunded` outcome                                 | Live                           |
-| `reputation.event_written`     | `POST /api/reputation/append` returns 201                                                                                 | Live                           |
-| `anchor.health_status_changed` | The publisher tick sees an anchor's `degraded` flag change                                                                | Live                           |
-| `intent.rejected`              | An off-ramp intent route refuses a signed intent (401 bad signature, 400 missing replay fields, 409 replay, 422 no route) | Live                           |
-| `intent.expired`               | An off-ramp intent route answers 410: the intent's `deadline` has passed                                                  | Live                           |
-| `settlement.status_changed`    | An anchor transaction changes status                                                                                      | Subscribable; producer pending |
-| `dispute.opened`               | `POST /api/reputation/dispute` returns 201                                                                                | Live                           |
-| `dispute.resolved`             | `POST /api/admin/disputes` accepts or rejects a dispute (200)                                                             | Live                           |
-| `oracle.published`             | The publisher tick writes outcomes, rates, metrics or probe signals on chain                                              | Live                           |
-| `intent.slippage_breach`       | `POST /api/reputation/append` records an outcome below the intent's `minReceive`                                          | Live                           |
-| `refund.opened`                | `POST /api/reputation/append` opens a new refund case (refunded, failed after payment, or a slippage breach)              | Live                           |
-| `refund.acknowledged`          | `POST /api/refunds/ack` records the signer's acknowledgement of a refund (200)                                            | Live                           |
+| Kind                           | Fires when                                                                                                                | Status |
+| ------------------------------ | ------------------------------------------------------------------------------------------------------------------------- | ------ |
+| `intent.created`               | `POST /api/intent/offramp`, `POST /api/v1/intent/offramp` or `POST /api/v1/intent/onramp` returns 200                     | Live   |
+| `intent.settled`               | `POST /api/reputation/append` returns 201 for a `completed` outcome                                                       | Live   |
+| `intent.failed`                | `POST /api/reputation/append` returns 201 for an `error`, `expired` or `refunded` outcome                                 | Live   |
+| `reputation.event_written`     | `POST /api/reputation/append` returns 201                                                                                 | Live   |
+| `anchor.health_status_changed` | The publisher tick sees an anchor's `degraded` flag change                                                                | Live   |
+| `intent.rejected`              | An off-ramp intent route refuses a signed intent (401 bad signature, 400 missing replay fields, 409 replay, 422 no route) | Live   |
+| `intent.expired`               | An off-ramp intent route answers 410: the intent's `deadline` has passed                                                  | Live   |
+| `settlement.status_changed`    | `POST /api/intent/status` observes a new status for an anchor transaction                                                 | Live   |
+| `dispute.opened`               | `POST /api/reputation/dispute` returns 201                                                                                | Live   |
+| `dispute.resolved`             | `POST /api/admin/disputes` accepts or rejects a dispute (200)                                                             | Live   |
+| `oracle.published`             | The publisher tick writes outcomes, rates, metrics or probe signals on chain                                              | Live   |
+| `intent.slippage_breach`       | `POST /api/reputation/append` records an outcome below the intent's `minReceive`                                          | Live   |
+| `refund.opened`                | `POST /api/reputation/append` opens a new refund case (refunded, failed after payment, or a slippage breach)              | Live   |
+| `refund.acknowledged`          | `POST /api/refunds/ack` records the signer's acknowledgement of a refund (200)                                            | Live   |
 
 Every payload is built field by field. None carries a sender, recipient, public key,
 signature, dispute reason or JWT.
@@ -4519,7 +4519,7 @@ An off-ramp intent arrived after its signed `deadline`:
 
 ### settlement.status_changed
 
-An anchor transaction moved from one status to another. `from` is `null` for the first status seen, and `intentHash` is `null` when the transaction has no intent. Subscribable; the producer is pending:
+An anchor transaction moved from one status to another. `from` is `null` for the first status seen, and `intentHash` is `null` when the transaction has no intent. Emitted when `POST /api/intent/status` observes a status that differs from the last one recorded for the transaction; a repeat of the same status emits nothing. Its idempotency key is `settlement.status_changed:<anchorId>:<transactionId>:<to>`:
 
 ```json
 {
