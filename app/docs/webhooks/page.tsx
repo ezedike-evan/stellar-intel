@@ -68,6 +68,16 @@ export const EVENTS: { kind: string; description: string; emitted: boolean }[] =
     description: "A recorded outcome delivered less than the intent's minimum receive",
     emitted: true,
   },
+  {
+    kind: 'refund.opened',
+    description: 'Stellar Intel started tracking a refund for an intent',
+    emitted: true,
+  },
+  {
+    kind: 'refund.acknowledged',
+    description: 'The account that signed the transfer confirmed it received the refund',
+    emitted: true,
+  },
 ];
 
 /** How many of the kinds above a producer emits today. The banner is computed, never typed. */

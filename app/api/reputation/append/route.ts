@@ -12,7 +12,12 @@ import type { ApiError } from '@/types';
 import { enforceRateLimit } from '@/lib/api/response';
 import { requireCallerScope } from '@/lib/auth/caller';
 import { emitWebhookEvent } from '@/lib/webhooks/emit';
-import { openRefundCaseForBreach, openRefundCaseForOutcome } from '@/lib/refunds/detect';
+import {
+  emitRefundOpened,
+  openRefundCaseForBreach,
+  openRefundCaseForOutcome,
+} from '@/lib/refunds/detect';
+import type { RefundCase } from '@/lib/refunds/store';
 import type { OutcomeLogRow, SlippageBreach } from '@/types/reputation';
 
 export const runtime = 'nodejs';
@@ -189,6 +194,7 @@ export async function POST(request: NextRequest): Promise<NextResponse> {
     );
 
     let slippage: 'not_applicable' | 'met' | 'breach' | 'unrecorded';
+    let breachCase: RefundCase | null = null;
     if (slippageResult.kind === 'breach') {
       slippage = 'breach';
       logger.info({
@@ -198,7 +204,7 @@ export async function POST(request: NextRequest): Promise<NextResponse> {
         shortfallBps: slippageResult.breach.shortfallBps,
       });
       try {
-        await openRefundCaseForBreach(slippageResult.breach);
+        breachCase = await openRefundCaseForBreach(slippageResult.breach);
       } catch (err) {
         logger.warn({
           event: 'refund_case_open_failed',
@@ -225,6 +231,8 @@ export async function POST(request: NextRequest): Promise<NextResponse> {
     // After the events of the outcome itself, so a subscriber learns of the outcome
     // before it learns that the outcome fell short.
     if (slippageResult.kind === 'breach') emitSlippageBreachEvent(slippageResult.breach);
+    // And only then that a refund is now tracked for it (#2124).
+    if (breachCase) emitRefundOpened(breachCase);
 
     // A refunded outcome, or a withdrawal that failed after the user paid,
     // opens a refund case with no user action (RFD004). A failure here never
