@@ -82,3 +82,18 @@ describe('RateRowDetail estimate recipe (#1515)', () => {
     expect(screen.getByText('Indicative (SEP-24)')).toBeTruthy();
   });
 });
+
+describe('RateRowDetail settle-time annotation (#2151)', () => {
+  it('shows the p95 settle time and its sample size', () => {
+    renderDetail(rate({ settleP95Ms: 245_000, settleSampleSize: 42 }));
+
+    expect(screen.getByText('Usually settles within')).toBeTruthy();
+    expect(screen.getByText(/4m 05s/)).toBeTruthy();
+    expect(screen.getByText(/95% of 42 withdrawals, last 30 days/)).toBeTruthy();
+  });
+
+  it('renders nothing when the annotation is absent', () => {
+    renderDetail(rate());
+    expect(screen.queryByText('Usually settles within')).toBeNull();
+  });
+});

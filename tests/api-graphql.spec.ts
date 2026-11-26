@@ -234,6 +234,12 @@ describe('POST /api/graphql — rate limiting', () => {
 
     expect(res.status).toBe(429);
     expect(res.headers.get('Retry-After')).toBeTruthy();
+    expect(res.headers.get('X-RateLimit-Limit')).toBe('60');
+    expect(res.headers.get('X-RateLimit-Reset')).toBeTruthy();
+    expect(res.headers.get('RateLimit')).toMatch(/^"api\.graphql";r=0;t=\d+$/);
+    expect(res.headers.get('RateLimit-Policy')).toBe('"api.graphql";q=60;w=60');
+    const body = (await res.json()) as { code?: string };
+    expect(body.code).toBe('RATE_LIMITED');
   });
 });
 

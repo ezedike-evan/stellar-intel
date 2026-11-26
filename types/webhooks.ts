@@ -17,9 +17,12 @@ const IntentDirectionSchema = z.enum(['offramp', 'onramp']);
 
 export const IntentCreatedPayloadSchema = z
   .object({
+    intentHash: IntentHashSchema,
+    direction: IntentDirectionSchema,
     corridorId: z.string(),
     anchorId: z.string(),
-    quoteId: z.string(),
+    // Null for an on-ramp, which has no quote id (WHK008).
+    quoteId: z.string().nullable(),
     amount: z.string(),
     sourceAsset: z.string(),
     destinationAsset: z.string(),
@@ -142,6 +145,61 @@ export const OraclePublishedPayloadSchema = z
   })
   .strict();
 
+/**
+ * A recorded outcome delivered less than the intent's `minReceive`. The payload is
+ * built from the breach record field by field: its `signerAccount`, `evidence` and
+ * `anchorTransactionId` stay on the platform. `evidenceHash` identifies that evidence
+ * without carrying it.
+ */
+export const IntentSlippageBreachPayloadSchema = z
+  .object({
+    intentHash: IntentHashSchema,
+    anchorId: z.string(),
+    corridor: z.string(),
+    minReceive: z.string(),
+    amountOut: z.string(),
+    shortfall: z.string(),
+    shortfallBps: z.number().int().min(0),
+    evidenceHash: z.string(),
+    status: z.literal('detected'),
+    detectedAt: z.iso.datetime(),
+  })
+  .strict();
+
+/**
+ * Stellar Intel started tracking a refund for an intent. Built from the refund case
+ * field by field: its `signerAccount`, `ackHash`, `ackSignature` and amounts stay on
+ * the platform.
+ */
+export const RefundOpenedPayloadSchema = z
+  .object({
+    caseId: z.string(),
+    intentHash: IntentHashSchema,
+    anchorId: z.string(),
+    corridor: z.string(),
+    direction: z.enum(['withdraw', 'deposit']),
+    reason: z.enum([
+      'anchor_refunded',
+      'anchor_error_after_payment',
+      'expired_after_payment',
+      'slippage_breach',
+    ]),
+    status: z.enum(['owed', 'refunded']),
+    openedAt: z.iso.datetime(),
+  })
+  .strict();
+
+/** The user who signed the transfer confirmed they received the refund. */
+export const RefundAcknowledgedPayloadSchema = z
+  .object({
+    caseId: z.string(),
+    intentHash: IntentHashSchema,
+    anchorId: z.string(),
+    acknowledgedAt: z.iso.datetime(),
+    onChainCheck: z.enum(['verified', 'mismatch', 'unverifiable']).nullable(),
+  })
+  .strict();
+
 export const WEBHOOK_PAYLOAD_SCHEMAS = {
   'intent.created': IntentCreatedPayloadSchema,
   'intent.settled': IntentSettledPayloadSchema,
@@ -154,6 +212,9 @@ export const WEBHOOK_PAYLOAD_SCHEMAS = {
   'dispute.opened': DisputeOpenedPayloadSchema,
   'dispute.resolved': DisputeResolvedPayloadSchema,
   'oracle.published': OraclePublishedPayloadSchema,
+  'intent.slippage_breach': IntentSlippageBreachPayloadSchema,
+  'refund.opened': RefundOpenedPayloadSchema,
+  'refund.acknowledged': RefundAcknowledgedPayloadSchema,
 } as const;
 
 export type WebhookEventKind = keyof typeof WEBHOOK_PAYLOAD_SCHEMAS;
@@ -167,66 +228,98 @@ export const WebhookEventEnvelopeSchema = z.discriminatedUnion('kind', [
     id: z.string().uuid(),
     kind: z.literal('intent.created'),
     createdAt: z.iso.datetime(),
+    idempotencyKey: z.string().min(1).max(200),
     payload: IntentCreatedPayloadSchema,
   }),
   z.object({
     id: z.string().uuid(),
     kind: z.literal('intent.settled'),
     createdAt: z.iso.datetime(),
+    idempotencyKey: z.string().min(1).max(200),
     payload: IntentSettledPayloadSchema,
   }),
   z.object({
     id: z.string().uuid(),
     kind: z.literal('intent.failed'),
     createdAt: z.iso.datetime(),
+    idempotencyKey: z.string().min(1).max(200),
     payload: IntentFailedPayloadSchema,
   }),
   z.object({
     id: z.string().uuid(),
     kind: z.literal('reputation.event_written'),
     createdAt: z.iso.datetime(),
+    idempotencyKey: z.string().min(1).max(200),
     payload: ReputationEventWrittenPayloadSchema,
   }),
   z.object({
     id: z.string().uuid(),
     kind: z.literal('anchor.health_status_changed'),
     createdAt: z.iso.datetime(),
+    idempotencyKey: z.string().min(1).max(200),
     payload: AnchorHealthStatusChangedPayloadSchema,
   }),
   z.object({
     id: z.string().uuid(),
     kind: z.literal('intent.rejected'),
     createdAt: z.iso.datetime(),
+    idempotencyKey: z.string().min(1).max(200),
     payload: IntentRejectedPayloadSchema,
   }),
   z.object({
     id: z.string().uuid(),
     kind: z.literal('intent.expired'),
     createdAt: z.iso.datetime(),
+    idempotencyKey: z.string().min(1).max(200),
     payload: IntentExpiredPayloadSchema,
   }),
   z.object({
     id: z.string().uuid(),
     kind: z.literal('settlement.status_changed'),
     createdAt: z.iso.datetime(),
+    idempotencyKey: z.string().min(1).max(200),
     payload: SettlementStatusChangedPayloadSchema,
   }),
   z.object({
     id: z.string().uuid(),
     kind: z.literal('dispute.opened'),
     createdAt: z.iso.datetime(),
+    idempotencyKey: z.string().min(1).max(200),
     payload: DisputeOpenedPayloadSchema,
   }),
   z.object({
     id: z.string().uuid(),
     kind: z.literal('dispute.resolved'),
     createdAt: z.iso.datetime(),
+    idempotencyKey: z.string().min(1).max(200),
     payload: DisputeResolvedPayloadSchema,
   }),
   z.object({
     id: z.string().uuid(),
     kind: z.literal('oracle.published'),
     createdAt: z.iso.datetime(),
+    idempotencyKey: z.string().min(1).max(200),
     payload: OraclePublishedPayloadSchema,
+  }),
+  z.object({
+    id: z.string().uuid(),
+    kind: z.literal('intent.slippage_breach'),
+    createdAt: z.iso.datetime(),
+    idempotencyKey: z.string().min(1).max(200),
+    payload: IntentSlippageBreachPayloadSchema,
+  }),
+  z.object({
+    id: z.string().uuid(),
+    kind: z.literal('refund.opened'),
+    createdAt: z.iso.datetime(),
+    idempotencyKey: z.string().min(1).max(200),
+    payload: RefundOpenedPayloadSchema,
+  }),
+  z.object({
+    id: z.string().uuid(),
+    kind: z.literal('refund.acknowledged'),
+    createdAt: z.iso.datetime(),
+    idempotencyKey: z.string().min(1).max(200),
+    payload: RefundAcknowledgedPayloadSchema,
   }),
 ]);

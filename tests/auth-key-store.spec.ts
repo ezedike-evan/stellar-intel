@@ -5,6 +5,7 @@ import {
   _setApiKeyStore,
   type ApiKeyRecord,
 } from '@/lib/auth/key-store';
+import { apiKeyStoreContract } from './fixtures/api-key-store-contract';
 
 function makeRecord(id: string, createdAt = '2026-11-21T10:00:00.000Z'): ApiKeyRecord {
   return {
@@ -91,4 +92,8 @@ describe('lib/auth/key-store.ts (AGS002)', () => {
     const s = getApiKeyStore();
     expect(s).toBeInstanceOf(InMemoryApiKeyStore);
   });
+});
+
+describe('InMemoryApiKeyStore satisfies the ApiKeyStore contract', () => {
+  apiKeyStoreContract(async () => new InMemoryApiKeyStore());
 });

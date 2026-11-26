@@ -5,6 +5,7 @@ import {
   isApiErrorBody,
 } from './errors.js';
 import type {
+  AdjudicationLogResponse,
   AnchorCensusResponse,
   AnchorHealth,
   AnchorHealthLedgerArtifact,
@@ -288,6 +289,23 @@ export class StellarIntelClient {
   /** Liveness of the API itself. */
   async getHealth(): Promise<{ ok: boolean }> {
     return this.request<{ ok: boolean }>({ method: 'GET', path: '/api/v1/health' });
+  }
+
+  /**
+   * Serves the public, append-only dispute adjudication log.
+   */
+  async getDisputeLog(options?: {
+    afterSeq?: number;
+    limit?: number;
+  }): Promise<AdjudicationLogResponse> {
+    const params = new URLSearchParams();
+    if (options?.afterSeq !== undefined) params.set('afterSeq', String(options.afterSeq));
+    if (options?.limit !== undefined) params.set('limit', String(options.limit));
+    const qs = params.toString() ? `?${params.toString()}` : '';
+    return this.request<AdjudicationLogResponse>({
+      method: 'GET',
+      path: `/api/v1/disputes/log${qs}`,
+    });
   }
 
   private async request<T>(options: RequestOptions): Promise<T> {
