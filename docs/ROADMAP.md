@@ -664,7 +664,7 @@ Scope is decomposed post-v2; the shape is already committed.
 - [ ] **Slippage bounds** — `minReceive` enforced at settlement; refund on
       breach with on-chain evidence
 - [ ] **Recurring intents** — standing-order semantics (signed
-      authorization with per-period cap, hard stop date, due reminders, and single-signature execution; see [docs/RECURRING.md](docs/RECURRING.md))
+      authorization with per-period cap, hard stop date, due reminders, and single-signature execution; see [docs/RECURRING.md](RECURRING.md))
 - [ ] **Execution SLA** — per-anchor SLA card: p50/p95/p99 settle latency
       with 30-day trailing window
 - [ ] **Refund guarantees** — automatic refund flow with user-signed
@@ -812,7 +812,7 @@ still open.
 
 - [-] **Recurring intents / subscription remittance** — standing-order
   semantics with signed authorization terms, server-enforced limits, due
-  reminders, and single-signature payment confirmation (see [docs/RECURRING.md](docs/RECURRING.md)).
+  reminders, and single-signature payment confirmation (see [docs/RECURRING.md](RECURRING.md)).
   A flag-gated implementation exists (`lib/recurring/`, `types/recurring.ts`,
   behind `NEXT_PUBLIC_RECURRING_INTENTS` in `lib/flags.ts`, off by default).
   Fully automated execution without a fresh signature remains parked on

@@ -1,6 +1,6 @@
 # Standing Orders & Recurring Intents
 
-**Last reviewed:** 2026-11-22
+**Last reviewed:** 2026-11-26
 
 Stellar Intel supports standing orders for recurring remittance and scheduled payouts. A user signs a standing authorization once with Freighter to define the bounds of future payments (cadence, per-period cap, anchor allowlist, and expiration). Because standard Stellar wallets do not currently support automated pre-authorized execution without user presence, each due payment generates a reminder and requires exactly one signature to confirm and execute.
 
@@ -12,7 +12,7 @@ Recurring intents are flag-gated and **off by default** in production:
 
 - Governed by `flags.recurringIntents` in `lib/flags.ts` (environment variable `NEXT_PUBLIC_RECURRING_INTENTS=on`).
 - When disabled, recurring routes return `404 Not Found`.
-- When enabled, it activates `/recurring`, `/api/recurring/*`, and the due banner on `/offramp`.
+- When enabled, it activates `/api/recurring/*` and the due-payment banner on `/offramp`. A dedicated `/recurring` management page is not built yet.
 
 ---
 
@@ -91,11 +91,11 @@ The state of a standing authorization transitions through discrete phases based 
 
 ## 6. Confirming Payments (One Signature)
 
-When an authorization is `due`, the UI displays a reminder on `/recurring` and a banner on `/offramp`. The user can confirm the cycle:
+When an authorization is `due`, the banner on `/offramp` shows a reminder for each standing order this browser created, and links to `/offramp` prefilled with the corridor, the amount, the order id and the cycle. Confirming the cycle:
 
-1. The server compiles an off-ramp intent for the due amount with an approved anchor from `anchorAllowlist`.
-2. The user signs the generated intent transaction in Freighter.
-3. The execution is recorded and linked to the authorization cycle via `POST /api/recurring/{id}/executions`.
+1. The rate table is limited to the order's `anchorAllowlist`, and an amount above the remaining per-period cap is refused before any signing.
+2. The user signs the off-ramp intent in Freighter. In recurring mode the intent also names `recurringAuthorizationId` and `cycleNumber`.
+3. The client posts that signed intent to `POST /api/recurring/{id}/executions`, which records the cycle after the server re-checks the signature, the due cycle and the limits above.
 
 ---
 
@@ -133,25 +133,32 @@ All routes require `flags.recurringIntents` to be enabled; otherwise they return
 
 ### `POST /api/recurring`
 
-Registers a new standing authorization.
+Registers a new standing authorization. The request body is the signed authorization itself.
 
-- **Body:** `{ authorization: SignedStandingAuthorization }`
-- **Response (201):** `{ id: string, status: "active", termsHash: string }`
-- **Errors:** `400 VALIDATION_ERROR`, `401 UNAUTHORIZED`, `409 DUPLICATE_AUTHORIZATION`, `429 RATE_LIMITED`.
+- **Body:** `SignedStandingAuthorization`: `{ terms, termsHash, signature, publicKey }`
+- **Response (201):** `{ id, termsHash, state }`. `id` is a random UUID that only the creator learns; keep it, because there is no listing endpoint.
+- **Errors:**
+  - `400 INVALID_JSON`: the body is not JSON.
+  - `400 VALIDATION_ERROR`: the body fails the schema.
+  - `401 UNAUTHORIZED`: the terms do not hash to `termsHash`, or the signature does not verify.
+  - `422` with the policy code upper-cased: `UNKNOWN_CORRIDOR`, `ANCHOR_NOT_IN_CORRIDOR`, `AMOUNT_EXCEEDS_CAP`, `STOP_IN_PAST`, `START_TOO_OLD`, `WINDOW_TOO_LONG`.
+  - `409 DUPLICATE_AUTHORIZATION`: the same signed terms were already registered.
+  - `429 RATE_LIMITED`.
 
 ### `GET /api/recurring/{id}`
 
-Retrieves a standing authorization record along with its current evaluated state.
+Retrieves a standing authorization with its current state and execution history. The signature is never returned.
 
-- **Response (200):** `{ id, status, authorization, state }`
-- **Errors:** `404 NOT_FOUND`.
+- **Response (200):** `{ id, termsHash, terms, status, state, executions }`
+- **Errors:** `404 NOT_FOUND` for a malformed or unknown id. `429 RATE_LIMITED`.
 
 ### `GET /api/recurring/due`
 
-Lists all authorizations currently in the `due` phase for the connected sender wallet.
+Returns the due reminders for authorization ids the caller already holds. There is deliberately no lookup by wallet.
 
-- **Query:** `?sender=G...`
-- **Response (200):** `{ due: DueReminder[] }`
+- **Query:** `?ids=<uuid>,<uuid>` (at most 20)
+- **Response (200):** `{ reminders: DueReminder[] }`. Only orders whose phase is `due` are returned; unknown ids are skipped.
+- **Errors:** `400 VALIDATION_ERROR` when `ids` is missing, has more than 20 entries or contains a non-UUID. `429 RATE_LIMITED`.
 
 ### `POST /api/recurring/{id}/control`
 
@@ -195,8 +202,15 @@ Applies a signed control message (`pause`, `resume`, or `cancel`).
 
 ### `POST /api/recurring/{id}/executions`
 
-Records a confirmed payment execution for an authorized cycle.
+Confirms the payment for the due cycle with one signature over an off-ramp outcome intent that names the order and the cycle.
 
-- **Body:** `{ cycleNumber, periodIndex, amount, anchorId, intentHash, transactionId }`
-- **Response (200):** `{ ok: true, executionId: string }`
-- **Errors:** `400 VALIDATION_ERROR`, `403 FORBIDDEN`, `409 DUPLICATE_CYCLE`.
+- **Body:** `{ intent, signature, publicKey }`, where `intent` is `{ type: "offramp-outcome", sourceAsset, destinationAsset, amount, sender, recipient, anchorId, corridor, transactionId, recurringAuthorizationId, cycleNumber, minReceive? }`
+- **Response (201):** `{ execution, state }`. Repeating a confirmed intent answers `200` with the same shape.
+- **Errors:**
+  - `400 VALIDATION_ERROR`: malformed body.
+  - `401 UNAUTHORIZED`: the signature does not verify over the intent's hash.
+  - `403 FORBIDDEN`: the intent names another order, or `publicKey`, `intent.sender` and the terms' sender differ.
+  - `404 NOT_FOUND`: unknown id, or the feature flag is off.
+  - `409 NOT_DUE`: no payment is due now. `409 CYCLE_MISMATCH`: the intent names another cycle. `409 DUPLICATE_CYCLE`: the cycle is already confirmed.
+  - `422` with the enforcement code upper-cased, for example `PERIOD_CAP_EXCEEDED` or `ANCHOR_NOT_ALLOWED`. The rejected attempt is recorded in the order's history.
+  - `429 RATE_LIMITED`.
