@@ -9,6 +9,7 @@ import {
 import * as sep24Module from '@/lib/stellar/sep24';
 import { SepError } from '@/lib/stellar/errors';
 import * as loggerModule from '@/lib/logger';
+import { _setWebhookEmitter } from '@/lib/webhooks/emit';
 
 const VALID_TRANSFER_SERVER = 'https://stellar.moneygram.com/sep24';
 const JWT = 'mock-bearer-jwt-token-xyz';
@@ -118,6 +119,40 @@ describe('POST /api/intent/status', () => {
       previous: 'pending_anchor',
       changed: true,
       terminal: true,
+    });
+  });
+
+  it('emits settlement.status_changed once for a change and not again for a repeat (WHK011)', async () => {
+    const emitted: Array<{ kind: string; payload: Record<string, unknown>; opts: unknown }> = [];
+    _setWebhookEmitter((kind, payload, opts) => emitted.push({ kind, payload, opts }));
+    try {
+      for (const status of ['pending_anchor', 'pending_anchor', 'completed']) {
+        getSep24TxSpy.mockResolvedValueOnce({ id: 'txn-12345', status } as any);
+        expect((await POST(makeRequest(VALID_BODY))).status).toBe(200);
+      }
+    } finally {
+      _setWebhookEmitter(null);
+    }
+
+    expect(emitted.map((e) => e.kind)).toEqual([
+      'settlement.status_changed',
+      'settlement.status_changed',
+    ]);
+    expect(emitted[0]?.payload).toMatchObject({
+      anchorId: 'moneygram',
+      transactionId: 'txn-12345',
+      from: null,
+      to: 'pending_anchor',
+      terminal: false,
+      intentHash: 'a'.repeat(64),
+    });
+    expect(emitted[1]?.payload).toMatchObject({
+      from: 'pending_anchor',
+      to: 'completed',
+      terminal: true,
+    });
+    expect(emitted[1]?.opts).toEqual({
+      idempotencyKey: 'settlement.status_changed:moneygram:txn-12345:completed',
     });
   });
 
