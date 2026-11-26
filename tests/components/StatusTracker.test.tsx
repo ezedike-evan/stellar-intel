@@ -1,6 +1,7 @@
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
 import { act, render, screen, waitFor, fireEvent } from '@testing-library/react';
 import { StatusTracker } from '@/components/offramp/StatusTracker';
+import { flags } from '@/lib/flags';
 
 vi.mock('@/lib/stellar/sep1', async (importOriginal) => {
   const actual = await importOriginal<typeof import('@/lib/stellar/sep1')>();
@@ -277,5 +278,65 @@ describe('StatusTracker', () => {
     expect(screen.getByText('Payment received, processing')).toBeInTheDocument();
     expect(screen.getByText('100 USDC')).toBeInTheDocument();
     expect(screen.getByText('154840 NGN')).toBeInTheDocument();
+  });
+});
+
+describe('StatusTracker — below-minimum notice', () => {
+  const COMPLETED = {
+    ...BASE_PROPS,
+    status: 'completed' as const,
+    amountOut: '150000',
+    minReceive: '152000',
+  };
+  const RECORD_URL = '/api/v1/slippage-breaches/abc123';
+  let original: boolean;
+
+  beforeEach(() => {
+    original = flags.slippageBreaches;
+    flags.slippageBreaches = true;
+  });
+
+  afterEach(() => {
+    flags.slippageBreaches = original;
+  });
+
+  it('shows an alert with the shortfall and a link to the record on a breach', () => {
+    render(<StatusTracker {...COMPLETED} breachRecordUrl={RECORD_URL} />);
+    const alert = screen.getByRole('alert');
+    expect(alert).toHaveTextContent(
+      'You received 150000 NGN, below your minimum of 152000 NGN (short by 2000).'
+    );
+    expect(alert).toHaveTextContent("We've recorded this with your Stellar payment as evidence.");
+    const link = screen.getByRole('link', { name: 'View the record' });
+    expect(link).toHaveAttribute('href', RECORD_URL);
+    expect(link).toHaveAttribute('target', '_blank');
+    expect(link).toHaveAttribute('rel', 'noopener noreferrer');
+  });
+
+  it('omits the link when no record URL is provided', () => {
+    render(<StatusTracker {...COMPLETED} />);
+    expect(screen.getByRole('alert')).toHaveTextContent('short by 2000');
+    expect(screen.queryByRole('link', { name: 'View the record' })).not.toBeInTheDocument();
+  });
+
+  it('shows a muted line when the minimum was met', () => {
+    render(<StatusTracker {...COMPLETED} amountOut="152500" />);
+    expect(
+      screen.getByText('Received at or above your minimum of 152000 NGN.')
+    ).toBeInTheDocument();
+    expect(screen.queryByRole('alert')).not.toBeInTheDocument();
+  });
+
+  it('renders nothing new while the withdrawal is still pending', () => {
+    render(<StatusTracker {...COMPLETED} status="pending_anchor" breachRecordUrl={RECORD_URL} />);
+    expect(screen.queryByRole('alert')).not.toBeInTheDocument();
+    expect(screen.queryByText(/your minimum of/)).not.toBeInTheDocument();
+  });
+
+  it('renders nothing new when the flag is off', () => {
+    flags.slippageBreaches = false;
+    render(<StatusTracker {...COMPLETED} breachRecordUrl={RECORD_URL} />);
+    expect(screen.queryByRole('alert')).not.toBeInTheDocument();
+    expect(screen.queryByText(/your minimum of/)).not.toBeInTheDocument();
   });
 });

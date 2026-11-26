@@ -14,6 +14,8 @@ import { STELLAR_EXPERT_URL } from '@/constants';
 import { CopyButton } from '@/components/ui/CopyButton';
 import { useShare } from '@/hooks/useShare';
 import { TransactionReceipt } from './TransactionReceipt';
+import { isFlag } from '@/lib/flags';
+import { evaluateSlippage } from '@/lib/reputation/slippage';
 
 const PENDING_ANCHOR_STALL_MS = 10 * 60 * 1000;
 
@@ -39,6 +41,10 @@ interface StatusTrackerProps {
   onRetryAnchor?: () => void;
   onAdjust?: () => void;
   onDisputeOpen?: (transactionId: string) => void;
+  /** Signed minReceive floor for this withdrawal (SLP005), in the destination currency. */
+  minReceive?: string | undefined;
+  /** Public slippage-breach record for this intent, linked from the below-minimum notice. */
+  breachRecordUrl?: string | undefined;
 }
 
 const STATUS_LABELS: Record<WithdrawStatusValue, string> = {
@@ -105,12 +111,18 @@ export function StatusTracker({
   anchorHomeDomain,
   onDisputeOpen,
   onAdjust,
+  minReceive,
+  breachRecordUrl,
 }: StatusTrackerProps) {
   const isTerminal = status ? TERMINAL.includes(status) : false;
   const isCompleted = status === 'completed';
   const canDispute = isTerminal && status != null && DISPUTABLE.includes(status);
   const terminalMessage = status ? terminalErrorMessage(status, transactionId) : null;
   const { share, copied: shareCopied } = useShare();
+  const slippage =
+    isFlag('slippageBreaches') && isCompleted && minReceive
+      ? evaluateSlippage({ minReceive, amountOut, outcome: 'completed' })
+      : null;
 
   const [anchorSupportUrl, setAnchorSupportUrl] = useState<string | null>(null);
   const pendingAnchorSinceRef = useRef<number | null>(null);
@@ -188,6 +200,36 @@ export function StatusTracker({
             {formatDeliveredAmount(amountOut, currencyCode)}
           </p>
         </div>
+      )}
+
+      {slippage?.kind === 'breach' && (
+        <div
+          role="alert"
+          className="mb-4 rounded-lg bg-bg-sunken px-3 py-2 text-xs text-status-down"
+        >
+          You received {amountOut} {currencyCode}, below your minimum of {minReceive} {currencyCode}{' '}
+          (short by {slippage.shortfall}). We&apos;ve recorded this with your Stellar payment as
+          evidence.
+          {breachRecordUrl && (
+            <>
+              {' '}
+              <a
+                href={breachRecordUrl}
+                target="_blank"
+                rel="noopener noreferrer"
+                className="font-medium underline"
+              >
+                View the record
+              </a>
+            </>
+          )}
+        </div>
+      )}
+
+      {slippage?.kind === 'met' && (
+        <p className="mb-4 text-xs text-fg-muted">
+          Received at or above your minimum of {minReceive} {currencyCode}.
+        </p>
       )}
 
       <div className="mb-4 flex items-center gap-2">
