@@ -1,5 +1,6 @@
 import { isIndicativeRateSource, type AnchorRate } from '@/types';
 import { formatCurrency, formatRate } from '@/lib/utils';
+import { formatSettleDuration } from '@/lib/format';
 
 const FEE_TYPE_LABELS: Record<AnchorRate['feeType'], string> = {
   flat: 'Flat fee',
@@ -69,6 +70,18 @@ export function RateRowDetail({ rate, currency, colSpan }: RateRowDetailProps) {
             <dt className="text-fg-muted">Last updated</dt>
             <dd className="font-medium text-primary-text">{rate.updatedAt.toLocaleTimeString()}</dd>
           </div>
+          {rate.settleP95Ms != null && (
+            <div>
+              <dt className="text-fg-muted">Usually settles within</dt>
+              <dd className="font-medium text-primary-text">
+                {formatSettleDuration(rate.settleP95Ms)}
+                <span className="text-fg-muted">
+                  {' '}
+                  · 95% of {rate.settleSampleSize} withdrawals, last 30 days
+                </span>
+              </dd>
+            </div>
+          )}
           {isIndicativeRateSource(rate.source) && (
             <div className="col-span-full">
               <dt className="text-fg-muted">How this estimate is built</dt>
