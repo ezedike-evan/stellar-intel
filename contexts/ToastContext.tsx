@@ -48,3 +48,8 @@ export function useToastContext(): ToastContextType {
   if (!context) throw new Error('useToastContext must be used within a ToastProvider');
   return context;
 }
+
+/** Like useToastContext, but undefined outside a ToastProvider instead of throwing. */
+export function useOptionalToastContext(): ToastContextType | undefined {
+  return useContext(ToastContext);
+}

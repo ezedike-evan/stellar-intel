@@ -769,8 +769,11 @@ decomposed into the child issues below.
   backoff, dead-letter after repeated failures
   ([#869](https://github.com/ezedike-evan/stellar-intel/issues/869)).
   `app/api/webhooks/*` + `lib/webhooks/sign.ts`. Subscription API and
-  HMAC signing shipped; no production code emits events yet
-  (`dispatchEvent` has no caller)
+  HMAC signing shipped; `intent.created` is emitted from
+  `app/api/intent/offramp/route.ts` and `app/api/v1/intent/offramp/route.ts`,
+  `reputation.event_written`, `intent.settled` and `intent.failed` from
+  `app/api/reputation/append/route.ts`, and `anchor.health_status_changed`
+  from `app/api/publisher/tick/route.ts`
 - [x] **GraphQL layer (additive)** — query corridor rates, anchor
       reputation, and intent status in one round trip, alongside the REST
       API rather than replacing it

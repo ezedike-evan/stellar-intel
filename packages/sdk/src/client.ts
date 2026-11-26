@@ -6,11 +6,13 @@ import {
 } from './errors.js';
 import type {
   AdjudicationLogResponse,
+  RefundGateMetrics,
   AnchorCensusResponse,
   AnchorHealth,
   AnchorHealthLedgerArtifact,
   AnchorPriceHistory,
   AnchorQuoteGap,
+  CallerTokenResponse,
   CorridorVolumeSavings,
   OfframpIntentRequest,
   OfframpIntentResponse,
@@ -20,6 +22,7 @@ import type {
   OnrampQuote,
   RateComparison,
   Sep38ReadinessResponse,
+  UsageResponse,
 } from './types.js';
 
 export const DEFAULT_BASE_URL = 'https://stellar-intel.vercel.app';
@@ -55,6 +58,10 @@ export interface ClientOptions {
   fetch?: typeof globalThis.fetch;
   /** Injectable so tests do not actually wait out the backoff. */
   sleep?: (ms: number) => Promise<void>;
+  /** Long-lived caller API key. Send as `Authorization: Bearer <apiKey>`. */
+  apiKey?: string | undefined;
+  /** Dynamic token provider called once per logical public method call. */
+  getToken?: (() => string | Promise<string>) | undefined;
 }
 
 interface RequestOptions {
@@ -103,13 +110,21 @@ export class StellarIntelClient {
   private readonly timeoutMs: number;
   private readonly fetchImpl: typeof globalThis.fetch;
   private readonly sleep: (ms: number) => Promise<void>;
+  private readonly apiKey: string | undefined;
+  private readonly getToken: (() => string | Promise<string>) | undefined;
 
   constructor(options: ClientOptions = {}) {
+    if (options.apiKey !== undefined && options.getToken !== undefined) {
+      throw new TypeError('Pass apiKey or getToken, not both');
+    }
+
     this.baseUrl = (options.baseUrl ?? DEFAULT_BASE_URL).replace(/\/$/, '');
     this.maxRetries = options.maxRetries ?? 3;
     this.timeoutMs = options.timeoutMs ?? 10_000;
     this.fetchImpl = options.fetch ?? globalThis.fetch;
     this.sleep = options.sleep ?? defaultSleep;
+    this.apiKey = options.apiKey;
+    this.getToken = options.getToken;
 
     if (typeof this.fetchImpl !== 'function') {
       throw new Error(
@@ -292,6 +307,42 @@ export class StellarIntelClient {
   }
 
   /**
+   * Exchange an API key for a short-lived scoped caller token.
+   *
+   * Calls `POST /api/v1/auth/token` with no idempotency key.
+   */
+  async exchangeToken(input?: {
+    scopes?: string[];
+    ttlSeconds?: number;
+  }): Promise<CallerTokenResponse> {
+    return this.request<CallerTokenResponse>({
+      method: 'POST',
+      path: '/api/v1/auth/token',
+      body: input,
+    });
+  }
+
+  /**
+   * Reads the caller's identity, tier, scopes, daily quota and rate-limit windows.
+   *
+   * Calls `GET /api/v1/usage`.
+   */
+  async getUsage(): Promise<UsageResponse> {
+    return this.request<UsageResponse>({
+      method: 'GET',
+      path: '/api/v1/usage',
+    });
+  }
+
+  /**
+   * The unsignaled-refund release gate: counts of refund cases opened in the
+   * trailing 30 days, and whether the gate passes.
+   */
+  async getRefundsSummary(): Promise<RefundGateMetrics> {
+    return this.request<RefundGateMetrics>({ method: 'GET', path: '/api/v1/refunds/summary' });
+  }
+
+  /**
    * Serves the public, append-only dispute adjudication log.
    */
   async getDisputeLog(options?: {
@@ -314,6 +365,19 @@ export class StellarIntelClient {
     headers['API-Version'] = API_VERSION;
     if (options.body !== undefined) headers['content-type'] = 'application/json';
     if (options.idempotencyKey) headers['Idempotency-Key'] = options.idempotencyKey;
+
+    let token = this.apiKey;
+    if (!token && this.getToken) {
+      token = await this.getToken();
+    }
+    if (token) {
+      headers['Authorization'] = `Bearer ${token}`;
+    }
+
+    const redact = (val: string): string => {
+      if (!token) return val;
+      return val.replaceAll(`Bearer ${token}`, '[REDACTED]').replaceAll(token, '[REDACTED]');
+    };
 
     let lastNetworkError: unknown = null;
 
@@ -357,9 +421,17 @@ export class StellarIntelClient {
       }
 
       if (isApiErrorBody(parsed)) {
-        throw new StellarIntelApiError(parsed.error, response.status);
+        const sanitizedBody = token
+          ? {
+              ...parsed.error,
+              message: redact(parsed.error.message),
+              requestId: redact(parsed.error.requestId),
+              code: redact(parsed.error.code),
+            }
+          : parsed.error;
+        throw new StellarIntelApiError(sanitizedBody, response.status);
       }
-      throw new StellarIntelResponseError(response.status, text);
+      throw new StellarIntelResponseError(response.status, redact(text));
     }
 
     // Only reachable if maxRetries is negative; kept so the type is honest.

@@ -26,7 +26,12 @@ import { useCountdown } from '@/hooks/useCountdown';
 import { useWallet } from '@/contexts/WalletContext';
 import { useWithdrawStatus, type OutcomeAppendContext } from '@/hooks/useWithdrawStatus';
 import { useWalletBalance } from '@/hooks/useWalletBalance';
-import { amountBucket, FUNNEL_EVENTS, trackFunnelEvent } from '@/lib/analytics';
+import { amountBucket, FUNNEL_EVENTS, TEMPLATE_EVENTS, trackFunnelEvent } from '@/lib/analytics';
+import { TemplatePicker } from '@/components/templates/TemplatePicker';
+import { TemplateManager } from '@/components/templates/TemplateManager';
+import { useIntentTemplates } from '@/hooks/useIntentTemplates';
+import type { IntentTemplate, IntentTemplateDraft } from '@/lib/templates/schema';
+import { SaveTemplateForm } from '@/components/templates/SaveTemplateForm';
 import { VISIBLE_CORRIDORS } from '@/constants/anchors';
 import { getCorridorAsset, getCorridorById } from '@/lib/stellar/anchors';
 import { signIntent } from '@/lib/intent/sign';
@@ -36,9 +41,21 @@ import type { AnchorRate } from '@/types';
 import { MIN_RECEIVE_TOLERANCE } from '@/lib/rate-ranking';
 import type { OutcomeIntent } from '@/lib/reputation/schema';
 import { flags } from '@/lib/flags';
+import { rememberTrackedIntent } from '@/lib/refunds/local-history';
 import { submitDispute } from '@/lib/reputation/dispute-client';
 import { DisputeModal } from '@/components/offramp/DisputeModal';
 import { DisputeStatusBadge } from '@/components/offramp/DisputeStatusBadge';
+import { RefundAckCard } from '@/components/refunds/RefundAckCard';
+import { DueRemindersBanner } from '@/components/recurring/DueRemindersBanner';
+import {
+  exceedsRemainingCap,
+  filterRatesToAllowlist,
+  parseRecurringParams,
+  withRecurringFields,
+  type RecurringOfframpContext,
+} from '@/lib/recurring/offramp-mode';
+import { fetchStandingOrder } from '@/lib/recurring/client';
+import { useOptionalToastContext } from '@/contexts/ToastContext';
 
 // Not needed until the user picks a rate to execute — split into its own
 // chunk so it doesn't pad the initial /offramp bundle.
@@ -89,6 +106,39 @@ function OfframpContent() {
   const [outcomeContext, setOutcomeContext] = useState<OutcomeAppendContext | null>(null);
 
   const { isConnected, publicKey, network } = useWallet();
+
+  // Standing-order mode (REC011), behind the recurringIntents flag: opened from a
+  // due reminder, the page limits the table to the signed allowlist and the
+  // remaining cap, and the outcome signature also confirms the cycle. Kept in
+  // state because the tracking router.replace drops the query params.
+  const [recurringCtx, setRecurringCtx] = useState<RecurringOfframpContext | null>(null);
+  const toast = useOptionalToastContext();
+
+  // Saved intent templates (TPL006), behind the intentTemplates flag. Applying
+  // one fills the corridor and amount only: it never selects an anchor or
+  // opens the drawer.
+  const templatesEnabled =
+    flags.intentTemplates && isConnected && !!publicKey && !trackingTransactionId;
+  const templatesApi = useIntentTemplates(
+    flags.intentTemplates && isConnected ? publicKey : null,
+    'offramp'
+  );
+  const [managerOpen, setManagerOpen] = useState(false);
+  const manageButtonRef = useRef<HTMLButtonElement>(null);
+  // Offered after a completed off-ramp started in this page session (TPL008).
+  const [templateDraft, setTemplateDraft] = useState<IntentTemplateDraft | null>(null);
+
+  const handleApplyTemplate = (template: IntentTemplate) => {
+    if (template.direction !== 'offramp' || !VALID_CORRIDOR_IDS.has(template.corridorId)) return;
+    setCorridorId(template.corridorId);
+    setAmount(template.amount);
+    templatesApi.markUsed(template.id);
+    trackFunnelEvent(TEMPLATE_EVENTS.templateApplied, {
+      direction: 'offramp',
+      corridor: template.corridorId,
+      amount_bucket: amountBucket(template.amount),
+    });
+  };
   const { rates, anchorErrors, isLoading, error, mutate, refreshInflight, lastFetchedAt } =
     useAnchorRates(corridorId, amount);
   const { secondsRemaining, elapsedSeconds, prefersReducedMotion, progress, totalSeconds } =
@@ -101,6 +151,18 @@ function OfframpContent() {
     code: selectedCorridor.from,
     issuer: selectedCorridor.fromIssuer,
   });
+  const recurringCapExceeded = recurringCtx
+    ? exceedsRemainingCap(amount, recurringCtx.remainingCap)
+    : false;
+  const tableRates = useMemo(() => {
+    if (!recurringCtx || !rates) return rates;
+    if (recurringCapExceeded) return { ...rates, rates: [], pending: [] };
+    return {
+      ...rates,
+      rates: filterRatesToAllowlist(rates.rates, recurringCtx.anchorAllowlist),
+      pending: filterRatesToAllowlist(rates.pending ?? [], recurringCtx.anchorAllowlist),
+    };
+  }, [rates, recurringCtx, recurringCapExceeded]);
   const withdrawStatus = useWithdrawStatus(
     trackingTransferServer,
     trackingTransactionId,
@@ -117,6 +179,35 @@ function OfframpContent() {
     setTrackingTransferServer(params.transferServer);
     setTrackingJwt(jwt);
     setTrackingNonce(params.nonce);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+
+  useEffect(() => {
+    if (!flags.recurringIntents) return;
+    const params = parseRecurringParams(searchParams.toString());
+    if (!params) return;
+    let active = true;
+    fetchStandingOrder(params.authorizationId)
+      .then((order) => {
+        if (!active) return;
+        const due = order.state.phase === 'due' ? order.state.due : null;
+        setRecurringCtx(
+          due
+            ? {
+                authorizationId: params.authorizationId,
+                cycleNumber: params.cycleNumber,
+                anchorAllowlist: order.terms.anchorAllowlist,
+                remainingCap: due.remainingCap,
+              }
+            : null
+        );
+      })
+      .catch(() => {
+        if (active) setRecurringCtx(null);
+      });
+    return () => {
+      active = false;
+    };
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
@@ -188,6 +279,14 @@ function OfframpContent() {
       setTrackingJwt(jwt);
       setTrackingNonce(nonce);
       setTrackingAnchorHomeDomain(anchorHomeDomain);
+      if (selectedRate) {
+        setTemplateDraft({
+          direction: 'offramp',
+          corridorId: selectedRate.corridorId,
+          amount,
+          anchorId: selectedRate.anchorId,
+        });
+      }
 
       // Capture the quote so the terminal outcome of this real transaction is
       // logged to the reputation store (#799). A null exchangeRate can't be
@@ -216,7 +315,13 @@ function OfframpContent() {
         // append body, is exactly what it was before.
         const outcomeIntent: OutcomeIntent | undefined =
           minReceive !== undefined ? { ...baseIntent, minReceive } : undefined;
-        const intent: Intent = outcomeIntent ?? baseIntent;
+        const outcome: Intent = outcomeIntent ?? baseIntent;
+        // A standing-order cycle signs the same intent plus the order id and cycle, so the one
+        // signature also confirms the cycle (REC009). The append route's strict outcomeIntent
+        // cannot carry those fields, so the floor evidence is left off the append in that case.
+        const ctx = recurringCtx;
+        const intent: Intent = ctx ? withRecurringFields(outcome, ctx) : outcome;
+        const appendOutcomeIntent = ctx ? undefined : outcomeIntent;
         const quote = {
           anchorId: selectedRate.anchorId,
           corridor: selectedRate.corridorId,
@@ -232,8 +337,39 @@ function OfframpContent() {
               intentHash,
               signature,
               publicKey: signer,
-              ...(outcomeIntent ? { minReceive: outcomeIntent.minReceive, outcomeIntent } : {}),
+              ...(appendOutcomeIntent
+                ? { minReceive: appendOutcomeIntent.minReceive, outcomeIntent: appendOutcomeIntent }
+                : {}),
             });
+            if (ctx) {
+              // Never blocks the off-ramp: a failure only surfaces as a toast.
+              fetch(`/api/recurring/${encodeURIComponent(ctx.authorizationId)}/executions`, {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ intent, signature, publicKey: signer }),
+              })
+                .then(async (res) => {
+                  if (res.ok) return;
+                  const body = (await res.json().catch(() => ({}))) as { code?: string };
+                  toast?.addToast(
+                    `Standing order payment not confirmed (${body.code ?? `HTTP ${res.status}`})`,
+                    'error'
+                  );
+                })
+                .catch(() => {
+                  toast?.addToast('Standing order payment not confirmed (NETWORK_ERROR)', 'error');
+                });
+            }
+            if (flags.refundGuarantees) {
+              rememberTrackedIntent({
+                intentHash,
+                anchorId: quote.anchorId,
+                corridor: quote.corridor,
+                direction: 'withdraw',
+                transactionId,
+                startedAt: new Date().toISOString(),
+              });
+            }
           })
           .catch(() => {
             // Best-effort, like the append itself: an unsigned outcome would be
@@ -241,7 +377,7 @@ function OfframpContent() {
           });
       }
     },
-    [router, selectedRate, amount, publicKey, minReceive]
+    [router, selectedRate, amount, publicKey, minReceive, recurringCtx, toast]
   );
 
   useEffect(() => {
@@ -274,6 +410,8 @@ function OfframpContent() {
     setTrackingNonce(null);
     setTrackingAnchorHomeDomain(null);
     setOutcomeContext(null);
+    setTemplateDraft(null);
+    setRecurringCtx(null);
     rateTableRef.current?.scrollIntoView({ behavior: 'smooth', block: 'start' });
   }, []);
 
@@ -324,6 +462,24 @@ function OfframpContent() {
 
       <DisclaimerBanner />
 
+      {templatesEnabled && (
+        <TemplatePicker
+          templates={templatesApi.templates}
+          visibleCorridorIds={VALID_CORRIDOR_IDS}
+          onApply={handleApplyTemplate}
+          onManage={() => setManagerOpen(true)}
+          manageButtonRef={manageButtonRef}
+        />
+      )}
+      <TemplateManager
+        open={managerOpen}
+        onClose={() => {
+          setManagerOpen(false);
+          manageButtonRef.current?.focus();
+        }}
+        api={templatesApi}
+      />
+
       <div className="grid grid-cols-1 gap-4 rounded-xl border border-border bg-bg-sunken p-4 /50 sm:grid-cols-3">
         <AssetSelector
           value={selectedAsset}
@@ -352,6 +508,28 @@ function OfframpContent() {
       )}
 
       <TrustBar lastFetchedAt={lastFetchedAt} />
+
+      {flags.recurringIntents && <DueRemindersBanner />}
+
+      {recurringCtx && (
+        <div className="rounded-xl border border-border bg-bg-sunken px-4 py-3 text-sm text-primary-text">
+          Standing order payment, cycle {recurringCtx.cycleNumber}
+          <span className="block text-xs text-fg-muted">
+            Only the anchors you approved are shown. Up to {recurringCtx.remainingCap}{' '}
+            {selectedAsset} can be sent this period.
+          </span>
+        </div>
+      )}
+
+      {recurringCtx && recurringCapExceeded && (
+        <div
+          role="alert"
+          className="rounded-xl border border-status-down/40 bg-bg-sunken px-4 py-3 text-sm text-status-down"
+        >
+          {amount} {selectedAsset} is more than the {recurringCtx.remainingCap} {selectedAsset} left
+          on this standing order for this period. Lower the amount to continue.
+        </div>
+      )}
 
       <div ref={rateTableRef}>
         <RateTableHeader
@@ -383,7 +561,7 @@ function OfframpContent() {
           )}
         >
           <RateTable
-            rates={rates}
+            rates={tableRates}
             anchorErrors={anchorErrors}
             isLoading={isLoading}
             refreshInflight={refreshInflight}
@@ -421,8 +599,33 @@ function OfframpContent() {
           {flags.disputeLadder && outcomeContext && (
             <DisputeStatusBadge intentHash={outcomeContext.intentHash} />
           )}
+          {flags.intentTemplates &&
+            publicKey &&
+            templateDraft &&
+            withdrawStatus.status === 'completed' && (
+              <SaveTemplateForm
+                draft={templateDraft}
+                onSave={templatesApi.save}
+                onDismiss={() => setTemplateDraft(null)}
+              />
+            )}
         </>
       )}
+
+      {flags.refundGuarantees &&
+        outcomeContext &&
+        trackingTransactionId &&
+        (withdrawStatus.status === 'refunded' ||
+          withdrawStatus.status === 'error' ||
+          withdrawStatus.status === 'expired') && (
+          <RefundAckCard
+            intentHash={outcomeContext.intentHash}
+            anchorId={outcomeContext.anchorId}
+            account={outcomeContext.publicKey}
+            refunds={withdrawStatus.refunds}
+            assetLabel="USDC"
+          />
+        )}
 
       {disputeOpen &&
         flags.disputeLadder &&

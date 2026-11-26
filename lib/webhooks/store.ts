@@ -17,6 +17,8 @@ export interface WebhookStore {
   recordDelivery(record: DeliveryRecord): Promise<void>;
   listDeadLetters(): Promise<DeliveryRecord[]>;
   listDeliveries(query: DeliveryQuery): Promise<DeliveryRecord[]>;
+  /** One logged delivery by its id, for resending it. `null` when the log has no such record. */
+  getDelivery(id: string): Promise<DeliveryRecord | null>;
   /**
    * Stores the event envelope once. Returns `false`, storing nothing, when an event with the
    * same `idempotencyKey` was already recorded, so the caller does not deliver it again.
@@ -66,6 +68,11 @@ export class InMemoryWebhookStore implements WebhookStore {
 
   async listDeadLetters(): Promise<DeliveryRecord[]> {
     return this.deliveries.filter((r) => r.status === 'dead_letter').map((r) => ({ ...r }));
+  }
+
+  async getDelivery(id: string): Promise<DeliveryRecord | null> {
+    const record = this.deliveries.find((r) => r.id === id);
+    return record ? { ...record } : null;
   }
 
   async listDeliveries(query: DeliveryQuery): Promise<DeliveryRecord[]> {

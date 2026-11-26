@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { z } from 'zod';
-import { isAdminRequest } from '@/lib/auth/admin';
+import { isAdminRequest, throttleFailedAdminAuth } from '@/lib/auth/admin';
 import { withRequestLogger } from '@/lib/logger';
 import { invalidateCachedRates, clearRateCache } from '@/lib/api/rate-cache';
 import type { ApiError } from '@/types';
@@ -20,6 +20,8 @@ export async function POST(request: NextRequest): Promise<NextResponse> {
     if (limited) return limited;
 
     if (!isAdminRequest(request)) {
+      const throttled = await throttleFailedAdminAuth(request);
+      if (throttled) return throttled;
       logger.warn({ event: 'unauthorized_access', path: request.nextUrl.pathname });
       return NextResponse.json<ApiError>(
         { code: 'UNAUTHORIZED', message: 'Admin access required' },

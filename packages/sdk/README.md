@@ -42,6 +42,43 @@ const { unsignedTx, quoteId, route } = await client.submitOfframpIntent({
 // Sign `unsignedTx` with Freighter, a keypair, or your own signer, then submit.
 ```
 
+## Authenticating
+
+Pass an API key (`apiKey`) or a dynamic token getter (`getToken`) in `ClientOptions`. Passing both throws a `TypeError`.
+
+```ts
+// Authenticating with an API key
+const client = new StellarIntelClient({
+  apiKey: 'sik_0123456789abcdef_…',
+});
+```
+
+For agents, mint short-lived scoped caller tokens via `exchangeToken()` rather than handing them long-lived root keys:
+
+```ts
+// Mint a short-lived token (up to 15 minutes) for an agent
+const rootClient = new StellarIntelClient({ apiKey: process.env.STELLAR_INTEL_API_KEY });
+const { token, expiresIn } = await rootClient.exchangeToken({
+  scopes: ['quotes:read'],
+  ttlSeconds: 900,
+});
+
+// Agent client using the short-lived token
+const agentClient = new StellarIntelClient({
+  getToken: () => token,
+});
+```
+
+Check your caller tier, daily quota, and rate-limit windows with `getUsage()`:
+
+```ts
+const usage = await client.getUsage();
+console.log(`Tier: ${usage.caller.tier}`);
+if (usage.quota) {
+  console.log(`Quota used: ${usage.quota.used} / ${usage.quota.limit}`);
+}
+```
+
 ## Retries and idempotency
 
 Both are defaults, because the failure they prevent — a retried request

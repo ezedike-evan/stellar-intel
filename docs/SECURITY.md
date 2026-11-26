@@ -31,6 +31,15 @@ for users — losing funds — is structurally out of scope because we never hol
 - **`ADMIN_SECRET_KEY`** gates `/admin/disputes` and admin reputation routes. Keep
   it server-side only; never expose it to the client (it is **not** a
   `NEXT_PUBLIC_*` var). See `lib/auth/admin.ts`.
+- **Caller API keys** authenticate agents and programmatic integrators. Keys follow the
+  format `sik_<keyId>_<secret>`, are SHA-256-hashed at rest, and are shown once upon issuance.
+  In the UI and admin logs, keys are identified only by their `sik_<keyId>` display prefix.
+  Revocation is immediate and also kills all short-lived tokens minted from that key.
+- **`CALLER_TOKEN_SECRET`** signs short-lived caller JWT tokens using HS256 with a
+  15-minute maximum lifetime and the algorithm pinned. Tokens inherit a scoped subset of
+  the minting key's permissions and cannot mint further tokens.
+- **Audit logging** — server-side actions, tool invocations, and admin events are recorded in
+  an append-only audit log. The audit log stores no IPs or intent contents.
 - **Publisher keys** (Soroban oracle) are server-held and never shipped to the
   browser. Rotation policy is a roadmap item ([`docs/ROADMAP.md`](ROADMAP.md)).
 - **Contract admin key** — on testnet the admin is a single key shared with the

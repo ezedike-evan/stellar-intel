@@ -17,6 +17,7 @@ The entry points expose the full tool set:
 | `intel.offramp.prepare`   | ✓                   | ✓              | ✓                             |
 | `intel.execute`           | ✓                   | ✓              | ✓                             |
 | `intel.anchor.reputation` | ✓                   | ✓              | ✓                             |
+| `intel.anchor.sla`        | ✓                   | ✓              | ✓                             |
 | `intel.anchor.health`     | ✓                   | ✓              | ✓                             |
 | `intel.probe.coverage`    | ✓                   | ✓              | ✓                             |
 | `intel.leaderboard`       | ✓                   | ✓              | ✓                             |
@@ -69,6 +70,78 @@ rate-limited to 60 per minute per IP.
 **It serves ten tools** — the eight off-ramp and discovery tools plus the two
 on-ramp tools — alongside prompts and the anchor health ledger resource across
 all transports.
+
+## Authentication, scopes and limits
+
+### Client configuration
+
+Clients authenticate against the hosted endpoint by passing an `Authorization` header in their MCP client configuration:
+
+```json
+{
+  "mcpServers": {
+    "stellar-intel": {
+      "type": "http",
+      "url": "https://stellar-intel.vercel.app/api/mcp",
+      "headers": {
+        "Authorization": "Bearer sik_0123456789abcdef_..."
+      }
+    }
+  }
+}
+```
+
+While an API key (`sik_…`) can be passed directly, it is strongly recommended to use a short-lived caller token minted via `POST /api/v1/auth/token`. Tokens are capped at a 15-minute maximum lifetime, inherit a restricted subset of the minting key's scopes, and cannot mint further tokens. Passing short-lived tokens to autonomous agents bounds the blast radius if an agent is prompt-injected or compromised.
+
+### Tool scopes
+
+Every tool call on the hosted endpoint requires a specific scope. Keys and short-lived tokens are restricted to their granted permissions:
+
+| Tool                      | Scope           | Description                                                           |
+| ------------------------- | --------------- | --------------------------------------------------------------------- |
+| `intel.offramp.quote`     | `quotes:read`   | Read indicative and firm off-ramp quotes across registered anchors    |
+| `intel.offramp.prepare`   | `intents:write` | Build an unsigned off-ramp intent and payment transaction             |
+| `intel.execute`           | `intents:write` | Validate and broadcast a signed transaction (or dry run via `dryRun`) |
+| `intel.probe.coverage`    | `quotes:read`   | Inspect automated quote-probe coverage across anchors                 |
+| `intel.anchor.reputation` | `quotes:read`   | Fetch rolling fill rates, latencies, and scorecards                   |
+| `intel.anchor.sla`        | `quotes:read`   | 30-day settle-time percentiles and SLA breach status for an anchor    |
+| `intel.anchor.health`     | `quotes:read`   | Live health and probe outcomes for an anchor                          |
+| `intel.leaderboard`       | `quotes:read`   | Reputation leaderboard across anchors                                 |
+| `intel.corridors`         | `quotes:read`   | Supported corridors, assets, and active anchors                       |
+| `intel.onramp.quote`      | `quotes:read`   | Indicative quotes and fees for fiat-to-crypto deposits                |
+| `intel.onramp.prepare`    | `intents:write` | Build an unsigned on-ramp deposit intent                              |
+
+### Error codes and `_meta` payloads
+
+When a call cannot be completed due to authorization or policy constraints, the tool returns an error result (`isError: true`) with structured metadata under reserved `_meta` keys:
+
+- `INSUFFICIENT_SCOPE`: The caller key or token does not hold the scope required by the tool. Structured error details are provided under `_meta['stellarintel/auth']` (including `{ code: "INSUFFICIENT_SCOPE", tool, requiredScope }`).
+- `AMOUNT_OVER_CAP`: The intent amount exceeds the global spending cap (`MCP_MAX_INTENT_AMOUNT`) or the key's configured `maxIntentAmount`. The call is rejected before transaction construction or submission.
+- `RATE_LIMITED`: The request exceeds the per-minute rate limit for the caller's tier. Detailed reset timing is provided under `_meta['stellarintel/rateLimit']` (including `{ code: "RATE_LIMITED", tool, retryAfter, limit, resetAt }`).
+
+### Caller tiers and daily quotas
+
+Rate limits and capacity scale with caller identity tiers:
+
+- **Anonymous** (1× baseline): 60 requests per minute per IP. No daily quota.
+- **Standard** (5× baseline): 300 requests per minute, counted per key, and 50,000 requests per day.
+- **Partner** (20× baseline): 1,200 requests per minute, counted per key, and 500,000 requests per day.
+
+Daily quotas are shared across all API surfaces (REST v1, MCP, and GraphQL). Callers can check active counters and remaining quotas with `GET /api/v1/usage`.
+
+### Dry-run execution (`intel.execute`)
+
+`intel.execute` supports pre-flight transaction verification without submitting to Horizon:
+
+- Supplying `dryRun: true` runs all signature, account, fee, and timebound assertions without broadcasting to the network.
+- When valid, it returns `{ status: "verified", hash, ledger: null, corridorId, anchorId }` instead of status `"submitted"`.
+
+### Audit logging
+
+All hosted MCP tool invocations are recorded in the append-only audit log:
+
+- Fields recorded: tool name (`action`), caller ID (`callerId`), scope used (`scope`), intent hash (`intentHash`), and execution outcome (`ok`, `denied`, `rate_limited`, `error`).
+- Parameters and secrets: tool arguments, destination addresses, and payment payloads are **never** audited or persisted.
 
 ## Running it yourself
 
@@ -212,29 +285,39 @@ Its fee must be at most 100,000 stroops, and it must carry an expiry
 Any mismatch is rejected (`TX_MISMATCH`) before anything reaches Horizon.
 
 - **Input:**
-  `{ unsignedEnvelope: { intent, intentHash }, signature, signedTx }` — the
+  `{ unsignedEnvelope: { intent, intentHash }, signature, signedTx, dryRun? }` — the
   exact `unsignedEnvelope` from `intel.offramp.prepare`, a base64 ed25519
   signature over `intentHash` from the sender's key, and the base64 XDR of
-  `unsignedTx` after the sender has signed it. The signature is accepted in
+  `unsignedTx` after the sender has signed it. Optional `dryRun: true` performs
+  every verification check without broadcasting the transaction to Horizon. The signature is accepted in
   the same two forms as the web app: over the 32 raw bytes the hex
   `intentHash` decodes to (`Keypair.sign`), or SEP-53 (`Keypair.signMessage`,
   which is what a wallet's `signMessage` produces). A signature over the
   hash's UTF-8 bytes is deprecated; it is still accepted, and each use is
   logged as `mcp_legacy_signature_format`.
-- **Output:** `{ status: "submitted", hash, ledger, corridorId, anchorId }`
+- **Output:** `{ status: "submitted" | "verified", hash, ledger: number | null, corridorId, anchorId }`. When `dryRun: true` is passed, `status` is `"verified"` and `ledger` is `null`.
 
 ```jsonc
 // input
 {
   "unsignedEnvelope": { "intent": { "type": "offramp", "..." }, "intentHash": "<64-hex>" },
   "signature": "<base64 ed25519 sig over intentHash (raw bytes or SEP-53)>",
-  "signedTx": "<base64 signed transaction XDR>"
+  "signedTx": "<base64 signed transaction XDR>",
+  "dryRun": false // optional, true to verify without broadcasting
 }
-// output
+// output (submitted)
 {
   "status": "submitted",
   "hash": "<64-hex tx hash>",
   "ledger": 12345,
+  "corridorId": "usdc-ngn",
+  "anchorId": "cowrie"
+}
+// output (dryRun: true)
+{
+  "status": "verified",
+  "hash": "<64-hex tx hash>",
+  "ledger": null,
   "corridorId": "usdc-ngn",
   "anchorId": "cowrie"
 }
@@ -277,6 +360,36 @@ the Stellar Intel API (`/api/reputation/{anchor}`).
     },
     "30": { "state": "insufficient_data", "window": 30, "sampleSize": 3, "computedAt": "2026-…Z", "lastPublisherTxTimestamp": null }
   }
+}
+```
+
+### `intel.anchor.sla`
+
+Returns 30-day trailing p50/p95/p99 settle latency for an anchor, overall and per corridor, with breach status and a daily p95 series. Fetched from the Stellar Intel API (`/api/reputation/{anchor}/sla`).
+`state` is `insufficient_data` until 30 completed withdrawals exist, and `p99Ms`
+is `null` below 100.
+
+- **Input:** `{ anchor: string, corridor?: string }`: anchor identifier (e.g.
+  `moneygram`) and an optional corridor to restrict the per-corridor entries to
+- **Output:** the `ExecutionSlaReport`: `{ anchorId, windowDays, computedAt,
+thresholds: { p95Ms, p99Ms }, overall: { sla, breach }, corridors: [{ corridor,
+sla, breach }], history: [{ day, p95Ms, sampleSize }] }`, where `breach.status`
+  is `within`, `breach` or `unknown`
+
+```jsonc
+// input
+{ "anchor": "moneygram", "corridor": "usdc-ngn" }
+// output (abridged)
+{
+  "anchorId": "moneygram",
+  "windowDays": 30,
+  "thresholds": { "p95Ms": 900000, "p99Ms": 3600000 },
+  "overall": {
+    "sla": { "state": "ok", "sampleSize": 120, "p50Ms": 60000, "p95Ms": 240000, "p99Ms": 610000 },
+    "breach": { "status": "within", "breaches": [] }
+  },
+  "corridors": [{ "corridor": "usdc-ngn", "sla": { "state": "ok", "…": "…" }, "breach": { "status": "within", "breaches": [] } }],
+  "history": [{ "day": "2026-11-01", "p95Ms": 230000, "sampleSize": 6 }]
 }
 ```
 
